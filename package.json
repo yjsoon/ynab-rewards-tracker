@@ -8,7 +8,9 @@
     "build": "pnpm -C apps/web build",
     "start": "pnpm -C apps/web start",
     "typecheck": "pnpm -r --parallel typecheck",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "db:generate": "pnpm -C packages/db generate",
+    "db:migrate": "pnpm -C packages/db migrate:dev"
   },
   "workspaces": [
     "apps/*",

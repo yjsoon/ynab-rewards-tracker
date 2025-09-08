@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 
+export const dynamic = 'force-dynamic';
+
 function required(name: string, val: string | undefined) {
   if (!val) throw new Error(`Missing env ${name}`);
   return val;
