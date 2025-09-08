@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@ynab-counter/db';
+import { prisma } from '@/lib/db';
 import { encrypt } from '@/lib/crypto';
 
 export const dynamic = 'force-dynamic';
@@ -109,4 +109,3 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'internal_error' }, { status: 500 });
   }
 }
-
