@@ -7,13 +7,15 @@
     "dev": "pnpm -C apps/web dev",
     "build": "pnpm -C apps/web build",
     "start": "pnpm -C apps/web start",
-    "typecheck": "tsc -b",
+    "typecheck": "pnpm -r --parallel typecheck",
     "lint": "eslint ."
   },
   "workspaces": [
     "apps/*",
     "packages/*",
     "docs"
-  ]
+  ],
+  "devDependencies": {
+    "typescript": "5.6.2"
+  }
 }
-
