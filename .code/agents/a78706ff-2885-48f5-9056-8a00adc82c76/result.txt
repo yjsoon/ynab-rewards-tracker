@@ -1,0 +1,838 @@
+[2025-09-08T14:21:25] Code v0.2.80
+--------
+workdir: /Users/yingjie/Developer/personal-projects/ynab-counter
+model: gpt-5
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: medium
+reasoning summaries: auto
+--------
+[2025-09-08T14:21:25] User instructions:
+Plan a web app that integrates with the YNAB API to track and optimize credit card rewards across accounts. The app should ingest accounts, categories, and transactions from a user's YNAB budget (read-only), let the user define card-specific reward programs (percent cash back, miles per dollar, rotating/quarterly multipliers, merchants/category mappings, sub-caps per category, global caps, start/end promo windows), and continuously compute progress toward caps and expected rewards. It should surface dashboards, alerts, and recommendations (e.g., which card is best for current category mix), while remaining compliant with YNAB OAuth requirements and API rate limits. Include privacy and security guidance for handling tokens. Deliver a comprehensive systems plan with architecture, data model, rule engine design, API integration strategy, UI/UX, testing, and rollout.
+
+Context about the current repo and code:
+- Repo path: /Users/yingjie/Developer/personal-projects/ynab-counter
+- Current state: empty repo (no files yet). We are in planning mode; do not create or modify files.
+- Target: modern full‑stack TypeScript with strong DX. Prefer Next.js App Router + API routes for OAuth callback and webhooks, or SvelteKit with similar capabilities. Use YNAB JS SDK (or direct REST) with read-only tokens for initial MVP.
+- Constraints: Respect YNAB API rate limits (200 req/hour per token) and delta requests for efficiency. Avoid storing raw PII; cache only necessary transaction/account metadata. Provide an export-only mode and explicit data deletion.
+- Data sources in YNAB to use: budgets (default), accounts, categories, transactions (including scheduled), category groups, payees. Consider memo-based hashtags and colored flags as pseudo-tags per-account, since YNAB has limited flags (6) and no arbitrary tags. Allow per-account flag-to-category mappings.
+
+High-level goals:
+1) OAuth (Authorization Code) with refresh tokens; optional Personal Access Token for personal use.
+2) Background sync using delta requests and light caching; map transactions into normalized schema.
+3) Reward rule engine capable of: time windows (start/end), category or merchant (MCC/Payee) matching, base rates, boosted rates, sub-caps (e.g., 5% up to $1,500 per quarter for groceries), stacking rules, miles vs cash back, breakage handling, and proration for partial windows.
+4) UI for defining cards and rules, mapping YNAB flags/categories to reward categories per account; dashboards for current period accruals, cap remaining, and forecasts.
+5) Notifications: email and optional push (web push) when approaching caps or rule windows ending; summarize best current card by category.
+6) Testing: unit for rule engine, contract tests for YNAB API client, e2e for OAuth and sync, seed fixtures.
+7) Security/compliance: token storage, scoping, data deletion, privacy policy.
+
+Proposed directory structure to guide you (feel free to adjust):
+
+- apps/web (Next.js 14 + App Router)
+  - app/
+    - (auth)/callback/route.ts  // OAuth callback
+    - dashboard/page.tsx
+    - settings/
+      - cards/page.tsx
+      - mappings/page.tsx
+      - rules/page.tsx
+  - components/
+  - lib/
+    - ynab.ts              // thin client wrapper + rate-limit + delta helpers
+    - reward-engine/
+      - index.ts
+      - rules.ts           // DSL + parser + validators
+      - calculators.ts     // percent, miles, flat, tiered
+    - mapping/
+      - flags.ts           // per-account flag meaning
+      - categories.ts
+    - time-windows.ts
+  - pages/api/
+    - auth/ynab/start.ts   // redirect to authorize
+    - auth/ynab/callback.ts
+    - sync/run.ts          // manual sync trigger
+- packages/db (Prisma + Postgres or SQLite to start)
+  - schema.prisma         // Card, RewardRule, SubCap, AccountConfig, Tx, Accrual
+- packages/ynab-client
+  - src/index.ts          // typed client + pagination + delta
+- packages/worker
+  - src/sync.ts           // scheduled sync job
+  - src/compute.ts        // recompute accruals
+- docs/
+  - architecture.md
+  - privacy.md
+
+Key files to be aware of (to look up later once created):
+- apps/web/lib/reward-engine/rules.ts: define a typed DSL such as:
+  type Rule = {
+    id: string;
+    name: string;
+    scope: { accounts?: ID[]; categories?: ID[]; payees?: ID[]; flags?: FlagName[] };
+    window?: { start: ISODate; end?: ISODate; cadence?: 'monthly'|'quarterly'|'annual' };
+    reward: { kind: 'percent'|'miles'|'flat'; rate: number; currency?: 'USD'|'mi' };
+    caps?: { overall?: Money; byCategory?: Record<ID, Money>; byMonth?: Money };
+    priority?: number; // resolve overlaps
+  }
+- packages/db/schema.prisma: model Card, RewardRule, AccountConfig, Transaction, Accrual, Mapping.
+
+Deliverables expected from each model:
+- A concrete, phased plan (MVP → v1 → v2) with rationale.
+- Data model (entities + key fields) and a first-pass Prisma schema or SQL tables.
+- OAuth flow diagram and API endpoints to implement.
+- Reward engine design with examples of tricky cases (stacking, sub-caps, window rollovers, split transactions, refunds, currency rounding/milliunits).
+- Sync strategy using YNAB delta requests and rate-limit budgeting.
+- UI pages and component list; quick wireframes in words.
+- Testing strategy and sample test cases.
+- Risks and mitigations; privacy policy outline.
+
+Please keep your answer self-contained and structured with clear sections: Architecture, Data Model, Rule Engine, YNAB Integration, UI/UX, Security, Testing, Migration/Rollout, Open Questions. Provide pragmatic defaults and prioritization.
+
+Reference docs: YNAB API (https://api.ynab.com/). Use read-only scope unless write is required.
+
+
+Desired output: Detailed, structured plan per the requested sections and deliverables. Include example schemas and pseudo-code where helpful, but do not write files.
+
+[Running in read-only mode - no modifications allowed]
+
+[2025-09-08T14:21:58] thinking
+
+**Analyzing notification systems and testing strategies**
+
+I’m thinking about notifications like email and web push, maybe doing a batched daily summary and implementing triggers for thresholds. When it comes to testing, I’ll include unit tests for calculators and property-based tests for rounding. I should also consider contract tests and e2e tests for OAuth flows. For migration and rollout, I'm focusing on building the MVP with personal PAT and tackling features like feature flags and data storage. There are open questions regarding shared budgets, multi-currency support, and possible API endpoints to implement.
+**Outlining OAuth setup and rate limiting**
+
+I’m considering the necessary environment variables like YNAB_CLIENT_ID and SECRET, possibly integrating custom OAuth. I’ll propose using NextAuth for convenience, ensuring compatibility with Next.js App Router. We should also decide on using Edge runtime or Node, opting for Node to maintain SDK compatibility. I'll structure instructions with bullet points under clear headers and include code blocks. When it comes to rate limiting, I’ll calculate based on 200 requests per hour per token, scheduling syncs every 10 minutes. I'll implement methods to minimize unnecessary calls.
+[2025-09-08T14:22:04] codex
+**Outlining OAuth setup and rate limiting**
+
+I’m considering the necessary environment variables like YNAB_CLIENT_ID and SECRET, possibly integrating custom OAuth. I’ll propose using NextAuth for convenience, ensuring compatibility with Next.js App Router. We should also decide on using Edge runtime or Node, opting for Node to maintain SDK compatibility. I'll structure instructions with bullet points under clear headers and include code blocks. When it comes to rate limiting, I’ll calculate based on 200 requests per hour per token, scheduling syncs every 10 minutes. I'll implement methods to minimize unnecessary calls.
+[2025-09-08T14:22:04] codex
+
+**Architecture**
+
+- **Stack:** Next.js 14 (App Router, Node runtime), TypeScript, Prisma, Postgres (SQLite dev), tRPC or REST for internal APIs, background worker (node-cron or separate worker package), email via Resend/SES, Web Push with VAPID.
+- **Packages:**  
+  - `apps/web`: UI + API routes (OAuth, sync triggers, dashboards).  
+  - `packages/db`: Prisma models + migrations + data-access helpers.  
+  - `packages/ynab-client`: Thin YNAB SDK wrapper with rate-limit + delta helpers.  
+  - `packages/worker`: Sync + compute schedulers and processors.  
+  - `docs`: architecture, privacy.
+- **Data flow:**  
+  1) OAuth exchanges code → encrypted tokens stored (read-only scope).  
+  2) Worker runs sync using delta cursors; maps YNAB entities → normalized tables.  
+  3) Reward engine recomputes per-card accruals per window (monthly/quarterly/annual, promo windows) and sub-caps; stores Accrual ledger + summaries.  
+  4) UI queries summaries, shows dashboards, cap progress, card recommendations.  
+  5) Notifier sends alerts (cap threshold, window ending, new bonus period).
+- **Boundaries:**  
+  - `ynab-client` enforces 200 req/hour/token with a leaky-bucket and coalescing.  
+  - Rule Engine pure/side-effect free; works on normalized Tx snapshots.  
+  - DB stores only necessary metadata; no raw PII beyond YNAB-provided names/IDs unless user opts in; hashing where practical.
+- **Proposed directory tree (adjust as needed):**
+  ```
+  apps/web
+    app/(auth)/callback/route.ts
+    app/dashboard/page.tsx
+    app/settings/cards/page.tsx
+    app/settings/mappings/page.tsx
+    app/settings/rules/page.tsx
+    components/
+    lib/ynab.ts
+    lib/reward-engine/{index.ts,rules.ts,calculators.ts}
+    lib/mapping/{flags.ts,categories.ts}
+    lib/time-windows.ts
+    pages/api/auth/ynab/{start.ts,callback.ts}
+    pages/api/sync/run.ts
+  packages/db/schema.prisma
+  packages/ynab-client/src/index.ts
+  packages/worker/src/{sync.ts,compute.ts,notify.ts}
+  docs/{architecture.md,privacy.md}
+  ```
+
+**Phased Plan**
+
+- **MVP (2–3 weeks):**
+  - OAuth (Authorization Code) + PAT mode; store tokens encrypted.
+  - Single budget; delta sync for accounts, categories, transactions (since_date + knowledge cursors).
+  - Basic rule DSL: percent/miles/flat; category/payee/flag match; single global cap; window cadence; priority/max-of.  
+  - Dashboard: per-card accruals, cap remaining; “Best card now” by last 30 days category mix.  
+  - Manual sync button + daily cron. Export-only JSON/CSV. Data deletion endpoint.
+- **v1 (4–6 weeks):**
+  - Sub-caps by category; quarterly rotating categories; promo windows; stacking modes.
+  - Split transactions and refunds handling; scheduled transactions for forecast.  
+  - Email + web push notifications; thresholds; window-end alerts.  
+  - Mappings UI (flags/categories → reward categories per account).  
+  - Contract tests for YNAB client; e2e OAuth + sync; performance profiling.
+- **v2 (ongoing):**
+  - Multi-budget; households/shared views; multiple cards per issuer with shared caps.  
+  - Advanced recommendations (future forecast with scheduled + monthly spend cadence).  
+  - Custom merchant mappings, MCC enrich (user-provided); valuation models for miles.  
+  - Usage analytics (privacy-preserving); per-user rate-limit optimizer; data residency options.
+
+**Data Model**
+
+- **Entities (key fields):**
+  - `User`: `id`, `email?`, `createdAt`.
+  - `Connection`: `id`, `userId`, `provider='ynab'`, `budgetId`, `accessTokenEnc`, `refreshTokenEnc`, `expiresAt`, `scope`, `serverKnowledge` (per resource).
+  - `Budget`: `id`, `ynabId`, `name`, `isDefault`, `connectionId`.
+  - `Account`: `id`, `ynabId`, `name`, `type`, `onBudget`, `closed`, `flagColor?`, `budgetId`.
+  - `CategoryGroup`: `id`, `ynabId`, `name`, `hidden`, `budgetId`.
+  - `Category`: `id`, `ynabId`, `name`, `groupId`, `hidden`, `budgetId`.
+  - `Payee`: `id`, `ynabId`, `nameHash`, `namePreview?`, `budgetId`.
+  - `Transaction`: `id`, `ynabId`, `date`, `amountMilli`, `cleared`, `approved`, `memoHash?`, `flagColor?`, `accountId`, `categoryId?`, `payeeId?`, `importId?`, `transferAccountId?`, `scheduled?`, `subTxCount`, `rawJson?`.
+  - `Split`: `id`, `transactionId`, `amountMilli`, `categoryId?`, `memoHash?`.
+  - `Card`: `id`, `userId`, `name`, `issuer`, `kind='cashback'|'points'|'miles'`, `valuationCentsPerPoint?`, `active`.
+  - `RewardRule`: `id`, `cardId`, `name`, `scopeJson`, `windowJson`, `rewardJson`, `capsJson`, `priority`, `stacking='max'|'sum'|'first'`.
+  - `Mapping`: `id`, `userId`, `accountId?`, `flagToCategoryJson`, `categoryToRewardCategoryJson`, `payeeMappingsJson`.
+  - `AccrualWindow`: `id`, `cardId`, `windowStart`, `windowEnd`, `cadence`, `capOverallMilli?`, `earnedMilli`, `points`, `breakageMilli?`.
+  - `AccrualLine`: `id`, `accrualWindowId`, `transactionId`, `splitId?`, `ruleId`, `eligibleMilli`, `rewardKind`, `rewardAmountRaw` (milli or points), `appliedCapMilli`, `notes?`.
+  - `NotificationSubscription`: `id`, `userId`, `kind='email'|'webpush'`, `endpoint`, `auth`, `p256dh`.
+  - `Alert`: `id`, `userId`, `cardId?`, `type`, `payloadJson`, `createdAt`, `sentAt?`.
+  - `SyncState`: `id`, `connectionId`, `sinceDate`, `serverKnowledgeByResourceJson`, `lastRunAt`, `status`.
+
+- **First-pass Prisma schema (excerpt):**
+  ```prisma
+  model User {
+    id        String  @id @default(cuid())
+    email     String? @unique
+    createdAt DateTime @default(now())
+    connections Connection[]
+  }
+
+  model Connection {
+    id                String  @id @default(cuid())
+    userId            String
+    user              User    @relation(fields: [userId], references: [id])
+    provider          String  // 'ynab'
+    budgetId          String?
+    accessTokenEnc    String
+    refreshTokenEnc   String
+    expiresAt         DateTime
+    scope             String
+    serverKnowledge   Json    // { budgets, accounts, categories, transactions, payees }
+    createdAt         DateTime @default(now())
+    updatedAt         DateTime @updatedAt
+    syncStates        SyncState[]
+  }
+
+  model Budget {
+    id        String  @id @default(cuid())
+    ynabId    String  @unique
+    name      String
+    isDefault Boolean @default(false)
+    connectionId String
+    connection Connection @relation(fields: [connectionId], references: [id])
+  }
+
+  model Account {
+    id        String  @id @default(cuid())
+    ynabId    String  @unique
+    name      String
+    type      String
+    onBudget  Boolean
+    closed    Boolean
+    flagColor String?
+    budgetId  String
+  }
+
+  model CategoryGroup {
+    id        String  @id @default(cuid())
+    ynabId    String  @unique
+    name      String
+    hidden    Boolean
+    budgetId  String
+  }
+
+  model Category {
+    id        String  @id @default(cuid())
+    ynabId    String  @unique
+    name      String
+    hidden    Boolean
+    groupId   String
+    budgetId  String
+  }
+
+  model Payee {
+    id        String  @id @default(cuid())
+    ynabId    String  @unique
+    nameHash  String
+    namePreview String?
+    budgetId  String
+  }
+
+  model Transaction {
+    id        String  @id @default(cuid())
+    ynabId    String  @unique
+    date      DateTime
+    amountMilli Int
+    cleared   String
+    approved  Boolean
+    memoHash  String?
+    flagColor String?
+    accountId String
+    categoryId String?
+    payeeId   String?
+    importId  String?
+    transferAccountId String?
+    scheduled Boolean @default(false)
+    subTxCount Int @default(0)
+  }
+
+  model Split {
+    id            String @id @default(cuid())
+    transactionId String
+    amountMilli   Int
+    categoryId    String?
+    memoHash      String?
+  }
+
+  model Card {
+    id        String @id @default(cuid())
+    userId    String
+    name      String
+    issuer    String
+    kind      String
+    valuationCentsPerPoint Int?
+    active    Boolean @default(true)
+  }
+
+  model RewardRule {
+    id        String @id @default(cuid())
+    cardId    String
+    name      String
+    scopeJson Json
+    windowJson Json
+    rewardJson Json
+    capsJson  Json
+    priority  Int @default(0)
+    stacking  String @default("max")
+  }
+
+  model AccrualWindow {
+    id        String @id @default(cuid())
+    cardId    String
+    windowStart DateTime
+    windowEnd   DateTime
+    cadence   String
+    capOverallMilli Int?
+    earnedMilli Int @default(0)
+    points    Int @default(0)
+    breakageMilli Int?
+  }
+
+  model AccrualLine {
+    id        String @id @default(cuid())
+    accrualWindowId String
+    transactionId   String
+    splitId         String?
+    ruleId          String
+    eligibleMilli   Int
+    rewardKind      String
+    rewardAmountRaw Int
+    appliedCapMilli Int
+    notes           String?
+  }
+
+  model SyncState {
+    id        String @id @default(cuid())
+    connectionId String
+    sinceDate DateTime
+    serverKnowledgeByResourceJson Json
+    lastRunAt DateTime?
+    status    String
+  }
+  ```
+
+**Rule Engine**
+
+- **Typed DSL (first pass):**
+  ```ts
+  type ID = string; type ISODate = string; type Money = number; // milliunits
+  type FlagName = 'red'|'orange'|'yellow'|'green'|'blue'|'purple';
+  type RewardKind = 'percent'|'miles'|'flat';
+
+  export type Rule = {
+    id: string;
+    name: string;
+    scope?: {
+      accounts?: ID[];
+      categories?: ID[];              // YNAB category IDs
+      payees?: ID[];                  // YNAB payee IDs
+      flags?: FlagName[];             // YNAB color flags
+      memoTags?: string[];            // hashtags parsed from memo
+    };
+    window?: {
+      start: ISODate;
+      end?: ISODate;
+      cadence?: 'monthly'|'quarterly'|'annual';
+      timezone?: string;              // default user TZ
+    };
+    reward: {
+      kind: RewardKind;
+      rate: number;                   // percent: 0.05, miles: 3 (per $), flat: cents
+      currency?: 'USD'|'mi'|'pt';
+    };
+    caps?: {
+      overall?: Money;                // in milliunits; applies to eligible spend
+      byCategory?: Record<ID, Money>;
+      byMonth?: Money;
+      byPayee?: Record<ID, Money>;
+    };
+    stacking?: 'max'|'sum'|'first';   // overlap resolution
+    priority?: number;                // only used for 'first'
+    notes?: string;
+  }
+  ```
+- **Calculators:**  
+  - Percent: `reward = floor(eligibleMilli * rate) / 1000` (compute in milli, round down at cent).  
+  - Miles: `reward = floor(dollars(eligibleMilli) * rate)`; valuation optional for $ view.  
+  - Flat: `reward = fixed milli or points per eligible unit` (most often per $1 or per txn).
+- **Matching:**  
+  - Category, payee, account, flag, memo-tags (#groceries), per-account flag overrides via Mapping.  
+  - Merchant enrichment optional later (user-provided mapping; no external MCC required).
+- **Windows & caps:**  
+  - Cadence windows materialized as `[windowStart, windowEnd)`; quarterly uses calendar quarters unless rule overrides.  
+  - Sub-caps enforced by deducting eligibility within each bucket before computing rewards.  
+  - Cap application order: byCategory/byPayee → overall → byMonth. Residual eligibility not carried unless stacking='sum'.
+- **Stacking:**  
+  - Default `max`: choose rule with max reward for each split.  
+  - `sum`: accumulate (for issuer promos that stack).  
+  - `first`: apply highest-priority rule; ties resolved by priority asc.
+- **Edge cases:**  
+  - Split transactions: evaluate per split (category may differ).  
+  - Refunds: negative amounts reduce prior accruals in same window (match by payee/importId if possible; fallback category-based).  
+  - Rounding: use integers (milliunits) end-to-end; only round presentation.  
+  - Partial windows: accruals are actuals (no proration); forecasts prorate remaining days in window × recent avg spend.  
+  - Shared caps across multiple cards (later): group rules by `capGroupId`.
+- **Pseudocode (core):**
+  ```ts
+  function evaluate(txSplit, rules, context): AccrualLine[] {
+    const candidates = rules.filter(r => withinWindow(txSplit.date, r.window, context.tz))
+                            .filter(r => matchesScope(txSplit, r.scope, context.mappings));
+    const lines = [];
+    if (!candidates.length) return lines;
+
+    if (candidates.some(r => r.stacking === 'sum')) {
+      for (const r of candidates) lines.push(applyRuleWithCaps(txSplit, r, context));
+      return lines;
+    }
+    if (candidates.some(r => r.stacking === 'first')) {
+      const r = candidates.sort(byPriority).find(Boolean)!;
+      lines.push(applyRuleWithCaps(txSplit, r, context));
+      return lines;
+    }
+    // default 'max'
+    const best = candidates.map(r => applyRuleWithCaps(txSplit, r, context))
+                           .sort((a,b) => rewardValue(b) - rewardValue(a))[0];
+    return best ? [best] : [];
+  }
+  ```
+
+**YNAB Integration**
+
+- **Auth flow (Authorization Code):**
+  - `GET /api/auth/ynab/start` → redirect to YNAB authorize with `client_id`, `redirect_uri`, `response_type=code`, `scope=read-only`, `state`.
+  - YNAB redirects to `GET /api/auth/ynab/callback?code&state`.
+  - Server exchanges `code` for `access_token`, `refresh_token`, `expires_in`.  
+  - Store encrypted tokens; tie to `User` and selected `Budget`. Use PKCE if supported.
+- **Endpoints to implement:**
+  - `GET /api/auth/ynab/start`
+  - `GET /api/auth/ynab/callback`
+  - `POST /api/sync/run` (manual trigger)
+  - `GET /api/accruals` (card/bucket summaries)
+  - `GET /api/recommendations` (by category/current mix)
+  - `DELETE /api/data` (full purge)
+  - `GET /api/export` (JSON/CSV dump)
+- **Rate limits (200 req/hour/token):**
+  - Leaky-bucket per-token: budget ~3 req/min.  
+  - Coalesce reads per sync cycle:  
+    - budgets (once)  
+    - accounts (only if knowledge changed)  
+    - categories + groups (delta by `last_knowledge_of_server`)  
+    - payees (infrequent change)  
+    - transactions: `since_date` = last sync or window start - 120 days; paginate.
+  - Backoff: 429 → exponential backoff with jitter; pause remaining jobs for token hour window.
+- **Delta strategy:**
+  - Use YNAB `last_knowledge_of_server` for budget-scoped endpoints where available; maintain per-resource knowledge in `Connection.serverKnowledge`.  
+  - For transactions, use `since_date` + `page` + server knowledge when supported by SDK.  
+  - Idempotent upserts keyed by `ynabId`; soft-delete closed accounts/hidden categories.
+- **Sync cadence:**
+  - MVP: manual + daily cron.  
+  - v1: every 3–6 hours; opportunistic sync on user visit if last sync > 2h and bucket permits.
+- **Mapping helpers:**
+  - Memo hashtags (`#travel`, `#groceries`) parsed into `memoTags`.  
+  - Colored flags → user-defined mapping to reward categories per-account.  
+  - Category aliasing (e.g., “Groceries” across budgets) via mapping UI.
+
+**UI/UX**
+
+- **Pages:**
+  - `Dashboard`:  
+    - Cap progress bars per card and per sub-cap; earned vs remaining; window countdown.  
+    - “Best Card Now” by top categories in last 30/90 days; show tie-breakers and projected value.  
+    - Alerts list (approaching caps, promos ending).
+  - `Settings / Cards`: define cards, base valuation, enable/disable.
+  - `Settings / Rules`: create/edit rules; preview panel shows how last 20 tx would accrue.
+  - `Settings / Mappings`: map flags/categories/payees → reward categories; per-account overrides.
+- **Components:**
+  - `CapProgress`, `CardSummary`, `RuleEditor` (form + DSL JSON view), `TxPreview`, `RecommendationTable`, `WindowSelector`, `ThresholdEditor`.
+- **Wireframes (in words):**
+  - Top: global KPIs (total rewards YTD, effective rate, forecast this month).  
+  - Middle: grid of cards with circular cap progress, earned amount, time left in window.  
+  - Bottom: recommendations by category with badges: “5% Grocery (cap 300 left) → Use Freedom Flex”.  
+  - Rule editor: left form (scope, window, reward, caps), right live preview table with tx and computed accrual lines.
+- **Accessibility/UX:**
+  - Dark mode, keyboard navigable, descriptive labels.  
+  - Optimistic previews; no blocking fetches.  
+  - Tooltips explaining caps, cadence, and valuations.
+
+**Security**
+
+- **Tokens:** Encrypt at rest with per-environment KMS (e.g., AES-GCM using managed key). Rotate keys; store `kid`. Never log tokens. Scope is read-only. Refresh tokens stored encrypted; rotate on refresh.
+- **Secrets:** `YNAB_CLIENT_ID/SECRET` via environment. Lock down API routes to authenticated users. CSRF on OAuth callbacks (`state`).
+- **Data minimization:** Store IDs; hash payee names and memos (e.g., SHA-256 w/ per-tenant salt) and keep optional truncated preview for UX (“Starb…”). No bank account numbers or full memos in plain text.
+- **Deletion:** `DELETE /api/data` purges rows by `userId` with cascade; revoke token; confirm via email. Provide export prior to delete.
+- **Transport:** HTTPS only, HSTS; secure cookies (`HttpOnly`, `SameSite=Lax`).
+- **RBAC:** Row-level scoping by `userId`. No multi-tenant cross access.
+- **Compliance:** Publish privacy policy; clear consent for notifications; rate-limit to respect YNAB ToS; honor robots for marketing pages.
+
+**Testing**
+
+- **Unit (Rule Engine):**
+  - Cases: base percent, miles conversion, flat rewards; sub-caps; overlapping rules (`max`, `sum`, `first`); split tx; refunds; partial window boundaries; rounding to milliunits; priority resolution.
+  - Property tests: “sum of accruals with refund equals net accrual” invariants; “applied cap never exceeds configured cap”.
+- **Contract (YNAB client):**
+  - Mock with MSW: endpoints for budgets, accounts, categories, payees, transactions (since_date, knowledge).  
+  - Assertions: pagination, delta cursors, 429 backoff, idempotent upserts.
+- **E2E (Playwright):**
+  - OAuth happy path (fake provider), sync run, dashboard renders correct accruals.  
+  - Data deletion flow.  
+  - Notifications opt-in flow and trigger thresholds.
+- **Fixtures:**
+  - Synthetic budgets:  
+    - “Quarterly 5% up to $1500 groceries”  
+    - Rotating categories; overlapping promos; refunds/splits.
+- **Performance:**
+  - Large budget simulation (50k tx); ensure sync completes within rate budget; compute under 1s for 2k monthly tx.
+
+**Migration/Rollout**
+
+- **Dev:** SQLite, PAT mode only, local MSW mocks.  
+- **Private Alpha:** Postgres, OAuth enabled for whitelisted users; daily cron sync; metrics (no PII).  
+- **Beta:** Background sync every 3–6h; notify thresholds; export; deletion self-serve.  
+- **Prod Hardening:** DB backups, KMS, error budgets/alerts, token rotation job, DPA-ready privacy policy.
+- **Data migrations:** Prisma migrations versioned; backfill AccrualWindow for existing rules upon deploy with safe batching.
+
+**YNAB API Strategy Details**
+
+- **Calls per sync (typical):**
+  - 1× budgets summary (initial only), 1× accounts (knowledge), 1× categories (knowledge), 0–1× payees (rarely), N× transactions pages since last sync. Target ≤ 10 calls/sync.  
+  - With 200/hour, allow ~20 syncs/hour across all users per token; throttle per-user accordingly.
+- **Error handling:** retry 5xx with exponential backoff; on 429, sleep until `X-Rate-Limit-Reset` if provided; otherwise backoff 15–30s; persist backoff state to avoid dogpiling.
+- **Caching:** server-side cache (per token) of last sync results; in-memory LRU in worker for hot runs.
+
+[2025-09-08T14:23:57] ERROR: stream error: stream disconnected before completion: Transport error: error decoding response body; retrying 1/5 in 212ms…
+
+[2025-09-08T14:24:17] thinking
+
+**Wrapping up the plan**
+
+The user wants me to avoid repetition while concluding, so I’ll ensure not to reiterate previous details too much. The earlier sections on the "YNAB API Strategy Details" have already covered rate limits, so I’ll mention them only briefly. My plan will be structured, delivering the complete approach in clear sections. It seems like a solid way to finalize everything while still being thorough. I'll get started on producing that now!
+Below is a concrete, end‑to‑end plan for a modern full‑stack TypeScript app (Next.js App Router) that integrates with YNAB (read‑only) to track and optimize credit card rewards across accounts. It focuses on correctness, rate‑limit efficiency, maintainability, and user privacy.
+
+**Architecture**
+
+- Client: Next.js 14 App Router in `apps/web`, React Server Components + Route Handlers, Tailwind or shadcn/ui for fast UI.
+- Server: Node runtime (not Edge) for SDK compatibility, OAuth, and background tasks via a worker (`packages/worker`) triggered by cron (Vercel Cron/Cloud scheduler) or queue (Lite first).
+- Data: Prisma + Postgres (SQLite for local dev). Store minimal YNAB metadata (IDs, amounts, dates, mapping references). No raw PII beyond what’s necessary.
+- Integration: YNAB JS SDK or REST. Read‑only scopes. OAuth Authorization Code + PKCE for web; optional Personal Access Token (PAT) for personal/dev.
+- Sync & Compute: Worker performs delta syncs, normalizes transactions, computes accruals per rule window, and updates caps/forecasts.
+- Notifications: Email (Resend/Sendgrid) + optional Web Push (VAPID). Throttled summaries and cap alerts.
+- Observability: Structured logs without PII, feature flags for risky rollouts, audit of token operations and data exports/deletes.
+
+Suggested monorepo shape (adjust as needed):
+- apps/web (Next.js App Router)
+  - app/
+    - (auth)/ynab/start/route.ts
+    - (auth)/ynab/callback/route.ts
+    - dashboard/page.tsx
+    - settings/cards/page.tsx
+    - settings/mappings/page.tsx
+    - settings/rules/page.tsx
+    - api/sync/run/route.ts
+  - components/
+  - lib/
+    - ynab.ts
+    - reward-engine/
+      - index.ts
+      - rules.ts
+      - calculators.ts
+    - mapping/
+      - flags.ts
+      - categories.ts
+    - time-windows.ts
+- packages/db (Prisma + migrations)
+  - schema.prisma
+- packages/ynab-client
+  - src/index.ts (typed client, rate-limit + delta helpers)
+- packages/worker
+  - src/sync.ts
+  - src/compute.ts
+- docs/
+  - architecture.md
+  - privacy.md
+
+Phased delivery:
+- MVP (2–3 weeks): OAuth + PAT, single budget, delta sync, minimal DB, rules for base/percent/miles + simple caps, dashboard with current accruals and cap remaining, manual sync, export JSON, data deletion, unit tests for engine.
+- v1: Quarterly/annual windows, stacking + priority resolution, by‑category sub‑caps, split/refund handling, forecasts, email alerts, web push opt‑in, contract tests vs mocked YNAB, e2e OAuth/sync.
+- v2: Rotating categories UI, merchant mappings (payee/MCC heuristics), multi‑currency (if needed), advanced recommendations, perf dashboards, multi‑budget support, admin/feature flags.
+
+**Data Model**
+
+Prisma schema (first pass; key fields and relations):
+
+- User: id, email (optional if OAuth only), createdAt.
+- YNABConnection: id, userId FK, budgetId, accessToken (encrypted), refreshToken (encrypted), tokenScope, tokenExpiresAt, serverKnowledge (int), lastSyncedAt.
+- Account: id, userId FK, ynabAccountId, name (hashed or optional), type, currency, active.
+- Category: id, userId FK, ynabCategoryId, groupName (optional), name, isIncome, active.
+- Payee: id, userId FK, ynabPayeeId, displayHash (optional), active. (Store ID; avoid name if possible.)
+- Transaction: id, userId, ynabTransactionId, accountId FK, categoryId FK (nullable), payeeId FK (nullable), date, amountMilli (int), memoHash (optional), isSplitParent, isSplitChild, parentId (nullable), isRefund, cleared, approved, importedAt, deleted.
+- Card: id, userId, name, issuer, currency, active, defaultPriority.
+- RewardRule: id, userId, cardId FK, name, priority, scope JSON (accounts[], categories[], payees[], flags[]), window JSON (start, end, cadence), reward JSON (kind, rate, currency), caps JSON (overall, byCategory, byMonth/byQuarter), stacking JSON (mode: exclusive|stack|bestOf).
+- SubCap: id, ruleId FK, key (categoryId or alias), period (monthly|quarterly|annual), limitMilli (or miles), resetAnchor (ISO date).
+- Mapping tables (optional but handy)
+  - AccountConfig: id, userId, accountId FK, flagToRewardCategory JSON, preferredCardId, overrides JSON.
+  - FlagMapping: id, userId, accountId FK, flagName -> rewardCategory.
+  - CategoryMapping: id, userId, ynabCategoryId -> rewardCategory.
+  - PayeeMapping: id, userId, ynabPayeeId -> rewardCategory or merchantId (ext).
+- AccrualWindow: id, userId, cardId, ruleId, windowKey (e.g., 2025-Q3 or 2025-03), start, end, capLimit, spentMilli, earnedMinor (cents or miles), remainingMinor, lastComputedAt, status (open|closed).
+- AccrualEvent: id, userId, transactionId FK, cardId, ruleId, windowKey, amountMilli, earnedMinor, isAdjustment (refund/reclass), createdAt.
+- NotificationPreference: id, userId, email, webPush, thresholds (e.g., 75%, 90%), digest cadence (weekly/monthly), quietHours.
+- AuditLog: id, userId, action, meta JSON, createdAt.
+- ExportRequest / DeletionRequest: id, userId, requestedAt, status, completedAt.
+
+Example (condensed) Prisma sketch:
+
+- model User { id String @id @default(cuid()) createdAt DateTime @default(now()) connections YNABConnection[] }
+- model YNABConnection { id String @id @default(cuid()) userId String budgetId String accessToken String refreshToken String tokenExpiresAt DateTime serverKnowledge Int @default(0) lastSyncedAt DateTime? user User @relation(fields: [userId], references: [id]) @@unique([userId, budgetId]) }
+- model Account { id String @id @default(cuid()) userId String ynabAccountId String @unique name String? type String currency String active Boolean @default(true) }
+- model Category { id String @id @default(cuid()) userId String ynabCategoryId String @unique name String groupName String? active Boolean @default(true) }
+- model Payee { id String @id @default(cuid()) userId String ynabPayeeId String @unique active Boolean @default(true) displayHash String? }
+- model Transaction { id String @id @default(cuid()) userId String ynabTransactionId String @unique accountId String categoryId String? payeeId String? date DateTime amountMilli Int memoHash String? isSplitParent Boolean @default(false) isSplitChild Boolean @default(false) parentId String? isRefund Boolean @default(false) cleared Boolean @default(false) approved Boolean @default(false) importedAt DateTime? deleted Boolean @default(false) }
+- model Card { id String @id @default(cuid()) userId String name String issuer String? currency String @default("USD") active Boolean @default(true) defaultPriority Int @default(100) }
+- model RewardRule { id String @id @default(cuid()) userId String cardId String name String priority Int @default(100) scope Json window Json? reward Json caps Json? stacking Json? }
+- model SubCap { id String @id @default(cuid()) ruleId String key String period String limitMinor Int resetAnchor DateTime }
+- model AccrualWindow { id String @id @default(cuid()) userId String cardId String ruleId String windowKey String start DateTime end DateTime capLimitMinor Int? spentMilli Int @default(0) earnedMinor Int @default(0) remainingMinor Int? lastComputedAt DateTime? status String @default("open") @@unique([userId, ruleId, windowKey]) }
+- model AccrualEvent { id String @id @default(cuid()) userId String transactionId String cardId String ruleId String windowKey String amountMilli Int earnedMinor Int isAdjustment Boolean @default(false) createdAt DateTime @default(now()) }
+
+Indexes: unique on YNAB entity IDs, window keys, (user, ynab IDs). Partition accruals by user for cleanup.
+
+**Rule Engine**
+
+Typed DSL (apps/web/lib/reward-engine/rules.ts):
+
+- type Rule = {
+  id: string
+  name: string
+  scope?: { accounts?: string[]; categories?: string[]; payees?: string[]; flags?: ('red'|'orange'|'yellow'|'green'|'blue'|'purple')[] }
+  window?: { start: string; end?: string; cadence?: 'monthly'|'quarterly'|'annual'|'one_time'; anchor?: 'calendar'|'statement' }
+  reward: { kind: 'percent'|'miles'|'flat'|'tiered'; rate?: number; tiers?: { uptoMinor: number; rate: number }[]; currency?: 'USD'|'mi' }
+  caps?: { overallMinor?: number; byCategoryMinor?: Record<string, number>; perWindowMinor?: number }
+  stacking?: { mode: 'exclusive'|'stack'|'bestOf'; group?: string } // group enforces mutual exclusivity
+  priority?: number
+}
+
+Calculators (apps/web/lib/reward-engine/calculators.ts):
+
+- percent: earnedMinor = round((amountMilli/1000) * ratePercent) in cents or miles.
+- miles: earnedMiles = floor((amountMilli/1000) * rateMilesPerDollar).
+- flat: earned = flat per eligible txn (rare, but supported).
+- tiered: iterate tiers by remaining cap for that tier.
+
+Stacking and priority resolution:
+- exclusive: pick highest earned among matching rules (tie → higher priority).
+- bestOf: compute all, select max; record “considered” rules for transparency.
+- stack: sum all matching rules (rare in issuers; off by default).
+- group: only one rule active per group in a window to avoid double counting.
+
+Windows and sub‑caps:
+- Resolve windowKey from cadence (e.g., 2025-03, 2025-Q3) with anchor start.
+- Accrue into AccrualWindow; enforce caps by reducing eligible base amount.
+- Proration: for forecasts, prorate expected spend for partial windows; do not prorate actual issuer caps unless rule explicitly says so (config flag: prorateCap: boolean).
+
+Matching:
+- Match order: transaction metadata → mapping overrides (flag/category/payee) → rule scope.
+- Support pseudo-tags: parse memo hashtags `#grocery`, `#amazon`, etc. Store only hashed tokens if persisted; otherwise ephemeral mapping in memory.
+- Split transactions: child lines inherit metadata; compute per child; parent transaction accrues zero.
+- Refunds: negative amounts reduce AccrualWindow.spentMilli and post negative AccrualEvent (isAdjustment=true). If window closed, reopen window or post to next window with carryback flag.
+
+Rounding and units:
+- Store YNAB amounts in milliunits (int). Convert to minor units (cents or miles) only for earned values; round to nearest cent per transaction, then sum. Expose both transaction‑level and total rounding deltas for audit.
+
+Edge cases:
+- Category reassignments after accrual: recompute for affected txns; write compensating AccrualEvents to reconcile.
+- Timezone: treat windows in user’s tz; persist tz on User or Connection; compute window boundaries accordingly.
+
+Engine interface (apps/web/lib/reward-engine/index.ts):
+- computeAccruals({ userId, sinceWindowKey? }): loads rules, mappings, and transactions since last computation window; returns changed AccrualWindows and AccrualEvents.
+- explain(txId): returns matched rules, effective rate, cap usage increments.
+
+Examples:
+- 5% grocery up to $1,500 per quarter, bestOf with 2% base:
+  - Rule A: scope categories=[grocery], cadence='quarterly', reward=percent 5, caps.perWindowMinor=150000, stacking.mode='exclusive', priority=10.
+  - Rule B: scope accounts=[same card], cadence='monthly', reward=percent 2, stacking.mode='exclusive', priority=100.
+
+**YNAB Integration**
+
+Scopes and flow:
+- Scope: read‑only (budget:read). Authorization Code + PKCE.
+- OAuth endpoints (Next.js App Router):
+  - GET `/app/(auth)/ynab/start` → constructs authorize URL with state, code_challenge, redirect_uri.
+  - GET `/app/(auth)/ynab/callback` → exchanges code, stores encrypted tokens, fetches initial budget info.
+
+Text flow:
+- User clicks Connect → redirect to YNAB authorize with client_id, redirect_uri, code_challenge.
+- YNAB redirects to callback with code, state.
+- App exchanges code for access + refresh, stores securely; records budgetId; fetches initial `server_knowledge`.
+
+Delta strategy and rate budgeting:
+- Use “last_knowledge_of_server” (serverKnowledge) against `GET /budgets/{budget_id}?last_knowledge_of_server=N` to receive only changed entities (accounts, categories, payees, transactions) plus new `server_knowledge`.
+- For transaction bodies, fall back to `transactions?since_date=` as needed for historical backfills.
+- Maintain per‑connection leaky bucket: 200 req/hour/token. Batch work so a sync typically uses ≤10 calls. Backoff on 429 with retry‑after.
+- Sync cadence defaults: every 15 minutes; increase interval when idle; immediate sync on manual trigger.
+
+packages/ynab-client/src/index.ts:
+- Thin wrapper: retry policy, rate limiter, delta helper: `fetchDelta({ budgetId, serverKnowledge })` → { changedEntities, newServerKnowledge }.
+- Normalization: map YNAB entities into internal shapes without PII (store IDs; do not persist names unless user allows).
+
+Sync pipeline (packages/worker/src/sync.ts):
+- For each YNABConnection within schedule and budget: get delta; upsert Accounts/Categories/Payees (IDs only); upsert Transactions (txn ID, amounts, refs). Update serverKnowledge atomically.
+- Identify changed transaction IDs; enqueue compute.
+
+Compute pipeline (packages/worker/src/compute.ts):
+- Load rules and mappings; compute accruals for changed windows; persist AccrualWindows and AccrualEvents; trigger notifications if thresholds crossed.
+
+No webhooks: YNAB does not provide webhooks. Use scheduled polling only. Expose a manual “Sync now” API for the user.
+
+**UI/UX**
+
+Pages:
+- Dashboard: current period by card and by rule; cap remaining, earned to date, forecast to window end; “best card by category” summary; upcoming rule expirations.
+- Settings → Cards: list cards, add/edit (name, issuer, currency, default priority).
+- Settings → Rules: create/edit rules with live preview; library of common issuers/category templates; simulator: paste recent transactions to see accruals.
+- Settings → Mappings: per‑account flag mapping (6 colors → reward categories), category mappings, payee overrides; preview effective category for sample txns.
+- Auth: Connect YNAB; show scope and privacy summary.
+- Notifications: email/web push preferences; thresholds; digest schedule.
+- Data: export data (JSON/CSV) and “Delete my data” with confirmation and cooldown.
+
+Components:
+- CardSummary, RuleCard, AccrualProgress (cap meter), ForecastChart (sparklines), WindowPicker, RuleEditor (DSL form + JSON view), MappingTable, TxList (virtualized), AlertBanner.
+
+Words‑as‑wireframes:
+- Dashboard: top row cards (earned / cap remaining with progress bars). Middle: category table (category → best card, current mix, potential gain if optimized). Right panel: alerts (cap 75%+, rule expiry in 7 days, new rotating categories). Bottom: recent accrual events with explain links.
+
+Accessibility and UX:
+- Clear indicators when data is simulated vs persisted. Tooltips with “how calculated”. Explain button on each transaction to show rule resolution steps.
+
+**Security**
+
+Tokens:
+- Store access/refresh tokens encrypted at rest (e.g., AES‑GCM via KMS or libsodium; key in env/KMS).
+- Use PKCE; store OAuth state and PKCE verifier in encrypted, HttpOnly cookie or ephemeral store; short TTL.
+- Read‑only scope only. Rotate client secret regularly.
+
+Data minimization:
+- Persist only YNAB IDs and numeric fields; avoid payee names and memos. If merchant display is needed, fetch on demand and avoid logging.
+- Memo hashtags: extract normalized tags client‑side; persist hashed tokens if needed.
+
+App hardening:
+- Strict Content Security Policy. SameSite=strict cookies. CSRF protection on POST routes.
+- RLS‑like checks: always filter by `userId`; do not trust client IDs.
+- AuditLog for token exchange, export, deletion operations only (no payloads).
+- PII in logs: redact by default; structured logs with safe fields.
+
+User controls:
+- Export‑only mode: compute in memory and return zip/JSON without persistence (may disable background sync/caps).
+- Explicit data deletion: queue deletion job that erases all user rows (FK cascade) and revokes YNAB token; confirmation email; 7‑day grace optional.
+
+Compliance:
+- Publish Privacy Policy and Data Retention. Document “read‑only” promise. Provide DPA‑ready language. Honor data subject requests.
+
+**Testing**
+
+Unit:
+- Rule engine: matching, stacking, priority, tiered calc, sub‑caps, windows (monthly/quarterly/annual), refunds negative accruals, split handling, rounding rules, timezone boundaries.
+- Mapping: flag/category/payee precedence resolution.
+
+Contract:
+- YNAB client: MSW or Pact tests to validate delta requests; 429/backoff; token refresh flow; serverKnowledge update logic.
+
+Integration:
+- Sync + compute: seed fixtures (transactions across windows, reassignments), run full pipeline, assert AccrualWindows, AccrualEvents, notifications.
+
+E2E:
+- Playwright: OAuth flow (mock provider), connect budget, run manual sync, see dashboard accruals; edit rule and recompute; delete data.
+
+Fixtures:
+- Realistic txn sets: quarterly cap exhaustion, mid‑window join, refunds after cap hit, split tx across multiple categories, rotating category activation.
+
+Performance:
+- Simulate 10k transactions; ensure compute runs within target (e.g., <1s per 1k tx) via window scoping and memoization.
+
+**Migration/Rollout**
+
+- Migrations: Prisma migration per change; start with Postgres. Seed initial templates (common cards/rules).
+- Feature flags: enable engine v2 (stacking) per user, notifications rollout staged.
+- Rollout path:
+  - Private alpha: PAT only, single budget, limited rules.
+  - Beta: OAuth, standard rules + sub‑caps, email alerts.
+  - GA: web push, recommendations, rotating categories library.
+- Backfills:
+  - On connect: import N months of history (configurable, default 3–6) with paging/throttling.
+  - Create AccrualWindows for existing rules over historical windows; batch in small chunks.
+
+**API Endpoints (App Router)**
+
+- GET `/api/auth/ynab/start` → redirect to YNAB authorize (PKCE).
+- GET `/api/auth/ynab/callback` → token exchange, persist connection, initial sync enqueue.
+- POST `/api/sync/run` → manual sync for current user.
+- GET `/api/dashboard` → current accruals, cap remaining, forecasts.
+- CRUD `/api/cards`, `/api/rules`, `/api/mappings` → server actions or route handlers.
+- POST `/api/notifications/test` → send test message to user preferences.
+
+Example server action outline (pseudo):
+- async function syncNow() { enforceRateLimit(userId); const delta = await ynab.fetchDelta(conn); await db.upsert(delta); await computeAccruals(userId, delta.changedTxnIds); return summary; }
+
+**Recommendations Engine**
+
+- Best card by category:
+  - For each category seen in last N days, simulate rules across user’s cards for an average $100 txn → select card with highest incremental reward; display “you’d earn X more/month if…”.
+- Cap proximity alerts:
+  - When remainingMinor <= threshold (e.g., 10% of cap or <$50), trigger one alert per window; include next‑best card recommendation.
+
+**Risks and Mitigations**
+
+- Rate limits: central leaky‑bucket and coarse sync cadence; delta endpoints; exponential backoff; per‑user sync staggering.
+- PII leakage: avoid storing names/memos; redact logs; security reviews; DLP checks in CI.
+- Misclassification: provide “Explain” and quick fix (mapping override) with immediate recompute; weekly digest with anomalies.
+- Complexity creep: start with percent and miles; defer exotic issuer edge cases; maintain rule templates to avoid user confusion.
+- Timezone/window errors: store user tz; add boundary tests (E2E around month/quarter edges).
+
+**Open Questions**
+
+- Multi‑currency: do we need FX handling for non‑USD? If yes, store currency per account and convert using daily rates for dashboard only; accruals stay in issuer currency.
+- Shared budgets: support multi‑user linking to the same budget? If so, model connections per user and deduplicate transaction imports by (budgetId, txnId), accruing per user’s rules.
+- Statement vs calendar windows: do issuers align caps to statements? If so, allow per‑card statement anchor dates; provide UI for statement day.
+- MCC data: YNAB payees don’t include MCC; do we add merchant heuristics or user category mapping suffice for MVP?
+- Templates: prioritize which issuers (Chase, Amex, Citi, Discover) and rotating categories source of truth schedule.
+
+**Quick Defaults**
+
+- Sync every 15 minutes; max 10 requests per sync; 3‑month backfill on connect.
+- Read‑only scope; Node runtime; tokens encrypted with libsodium secretbox; keys via env/KMS.
+- Minimal persistence: IDs + numeric fields; no payee names or memos by default.
+- Accrual rounding at transaction level; USD cents stored as int; miles as int.
+- Alerts at 75% and 90% of cap; weekly digest on Mondays.
+
+If you want, I can tailor the initial Prisma schema and the rule templates for your personal cards, or sketch the RuleEditor form structure next.
+[2025-09-08T14:25:29] tokens used: 6484

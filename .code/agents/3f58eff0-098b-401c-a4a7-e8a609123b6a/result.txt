@@ -1,0 +1,254 @@
+Here is a comprehensive plan for the YNAB credit card rewards optimizer web application.
+
+### **Architecture**
+
+The application will be a modern full-stack TypeScript monorepo using a `pnpm` workspace.
+
+*   **Framework**: Next.js 14 with the App Router.
+*   **Language**: TypeScript.
+*   **Database**: PostgreSQL for production, with SQLite for local development, managed by Prisma.
+*   **Authentication**: `Auth.js` (NextAuth.js) for handling the YNAB OAuth2 flow.
+*   **Deployment**: Vercel for the Next.js application and a separate provider like Railway or Heroku for the background worker and database.
+*   **Background Jobs**: A separate Node.js process for handling background syncs and reward computations, using a library like `bullmq` for queueing and scheduling.
+
+**Directory Structure:**
+
+```
+/
+├── apps/
+│   └── web/
+│       ├── app/
+│       │   ├── (auth)/
+│       │   │   └── callback/
+│       │   │       └── route.ts
+│       │   ├── dashboard/
+│       │   │   └── page.tsx
+│       │   └── settings/
+│       │       ├── cards/
+│       │       │   └── page.tsx
+│       │       └── rules/
+│       │           └── page.tsx
+│       ├── components/
+│       ├── lib/
+│       │   ├── ynab.ts
+│       │   └── reward-engine/
+│       │       ├── index.ts
+│       │       ├── rules.ts
+│       │       └── calculators.ts
+│       └── pages/api/
+│           ├── auth/
+│           │   └── [...nextauth]/
+│           │       └── route.ts
+│           └── webhooks/
+│               └── ynab.ts
+├── packages/
+│   ├── db/
+│   │   └── schema.prisma
+│   ├── ynab-client/
+│   │   └── src/
+│   │       └── index.ts
+│   └── worker/
+│       ├── src/
+│       │   ├── sync.ts
+│       │   └── compute.ts
+└── docs/
+    ├── architecture.md
+    └── privacy.md
+```
+
+### **Data Model**
+
+The database schema will be defined using Prisma.
+
+**`schema.prisma`:**
+
+```prisma
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  accounts      Account[]
+  ynabAccessToken String?
+  ynabRefreshToken String?
+  ynabTokenExpiresAt DateTime?
+}
+
+model Account {
+  id     String @id @default(cuid())
+  name   String
+  type   String
+  onBudget Boolean
+  closed Boolean
+  ynabAccountId String @unique
+  user   User   @relation(fields: [userId], references: [id])
+  userId String
+  cards  Card[]
+}
+
+model Card {
+  id        String      @id @default(cuid())
+  name      String
+  issuer    String
+  network   String
+  account   Account     @relation(fields: [accountId], references: [id])
+  accountId String
+  rules     RewardRule[]
+}
+
+model RewardRule {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  card        Card     @relation(fields: [cardId], references: [id])
+  cardId      String
+  type        String   // 'cashback', 'points', 'miles'
+  value       Float    // e.g., 0.05 for 5%
+  // JSON field for complex rule definitions
+  conditions  Json
+  // Example of conditions
+  // {
+  //   "categories": ["grocery", "gas"],
+  //   "payees": ["Amazon"],
+  //   "mcc": ["5411"],
+  //   "startDate": "2023-01-01T00:00:00Z",
+  //   "endDate": "2023-03-31T23:59:59Z",
+  //   "caps": {
+  //     "quarterly": 1500
+  //   }
+  // }
+}
+```
+
+### **Rule Engine**
+
+The reward rule engine will be a TypeScript-based module responsible for calculating rewards based on a set of configurable rules.
+
+**`apps/web/lib/reward-engine/rules.ts`:**
+
+```typescript
+export type RewardRule = {
+  id: string;
+  name: string;
+  description?: string;
+  cardId: string;
+  type: 'cashback' | 'points' | 'miles';
+  value: number;
+  conditions: {
+    categories?: string[];
+    payees?: string[];
+    mcc?: string[];
+    startDate?: string;
+    endDate?: string;
+    caps?: {
+      daily?: number;
+      monthly?: number;
+      quarterly?: number;
+      yearly?: number;
+      transaction?: number;
+    };
+  };
+};
+
+export class RuleEngine {
+  private rules: RewardRule[];
+
+  constructor(rules: RewardRule[]) {
+    this.rules = rules;
+  }
+
+  calculate(transaction: any): any[] {
+    const rewards = [];
+    for (const rule of this.rules) {
+      if (this.matches(rule, transaction)) {
+        rewards.push(this.calculateReward(rule, transaction));
+      }
+    }
+    return rewards;
+  }
+
+  private matches(rule: RewardRule, transaction: any): boolean {
+    // ... implementation to check if transaction matches rule conditions
+    return true;
+  }
+
+  private calculateReward(rule: RewardRule, transaction: any): any {
+    // ... implementation to calculate reward based on rule type and value
+    return {
+      ruleId: rule.id,
+      transactionId: transaction.id,
+      amount: transaction.amount * rule.value,
+    };
+  }
+}
+```
+
+### **YNAB Integration**
+
+*   **OAuth Flow**:
+    1.  User clicks "Connect to YNAB" button.
+    2.  Redirect to YNAB authorization URL with `read-only` scope.
+    3.  User authorizes the application.
+    4.  YNAB redirects back to `apps/web/pages/api/auth/[...nextauth]/route.ts`.
+    5.  `Auth.js` handles the OAuth callback, exchanges the authorization code for an access token and refresh token.
+    6.  Tokens are securely stored in the database, encrypted at rest.
+*   **Sync Strategy**:
+    *   A background worker will periodically sync data from the YNAB API for each connected user.
+    *   The worker will use the `server_knowledge` parameter to perform delta syncs, fetching only changed data since the last sync.
+    *   The sync will respect the YNAB API rate limit of 200 requests per hour per token. The worker will be designed to stay well below this limit.
+
+### **UI/UX**
+
+*   **Dashboard**: A central dashboard will display:
+    *   Total rewards earned in the current month/quarter/year.
+    *   Breakdown of rewards by card and category.
+    *   Progress towards spending caps for each reward rule.
+    *   Recommendations for which card to use for upcoming purchases based on spending habits.
+*   **Card & Rule Management**:
+    *   A dedicated section for users to add and manage their credit cards.
+    *   An intuitive UI for creating and editing reward rules, with clear explanations of each condition and parameter.
+*   **Wireframes (in words)**:
+    *   **Dashboard**: A grid of cards, each displaying a key metric (e.g., "Total Rewards This Month," "Chase Sapphire Preferred Progress"). A table below shows recent transactions and the rewards earned for each.
+    *   **Card Settings**: A list of cards, each with an "Edit" button. Clicking "Edit" opens a modal with fields for card name, issuer, and network.
+    *   **Rule Settings**: A list of rules grouped by card. Each rule shows its name and a summary of its conditions. A "New Rule" button opens a multi-step form to guide the user through creating a new rule.
+
+### **Security**
+
+*   **Token Storage**: YNAB access and refresh tokens will be encrypted at rest in the database.
+*   **Data Minimization**: The application will only store the minimum amount of data necessary to calculate rewards. Raw transaction data will not be stored.
+*   **Data Deletion**: Users will have the ability to delete their account and all associated data at any time.
+*   **Privacy Policy**: A clear and concise privacy policy will be provided, explaining what data is collected and how it is used.
+
+### **Testing**
+
+*   **Unit Tests**: The reward rule engine and other critical business logic will be thoroughly unit-tested using a framework like `jest`.
+*   **Integration Tests**: Integration tests will be written to verify the interaction between the application and the YNAB API.
+*   **End-to-End Tests**: End-to-end tests will be created using a framework like `Cypress` to test the entire application flow, from OAuth to displaying rewards on the dashboard.
+
+### **Migration/Rollout**
+
+*   **Phased Rollout**: The application will be rolled out in phases:
+    1.  **MVP**: Basic functionality, including YNAB integration, manual sync, and a simple reward rule engine.
+    2.  **V1**: Background sync, more advanced rule conditions, and a more polished UI.
+    3.  **V2**: Notifications, historical data import, and more advanced analytics.
+*   **Beta Program**: A private beta program will be used to gather feedback from a small group of users before the public launch.
+
+### **Open Questions**
+
+*   How to handle currency conversions for international transactions.
+*   How to handle split transactions in YNAB.
+*   How to best handle the 6-flag limit in YNAB for pseudo-tagging.
+*   What is the best way to handle the "stacking" of rewards (e.g., a quarterly bonus on top of a base reward).

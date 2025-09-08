@@ -1,0 +1,19 @@
+{
+  "name": "ynab-counter",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@9.6.0",
+  "scripts": {
+    "dev": "pnpm -C apps/web dev",
+    "build": "pnpm -C apps/web build",
+    "start": "pnpm -C apps/web start",
+    "typecheck": "tsc -b",
+    "lint": "eslint ."
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "docs"
+  ]
+}
+
