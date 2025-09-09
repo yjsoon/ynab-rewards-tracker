@@ -31,6 +31,15 @@ if (process.env.NODE_ENV !== 'production') {
 const dbUrl = process.env.DATABASE_URL || '';
 const isSqlite = dbUrl.startsWith('file:') || dbUrl.startsWith('sqlite:');
 
+/**
+ * Initialize SQLite PRAGMAs for better performance and concurrency.
+ * This should be called during application startup for production use.
+ * 
+ * @example
+ * // In your application startup:
+ * import { initPrisma } from '@ynab-counter/db';
+ * await initPrisma();
+ */
 export async function initPrisma() {
   if (isSqlite) {
     await prisma.$queryRawUnsafe('PRAGMA journal_mode = WAL');
@@ -38,7 +47,8 @@ export async function initPrisma() {
   }
 }
 
-// Initialize SQLite pragmas (fire and forget)
+// Auto-initialize for development convenience
+// Note: In production, consider awaiting initPrisma() during startup for reliability
 if (isSqlite) {
   initPrisma().catch((err) => {
     console.error('Failed to set SQLite PRAGMAs:', err);

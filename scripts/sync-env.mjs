@@ -60,8 +60,8 @@ function isSqlite(url) {
 }
 
 function isAbsoluteFileUrl(url) {
-  // file:// or file:/// are absolute; file:./ and file:../ are relative
-  return /^file:\/\//.test(url) || /^file:\/\/\//.test(url) || /^file:\/[^.]/.test(url);
+  // file:// (includes file:///) are absolute; file:./ and file:../ are relative
+  return /^file:\/\//.test(url) || /^file:\/[^.]/.test(url);
 }
 
 function writeDbEnv(vars) {

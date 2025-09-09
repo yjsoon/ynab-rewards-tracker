@@ -35,6 +35,11 @@ if (process.env.NODE_ENV !== 'production') {
 const dbUrl = resolvedDbUrl || process.env.DATABASE_URL || '';
 const isSqlite = dbUrl.startsWith('file:') || dbUrl.startsWith('sqlite:');
 
+/**
+ * Initialize SQLite PRAGMAs for better performance.
+ * TODO: Once web can import from @ynab-counter/db cleanly, 
+ * remove this duplicate and use the shared initPrisma() function.
+ */
 async function initSqlitePragmas() {
   if (isSqlite) {
     // WAL PRAGMA returns a row; use queryRaw. busy_timeout can use executeRaw.
@@ -43,7 +48,8 @@ async function initSqlitePragmas() {
   }
 }
 
-// Call the initialization function (fire and forget)
+// Auto-initialize for development convenience
+// Note: In production, consider awaiting during startup for reliability
 initSqlitePragmas().catch((err) => {
   console.error('Failed to set SQLite PRAGMAs:', err);
 });

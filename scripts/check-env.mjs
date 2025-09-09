@@ -66,7 +66,7 @@ function assessEnv(map, label) {
   }
 
   if (map.NEXTAUTH_SECRET) {
-    res.issues.push('NEXTAUTH_SECRET present but unused');
+    res.issues.push('NEXTAUTH_SECRET present (deprecated/transitional; not used by current codebase)');
   }
 
   return res;

@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-
-// YNAB tokens are typically longer than 20 characters
-const MIN_TOKEN_LENGTH = 20;
+import { MIN_TOKEN_LENGTH } from '@/lib/constants';
 
 type Status = {
   connected: boolean;

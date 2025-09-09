@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { encrypt } from '@/lib/crypto';
+import { MIN_TOKEN_LENGTH } from '@/lib/constants';
 
 export const dynamic = 'force-dynamic';
 
@@ -51,7 +52,7 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const { token, verify = true } = await req.json().catch(() => ({ token: undefined }));
-    if (!token || typeof token !== 'string' || token.trim().length < 40) {
+    if (!token || typeof token !== 'string' || token.trim().length < MIN_TOKEN_LENGTH) {
       return json(400, { error: 'invalid_token', message: 'Token missing or too short.' });
     }
 
