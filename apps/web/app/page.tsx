@@ -8,7 +8,9 @@ export default function HomePage() {
         <li>Define cards and reward rules.</li>
         <li>Run sync and view dashboards.</li>
       </ol>
+      <p>
+        <a href="/settings">Go to Settings</a> to paste a Personal Access Token.
+      </p>
     </main>
   );
 }
-

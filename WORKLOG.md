@@ -10,6 +10,7 @@
 - Added index export (`src/index.ts`) for clean imports
 - Added Prisma scripts: `generate`, `migrate:dev`, `studio`
 - Configured TypeScript with Node types support
+ - Switched datasource to SQLite by default; set WAL + busy timeout at client init
 
 ### 2. OAuth Implementation (apps/web)
 - **Token Exchange**: Implemented OAuth callback route with full token exchange flow
@@ -55,14 +56,18 @@
    # - Database URL (SQLite for local dev: file:./dev.db)
    ```
 
-3. **Initialize database**:
+3. **Initialize database (SQLite default)**:
    ```bash
+   # Important: Prisma reads .env from packages/db/.env
+   cp packages/db/.env.example packages/db/.env # adjust if needed
    pnpm db:generate
    pnpm db:migrate
    ```
 
 4. **Run development server**:
    ```bash
+   # Next.js reads env from apps/web/.env.local
+   cp apps/web/.env.local.example apps/web/.env.local # fill secrets
    pnpm dev
    ```
 
@@ -86,3 +91,12 @@
 3. Implement reward rule engine
 4. Add UI components for dashboard
 5. Set up proper user authentication (replace placeholder)
+### 6. PAT Mode & Settings UI (2025-09-09)
+- Added `POST/GET /api/auth/ynab/pat` to store a YNAB Personal Access Token securely (AES-GCM), scoped as `scope: 'pat'`.
+- Added `apps/web/app/settings/page.tsx` to paste token and test sync.
+- Updated `/api/sync/run` to support `YNAB_ACCESS_TOKEN` env override (mode: `pat`) and continue supporting DB-backed tokens.
+
+6. **Alternatively, use Personal Access Token (PAT)**:
+   - Generate a PAT in YNAB account settings.
+   - EITHER set `YNAB_ACCESS_TOKEN` in `.env`, OR visit `/settings` and paste it.
+   - Trigger a sync: `curl -X POST http://localhost:3000/api/sync/run`.
