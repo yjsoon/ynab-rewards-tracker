@@ -4,13 +4,18 @@
   "version": "0.1.0",
   "packageManager": "pnpm@9.6.0",
   "scripts": {
-    "dev": "pnpm -C apps/web dev",
-    "build": "pnpm -C apps/web build",
-    "start": "pnpm -C apps/web start",
+    "env:sync": "node scripts/sync-env.mjs",
+    "env:check": "node scripts/check-env.mjs",
+    "dev": "pnpm env:sync && pnpm -C apps/web dev",
+    "build": "pnpm env:sync && pnpm -C apps/web build",
+    "start": "pnpm env:sync && pnpm -C apps/web start",
     "typecheck": "pnpm -r --parallel typecheck",
     "lint": "eslint .",
-    "db:generate": "pnpm -C packages/db generate",
-    "db:migrate": "pnpm -C packages/db migrate:dev"
+    "db:generate": "pnpm env:sync && pnpm -C packages/db generate",
+    "db:migrate": "pnpm env:sync && pnpm -C packages/db migrate:dev",
+    "db:migrate:init": "pnpm env:sync && pnpm -C packages/db exec prisma migrate dev --name init",
+    "db:push": "pnpm env:sync && pnpm -C packages/db exec prisma db push",
+    "db:reset": "pnpm env:sync && rm -f packages/db/dev.db packages/db/dev.db-shm packages/db/dev.db-wal"
   },
   "workspaces": [
     "apps/*",

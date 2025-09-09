@@ -6,25 +6,41 @@ export const dynamic = 'force-dynamic';
 
 export async function POST() {
   try {
-    // For now, use the placeholder user created during OAuth
+    // PAT mode: allow using a Personal Access Token from env without DB records
+    const envToken = process.env.YNAB_ACCESS_TOKEN;
+    if (envToken) {
+      const resp = await fetch('https://api.ynab.com/v1/budgets', {
+        headers: {
+          Authorization: `Bearer ${envToken}`,
+          Accept: 'application/json',
+        },
+      });
+      if (!resp.ok) {
+        return NextResponse.json({ error: 'ynab_api_error', status: resp.status }, { status: 502 });
+      }
+      const budgets = await resp.json();
+      return NextResponse.json({ ok: true, mode: 'pat', budgets: budgets.data?.budgets ?? budgets });
+    }
+
+    // OAuth mode: use stored, encrypted token
     const user = await prisma.user.findFirst({ where: { email: 'placeholder@example.com' } });
     if (!user) return NextResponse.json({ error: 'no_user' }, { status: 404 });
 
     const connection = await prisma.connection.findFirst({ where: { userId: user.id, provider: 'YNAB' } });
-    if (!connection) return NextResponse.json({ error: 'no_connection' }, { status: 404 });
+    if (!connection) return NextResponse.json({ error: 'no_connection_or_pat' }, { status: 404 });
 
     const accessToken = decrypt(connection.accessTokenEnc);
     const resp = await fetch('https://api.ynab.com/v1/budgets', {
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        Accept: 'application/json'
-      }
+        Accept: 'application/json',
+      },
     });
     if (!resp.ok) {
       return NextResponse.json({ error: 'ynab_api_error', status: resp.status }, { status: 502 });
     }
     const budgets = await resp.json();
-    return NextResponse.json({ ok: true, budgets: budgets.data?.budgets ?? budgets });
+    return NextResponse.json({ ok: true, mode: 'oauth', budgets: budgets.data?.budgets ?? budgets });
   } catch (err) {
     console.error('sync/run error', err);
     return NextResponse.json({ error: 'internal_error' }, { status: 500 });
