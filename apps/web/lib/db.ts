@@ -34,8 +34,16 @@ if (process.env.NODE_ENV !== 'production') {
 // Only applies when DATABASE_URL points to SQLite (file:/ or sqlite: schemes).
 const dbUrl = resolvedDbUrl || process.env.DATABASE_URL || '';
 const isSqlite = dbUrl.startsWith('file:') || dbUrl.startsWith('sqlite:');
-if (isSqlite) {
-  // WAL PRAGMA returns a row; use queryRaw. busy_timeout can use executeRaw.
-  await prisma.$queryRawUnsafe('PRAGMA journal_mode = WAL');
-  await prisma.$queryRawUnsafe('PRAGMA busy_timeout = 5000');
+
+async function initSqlitePragmas() {
+  if (isSqlite) {
+    // WAL PRAGMA returns a row; use queryRaw. busy_timeout can use executeRaw.
+    await prisma.$queryRawUnsafe('PRAGMA journal_mode = WAL');
+    await prisma.$queryRawUnsafe('PRAGMA busy_timeout = 5000');
+  }
 }
+
+// Call the initialization function (fire and forget)
+initSqlitePragmas().catch((err) => {
+  console.error('Failed to set SQLite PRAGMAs:', err);
+});

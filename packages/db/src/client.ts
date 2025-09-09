@@ -30,9 +30,19 @@ if (process.env.NODE_ENV !== 'production') {
 // Enable WAL for SQLite deployments to improve concurrent reads/writes.
 const dbUrl = process.env.DATABASE_URL || '';
 const isSqlite = dbUrl.startsWith('file:') || dbUrl.startsWith('sqlite:');
+
+export async function initPrisma() {
+  if (isSqlite) {
+    await prisma.$queryRawUnsafe('PRAGMA journal_mode = WAL');
+    await prisma.$queryRawUnsafe('PRAGMA busy_timeout = 5000');
+  }
+}
+
+// Initialize SQLite pragmas (fire and forget)
 if (isSqlite) {
-  await prisma.$queryRawUnsafe('PRAGMA journal_mode = WAL');
-  await prisma.$queryRawUnsafe('PRAGMA busy_timeout = 5000');
+  initPrisma().catch((err) => {
+    console.error('Failed to set SQLite PRAGMAs:', err);
+  });
 }
 
 export { prisma };

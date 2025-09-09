@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from 'react';
 
+// YNAB tokens are typically longer than 20 characters
+const MIN_TOKEN_LENGTH = 20;
+
 type Status = {
   connected: boolean;
   scope?: string;
@@ -73,7 +76,7 @@ export default function SettingsPage() {
             aria-label="YNAB access token"
           />
           <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
-            <button type="submit" disabled={loading || token.trim().length < 20}>
+            <button type="submit" disabled={loading || token.trim().length < MIN_TOKEN_LENGTH}>
               {loading ? 'Saving…' : 'Save Token'}
             </button>
             <button type="button" onClick={testSync}>Test Sync</button>

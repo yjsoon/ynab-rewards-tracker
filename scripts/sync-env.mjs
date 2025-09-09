@@ -60,14 +60,17 @@ function isSqlite(url) {
 }
 
 function isAbsoluteFileUrl(url) {
-  // file:/ or file:/// are absolute; file:./ and file:../ are relative
-  return /^file:\/\//.test(url) || /^file:\/\//.test(url) || /^file:\/[^.]/.test(url);
+  // file:// or file:/// are absolute; file:./ and file:../ are relative
+  return /^file:\/\//.test(url) || /^file:\/\/\//.test(url) || /^file:\/[^.]/.test(url);
 }
 
 function writeDbEnv(vars) {
   const out = { ...vars };
-  // Drop keys we explicitly do not propagate
-  delete out.NEXTAUTH_SECRET;
+  // Drop keys we explicitly do not propagate to db/.env
+  const excludedKeys = ['NEXTAUTH_SECRET'];
+  for (const key of excludedKeys) {
+    delete out[key];
+  }
   // Force absolute sqlite path so CLI and runtime use the same file
   if (!out.DATABASE_URL || isSqlite(out.DATABASE_URL)) {
     out.DATABASE_URL = `file:${dbFileAbs}`;
