@@ -10,6 +10,8 @@ export interface CreditCard {
   type: 'cashback' | 'points' | 'miles';
   color?: string;
   active: boolean;
+  ynabAccountId?: string; // Link to YNAB account if connected
+  isManual?: boolean; // True if manually added, false if from YNAB
 }
 
 export interface RewardRule {
@@ -29,6 +31,8 @@ export interface YnabConnection {
   pat?: string;
   lastSync?: string;
   selectedBudgetId?: string;
+  selectedBudgetName?: string;
+  trackedAccountIds?: string[]; // YNAB account IDs marked for tracking
 }
 
 export interface AppSettings {
@@ -63,7 +67,10 @@ class StorageService {
         return JSON.parse(stored);
       }
     } catch (error) {
-      console.error('Failed to parse storage:', error);
+      // Log error in development, but gracefully fall back to defaults
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Failed to parse localStorage:', error);
+      }
     }
     
     return this.getDefaultStorage();
@@ -87,7 +94,11 @@ class StorageService {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     } catch (error) {
-      console.error('Failed to save storage:', error);
+      // Log error in development, but continue gracefully
+      // Storage may be full, disabled, or in private browsing mode
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Failed to set localStorage:', error);
+      }
     }
   }
 
@@ -106,6 +117,35 @@ class StorageService {
     const storage = this.getStorage();
     delete storage.ynab.pat;
     this.setStorage(storage);
+  }
+
+  // Budget management
+  getSelectedBudget(): { id?: string; name?: string } {
+    const { selectedBudgetId, selectedBudgetName } = this.getStorage().ynab;
+    return { id: selectedBudgetId, name: selectedBudgetName };
+  }
+
+  setSelectedBudget(budgetId: string, budgetName: string): void {
+    const storage = this.getStorage();
+    storage.ynab.selectedBudgetId = budgetId;
+    storage.ynab.selectedBudgetName = budgetName;
+    this.setStorage(storage);
+  }
+
+  // Tracked accounts management
+  getTrackedAccountIds(): string[] {
+    return this.getStorage().ynab.trackedAccountIds || [];
+  }
+
+  setTrackedAccountIds(accountIds: string[]): void {
+    const storage = this.getStorage();
+    storage.ynab.trackedAccountIds = accountIds;
+    this.setStorage(storage);
+  }
+
+  isAccountTracked(accountId: string): boolean {
+    const trackedIds = this.getTrackedAccountIds();
+    return trackedIds.includes(accountId);
   }
 
   // Cards management

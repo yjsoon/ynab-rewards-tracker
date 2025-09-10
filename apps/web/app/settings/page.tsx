@@ -1,10 +1,65 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useYnabPAT, useCreditCards, useSettings } from '@/hooks/useLocalStorage';
 import { YnabClient } from '@/lib/ynab-client';
-import { CreditCard } from '@/lib/storage';
+import { CreditCard, storage } from '@/lib/storage';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+
+interface YnabBudget {
+  id: string;
+  name: string;
+  last_modified_on: string;
+}
+
+interface YnabAccount {
+  id: string;
+  name: string;
+  type: string;
+  on_budget: boolean;
+  closed: boolean;
+  balance: number;
+}
+
+// Constants for account type labels
+const ACCOUNT_TYPE_LABELS: Record<string, string> = {
+  creditCard: 'Credit Card',
+  checking: 'Checking',
+  savings: 'Savings',
+  cash: 'Cash',
+  lineOfCredit: 'Line of Credit',
+};
+
+// Type guard for card types
+function isValidCardType(value: string): value is 'cashback' | 'points' | 'miles' {
+  return value === 'cashback' || value === 'points' || value === 'miles';
+}
+
+// Style constants
+const styles = {
+  section: { marginBottom: 40 },
+  inputFull: { width: '100%', padding: 8, marginTop: 5 },
+  buttonSpacing: { marginLeft: 10 },
+  cardItem: {
+    padding: 10,
+    marginBottom: 10,
+    border: '1px solid #ddd',
+    borderRadius: 4,
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  ynabCardItem: {
+    padding: 10,
+    marginBottom: 10,
+    border: '1px solid #ddd',
+    borderRadius: 4,
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#f0f8ff',
+  },
+} as const;
 
 export default function SettingsPage() {
   const { pat, setPAT, isLoading: patLoading } = useYnabPAT();
@@ -18,27 +73,160 @@ export default function SettingsPage() {
   const [showDeleteCardDialog, setShowDeleteCardDialog] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Budget and account selection state
+  const [budgets, setBudgets] = useState<YnabBudget[]>([]);
+  const [selectedBudget, setSelectedBudget] = useState<{ id?: string; name?: string }>({});
+  const [accounts, setAccounts] = useState<YnabAccount[]>([]);
+  const [trackedAccountIds, setTrackedAccountIds] = useState<string[]>([]);
+  const [loadingBudgets, setLoadingBudgets] = useState(false);
+  const [loadingAccounts, setLoadingAccounts] = useState(false);
+  const [showBudgetSelector, setShowBudgetSelector] = useState(false);
+
   // Card form state
   const [showCardForm, setShowCardForm] = useState(false);
   const [editingCard, setEditingCard] = useState<CreditCard | null>(null);
-  const [cardForm, setCardForm] = useState<{
+  type CardFormData = {
     name: string;
     issuer: string;
     type: 'cashback' | 'points' | 'miles';
-  }>({
+  };
+
+  const [cardForm, setCardForm] = useState<CardFormData>({
     name: '',
     issuer: '',
     type: 'cashback',
   });
+
+  // Load saved budget and tracked accounts on mount
+  useEffect(() => {
+    const savedBudget = storage.getSelectedBudget();
+    setSelectedBudget(savedBudget);
+    setTrackedAccountIds(storage.getTrackedAccountIds());
+    
+    // If we have a PAT and selected budget, fetch accounts
+    if (pat && savedBudget.id) {
+      fetchAccounts(savedBudget.id);
+    }
+    // If we have a PAT but no budget, fetch budgets
+    else if (pat && !savedBudget.id) {
+      fetchBudgets();
+    }
+  }, [pat]);
+
+  async function fetchBudgets() {
+    if (!pat) return;
+    
+    setLoadingBudgets(true);
+    try {
+      const client = new YnabClient(pat);
+      const fetchedBudgets = await client.getBudgets();
+      setBudgets(fetchedBudgets);
+      
+      // If only one budget, auto-select it
+      if (fetchedBudgets.length === 1) {
+        handleBudgetSelect(fetchedBudgets[0].id, fetchedBudgets[0].name);
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      setConnectionMessage(`Failed to fetch budgets: ${errorMessage}`);
+    } finally {
+      setLoadingBudgets(false);
+    }
+  }
+
+  async function fetchAccounts(budgetId: string) {
+    if (!pat) return;
+    
+    setLoadingAccounts(true);
+    try {
+      const client = new YnabClient(pat);
+      const fetchedAccounts = await client.getAccounts(budgetId);
+      // Filter to only show open accounts (all types - checking, savings, credit cards, etc.)
+      const openAccounts = fetchedAccounts.filter(
+        (acc: YnabAccount) => !acc.closed && acc.on_budget
+      );
+      setAccounts(openAccounts);
+      
+      // Sync tracked accounts with existing cards
+      syncCardsWithAccounts(openAccounts);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      setConnectionMessage(`Failed to fetch accounts: ${errorMessage}`);
+    } finally {
+      setLoadingAccounts(false);
+    }
+  }
+
+  function syncCardsWithAccounts(ynabAccounts: YnabAccount[]) {
+    const savedTrackedIds = storage.getTrackedAccountIds();
+    
+    // Create cards for tracked accounts that don't exist yet
+    ynabAccounts.forEach((account) => {
+      if (savedTrackedIds.includes(account.id)) {
+        const existingCard = cards.find(c => c.ynabAccountId === account.id);
+        if (!existingCard) {
+          // Create a new card for this YNAB account
+          const newCard: CreditCard = {
+            id: `ynab-${account.id}`,
+            name: account.name,
+            issuer: 'Unknown', // User can edit later
+            type: 'cashback', // Default, user can edit
+            active: true,
+            ynabAccountId: account.id,
+            isManual: false,
+          };
+          saveCard(newCard);
+        }
+      }
+    });
+  }
 
   async function handleSaveToken(e: React.FormEvent) {
     e.preventDefault();
     if (!tokenInput.trim()) return;
 
     setPAT(tokenInput);
-    setConnectionMessage('Token saved!');
+    setConnectionMessage('Token saved! Fetching budgets...');
     setTokenInput('');
-    setTimeout(() => setConnectionMessage(''), 3000);
+    
+    // Immediately fetch budgets after saving token
+    fetchBudgets();
+  }
+
+  function handleBudgetSelect(budgetId: string, budgetName: string) {
+    storage.setSelectedBudget(budgetId, budgetName);
+    setSelectedBudget({ id: budgetId, name: budgetName });
+    setShowBudgetSelector(false);
+    fetchAccounts(budgetId);
+  }
+
+  function handleAccountToggle(accountId: string, accountName: string) {
+    const newTrackedIds = trackedAccountIds.includes(accountId)
+      ? trackedAccountIds.filter(id => id !== accountId)
+      : [...trackedAccountIds, accountId];
+    
+    setTrackedAccountIds(newTrackedIds);
+    storage.setTrackedAccountIds(newTrackedIds);
+    
+    // If adding an account, create a card for it
+    if (!trackedAccountIds.includes(accountId)) {
+      const newCard: CreditCard = {
+        id: `ynab-${accountId}`,
+        name: accountName,
+        issuer: 'Unknown',
+        type: 'cashback',
+        active: true,
+        ynabAccountId: accountId,
+        isManual: false,
+      };
+      saveCard(newCard);
+    } else {
+      // If removing, delete the associated card
+      const cardToDelete = cards.find(c => c.ynabAccountId === accountId);
+      if (cardToDelete) {
+        deleteCard(cardToDelete.id);
+      }
+    }
   }
 
   async function testConnection() {
@@ -53,9 +241,10 @@ export default function SettingsPage() {
     try {
       const client = new YnabClient(pat);
       const budgets = await client.getBudgets();
-      setConnectionMessage(`✅ Connected! Found ${budgets.length} budget(s)`);
+      setConnectionMessage(`Connected successfully! Found ${budgets.length} budget(s)`);
     } catch (error) {
-      setConnectionMessage(`❌ Connection failed: ${error}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      setConnectionMessage(`Connection failed: ${errorMessage}`);
     } finally {
       setTestingConnection(false);
     }
@@ -81,7 +270,8 @@ export default function SettingsPage() {
       try {
         importSettings(event.target?.result as string);
       } catch (error) {
-        alert('Failed to import settings: ' + error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        alert(`Failed to import settings: ${errorMessage}`);
       }
     };
     reader.readAsText(file);
@@ -107,10 +297,22 @@ export default function SettingsPage() {
       issuer: cardForm.issuer,
       type: cardForm.type,
       active: editingCard?.active ?? true,
+      ynabAccountId: editingCard?.ynabAccountId,
+      isManual: editingCard?.isManual ?? true,
     };
     saveCard(card);
     setShowCardForm(false);
     setCardForm({ name: '', issuer: '', type: 'cashback' });
+  }
+
+  function handleClearAll() {
+    clearAll();
+    setPAT('');
+    setBudgets([]);
+    setSelectedBudget({});
+    setAccounts([]);
+    setTrackedAccountIds([]);
+    setShowClearDialog(false);
   }
 
   if (patLoading || cardsLoading) {
@@ -122,19 +324,9 @@ export default function SettingsPage() {
       <h1>Settings</h1>
 
       {/* YNAB Connection */}
-      <section style={{ marginBottom: 40 }}>
+      <section style={styles.section}>
         <h2>YNAB Connection</h2>
-        {pat ? (
-          <div>
-            <p style={{ color: 'green' }}>✅ Token configured</p>
-            <button onClick={testConnection} disabled={testingConnection}>
-              {testingConnection ? 'Testing...' : 'Test Connection'}
-            </button>
-            <button onClick={() => setPAT('')} style={{ marginLeft: 10 }}>
-              Clear Token
-            </button>
-          </div>
-        ) : (
+        {!pat ? (
           <form onSubmit={handleSaveToken}>
             <p>Get your Personal Access Token from your{' '}
               <a href="https://app.ynab.com/settings/developer" target="_blank" rel="noopener noreferrer">
@@ -152,15 +344,130 @@ export default function SettingsPage() {
               Save Token
             </button>
           </form>
+        ) : (
+          <div>
+            <p style={{ color: 'green' }}>Token configured</p>
+            
+            {/* Budget Selection */}
+            {selectedBudget.id && !showBudgetSelector ? (
+              <div style={{ marginTop: 15 }}>
+                <p><strong>Selected Budget:</strong> {selectedBudget.name}</p>
+                <button onClick={() => {
+                  fetchBudgets();
+                  setShowBudgetSelector(true);
+                }}>Change Budget</button>
+              </div>
+            ) : loadingBudgets ? (
+              <p>Loading budgets...</p>
+            ) : (budgets.length > 0 || showBudgetSelector) ? (
+              <div style={{ marginTop: 15 }}>
+                <label>
+                  Select a budget:
+                  <select 
+                    value={selectedBudget.id || ''}
+                    onChange={(e) => {
+                      const budget = budgets.find(b => b.id === e.target.value);
+                      if (budget) handleBudgetSelect(budget.id, budget.name);
+                    }}
+                    style={{ marginLeft: 10, padding: 5 }}
+                  >
+                    <option value="">Choose a budget...</option>
+                    {budgets.map(budget => (
+                      <option key={budget.id} value={budget.id}>
+                        {budget.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {selectedBudget.id && (
+                  <button onClick={() => setShowBudgetSelector(false)} style={{ marginLeft: 10 }}>
+                    Cancel
+                  </button>
+                )}
+              </div>
+            ) : (
+              <button onClick={fetchBudgets} style={{ marginTop: 10 }}>
+                Load Budgets
+              </button>
+            )}
+            
+            <div style={{ marginTop: 10 }}>
+              <button onClick={testConnection} disabled={testingConnection}>
+                {testingConnection ? 'Testing...' : 'Test Connection'}
+              </button>
+              <button onClick={() => {
+                setPAT('');
+                setBudgets([]);
+                setSelectedBudget({});
+                setAccounts([]);
+                setTrackedAccountIds([]);
+              }} style={{ marginLeft: 10 }}>
+                Clear Token
+              </button>
+            </div>
+          </div>
         )}
         {connectionMessage && <p style={{ marginTop: 10 }}>{connectionMessage}</p>}
       </section>
 
-      {/* Credit Cards */}
-      <section style={{ marginBottom: 40 }}>
-        <h2>Credit Cards</h2>
+      {/* Accounts for Rewards Tracking */}
+      {selectedBudget.id && (
+        <section style={styles.section}>
+          <h2>Accounts for Rewards Tracking</h2>
+          <p>Select which accounts you want to track for rewards (including checking, savings, and credit cards):</p>
+          
+          {loadingAccounts ? (
+            <p>Loading accounts...</p>
+          ) : accounts.length > 0 ? (
+            <div style={{ 
+              border: '1px solid #ddd', 
+              borderRadius: 8, 
+              padding: 15,
+              marginTop: 15 
+            }}>
+              {accounts.map(account => {
+                const accountTypeLabel = ACCOUNT_TYPE_LABELS[account.type] || account.type;
+                
+                return (
+                  <label key={account.id} style={{ 
+                    display: 'flex', 
+                    alignItems: 'center',
+                    padding: '8px 0',
+                    cursor: 'pointer',
+                    borderBottom: '1px solid #f0f0f0'
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={trackedAccountIds.includes(account.id)}
+                      onChange={() => handleAccountToggle(account.id, account.name)}
+                      style={{ marginRight: 10 }}
+                    />
+                    <div style={{ flex: 1 }}>
+                      <span>{account.name}</span>
+                      <span style={{ marginLeft: 10, color: '#888', fontSize: '0.85em' }}>
+                        {accountTypeLabel}
+                      </span>
+                    </div>
+                    <span style={{ color: '#666', fontSize: '0.9em' }}>
+                      Balance: ${(account.balance / 1000).toFixed(2)}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          ) : (
+            <p>No accounts found in this budget.</p>
+          )}
+        </section>
+      )}
+
+      {/* Cards Management */}
+      <section style={styles.section}>
+        <h2>Rewards Cards Management</h2>
+        <p>Manage your cards and their reward rules:</p>
+        
         <button onClick={handleAddCard} style={{ marginBottom: 20 }}>
-          + Add Card
+          + Add Manual Card
         </button>
 
         {showCardForm && (
@@ -170,7 +477,7 @@ export default function SettingsPage() {
             marginBottom: 20,
             borderRadius: 8 
           }}>
-            <h3>{editingCard ? 'Edit Card' : 'Add Card'}</h3>
+            <h3>{editingCard ? 'Edit Card' : 'Add Manual Card'}</h3>
             <div style={{ marginBottom: 10 }}>
               <label>
                 Card Name:
@@ -179,7 +486,7 @@ export default function SettingsPage() {
                   value={cardForm.name}
                   onChange={(e) => setCardForm({ ...cardForm, name: e.target.value })}
                   required
-                  style={{ width: '100%', padding: 8, marginTop: 5 }}
+                  style={styles.inputFull}
                 />
               </label>
             </div>
@@ -192,7 +499,7 @@ export default function SettingsPage() {
                   onChange={(e) => setCardForm({ ...cardForm, issuer: e.target.value })}
                   required
                   placeholder="e.g., Chase, Amex, Citi"
-                  style={{ width: '100%', padding: 8, marginTop: 5 }}
+                  style={styles.inputFull}
                 />
               </label>
             </div>
@@ -201,8 +508,13 @@ export default function SettingsPage() {
                 Type:
                 <select
                   value={cardForm.type}
-                  onChange={(e) => setCardForm({ ...cardForm, type: e.target.value as any })}
-                  style={{ width: '100%', padding: 8, marginTop: 5 }}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (isValidCardType(value)) {
+                      setCardForm({ ...cardForm, type: value });
+                    }
+                  }}
+                  style={styles.inputFull}
                 >
                   <option value="cashback">Cashback</option>
                   <option value="points">Points</option>
@@ -221,50 +533,71 @@ export default function SettingsPage() {
           {cards.length === 0 ? (
             <p>No cards configured yet.</p>
           ) : (
-            <ul style={{ listStyle: 'none', padding: 0 }}>
-              {cards.map((card) => (
-                <li key={card.id} style={{ 
-                  padding: 10, 
-                  marginBottom: 10, 
-                  border: '1px solid #ddd',
-                  borderRadius: 4,
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center'
-                }}>
-                  <div>
-                    <strong>{card.name}</strong>
-                    <span style={{ marginLeft: 10, color: '#666' }}>
-                      {card.issuer} • {card.type}
-                    </span>
-                  </div>
-                  <div>
-                    <button onClick={() => handleEditCard(card)} style={{ marginRight: 10 }}>
-                      Edit
-                    </button>
-                    <button onClick={() => setShowDeleteCardDialog(card.id)}>
-                      Delete
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <div>
+              <h3>YNAB-Linked Cards</h3>
+              <ul style={{ listStyle: 'none', padding: 0 }}>
+                {cards.filter(card => !card.isManual).map((card) => (
+                  <li key={card.id} style={styles.ynabCardItem}>
+                    <div>
+                      <strong>{card.name}</strong>
+                      <span style={{ marginLeft: 10, color: '#666' }}>
+                        {card.issuer} • {card.type} • YNAB-linked
+                      </span>
+                    </div>
+                    <div>
+                      <button onClick={() => handleEditCard(card)} style={{ marginRight: 10 }}>
+                        Edit
+                      </button>
+                      <button onClick={() => setShowDeleteCardDialog(card.id)}>
+                        Remove
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              
+              {cards.some(card => card.isManual) && (
+                <>
+                  <h3>Manual Cards</h3>
+                  <ul style={{ listStyle: 'none', padding: 0 }}>
+                    {cards.filter(card => card.isManual).map((card) => (
+                      <li key={card.id} style={styles.cardItem}>
+                        <div>
+                          <strong>{card.name}</strong>
+                          <span style={{ marginLeft: 10, color: '#666' }}>
+                            {card.issuer} • {card.type}
+                          </span>
+                        </div>
+                        <div>
+                          <button onClick={() => handleEditCard(card)} style={{ marginRight: 10 }}>
+                            Edit
+                          </button>
+                          <button onClick={() => setShowDeleteCardDialog(card.id)}>
+                            Delete
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </div>
           )}
         </div>
       </section>
 
       {/* Data Management */}
-      <section style={{ marginBottom: 40 }}>
+      <section style={styles.section}>
         <h2>Data Management</h2>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <button onClick={handleExport}>
-            📥 Export Settings
+            Export Settings
           </button>
           <button onClick={() => fileInputRef.current?.click()}>
-            📤 Import Settings
+            Import Settings
           </button>
           <button onClick={() => setShowClearDialog(true)} style={{ backgroundColor: '#dc3545', color: 'white' }}>
-            🗑️ Clear All Data
+            Clear All Data
           </button>
         </div>
         <input
@@ -286,11 +619,7 @@ export default function SettingsPage() {
         message="This will delete all your settings, cards, and data. Your PAT will also be removed. This action cannot be undone."
         confirmText="Clear All"
         cancelText="Cancel"
-        onConfirm={() => {
-          clearAll();
-          setShowClearDialog(false);
-          setPAT(''); // Also clear the PAT from state
-        }}
+        onConfirm={handleClearAll}
         onCancel={() => setShowClearDialog(false)}
       />
 
@@ -303,6 +632,13 @@ export default function SettingsPage() {
         onConfirm={() => {
           if (showDeleteCardDialog) {
             deleteCard(showDeleteCardDialog);
+            // If it's a YNAB-linked card, also remove from tracked accounts
+            const card = cards.find(c => c.id === showDeleteCardDialog);
+            if (card?.ynabAccountId) {
+              const newTrackedIds = trackedAccountIds.filter(id => id !== card.ynabAccountId);
+              setTrackedAccountIds(newTrackedIds);
+              storage.setTrackedAccountIds(newTrackedIds);
+            }
             setShowDeleteCardDialog(null);
           }
         }}
