@@ -66,8 +66,11 @@ class StorageService {
       if (stored) {
         return JSON.parse(stored);
       }
-    } catch {
-      // Silent failure - return default storage
+    } catch (error) {
+      // Log error in development, but gracefully fall back to defaults
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Failed to parse localStorage:', error);
+      }
     }
     
     return this.getDefaultStorage();
@@ -90,8 +93,12 @@ class StorageService {
     
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    } catch {
-      // Silent failure - storage may be full or disabled
+    } catch (error) {
+      // Log error in development, but continue gracefully
+      // Storage may be full, disabled, or in private browsing mode
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Failed to set localStorage:', error);
+      }
     }
   }
 

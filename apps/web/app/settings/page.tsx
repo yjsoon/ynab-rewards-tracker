@@ -21,6 +21,20 @@ interface YnabAccount {
   balance: number;
 }
 
+// Constants for account type labels
+const ACCOUNT_TYPE_LABELS: Record<string, string> = {
+  creditCard: 'Credit Card',
+  checking: 'Checking',
+  savings: 'Savings',
+  cash: 'Cash',
+  lineOfCredit: 'Line of Credit',
+};
+
+// Type guard for card types
+function isValidCardType(value: string): value is 'cashback' | 'points' | 'miles' {
+  return value === 'cashback' || value === 'points' || value === 'miles';
+}
+
 // Style constants
 const styles = {
   section: { marginBottom: 40 },
@@ -412,13 +426,7 @@ export default function SettingsPage() {
               marginTop: 15 
             }}>
               {accounts.map(account => {
-                const accountTypeLabel = 
-                  account.type === 'creditCard' ? 'Credit Card' :
-                  account.type === 'checking' ? 'Checking' :
-                  account.type === 'savings' ? 'Savings' :
-                  account.type === 'cash' ? 'Cash' :
-                  account.type === 'lineOfCredit' ? 'Line of Credit' :
-                  account.type;
+                const accountTypeLabel = ACCOUNT_TYPE_LABELS[account.type] || account.type;
                 
                 return (
                   <label key={account.id} style={{ 
@@ -500,7 +508,12 @@ export default function SettingsPage() {
                 Type:
                 <select
                   value={cardForm.type}
-                  onChange={(e) => setCardForm({ ...cardForm, type: e.target.value as CardFormData['type'] })}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (isValidCardType(value)) {
+                      setCardForm({ ...cardForm, type: value });
+                    }
+                  }}
                   style={styles.inputFull}
                 >
                   <option value="cashback">Cashback</option>
