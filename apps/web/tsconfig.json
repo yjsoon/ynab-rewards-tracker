@@ -5,6 +5,7 @@
     "module": "esnext",
     "target": "es2022",
     "moduleResolution": "bundler",
+    "skipLibCheck": true,
     "baseUrl": ".",
     "paths": {
       "@/*": ["./*"]
