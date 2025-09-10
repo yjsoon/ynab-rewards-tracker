@@ -1,97 +1,280 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from 'react';
-import { MIN_TOKEN_LENGTH } from '@/lib/constants';
-
-type Status = {
-  connected: boolean;
-  scope?: string;
-  expiresAt?: string;
-  updatedAt?: string;
-};
+import { useState, useRef } from 'react';
+import { useYnabPAT, useCreditCards, useSettings } from '@/hooks/useLocalStorage';
+import { YnabClient } from '@/lib/ynab-client';
+import { CreditCard } from '@/lib/storage';
 
 export default function SettingsPage() {
-  const [status, setStatus] = useState<Status>({ connected: false });
-  const [token, setToken] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const { pat, setPAT, isLoading: patLoading } = useYnabPAT();
+  const { cards, saveCard, deleteCard, isLoading: cardsLoading } = useCreditCards();
+  const { exportSettings, importSettings, clearAll } = useSettings();
+  
+  const [tokenInput, setTokenInput] = useState('');
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [connectionMessage, setConnectionMessage] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  async function loadStatus() {
-    setMessage(null);
-    const res = await fetch('/api/auth/ynab/pat', { cache: 'no-store' });
-    const json = await res.json();
-    setStatus(json);
+  // Card form state
+  const [showCardForm, setShowCardForm] = useState(false);
+  const [editingCard, setEditingCard] = useState<CreditCard | null>(null);
+  const [cardForm, setCardForm] = useState<{
+    name: string;
+    issuer: string;
+    type: 'cashback' | 'points' | 'miles';
+  }>({
+    name: '',
+    issuer: '',
+    type: 'cashback',
+  });
+
+  async function handleSaveToken(e: React.FormEvent) {
+    e.preventDefault();
+    if (!tokenInput.trim()) return;
+
+    setPAT(tokenInput);
+    setConnectionMessage('Token saved!');
+    setTokenInput('');
+    setTimeout(() => setConnectionMessage(''), 3000);
   }
 
-  useEffect(() => {
-    loadStatus();
-  }, []);
+  async function testConnection() {
+    if (!pat) {
+      setConnectionMessage('Please save a token first');
+      return;
+    }
 
-  async function saveToken(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    setMessage(null);
+    setTestingConnection(true);
+    setConnectionMessage('');
+
     try {
-      const res = await fetch('/api/auth/ynab/pat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, verify: true }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        setMessage(json?.error ? `Error: ${json.error}` : 'Failed to save token');
-      } else {
-        setMessage('Token saved.');
-        setToken('');
-        await loadStatus();
-      }
+      const client = new YnabClient(pat);
+      const budgets = await client.getBudgets();
+      setConnectionMessage(`✅ Connected! Found ${budgets.length} budget(s)`);
+    } catch (error) {
+      setConnectionMessage(`❌ Connection failed: ${error}`);
     } finally {
-      setLoading(false);
+      setTestingConnection(false);
     }
   }
 
-  async function testSync() {
-    setMessage(null);
-    const res = await fetch('/api/sync/run', { method: 'POST' });
-    const json = await res.json();
-    if (json?.ok) setMessage(`Sync ok (${json.mode}). Budgets: ${json.budgets?.length ?? 0}`);
-    else setMessage(`Sync failed: ${json?.error ?? 'unknown'}`);
+  function handleExport() {
+    const json = exportSettings();
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ynab-rewards-settings-${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        importSettings(event.target?.result as string);
+      } catch (error) {
+        alert('Failed to import settings: ' + error);
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  function handleAddCard() {
+    setEditingCard(null);
+    setCardForm({ name: '', issuer: '', type: 'cashback' });
+    setShowCardForm(true);
+  }
+
+  function handleEditCard(card: CreditCard) {
+    setEditingCard(card);
+    setCardForm({ name: card.name, issuer: card.issuer, type: card.type });
+    setShowCardForm(true);
+  }
+
+  function handleSaveCard(e: React.FormEvent) {
+    e.preventDefault();
+    const card: CreditCard = {
+      id: editingCard?.id || `card-${Date.now()}`,
+      name: cardForm.name,
+      issuer: cardForm.issuer,
+      type: cardForm.type,
+      active: editingCard?.active ?? true,
+    };
+    saveCard(card);
+    setShowCardForm(false);
+    setCardForm({ name: '', issuer: '', type: 'cashback' });
+  }
+
+  if (patLoading || cardsLoading) {
+    return <div style={{ padding: 20 }}>Loading settings...</div>;
   }
 
   return (
-    <main style={{ maxWidth: 600 }}>
+    <div style={{ maxWidth: 800, margin: '20px auto', padding: 20 }}>
       <h1>Settings</h1>
-      <section>
-        <h2>YNAB Personal Access Token</h2>
-        <p>Paste your YNAB Personal Access Token to connect without OAuth.</p>
-        <form onSubmit={saveToken}>
-          <input
-            type="password"
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-            placeholder="YNAB access token"
-            style={{ width: '100%', padding: 8 }}
-            aria-label="YNAB access token"
-          />
-          <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
-            <button type="submit" disabled={loading || token.trim().length < MIN_TOKEN_LENGTH}>
-              {loading ? 'Saving…' : 'Save Token'}
+
+      {/* YNAB Connection */}
+      <section style={{ marginBottom: 40 }}>
+        <h2>YNAB Connection</h2>
+        {pat ? (
+          <div>
+            <p style={{ color: 'green' }}>✅ Token configured</p>
+            <button onClick={testConnection} disabled={testingConnection}>
+              {testingConnection ? 'Testing...' : 'Test Connection'}
             </button>
-            <button type="button" onClick={testSync}>Test Sync</button>
+            <button onClick={() => setPAT('')} style={{ marginLeft: 10 }}>
+              Clear Token
+            </button>
           </div>
-        </form>
-        {message && <p style={{ marginTop: 8 }}>{message}</p>}
+        ) : (
+          <form onSubmit={handleSaveToken}>
+            <p>Get your Personal Access Token from your{' '}
+              <a href="https://app.ynab.com/settings/developer" target="_blank" rel="noopener noreferrer">
+                YNAB Developer Settings
+              </a>
+            </p>
+            <input
+              type="password"
+              value={tokenInput}
+              onChange={(e) => setTokenInput(e.target.value)}
+              placeholder="Paste your YNAB Personal Access Token"
+              style={{ width: '100%', padding: 8, marginTop: 10 }}
+            />
+            <button type="submit" style={{ marginTop: 10 }}>
+              Save Token
+            </button>
+          </form>
+        )}
+        {connectionMessage && <p style={{ marginTop: 10 }}>{connectionMessage}</p>}
       </section>
 
-      <section style={{ marginTop: 24 }}>
-        <h3>Connection Status</h3>
-        <ul>
-          <li>Connected: {String(status.connected)}</li>
-          {status.scope && <li>Scope: {status.scope}</li>}
-          {status.updatedAt && <li>Updated: {new Date(status.updatedAt).toLocaleString()}</li>}
-        </ul>
+      {/* Credit Cards */}
+      <section style={{ marginBottom: 40 }}>
+        <h2>Credit Cards</h2>
+        <button onClick={handleAddCard} style={{ marginBottom: 20 }}>
+          + Add Card
+        </button>
+
+        {showCardForm && (
+          <form onSubmit={handleSaveCard} style={{ 
+            border: '1px solid #ccc', 
+            padding: 20, 
+            marginBottom: 20,
+            borderRadius: 8 
+          }}>
+            <h3>{editingCard ? 'Edit Card' : 'Add Card'}</h3>
+            <div style={{ marginBottom: 10 }}>
+              <label>
+                Card Name:
+                <input
+                  type="text"
+                  value={cardForm.name}
+                  onChange={(e) => setCardForm({ ...cardForm, name: e.target.value })}
+                  required
+                  style={{ width: '100%', padding: 8, marginTop: 5 }}
+                />
+              </label>
+            </div>
+            <div style={{ marginBottom: 10 }}>
+              <label>
+                Issuer:
+                <input
+                  type="text"
+                  value={cardForm.issuer}
+                  onChange={(e) => setCardForm({ ...cardForm, issuer: e.target.value })}
+                  required
+                  placeholder="e.g., Chase, Amex, Citi"
+                  style={{ width: '100%', padding: 8, marginTop: 5 }}
+                />
+              </label>
+            </div>
+            <div style={{ marginBottom: 10 }}>
+              <label>
+                Type:
+                <select
+                  value={cardForm.type}
+                  onChange={(e) => setCardForm({ ...cardForm, type: e.target.value as any })}
+                  style={{ width: '100%', padding: 8, marginTop: 5 }}
+                >
+                  <option value="cashback">Cashback</option>
+                  <option value="points">Points</option>
+                  <option value="miles">Miles</option>
+                </select>
+              </label>
+            </div>
+            <button type="submit">Save Card</button>
+            <button type="button" onClick={() => setShowCardForm(false)} style={{ marginLeft: 10 }}>
+              Cancel
+            </button>
+          </form>
+        )}
+
+        <div>
+          {cards.length === 0 ? (
+            <p>No cards configured yet.</p>
+          ) : (
+            <ul style={{ listStyle: 'none', padding: 0 }}>
+              {cards.map((card) => (
+                <li key={card.id} style={{ 
+                  padding: 10, 
+                  marginBottom: 10, 
+                  border: '1px solid #ddd',
+                  borderRadius: 4,
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}>
+                  <div>
+                    <strong>{card.name}</strong>
+                    <span style={{ marginLeft: 10, color: '#666' }}>
+                      {card.issuer} • {card.type}
+                    </span>
+                  </div>
+                  <div>
+                    <button onClick={() => handleEditCard(card)} style={{ marginRight: 10 }}>
+                      Edit
+                    </button>
+                    <button onClick={() => deleteCard(card.id)}>
+                      Delete
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </section>
-    </main>
+
+      {/* Data Management */}
+      <section style={{ marginBottom: 40 }}>
+        <h2>Data Management</h2>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button onClick={handleExport}>
+            📥 Export Settings
+          </button>
+          <button onClick={() => fileInputRef.current?.click()}>
+            📤 Import Settings
+          </button>
+          <button onClick={clearAll} style={{ backgroundColor: '#dc3545', color: 'white' }}>
+            🗑️ Clear All Data
+          </button>
+        </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".json"
+          onChange={handleImport}
+          style={{ display: 'none' }}
+        />
+        <p style={{ marginTop: 10, fontSize: '0.9em', color: '#666' }}>
+          Export saves your cards and rules (but not your PAT). Import merges with existing data.
+        </p>
+      </section>
+    </div>
   );
 }
-

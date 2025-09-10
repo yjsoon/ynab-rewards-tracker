@@ -1,4 +1,5 @@
-// prisma/schema.prisma (packages/db)
+// Simplified schema for potential server-side caching
+// For now, all data lives in browser localStorage
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,150 +9,22 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id          String   @id @default(cuid())
-  email       String?  @unique
-  createdAt   DateTime @default(now())
-  connections Connection[]
-}
-
-model Connection {
-  id              String   @id @default(cuid())
-  userId          String
-  user            User     @relation(fields: [userId], references: [id])
-  provider        String   // 'ynab'
-  budgetId        String?
-  accessTokenEnc  String
-  refreshTokenEnc String
-  expiresAt       DateTime
-  scope           String
-  serverKnowledge Json     // { budgets, accounts, categories, transactions, payees }
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-}
-
-model Budget {
-  id           String @id @default(cuid())
-  ynabId       String @unique
-  name         String
-  isDefault    Boolean @default(false)
-  connectionId String
-}
-
-model Account {
-  id        String @id @default(cuid())
-  ynabId    String @unique
-  name      String
-  type      String
-  onBudget  Boolean
-  closed    Boolean
-  flagColor String?
-  budgetId  String
-}
-
-model CategoryGroup {
-  id        String @id @default(cuid())
-  ynabId    String @unique
-  name      String
-  hidden    Boolean
-  budgetId  String
-}
-
-model Category {
-  id        String @id @default(cuid())
-  ynabId    String @unique
-  name      String
-  hidden    Boolean
-  groupId   String
-  budgetId  String
-}
-
-model Payee {
-  id          String @id @default(cuid())
-  ynabId      String @unique
-  nameHash    String
-  namePreview String?
-  budgetId    String
-}
-
-model Transaction {
-  id                 String   @id @default(cuid())
-  ynabId             String   @unique
-  date               DateTime
-  amountMilli        Int
-  cleared            String
-  approved           Boolean
-  memoHash           String?
-  flagColor          String?
-  accountId          String
-  categoryId         String?
-  payeeId            String?
-  importId           String?
-  transferAccountId  String?
-  scheduled          Boolean  @default(false)
-  subTxCount         Int      @default(0)
-}
-
-model Split {
-  id            String @id @default(cuid())
-  transactionId String
-  amountMilli   Int
-  categoryId    String?
-  memoHash      String?
-}
-
-model Card {
-  id        String @id @default(cuid())
-  userId    String
-  name      String
-  issuer    String
-  kind      String // 'cashback' | 'points' | 'miles'
-  valuationCentsPerPoint Int?
-  active    Boolean @default(true)
-}
-
-model RewardRule {
-  id        String @id @default(cuid())
-  cardId    String
-  name      String
-  scopeJson Json
-  windowJson Json
-  rewardJson Json
-  capsJson  Json
-  priority  Int     @default(0)
-  stacking  String  @default("max") // 'max' | 'sum' | 'first'
-}
-
-model AccrualWindow {
+// Optional: Cache YNAB data server-side if needed
+model CachedBudget {
   id           String   @id @default(cuid())
-  cardId       String
-  windowStart  DateTime
-  windowEnd    DateTime
-  cadence      String
-  capOverallMilli Int?
-  earnedMilli  Int      @default(0)
-  points       Int      @default(0)
-  breakageMilli Int?
+  ynabId       String   @unique
+  name         String
+  data         Json     // Full YNAB response
+  lastSyncedAt DateTime @default(now())
 }
 
-model AccrualLine {
-  id              String  @id @default(cuid())
-  accrualWindowId String
-  transactionId   String
-  splitId         String?
-  ruleId          String
-  eligibleMilli   Int
-  rewardKind      String
-  rewardAmountRaw Int
-  appliedCapMilli Int
-  notes           String?
-}
-
-model SyncState {
-  id        String  @id @default(cuid())
-  connectionId String
-  sinceDate DateTime
-  serverKnowledgeByResourceJson Json
-  lastRunAt DateTime?
-  status    String
+// Optional: Store computed rewards for sharing/analysis
+model ComputedReward {
+  id           String   @id @default(cuid())
+  period       String   // e.g., "2024-Q1"
+  cardName     String
+  totalSpend   Int      // in milliunits
+  totalRewards Int      // in milliunits or points
+  metadata     Json
+  computedAt   DateTime @default(now())
 }
