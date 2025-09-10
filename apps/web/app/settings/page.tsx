@@ -4,6 +4,7 @@ import { useState, useRef } from 'react';
 import { useYnabPAT, useCreditCards, useSettings } from '@/hooks/useLocalStorage';
 import { YnabClient } from '@/lib/ynab-client';
 import { CreditCard } from '@/lib/storage';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 export default function SettingsPage() {
   const { pat, setPAT, isLoading: patLoading } = useYnabPAT();
@@ -13,6 +14,8 @@ export default function SettingsPage() {
   const [tokenInput, setTokenInput] = useState('');
   const [testingConnection, setTestingConnection] = useState(false);
   const [connectionMessage, setConnectionMessage] = useState('');
+  const [showClearDialog, setShowClearDialog] = useState(false);
+  const [showDeleteCardDialog, setShowDeleteCardDialog] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Card form state
@@ -239,7 +242,7 @@ export default function SettingsPage() {
                     <button onClick={() => handleEditCard(card)} style={{ marginRight: 10 }}>
                       Edit
                     </button>
-                    <button onClick={() => deleteCard(card.id)}>
+                    <button onClick={() => setShowDeleteCardDialog(card.id)}>
                       Delete
                     </button>
                   </div>
@@ -260,7 +263,7 @@ export default function SettingsPage() {
           <button onClick={() => fileInputRef.current?.click()}>
             📤 Import Settings
           </button>
-          <button onClick={clearAll} style={{ backgroundColor: '#dc3545', color: 'white' }}>
+          <button onClick={() => setShowClearDialog(true)} style={{ backgroundColor: '#dc3545', color: 'white' }}>
             🗑️ Clear All Data
           </button>
         </div>
@@ -275,6 +278,36 @@ export default function SettingsPage() {
           Export saves your cards and rules (but not your PAT). Import merges with existing data.
         </p>
       </section>
+
+      {/* Confirmation Dialogs */}
+      <ConfirmDialog
+        isOpen={showClearDialog}
+        title="Clear All Data"
+        message="This will delete all your settings, cards, and data. Your PAT will also be removed. This action cannot be undone."
+        confirmText="Clear All"
+        cancelText="Cancel"
+        onConfirm={() => {
+          clearAll();
+          setShowClearDialog(false);
+          setPAT(''); // Also clear the PAT from state
+        }}
+        onCancel={() => setShowClearDialog(false)}
+      />
+
+      <ConfirmDialog
+        isOpen={!!showDeleteCardDialog}
+        title="Delete Card"
+        message="Are you sure you want to delete this card? This will also delete all associated reward rules."
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={() => {
+          if (showDeleteCardDialog) {
+            deleteCard(showDeleteCardDialog);
+            setShowDeleteCardDialog(null);
+          }
+        }}
+        onCancel={() => setShowDeleteCardDialog(null)}
+      />
     </div>
   );
 }
