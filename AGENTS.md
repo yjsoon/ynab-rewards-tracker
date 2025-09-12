@@ -57,3 +57,29 @@ Conventions:
 - Tests for calculator/recommendations
 - Remove legacy `lib/reward-engine/rules.ts` (singular)
 
+
+## Alignment Check — 12 Sep 2025
+
+Conclusion: The project is on track. The client‑only architecture, YNAB linkage, localStorage data model, and rewards engine scaffolding match the intent. The main gaps are UI for rules/mappings, wiring real calculations from YNAB transactions, enforcing rule windows, exposing valuation controls, and removing stray server‑DB artefacts to keep the client‑only promise.
+
+What’s working as intended
+- Rewards: Cashback and miles supported, including block‑based miles; rewards are normalised to dollars for cross‑card comparison.
+- Caps and progress: Per‑category caps, an overall cap with proportional scaling, minimum/maximum spend tracking, and a “stop using” signal when capped.
+- Time windows: Calendar vs billing‑day cycles with period labels (`YYYY‑MM` or `YYYY‑MM‑DD`).
+- Tag mappings: YNAB flags/names map to reward categories; recommendations use normalised values.
+- Privacy: PAT remains local; exports exclude the token.
+
+Gaps to close
+- Rules/mappings UI: Links exist but there’s no UI to create/edit Reward Rules or Tag Mappings.
+- Calculation pipeline: The calculator isn’t yet run against fetched transactions; dashboards show placeholders.
+- Rule windows: `startDate`/`endDate` on rules aren’t enforced in the calculator.
+- Points support: Storage/calculations acknowledge points, but `RewardRule.rewardType` omits `'points'`.
+- Transactions UX: Category edits aren’t persisted; no ability to move an item between periods (local override).
+- Fetch hygiene: No `AbortController` usage in longer‑running fetches.
+- Valuation controls: Miles/points valuations aren’t surfaced in Settings; category recommendations still use fixed assumptions.
+- Server DB artefacts: Prisma/DB code appears in the web app; quarantine or remove to uphold “no server DB”.
+
+Guardrails (unchanged)
+- Do not reintroduce manual cards; all cards are YNAB‑linked.
+- Do not store or export the PAT.
+- Do not mix reward units when comparing; always use normalised dollars.

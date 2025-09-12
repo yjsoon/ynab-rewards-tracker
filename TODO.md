@@ -1,27 +1,52 @@
 # TODO
 
-Shortlist of next tasks after dark-mode + engine updates.
+Updated 12 Sep 2025 — prioritised next steps to align the app with the intended behaviour. British spelling is used in copy; code identifiers remain unchanged.
 
-- Recommendations: read valuations from settings
-  - Replace hard-coded 0.01 and 0.8 assumptions in `RecommendationEngine.generateCategoryRecommendations` with values from `AppSettings` (and optional block efficiency setting).
+## P1 — Next Actions
+- Implement Rules & Mappings UI
+  - Add pages under `app/cards/[id]/rules/(new|[ruleId]/edit)` and `app/cards/[id]/mappings/(new|[mappingId]/edit)`.
+  - Persist via `storage.ts` (`saveRule`, `saveTagMapping`); support per‑category caps, minimum/maximum spend, block miles, and billing window.
 
-- Abortable fetches in UI
-  - Add `AbortController` to data loads in `app/page.tsx` and `app/cards/[id]/transactions/page.tsx` to prevent setState-after-unmount.
+- Wire the Calculation Pipeline
+  - For each active card: fetch transactions (YNAB PAT + selected budget), apply tag mappings, derive the current period (`RewardsCalculator.calculatePeriod`), compute, and `saveCalculation`.
+  - Provide a “Compute Now” button and trigger recompute on app open; show last‑computed timestamp.
+
+- Enforce Rule Windows
+  - In `calculateRuleRewards`, skip or clamp calculations when the period is outside `startDate`/`endDate`.
+
+- Expose Valuation Controls in Settings
+  - Add `milesValuation` / `pointsValuation` inputs; plumb through to the calculator and recommendations.
+  - Replace hard‑coded 0.01 and block efficiency assumptions in category recommendations (optionally add a block efficiency knob).
+
+- Add Abortable Fetches
+  - Use `AbortController` in `app/page.tsx` and `app/cards/[id]/transactions/page.tsx` to prevent state updates after unmount.
+
+- Remove Prisma/DB Artefacts from Web App
+  - Drop `@prisma/client` and `@ynab-counter/db` from `apps/web` deps; delete `apps/web/lib/db.ts` and `apps/web/types/prisma.d.ts`.
+  - Remove `transpilePackages` entries related to DB in `apps/web/next.config.js`.
+  - Keep `packages/db` only as a quarantined future server component (documented), but not referenced by the web app.
+
+## P2 — Quality and UX
+- Persist Category Edits in Transactions
+  - When a user changes a reward category, update the corresponding tag mapping (or store a per‑transaction override) so it survives reloads.
+
+- Progress & Limits UX
+  - Show distance to minimum/maximum per rule; surface “stop using” badges when capped.
+
+- Recommendations Accuracy
+  - Base effective‑rate comparisons on normalised dollars and respect `shouldStopUsing`; re‑run when valuation settings change.
 
 - Tests
-  - Calculator: category caps, overall cap scaling, miles/points and block rules, progress flags.
-  - Recommendations: effective rate selection and “avoid/use” alerts.
+  - Calculator: category caps, overall cap scaling, miles/points and block rules, progress flags, window enforcement.
+  - Recommendations: effective‑rate selection and “avoid/use” alerts; settings‑driven valuations.
 
-- Clean up legacy path
-  - Remove or migrate `apps/web/lib/reward-engine/rules.ts` (singular) to avoid confusion with `lib/rewards-engine/*`.
-  - Optionally add lint rule to forbid importing from the singular path.
+- Clean Up Legacy Path
+  - Remove or migrate `apps/web/lib/reward-engine/rules.ts` (singular) and optionally lint against importing it.
 
-- Ynab client helper
-  - Remove or wire `getYnabClient()` to `storage.getPAT()` (avoid key drift) if we keep it.
+- Ynab Client Helper
+  - Keep `getYnabClient()` reading from `storage.getPAT()` (already done) or remove if redundant.
 
-- Settings UI
-  - Expose `milesValuation` / `pointsValuation` controls so users can tune assumptions used by the engine.
-
-- Optional: persist category edits
-  - In `cards/[id]/transactions/page.tsx`, wire the “edit reward category” action to a persistent mapping or storage if we want it to survive reloads.
-
+## P3 — Optional Enhancements
+- Allow moving a transaction between periods (local override date only; do not patch YNAB).
+- Background refresh while the app is open (with visible “last updated”).
+- Lightweight local analytics and debug tooling for the rewards engine.
