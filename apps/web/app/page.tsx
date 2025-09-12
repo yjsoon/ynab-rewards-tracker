@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useYnabPAT, useCreditCards } from '@/hooks/useLocalStorage';
 import { YnabClient } from '@/lib/ynab-client';
 import { storage } from '@/lib/storage';
+import { cn } from '@/lib/utils';
 import { SetupPrompt } from '@/components/SetupPrompt';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -47,6 +48,7 @@ export default function DashboardPage() {
   const [selectedBudget, setSelectedBudget] = useState<{ id?: string; name?: string }>({});
   const [trackedAccounts, setTrackedAccounts] = useState<string[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [accountsMap, setAccountsMap] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showSetupPrompt, setShowSetupPrompt] = useState(false);
@@ -58,6 +60,13 @@ export default function DashboardPage() {
     setError('');
     try {
       const client = new YnabClient(pat);
+      
+      // First get accounts to map IDs to names
+      const accounts = await client.getAccounts(budgetId);
+      const accMap = new Map<string, string>();
+      accounts.forEach(acc => accMap.set(acc.id, acc.name));
+      setAccountsMap(accMap);
+      
       // Get transactions from the last N days
       const sinceDate = new Date();
       sinceDate.setDate(sinceDate.getDate() - TRANSACTION_LOOKBACK_DAYS);
@@ -257,7 +266,10 @@ export default function DashboardPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {cards.map((card) => (
-                <Card key={card.id} className="hover:bg-muted/50 transition-colors">
+                <Card 
+                  key={card.id} 
+                  className="group relative overflow-hidden border-2 hover:border-primary/50 transition-all bg-gradient-to-br from-primary/5 via-transparent to-primary/10 flex flex-col"
+                >
                   <CardHeader>
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
@@ -268,13 +280,19 @@ export default function DashboardPage() {
                            card.type === 'points' ? 'Points Card' : 'Reward Card'}
                         </CardDescription>
                       </div>
-                      <Badge variant={card.active ? 'default' : 'secondary'} className="shrink-0">
+                      <Badge 
+                        variant={card.active ? 'default' : 'secondary'} 
+                        className={cn(
+                          "shrink-0",
+                          card.active && "bg-primary text-primary-foreground"
+                        )}
+                      >
                         {card.active ? 'Active' : 'Inactive'}
                       </Badge>
                     </div>
                   </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
+                  <CardContent className="flex-1 flex flex-col">
+                    <div className="space-y-3 flex-1">
                       {/* Placeholder for rewards summary */}
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Current Period:</span>
@@ -284,13 +302,13 @@ export default function DashboardPage() {
                         <span className="text-muted-foreground">Rewards Earned:</span>
                         <span className="font-medium">Coming Soon</span>
                       </div>
-                      <div className="pt-3 border-t">
-                        <Button variant="outline" size="sm" asChild className="w-full">
-                          <Link href={`/cards/${card.id}`}>
-                            View Details
-                          </Link>
-                        </Button>
-                      </div>
+                    </div>
+                    <div className="pt-3 mt-auto">
+                      <Button variant="ghost" size="icon" asChild className="w-full hover:bg-primary/10">
+                        <Link href={`/cards/${card.id}`}>
+                          <ArrowRight className="h-5 w-5" />
+                        </Link>
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>
@@ -359,16 +377,27 @@ export default function DashboardPage() {
                   <thead>
                     <tr className="border-b" role="row">
                       <th className="text-left p-2 font-medium" scope="col">Date</th>
+                      <th className="text-left p-2 font-medium" scope="col">Account</th>
                       <th className="text-left p-2 font-medium" scope="col">Payee</th>
                       <th className="text-left p-2 font-medium" scope="col">Category</th>
                       <th className="text-right p-2 font-medium" scope="col">Amount</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {transactions.map((txn) => (
-                      <tr key={txn.id} className="border-b" role="row">
+                    {transactions.map((txn, index) => (
+                      <tr 
+                        key={txn.id} 
+                        className={cn(
+                          "border-b",
+                          index % 2 === 0 ? "bg-transparent" : "bg-muted/30"
+                        )}
+                        role="row"
+                      >
                         <td className="p-2 text-sm">
                           {new Date(txn.date).toLocaleDateString()}
+                        </td>
+                        <td className="p-2 text-sm font-medium">
+                          {accountsMap.get(txn.account_id) || 'Unknown'}
                         </td>
                         <td className="p-2 text-sm">{txn.payee_name}</td>
                         <td className="p-2 text-sm">
