@@ -7,14 +7,15 @@ import type {
   CreditCard, 
   TagMapping, 
   RewardCalculation,
-  CategoryBreakdown 
+  CategoryBreakdown,
+  AppSettings 
 } from '@/lib/storage';
 import type { TransactionWithRewards } from '@/types/transaction';
 
 export interface CalculationPeriod {
   startDate: Date;
   endDate: Date;
-  label: string;
+  name: string;
 }
 
 export class RewardsCalculator {
@@ -24,8 +25,13 @@ export class RewardsCalculator {
   static calculateRuleRewards(
     rule: RewardRule,
     transactions: TransactionWithRewards[],
-    period: CalculationPeriod
+    period: CalculationPeriod,
+    settings?: AppSettings
   ): RewardCalculation {
+    // Get valuation rates from settings (default 1 cent per mile/point)
+    const milesValuation = settings?.milesValuation || 0.01;
+    const pointsValuation = settings?.pointsValuation || 0.01;
+
     // Filter transactions to this period and eligible categories
     const eligibleTransactions = transactions.filter(txn => {
       const txnDate = new Date(txn.date);
@@ -55,9 +61,11 @@ export class RewardsCalculator {
     });
 
     // Calculate rewards per category with caps
+    // First pass: calculate raw rewards without overall cap
     categorySpends.forEach((spend, category) => {
       let categoryEligibleSpend = spend;
       let categoryReward = 0;
+      let categoryRewardUSD = 0;
       let capReached = false;
 
       // Apply category-specific caps
@@ -67,15 +75,10 @@ export class RewardsCalculator {
         capReached = true;
       }
 
-      // Apply overall maximum spend cap
-      if (rule.maximumSpend && spend > rule.maximumSpend) {
-        categoryEligibleSpend = Math.min(categoryEligibleSpend, rule.maximumSpend);
-        capReached = true;
-      }
-
       // Calculate reward based on type
       if (rule.rewardType === 'cashback') {
         categoryReward = (categoryEligibleSpend * rule.rewardValue) / 100;
+        categoryRewardUSD = categoryReward; // Already in USD
       } else if (rule.rewardType === 'miles') {
         if (rule.milesBlockSize) {
           // Block-based miles (e.g., "$5 blocks")
@@ -85,21 +88,40 @@ export class RewardsCalculator {
           // Regular miles per dollar
           categoryReward = categoryEligibleSpend * rule.rewardValue;
         }
+        // Convert miles to USD for comparison
+        categoryRewardUSD = categoryReward * milesValuation;
       }
 
       categoryBreakdowns.push({
         category,
         spend,
         reward: categoryReward,
+        rewardUSD: categoryRewardUSD,
         capReached
       });
 
       rewardEarned += categoryReward;
     });
 
-    // Apply overall spending cap
-    if (rule.maximumSpend && eligibleSpend > rule.maximumSpend) {
+    // Apply overall spending cap to eligible spend
+    // If total spend exceeds the maximum, we need to scale down rewards proportionally
+    if (rule.maximumSpend && totalSpend > rule.maximumSpend) {
+      const scaleFactor = rule.maximumSpend / totalSpend;
       eligibleSpend = rule.maximumSpend;
+      
+      // Scale down all category rewards proportionally
+      categoryBreakdowns.forEach(breakdown => {
+        breakdown.reward *= scaleFactor;
+        if (breakdown.rewardUSD) {
+          breakdown.rewardUSD *= scaleFactor;
+        }
+      });
+      
+      // Recalculate total reward
+      rewardEarned = categoryBreakdowns.reduce((sum, cat) => sum + cat.reward, 0);
+    } else if (rule.maximumSpend) {
+      // Even if not exceeded, cap eligible spend at maximum
+      eligibleSpend = Math.min(eligibleSpend, rule.maximumSpend);
     }
 
     // Calculate progress percentages
@@ -116,13 +138,25 @@ export class RewardsCalculator {
     const maximumExceeded = !!rule.maximumSpend && eligibleSpend >= rule.maximumSpend;
     const shouldStopUsing = maximumExceeded;
 
+    // Calculate normalized USD value for the total reward
+    let rewardEarnedUSD: number;
+    if (rule.rewardType === 'cashback') {
+      rewardEarnedUSD = rewardEarned;
+    } else if (rule.rewardType === 'miles') {
+      rewardEarnedUSD = rewardEarned * milesValuation;
+    } else {
+      rewardEarnedUSD = rewardEarned * pointsValuation;
+    }
+
     return {
       cardId: rule.cardId,
       ruleId: rule.id,
-      period: period.label,
+      period: period.name,
       totalSpend,
       eligibleSpend,
       rewardEarned,
+      rewardEarnedUSD,
+      rewardType: rule.rewardType,
       minimumProgress,
       maximumProgress,
       categoryBreakdowns,
