@@ -19,6 +19,7 @@ export interface CalculationPeriod {
 }
 
 export class RewardsCalculator {
+  private static readonly DEFAULT_BILLING_DAY = 1;
   /**
    * Calculate rewards for a single rule in a given period
    */
@@ -182,7 +183,7 @@ export class RewardsCalculator {
       label = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}`;
     } else {
       // Billing cycle
-      const dayOfMonth = card.billingCycle.dayOfMonth || 1;
+      const dayOfMonth = card.billingCycle.dayOfMonth || this.DEFAULT_BILLING_DAY;
       
       if (targetDate.getDate() >= dayOfMonth) {
         // Current billing period
@@ -213,7 +214,7 @@ export class RewardsCalculator {
       if (!card.billingCycle || card.billingCycle.type === 'calendar') {
         targetDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
       } else {
-        const dayOfMonth = card.billingCycle.dayOfMonth || 1;
+        const dayOfMonth = card.billingCycle.dayOfMonth || this.DEFAULT_BILLING_DAY;
         targetDate = new Date(now.getFullYear(), now.getMonth() - i, dayOfMonth);
       }
       
