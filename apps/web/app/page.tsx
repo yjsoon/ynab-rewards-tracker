@@ -6,17 +6,11 @@ import { useYnabPAT, useCreditCards } from '@/hooks/useLocalStorage';
 import { YnabClient } from '@/lib/ynab-client';
 import { storage } from '@/lib/storage';
 import { SetupPrompt } from '@/components/SetupPrompt';
+import type { Transaction } from '@/types/transaction';
 
 export default function DashboardPage() {
   const { pat } = useYnabPAT();
   const { cards } = useCreditCards();
-  interface Transaction {
-    id: string;
-    date: string;
-    payee_name: string;
-    category_name?: string;
-    amount: number;
-  }
 
   const [selectedBudget, setSelectedBudget] = useState<{ id?: string; name?: string }>({});
   const [trackedAccounts, setTrackedAccounts] = useState<string[]>([]);
@@ -49,10 +43,12 @@ export default function DashboardPage() {
   }, [pat]);
 
   useEffect(() => {
-    // Check if we should show setup prompt
-    const hasSeenSetup = localStorage.getItem('hasSeenSetupPrompt');
-    if (!pat && !hasSeenSetup) {
-      setShowSetupPrompt(true);
+    // Check if we should show setup prompt (only on client side)
+    if (typeof window !== 'undefined') {
+      const hasSeenSetup = localStorage.getItem('hasSeenSetupPrompt');
+      if (!pat && !hasSeenSetup) {
+        setShowSetupPrompt(true);
+      }
     }
 
     // Load saved settings
@@ -67,7 +63,9 @@ export default function DashboardPage() {
   }, [pat, loadRecentTransactions]);
 
   const handleDismissSetup = () => {
-    localStorage.setItem('hasSeenSetupPrompt', 'true');
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('hasSeenSetupPrompt', 'true');
+    }
     setShowSetupPrompt(false);
   };
 
