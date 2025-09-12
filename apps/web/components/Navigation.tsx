@@ -2,64 +2,75 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { Button } from '@/components/ui/button';
+import { Home, Settings, CreditCard } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 export function Navigation() {
   const pathname = usePathname();
 
-  const isActive = (path: string) => pathname === path;
-
-  const getLinkStyle = (path: string) => ({
-    textDecoration: 'none',
-    color: isActive(path) ? '#007bff' : '#666',
-    fontWeight: isActive(path) ? 600 : 400,
-    padding: '8px 12px',
-    borderRadius: 4,
-    backgroundColor: isActive(path) ? '#e7f3ff' : 'transparent',
-    transition: 'all 0.2s ease',
-  });
-
   const navLinks = [
-    { href: '/', label: 'Dashboard' },
-    { href: '/settings', label: 'Settings' },
+    { href: '/', label: 'Dashboard', icon: Home },
+    { href: '/settings', label: 'Settings', icon: Settings },
   ];
 
   return (
-    <nav style={{
-      borderBottom: '1px solid #e0e0e0',
-      backgroundColor: '#f8f9fa',
-      padding: '0 20px',
-      position: 'sticky',
-      top: 0,
-      zIndex: 100,
-    }}>
-      <div style={{
-        maxWidth: 1200,
-        margin: '0 auto',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        height: 60,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 30 }}>
-          <Link href="/" style={{
-            fontSize: '1.2rem',
-            fontWeight: 'bold',
-            textDecoration: 'none',
-            color: '#333',
-          }}>
-            YNAB Rewards
-          </Link>
-          
-          <div style={{ display: 'flex', gap: 20 }}>
-            {navLinks.map((link) => (
-              <Link 
-                key={link.href}
-                href={link.href} 
-                style={getLinkStyle(link.href)}
-              >
-                {link.label}
-              </Link>
-            ))}
+    <nav className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
+      <div className="max-w-6xl mx-auto px-6">
+        <div className="flex h-14 items-center justify-between">
+          <div className="flex items-center gap-6">
+            <Link href="/" className="flex items-center space-x-2 font-bold text-lg">
+              <CreditCard className="h-6 w-6" />
+              <span>YNAB Rewards</span>
+            </Link>
+            
+            <div className="hidden md:flex items-center gap-1">
+              {navLinks.map((link) => {
+                const Icon = link.icon;
+                const isActive = pathname === link.href;
+                return (
+                  <Button
+                    key={link.href}
+                    variant={isActive ? "secondary" : "ghost"}
+                    size="sm"
+                    asChild
+                    className={cn(
+                      "gap-2",
+                      isActive && "bg-secondary"
+                    )}
+                  >
+                    <Link href={link.href}>
+                      <Icon className="h-4 w-4" />
+                      {link.label}
+                    </Link>
+                  </Button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Mobile navigation */}
+          <div className="flex md:hidden items-center gap-1">
+            {navLinks.map((link) => {
+              const Icon = link.icon;
+              const isActive = pathname === link.href;
+              return (
+                <Button
+                  key={link.href}
+                  variant={isActive ? "secondary" : "ghost"}
+                  size="icon"
+                  asChild
+                  className={cn(
+                    isActive && "bg-secondary"
+                  )}
+                >
+                  <Link href={link.href}>
+                    <Icon className="h-4 w-4" />
+                    <span className="sr-only">{link.label}</span>
+                  </Link>
+                </Button>
+              );
+            })}
           </div>
         </div>
       </div>

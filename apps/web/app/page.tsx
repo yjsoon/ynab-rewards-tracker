@@ -1,12 +1,44 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { useYnabPAT, useCreditCards } from '@/hooks/useLocalStorage';
 import { YnabClient } from '@/lib/ynab-client';
 import { storage } from '@/lib/storage';
 import { SetupPrompt } from '@/components/SetupPrompt';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
+import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { 
+  CheckCircle2, 
+  XCircle, 
+  Circle, 
+  Wallet, 
+  CreditCard, 
+  TrendingUp, 
+  Calendar,
+  ArrowRight,
+  AlertCircle,
+  Loader2,
+  Construction
+} from 'lucide-react';
 import type { Transaction } from '@/types/transaction';
+
+// Constants
+const TRANSACTION_LOOKBACK_DAYS = 30;
+const RECENT_TRANSACTIONS_LIMIT = 10;
+
+// Types for better type safety
+type SetupStep = 'pat' | 'budget' | 'accounts' | 'cards';
+
+interface SetupStatus {
+  pat: boolean;
+  budget: boolean;
+  accounts: boolean;
+  cards: boolean;
+}
 
 export default function DashboardPage() {
   const { pat } = useYnabPAT();
@@ -26,14 +58,14 @@ export default function DashboardPage() {
     setError('');
     try {
       const client = new YnabClient(pat);
-      // Get transactions from the last 30 days
+      // Get transactions from the last N days
       const sinceDate = new Date();
-      sinceDate.setDate(sinceDate.getDate() - 30);
+      sinceDate.setDate(sinceDate.getDate() - TRANSACTION_LOOKBACK_DAYS);
       const txns = await client.getTransactions(budgetId, {
         since_date: sinceDate.toISOString().split('T')[0],
       });
-      // Show only the 10 most recent transactions
-      setTransactions(txns.slice(0, 10));
+      // Show only the most recent transactions
+      setTransactions(txns.slice(0, RECENT_TRANSACTIONS_LIMIT));
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       setError(`Failed to load transactions: ${errorMessage}`);
@@ -69,301 +101,320 @@ export default function DashboardPage() {
     setShowSetupPrompt(false);
   };
 
-  // Calculate some basic stats
-  const isFullyConfigured = pat && selectedBudget.id && trackedAccounts.length > 0;
-  const setupProgress = [
-    pat ? 1 : 0,
-    selectedBudget.id ? 1 : 0,
-    trackedAccounts.length > 0 ? 1 : 0,
-    cards.length > 0 ? 1 : 0,
-  ].reduce((a, b) => a + b, 0);
-  const setupPercentage = (setupProgress / 4) * 100;
+  // Calculate some basic stats with memoization
+  const setupStatus = useMemo<SetupStatus>(() => ({
+    pat: !!pat,
+    budget: !!selectedBudget.id,
+    accounts: trackedAccounts.length > 0,
+    cards: cards.length > 0,
+  }), [pat, selectedBudget.id, trackedAccounts.length, cards.length]);
+
+  const isFullyConfigured = useMemo(() => 
+    setupStatus.pat && setupStatus.budget && setupStatus.accounts,
+    [setupStatus]
+  );
+
+  const setupProgress = useMemo(() => 
+    Object.values(setupStatus).filter(Boolean).length,
+    [setupStatus]
+  );
+
+  const setupPercentage = useMemo(() => 
+    (setupProgress / 4) * 100,
+    [setupProgress]
+  );
 
   // Empty state when nothing is configured
   if (!pat) {
     return (
-      <div style={{ maxWidth: 1200, margin: '20px auto', padding: 20 }}>
+      <div className="max-w-6xl mx-auto p-6">
         {showSetupPrompt && <SetupPrompt onDismiss={handleDismissSetup} />}
         
-        <h1>Dashboard</h1>
+        <h1 className="text-3xl font-bold mb-8">Dashboard</h1>
         
-        <div style={{
-          textAlign: 'center',
-          padding: 60,
-          backgroundColor: '#f8f9fa',
-          borderRadius: 8,
-          marginTop: 40,
-        }}>
-          <h2 style={{ marginBottom: 20 }}>No YNAB Connection</h2>
-          <p style={{ fontSize: '1.1rem', marginBottom: 30, color: '#666' }}>
-            Connect your YNAB account to start tracking rewards across all your cards
-          </p>
+        <Card className="text-center p-12">
+          <div className="mb-6">
+            <Wallet className="h-16 w-16 text-muted-foreground mx-auto mb-4" aria-hidden="true" />
+            <CardTitle className="text-2xl mb-3">No YNAB Connection</CardTitle>
+            <CardDescription className="text-lg">
+              Connect your YNAB account to start tracking rewards across all your cards
+            </CardDescription>
+          </div>
           
-          <Link href="/settings" style={{ 
-            padding: '14px 32px', 
-            backgroundColor: '#007bff', 
-            color: 'white', 
-            textDecoration: 'none',
-            borderRadius: 4,
-            display: 'inline-block',
-            fontSize: '1.1rem',
-            fontWeight: 'bold',
-          }}>
-            Connect YNAB Account
-          </Link>
+          <Button size="lg" asChild className="mb-8">
+            <Link href="/settings">
+              <Wallet className="mr-2 h-5 w-5" aria-hidden="true" />
+              Connect YNAB Account
+            </Link>
+          </Button>
           
-          <div style={{ marginTop: 40, maxWidth: 600, margin: '40px auto 0' }}>
-            <h3>Why Connect YNAB?</h3>
-            <ul style={{ textAlign: 'left', lineHeight: 1.8 }}>
-              <li>Automatically calculate rewards based on your actual spending</li>
-              <li>Track progress toward quarterly and annual spending caps</li>
-              <li>Get recommendations for which card to use for each purchase</li>
-              <li>All data stays in your browser - 100% private</li>
+          <div className="max-w-2xl mx-auto">
+            <h3 className="text-lg font-semibold mb-4">Why Connect YNAB?</h3>
+            <ul className="text-left space-y-2 text-muted-foreground">
+              <li className="flex items-start">
+                <CheckCircle2 className="h-5 w-5 text-green-500 mr-2 mt-0.5 flex-shrink-0" aria-hidden="true" />
+                Automatically calculate rewards based on your actual spending
+              </li>
+              <li className="flex items-start">
+                <CheckCircle2 className="h-5 w-5 text-green-500 mr-2 mt-0.5 flex-shrink-0" aria-hidden="true" />
+                Track progress toward quarterly and annual spending caps
+              </li>
+              <li className="flex items-start">
+                <CheckCircle2 className="h-5 w-5 text-green-500 mr-2 mt-0.5 flex-shrink-0" aria-hidden="true" />
+                Get recommendations for which card to use for each purchase
+              </li>
+              <li className="flex items-start">
+                <CheckCircle2 className="h-5 w-5 text-green-500 mr-2 mt-0.5 flex-shrink-0" aria-hidden="true" />
+                All data stays in your browser - 100% private
+              </li>
             </ul>
           </div>
-        </div>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div style={{ maxWidth: 1200, margin: '20px auto', padding: 20 }}>
-      <h1>Dashboard</h1>
+    <div className="max-w-6xl mx-auto p-6">
+      <h1 className="text-3xl font-bold mb-8">Dashboard</h1>
 
       {/* Setup Progress */}
       {!isFullyConfigured && (
-        <div style={{
-          backgroundColor: '#e7f3ff',
-          border: '1px solid #007bff',
-          borderRadius: 8,
-          padding: 20,
-          marginBottom: 30,
-        }}>
-          <h3 style={{ marginTop: 0 }}>Setup Progress: {setupProgress}/4 steps completed</h3>
-          <div style={{
-            backgroundColor: '#ddd',
-            height: 20,
-            borderRadius: 10,
-            overflow: 'hidden',
-            marginBottom: 15,
-          }}>
-            <div style={{
-              backgroundColor: '#007bff',
-              height: '100%',
-              width: `${setupPercentage}%`,
-              transition: 'width 0.3s ease',
-            }} />
-          </div>
-          <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
-            <span style={{ color: pat ? 'green' : '#666' }}>
-              {pat ? '✓' : '○'} YNAB Token
-            </span>
-            <span style={{ color: selectedBudget.id ? 'green' : '#666' }}>
-              {selectedBudget.id ? '✓' : '○'} Budget Selected
-            </span>
-            <span style={{ color: trackedAccounts.length > 0 ? 'green' : '#666' }}>
-              {trackedAccounts.length > 0 ? '✓' : '○'} Accounts Tracked
-            </span>
-            <span style={{ color: cards.length > 0 ? 'green' : '#666' }}>
-              {cards.length > 0 ? '✓' : '○'} Cards Configured
-            </span>
-          </div>
-          {!isFullyConfigured && (
-            <Link href="/settings" style={{
-              display: 'inline-block',
-              marginTop: 15,
-              color: '#007bff',
-              textDecoration: 'underline',
-            }}>
-              Complete Setup →
-            </Link>
-          )}
-        </div>
+        <Alert className="mb-6">
+          <AlertCircle className="h-4 w-4" aria-hidden="true" />
+          <AlertDescription>
+            <div className="mt-2">
+              <div className="flex justify-between items-center mb-3">
+                <span className="font-semibold">Setup Progress: {setupProgress}/4 steps completed</span>
+                <Button variant="outline" size="sm" asChild aria-label="Complete setup">
+                  <Link href="/settings">
+                    Complete Setup <ArrowRight className="ml-1 h-4 w-4" aria-hidden="true" />
+                  </Link>
+                </Button>
+              </div>
+              <Progress value={setupPercentage} className="mb-3" aria-label={`Setup progress: ${setupProgress} of 4 steps completed`} />
+              <div className="flex gap-4 flex-wrap text-sm">
+                <span className="flex items-center">
+                  {setupStatus.pat ? (
+                    <CheckCircle2 className="h-4 w-4 text-green-500 mr-1" aria-hidden="true" />
+                  ) : (
+                    <Circle className="h-4 w-4 text-muted-foreground mr-1" aria-hidden="true" />
+                  )}
+                  YNAB Token
+                </span>
+                <span className="flex items-center">
+                  {setupStatus.budget ? (
+                    <CheckCircle2 className="h-4 w-4 text-green-500 mr-1" aria-hidden="true" />
+                  ) : (
+                    <Circle className="h-4 w-4 text-muted-foreground mr-1" aria-hidden="true" />
+                  )}
+                  Budget Selected
+                </span>
+                <span className="flex items-center">
+                  {setupStatus.accounts ? (
+                    <CheckCircle2 className="h-4 w-4 text-green-500 mr-1" aria-hidden="true" />
+                  ) : (
+                    <Circle className="h-4 w-4 text-muted-foreground mr-1" aria-hidden="true" />
+                  )}
+                  Accounts Tracked
+                </span>
+                <span className="flex items-center">
+                  {setupStatus.cards ? (
+                    <CheckCircle2 className="h-4 w-4 text-green-500 mr-1" aria-hidden="true" />
+                  ) : (
+                    <Circle className="h-4 w-4 text-muted-foreground mr-1" aria-hidden="true" />
+                  )}
+                  Cards Configured
+                </span>
+              </div>
+            </div>
+          </AlertDescription>
+        </Alert>
       )}
 
       {/* Quick Stats */}
-      <div style={{ 
-        display: 'grid', 
-        gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
-        gap: 20,
-        marginBottom: 40 
-      }}>
-        <div style={{ 
-          padding: 20, 
-          border: '1px solid #ddd', 
-          borderRadius: 8,
-          backgroundColor: '#f8f9fa'
-        }}>
-          <h3>YNAB Status</h3>
-          <p style={{ fontSize: '2em', margin: 0 }}>
-            {pat ? '✅' : '❌'}
-          </p>
-          <p>{pat ? 'Connected' : 'Not Connected'}</p>
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">YNAB Status</CardTitle>
+            <Wallet className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center space-x-2">
+              {pat ? (
+                <CheckCircle2 className="h-8 w-8 text-green-500" aria-hidden="true" />
+              ) : (
+                <XCircle className="h-8 w-8 text-red-500" aria-hidden="true" />
+              )}
+              <p className="text-2xl font-bold">{pat ? 'Connected' : 'Not Connected'}</p>
+            </div>
+          </CardContent>
+        </Card>
         
-        <div style={{ 
-          padding: 20, 
-          border: '1px solid #ddd', 
-          borderRadius: 8,
-          backgroundColor: '#f8f9fa'
-        }}>
-          <h3>Active Budget</h3>
-          <p style={{ fontSize: '1.2em', margin: 0, fontWeight: 'bold' }}>
-            {selectedBudget.name || 'None Selected'}
-          </p>
-          {selectedBudget.id && (
-            <Link href="/settings" style={{ fontSize: '0.9em' }}>Change</Link>
-          )}
-        </div>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Active Budget</CardTitle>
+            <TrendingUp className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          </CardHeader>
+          <CardContent>
+            <p className="text-xl font-bold truncate">
+              {selectedBudget.name || 'None Selected'}
+            </p>
+            {selectedBudget.id && (
+              <Button variant="link" size="sm" asChild className="px-0">
+                <Link href="/settings">Change</Link>
+              </Button>
+            )}
+          </CardContent>
+        </Card>
 
-        <div style={{ 
-          padding: 20, 
-          border: '1px solid #ddd', 
-          borderRadius: 8,
-          backgroundColor: '#f8f9fa'
-        }}>
-          <h3>Tracked Accounts</h3>
-          <p style={{ fontSize: '2em', margin: 0 }}>{trackedAccounts.length}</p>
-          <Link href="/settings">Manage</Link>
-        </div>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Tracked Accounts</CardTitle>
+            <Calendar className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-bold">{trackedAccounts.length}</p>
+            <Button variant="link" size="sm" asChild className="px-0">
+              <Link href="/settings">Manage</Link>
+            </Button>
+          </CardContent>
+        </Card>
 
-        <div style={{ 
-          padding: 20, 
-          border: '1px solid #ddd', 
-          borderRadius: 8,
-          backgroundColor: '#f8f9fa'
-        }}>
-          <h3>Reward Cards</h3>
-          <p style={{ fontSize: '2em', margin: 0 }}>{cards.length}</p>
-          <Link href="/settings">Configure</Link>
-        </div>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Reward Cards</CardTitle>
+            <CreditCard className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-bold">{cards.length}</p>
+            <Button variant="link" size="sm" asChild className="px-0">
+              <Link href="/settings">Configure</Link>
+            </Button>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Recent Transactions Preview */}
       {isFullyConfigured && (
-        <section style={{ marginBottom: 40 }}>
-          <h2>Recent Transactions (Last 30 Days)</h2>
-          {loading && <p>Loading transactions...</p>}
-          {error && <p style={{ color: 'red' }}>{error}</p>}
-          {!loading && !error && transactions.length > 0 && (
-            <div style={{ 
-              border: '1px solid #ddd',
-              borderRadius: 8,
-              overflow: 'hidden'
-            }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ backgroundColor: '#f8f9fa' }}>
-                    <th style={{ padding: 10, textAlign: 'left' }}>Date</th>
-                    <th style={{ padding: 10, textAlign: 'left' }}>Payee</th>
-                    <th style={{ padding: 10, textAlign: 'left' }}>Category</th>
-                    <th style={{ padding: 10, textAlign: 'right' }}>Amount</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {transactions.map((txn) => (
-                    <tr key={txn.id} style={{ borderTop: '1px solid #eee' }}>
-                      <td style={{ padding: 10 }}>
-                        {new Date(txn.date).toLocaleDateString()}
-                      </td>
-                      <td style={{ padding: 10 }}>{txn.payee_name}</td>
-                      <td style={{ padding: 10 }}>{txn.category_name || 'Uncategorized'}</td>
-                      <td style={{ padding: 10, textAlign: 'right' }}>
-                        ${Math.abs(txn.amount / 1000).toFixed(2)}
-                      </td>
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle>Recent Transactions (Last {TRANSACTION_LOOKBACK_DAYS} Days)</CardTitle>
+            <CardDescription>
+              Your most recent transactions from tracked accounts
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {loading && (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden="true" />
+                <span className="ml-2">Loading transactions...</span>
+              </div>
+            )}
+            {error && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" aria-hidden="true" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+            {!loading && !error && transactions.length > 0 && (
+              <div className="overflow-x-auto">
+                <table className="w-full" role="table" aria-label="Recent transactions">
+                  <thead>
+                    <tr className="border-b" role="row">
+                      <th className="text-left p-2 font-medium" scope="col">Date</th>
+                      <th className="text-left p-2 font-medium" scope="col">Payee</th>
+                      <th className="text-left p-2 font-medium" scope="col">Category</th>
+                      <th className="text-right p-2 font-medium" scope="col">Amount</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          {!loading && !error && transactions.length === 0 && (
-            <p>No recent transactions found.</p>
-          )}
-        </section>
+                  </thead>
+                  <tbody>
+                    {transactions.map((txn) => (
+                      <tr key={txn.id} className="border-b" role="row">
+                        <td className="p-2 text-sm">
+                          {new Date(txn.date).toLocaleDateString()}
+                        </td>
+                        <td className="p-2 text-sm">{txn.payee_name}</td>
+                        <td className="p-2 text-sm">
+                          {txn.category_name || 'Uncategorized'}
+                        </td>
+                        <td className="p-2 text-sm text-right font-mono">
+                          ${Math.abs(txn.amount / 1000).toFixed(2)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {!loading && !error && transactions.length === 0 && (
+              <p className="text-center py-8 text-muted-foreground">No recent transactions found.</p>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {/* Cards Overview */}
-      <section style={{ marginBottom: 40 }}>
-        <h2>Your Reward Cards</h2>
-        {cards.length === 0 ? (
-          <div style={{
-            padding: 40,
-            textAlign: 'center',
-            backgroundColor: '#f8f9fa',
-            borderRadius: 8,
-          }}>
-            <p style={{ fontSize: '1.1rem', marginBottom: 20 }}>
-              No cards configured yet
-            </p>
-            <Link href="/settings" style={{
-              padding: '10px 20px',
-              backgroundColor: '#28a745',
-              color: 'white',
-              textDecoration: 'none',
-              borderRadius: 4,
-              display: 'inline-block',
-            }}>
-              Add Your First Card
-            </Link>
-          </div>
-        ) : (
-          <div style={{ 
-            display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', 
-            gap: 20 
-          }}>
-            {cards.map((card) => (
-              <div key={card.id} style={{ 
-                padding: 20, 
-                border: '1px solid #ddd',
-                borderRadius: 8,
-                backgroundColor: card.ynabAccountId ? '#f0f8ff' : '#fff',
-                position: 'relative',
-              }}>
-                {card.ynabAccountId && (
-                  <span style={{
-                    position: 'absolute',
-                    top: 10,
-                    right: 10,
-                    fontSize: '0.8em',
-                    padding: '2px 6px',
-                    backgroundColor: '#007bff',
-                    color: 'white',
-                    borderRadius: 3,
-                  }}>
-                    YNAB Linked
-                  </span>
-                )}
-                <h3 style={{ marginTop: 0 }}>{card.name}</h3>
-                <p style={{ color: '#666' }}>{card.issuer}</p>
-                <p style={{ 
-                  display: 'inline-block',
-                  padding: '4px 8px',
-                  backgroundColor: '#e9ecef',
-                  borderRadius: 4,
-                  fontSize: '0.9em'
-                }}>
-                  {card.type}
-                </p>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
+      <Card className="mb-8">
+        <CardHeader>
+          <CardTitle>Your Reward Cards</CardTitle>
+          <CardDescription>
+            Manage your credit cards and their reward rules
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {cards.length === 0 ? (
+            <div className="text-center py-8">
+              <CreditCard className="h-12 w-12 text-muted-foreground mx-auto mb-4" aria-hidden="true" />
+              <p className="text-lg mb-4 text-muted-foreground">
+                No cards configured yet
+              </p>
+              <Button asChild>
+                <Link href="/settings">
+                  <CreditCard className="mr-2 h-4 w-4" aria-hidden="true" />
+                  Add Your First Card
+                </Link>
+              </Button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {cards.map((card) => (
+                <Card key={card.id} className={card.ynabAccountId ? 'border-primary/50' : ''}>
+                  <CardHeader>
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <CardTitle className="text-lg">{card.name}</CardTitle>
+                        <CardDescription>{card.issuer}</CardDescription>
+                      </div>
+                      {card.ynabAccountId && (
+                        <Badge variant="secondary">YNAB Linked</Badge>
+                      )}
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <Badge variant="outline">{card.type}</Badge>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Coming Soon */}
       {isFullyConfigured && (
-        <section style={{ 
-          padding: 30, 
-          backgroundColor: '#f8f9fa',
-          borderRadius: 8,
-          textAlign: 'center'
-        }}>
-          <h2>🚧 Rewards Calculation Coming Soon</h2>
-          <p>We're working on calculating your rewards based on your YNAB transactions and card rules.</p>
-          <p>You're all set up and ready - rewards tracking will be available in the next update!</p>
-        </section>
+        <Card className="text-center">
+          <CardHeader>
+            <div className="flex justify-center mb-4">
+              <Construction className="h-12 w-12 text-yellow-500" aria-hidden="true" />
+            </div>
+            <CardTitle className="text-2xl">Rewards Calculation Coming Soon</CardTitle>
+            <CardDescription className="text-base">
+              We're working on calculating your rewards based on your YNAB transactions and card rules.
+              You're all set up and ready - rewards tracking will be available in the next update!
+            </CardDescription>
+          </CardHeader>
+        </Card>
       )}
     </div>
   );
