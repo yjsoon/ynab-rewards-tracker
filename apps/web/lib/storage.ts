@@ -8,12 +8,11 @@ export interface CreditCard {
   name: string;
   issuer?: string;
   type: 'cashback' | 'points' | 'miles';
-  ynabAccountId: string; // YNAB account ID
+  ynabAccountId: string; // YNAB account ID (required; no manual cards)
   billingCycle?: {
     type: 'calendar' | 'billing';
     dayOfMonth?: number; // for billing cycle
   };
-  isManual?: boolean; // true for manually created cards
   active: boolean;
 }
 
@@ -53,7 +52,7 @@ export interface RewardCalculation {
   totalSpend: number;
   eligibleSpend: number;
   rewardEarned: number; // Raw reward units (dollars for cashback, miles/points for others)
-  rewardEarnedUSD?: number; // Normalized USD value for comparison
+  rewardEarnedDollars?: number; // Normalized dollar value for comparison
   rewardType: 'cashback' | 'miles' | 'points'; // Track the type for clarity
   minimumProgress?: number;
   maximumProgress?: number;
@@ -67,7 +66,7 @@ export interface CategoryBreakdown {
   category: string;
   spend: number;
   reward: number; // Raw reward units
-  rewardUSD?: number; // Normalized USD value
+  rewardDollars?: number; // Normalized dollar value
   capReached: boolean;
 }
 
@@ -82,8 +81,8 @@ export interface YnabConnection {
 export interface AppSettings {
   theme?: 'light' | 'dark' | 'auto';
   currency?: string;
-  milesValuation?: number; // USD value per mile (default: 0.01)
-  pointsValuation?: number; // USD value per point (default: 0.01)
+  milesValuation?: number; // Dollar value per mile (default: 0.01)
+  pointsValuation?: number; // Dollar value per point (default: 0.01)
 }
 
 export interface StorageData {
@@ -127,6 +126,30 @@ class StorageService {
             return card;
           });
         }
+        // Migrations for renamed fields
+        try {
+          if (Array.isArray(data.calculations)) {
+            data.calculations = data.calculations.map((calc: any) => {
+              if (calc && typeof calc === 'object') {
+                if (calc.rewardEarnedUSD != null && calc.rewardEarnedDollars == null) {
+                  calc.rewardEarnedDollars = calc.rewardEarnedUSD;
+                  delete calc.rewardEarnedUSD;
+                }
+                if (Array.isArray(calc.categoryBreakdowns)) {
+                  calc.categoryBreakdowns = calc.categoryBreakdowns.map((cb: any) => {
+                    if (cb && typeof cb === 'object' && cb.rewardUSD != null && cb.rewardDollars == null) {
+                      cb.rewardDollars = cb.rewardUSD;
+                      delete cb.rewardUSD;
+                    }
+                    return cb;
+                  });
+                }
+              }
+              return calc;
+            });
+          }
+        } catch {}
+
         return data;
       }
     } catch (error) {
