@@ -171,7 +171,6 @@ export default function SettingsPage() {
             type: 'cashback', // Default, user can edit
             active: true,
             ynabAccountId: account.id,
-            isManual: false,
           };
           saveCard(newCard);
         }
@@ -220,7 +219,6 @@ export default function SettingsPage() {
         type: 'cashback',
         active: true,
         ynabAccountId: accountId,
-        isManual: false,
       };
       saveCard(newCard);
     } else {
@@ -314,7 +312,6 @@ export default function SettingsPage() {
       type: cardForm.type,
       active: editingCard.active ?? true,
       ynabAccountId: editingCard.ynabAccountId,
-      isManual: editingCard.isManual ?? false,
     };
     saveCard(card);
     setShowCardForm(false);
@@ -616,89 +613,43 @@ export default function SettingsPage() {
             <p className="text-sm text-muted-foreground">No cards configured yet.</p>
           ) : (
             <div className="space-y-4">
-              {cards.filter(card => !card.isManual).length > 0 && (
-                <>
-                  <h3 className="font-semibold text-sm">YNAB-Linked Cards</h3>
-                  <div className="space-y-2">
-                    {cards.filter(card => !card.isManual).map((card) => (
-                      <div 
-                        key={card.id} 
-                        className="flex items-center justify-between p-3 rounded-lg border bg-blue-50 dark:bg-blue-950"
-                      >
-                        <div className="flex items-center gap-3">
-                          <Link2 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                          <div>
-                            <div className="font-medium">{card.name}</div>
-                            <div className="text-sm text-muted-foreground">
-                              {card.issuer} • {card.type}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button 
-                            size="sm" 
-                            variant="ghost"
-                            onClick={() => handleEditCard(card)}
-                            aria-label={`Edit ${card.name}`}
-                          >
-                            <Edit2 className="h-4 w-4" aria-hidden="true" />
-                          </Button>
-                          <Button 
-                            size="sm" 
-                            variant="ghost"
-                            onClick={() => setShowDeleteCardDialog(card.id)}
-                            aria-label={`Delete ${card.name}`}
-                          >
-                            <Trash2 className="h-4 w-4" aria-hidden="true" />
-                          </Button>
+              <h3 className="font-semibold text-sm">Linked Cards</h3>
+              <div className="space-y-2">
+                {cards.map((card) => (
+                  <div 
+                    key={card.id} 
+                    className="flex items-center justify-between p-3 rounded-lg border bg-blue-50 dark:bg-blue-950"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Link2 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                      <div>
+                        <div className="font-medium">{card.name}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {card.issuer} • {card.type}
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </>
-              )}
-              
-              {cards.filter(card => card.isManual).length > 0 && (
-                <>
-                  <h3 className="font-semibold text-sm">Manual Cards</h3>
-                  <div className="space-y-2">
-                    {cards.filter(card => card.isManual).map((card) => (
-                      <div 
-                        key={card.id} 
-                        className="flex items-center justify-between p-3 rounded-lg border"
+                    </div>
+                    <div className="flex gap-2">
+                      <Button 
+                        size="sm" 
+                        variant="ghost"
+                        onClick={() => handleEditCard(card)}
+                        aria-label={`Edit ${card.name}`}
                       >
-                        <div className="flex items-center gap-3">
-                          <CreditCardIcon className="h-5 w-5 text-muted-foreground" />
-                          <div>
-                            <div className="font-medium">{card.name}</div>
-                            <div className="text-sm text-muted-foreground">
-                              {card.issuer} • {card.type}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button 
-                            size="sm" 
-                            variant="ghost"
-                            onClick={() => handleEditCard(card)}
-                            aria-label={`Edit ${card.name}`}
-                          >
-                            <Edit2 className="h-4 w-4" aria-hidden="true" />
-                          </Button>
-                          <Button 
-                            size="sm" 
-                            variant="ghost"
-                            onClick={() => setShowDeleteCardDialog(card.id)}
-                            aria-label={`Delete ${card.name}`}
-                          >
-                            <Trash2 className="h-4 w-4" aria-hidden="true" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
+                        <Edit2 className="h-4 w-4" aria-hidden="true" />
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        variant="ghost"
+                        onClick={() => setShowDeleteCardDialog(card.id)}
+                        aria-label={`Delete ${card.name}`}
+                      >
+                        <Trash2 className="h-4 w-4" aria-hidden="true" />
+                      </Button>
+                    </div>
                   </div>
-                </>
-              )}
+                ))}
+              </div>
             </div>
           )}
         </CardContent>
