@@ -19,8 +19,7 @@ export function Navigation() {
   });
 
   const navLinks = [
-    { href: '/', label: 'Home' },
-    { href: '/dashboard', label: 'Dashboard' },
+    { href: '/', label: 'Dashboard' },
     { href: '/settings', label: 'Settings' },
   ];
 
