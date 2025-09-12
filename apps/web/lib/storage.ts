@@ -119,7 +119,7 @@ class StorageService {
               return {
                 ...card,
                 billingCycle: {
-                  type: 'calendar' as const
+                  type: 'calendar' as const // dayOfMonth only applies to 'billing'
                 }
               };
             }
