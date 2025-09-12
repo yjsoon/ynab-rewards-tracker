@@ -24,35 +24,22 @@ What’s great
 - Local export/import excludes PAT — good data-minimization practice.
 - The rewards engine is modularized for future extension.
 
-Issues to address (suggested fixes inline below)
-1) Type mismatches for CreditCard (blocking)
-   - Code uses fields not in the type: `issuer`, `isManual`, optional `ynabAccountId`, and the union references `'points'` in several components.
-   - Fix: widen the `CreditCard` interface to include these and make `billingCycle` optional. See apps/web/lib/storage.ts change.
+Status
 
-2) Rewards units consistency (logic/UX correctness)
-   - `RewardsCalculator.calculateRuleRewards` sets `rewardEarned` to raw “miles” for `rewardType === 'miles'`. Downstream UI and `RecommendationEngine.generateCardRecommendations` compute effective rates by `rewardEarned / eligibleSpend`, mixing miles with dollars.
-   - Fix options:
-     - Normalize to USD (e.g., 1¢/mile default, configurable) and store both `rewardEarnedUnits` and `rewardEarnedUsd`.
-     - Or, keep units, and have `RecommendationEngine` compute effective rate from rule definitions instead of raw `rewardEarned` values.
-   - Inline REVIEW notes added to both files.
+Resolved
+- CreditCard type is aligned with usage; `ynabAccountId` is required (no manual cards), `billingCycle` optional, `type` includes `'points'`. File: apps/web/lib/storage.ts
+- Rewards normalization: calculator computes `rewardEarnedDollars` using configurable valuations; recommendations use normalized dollars for card-level rates. Files: apps/web/lib/rewards-engine/calculator.ts, apps/web/lib/rewards-engine/recommendations.ts
+- Overall cap handling: calculator now scales category rewards proportionally when total spend exceeds `maximumSpend` (no double-application).
+- Removed manual-card UI branches; Settings shows a single YNAB-linked list. File: apps/web/app/settings/page.tsx
+- Minor: transaction type newline fixed.
 
-3) Cap application correctness (logic)
-   - In calculator, per-category handling applies `maximumSpend` as if it were per-category; later you also cap overall `eligibleSpend`. This can overcount rewards when the overall cap should limit total rewards, not each category independently.
-   - Fix: compute aggregate eligible spend across categories, apply the overall cap once, and (if needed) proportionally scale category rewards or track remaining cap as you iterate categories. Inline REVIEW note added.
+Remaining
+- Rewards dashboard now normalized; no action needed there.
+- Category recommendations use hard-coded 1¢/mile and an 80% block efficiency. Consider reading from settings valuations for consistency. File: apps/web/lib/rewards-engine/recommendations.ts
+- Legacy module path: `apps/web/lib/reward-engine/rules.ts` (singular) remains; remove or migrate to the plural `rewards-engine` tree and add a lint rule to prevent reintroduction.
+- Networking polish: consider AbortController in dashboard/transactions fetches to avoid state updates after unmount.
+- Tests: add unit tests for calculator (category caps, overall cap scaling, blocks, progress flags) and a smoke test for recommendations.
+- Ynab client helper: `getYnabClient` comment notes localStorage key drift; either wire it to the storage service or remove if unused. File: apps/web/lib/ynab-client.ts
 
-4) Legacy module naming
-   - `apps/web/lib/reward-engine/rules.ts` (singular) remains but new code uses `rewards-engine` (plural). This is confusing and risks drift.
-   - Fix: remove or migrate the old path; keep a single canonical module tree.
-
-5) Minor
-   - `types/transaction.ts` had no trailing newline; added.
-   - Consider abort controllers for fetches in dashboard/transactions to avoid setting state after unmount.
-   - Consider memoizing `accountsMap.get(...)` lookups by computing a simple object map; `Map` is fine, but not serializable if later moved to context.
-
-Suggested follow-ups
-- Add a simple “miles valuation” setting (default 0.01) to normalize rewards and make the dashboard’s effective rate meaningful across card types.
-- Unit tests for `RewardsCalculator` covering: category caps, overall caps, miles-block rules, minimum/maximum progress flags, and refund/negative adjustments when introduced.
-- Lint rule to forbid importing from the legacy `reward-engine` path.
-
-If you want, I can implement the type fix and a minimal normalization in the recommendations logic in a follow-up patch.
-
+Notes
+- Valuations defaults exist in calculator (`milesValuation`/`pointsValuation`); surface these in Settings if you want user-tunable assumptions.
