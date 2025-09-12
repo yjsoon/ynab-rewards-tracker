@@ -6,12 +6,14 @@
 export interface CreditCard {
   id: string;
   name: string;
-  type: 'cashback' | 'miles';
-  ynabAccountId: string;
-  billingCycle: {
+  issuer?: string;
+  type: 'cashback' | 'points' | 'miles';
+  ynabAccountId?: string; // present for YNAB-linked cards
+  billingCycle?: {
     type: 'calendar' | 'billing';
     dayOfMonth?: number; // for billing cycle
   };
+  isManual?: boolean; // true for manually created cards
   active: boolean;
 }
 
@@ -22,7 +24,7 @@ export interface RewardRule {
   rewardType: 'cashback' | 'miles';
   rewardValue: number; // percentage or miles per dollar
   milesBlockSize?: number; // e.g., 5 for "$5 blocks"
-  categories: string[]; // YNAB tag names
+  categories: string[]; // Reward categories (mapped from YNAB flags/tags)
   minimumSpend?: number;
   maximumSpend?: number;
   categoryCaps?: CategoryCap[];
@@ -50,7 +52,9 @@ export interface RewardCalculation {
   period: string;
   totalSpend: number;
   eligibleSpend: number;
-  rewardEarned: number;
+  rewardEarned: number; // Raw reward units (dollars for cashback, miles/points for others)
+  rewardEarnedUSD?: number; // Normalized USD value for comparison
+  rewardType: 'cashback' | 'miles' | 'points'; // Track the type for clarity
   minimumProgress?: number;
   maximumProgress?: number;
   categoryBreakdowns: CategoryBreakdown[];
@@ -62,7 +66,8 @@ export interface RewardCalculation {
 export interface CategoryBreakdown {
   category: string;
   spend: number;
-  reward: number;
+  reward: number; // Raw reward units
+  rewardUSD?: number; // Normalized USD value
   capReached: boolean;
 }
 
@@ -77,6 +82,8 @@ export interface YnabConnection {
 export interface AppSettings {
   theme?: 'light' | 'dark' | 'auto';
   currency?: string;
+  milesValuation?: number; // USD value per mile (default: 0.01)
+  pointsValuation?: number; // USD value per point (default: 0.01)
 }
 
 export interface StorageData {

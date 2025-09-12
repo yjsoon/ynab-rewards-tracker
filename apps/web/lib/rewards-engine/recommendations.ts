@@ -76,9 +76,11 @@ export class RecommendationEngine {
         return;
       }
 
-      // Check for cards with good reward rates
+      // Check for cards with good reward rates using normalized USD values
       const avgRewardRate = cardCalculations.reduce((sum, calc) => {
-        return sum + (calc.eligibleSpend > 0 ? calc.rewardEarned / calc.eligibleSpend : 0);
+        // Use normalized USD value for consistent comparison across card types
+        const rewardUSD = calc.rewardEarnedUSD || calc.rewardEarned;
+        return sum + (calc.eligibleSpend > 0 ? rewardUSD / calc.eligibleSpend : 0);
       }, 0) / cardCalculations.length;
 
       if (avgRewardRate > 0.02) { // >2% effective rate
