@@ -257,32 +257,48 @@ export default function DashboardPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {cards.map((card) => (
-                <Card key={card.id}>
+                <Card key={card.id} className="hover:bg-muted/50 transition-colors">
                   <CardHeader>
-                    <CardTitle className="text-lg">{card.name}</CardTitle>
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <CardTitle className="text-lg">{card.name}</CardTitle>
+                        <CardDescription className="mt-1">
+                          {card.type === 'cashback' ? 'Cashback Card' : 
+                           card.type === 'miles' ? 'Miles Card' : 
+                           card.type === 'points' ? 'Points Card' : 'Reward Card'}
+                        </CardDescription>
+                      </div>
+                      <Badge variant={card.active ? 'default' : 'secondary'} className="shrink-0">
+                        {card.active ? 'Active' : 'Inactive'}
+                      </Badge>
+                    </div>
                   </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {/* Placeholder for rewards summary */}
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Current Period:</span>
+                        <span className="font-medium">Coming Soon</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Rewards Earned:</span>
+                        <span className="font-medium">Coming Soon</span>
+                      </div>
+                      <div className="pt-3 border-t">
+                        <Button variant="outline" size="sm" asChild className="w-full">
+                          <Link href={`/cards/${card.id}`}>
+                            View Details
+                          </Link>
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
                 </Card>
               ))}
             </div>
           )}
         </CardContent>
       </Card>
-
-      {/* Rewards Calculation */}
-      {isFullyConfigured && (
-        <Card className="text-center mb-8">
-          <CardHeader>
-            <div className="flex justify-center mb-4">
-              <Construction className="h-12 w-12 text-yellow-500" aria-hidden="true" />
-            </div>
-            <CardTitle className="text-2xl">Rewards Calculation Coming Soon</CardTitle>
-            <CardDescription className="text-base">
-              We're working on calculating your rewards based on your YNAB transactions and card rules.
-              You're all set up and ready - rewards tracking will be available in the next update!
-            </CardDescription>
-          </CardHeader>
-        </Card>
-      )}
 
       {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">

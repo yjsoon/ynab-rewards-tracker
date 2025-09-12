@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { storage, StorageData, CreditCard, RewardRule } from '@/lib/storage';
+import { storage, StorageData, CreditCard, RewardRule, TagMapping, RewardCalculation } from '@/lib/storage';
 import { useStorageContext } from '@/contexts/StorageContext';
 
 export function useYnabPAT() {
@@ -79,6 +79,67 @@ export function useRewardRules(cardId?: string) {
   }, [loadRules]);
 
   return { rules, saveRule, deleteRule, isLoading };
+}
+
+export function useTagMappings(cardId?: string) {
+  const [mappings, setMappingsState] = useState<TagMapping[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const { refreshTrigger } = useStorageContext();
+
+  const loadMappings = useCallback(() => {
+    const stored = cardId ? storage.getCardTagMappings(cardId) : storage.getTagMappings();
+    setMappingsState(stored);
+  }, [cardId]);
+
+  useEffect(() => {
+    loadMappings();
+    setIsLoading(false);
+  }, [loadMappings, refreshTrigger]);
+
+  const saveMapping = useCallback((mapping: TagMapping) => {
+    storage.saveTagMapping(mapping);
+    loadMappings();
+  }, [loadMappings]);
+
+  const deleteMapping = useCallback((mappingId: string) => {
+    storage.deleteTagMapping(mappingId);
+    loadMappings();
+  }, [loadMappings]);
+
+  return { mappings, saveMapping, deleteMapping, isLoading };
+}
+
+export function useRewardCalculations(cardId?: string) {
+  const [calculations, setCalculationsState] = useState<RewardCalculation[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const { refreshTrigger } = useStorageContext();
+
+  const loadCalculations = useCallback(() => {
+    const stored = cardId ? storage.getCardCalculations(cardId) : storage.getCalculations();
+    setCalculationsState(stored);
+  }, [cardId]);
+
+  useEffect(() => {
+    loadCalculations();
+    setIsLoading(false);
+  }, [loadCalculations, refreshTrigger]);
+
+  const saveCalculation = useCallback((calculation: RewardCalculation) => {
+    storage.saveCalculation(calculation);
+    loadCalculations();
+  }, [loadCalculations]);
+
+  const deleteCalculation = useCallback((cardId: string, ruleId: string, period: string) => {
+    storage.deleteCalculation(cardId, ruleId, period);
+    loadCalculations();
+  }, [loadCalculations]);
+
+  const clearCalculations = useCallback(() => {
+    storage.clearCalculations();
+    loadCalculations();
+  }, [loadCalculations]);
+
+  return { calculations, saveCalculation, deleteCalculation, clearCalculations, isLoading };
 }
 
 export function useSettings() {
