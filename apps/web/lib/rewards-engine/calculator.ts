@@ -65,7 +65,7 @@ export class RewardsCalculator {
     categorySpends.forEach((spend, category) => {
       let categoryEligibleSpend = spend;
       let categoryReward = 0;
-      let categoryRewardUSD = 0;
+    let categoryRewardDollars = 0;
       let capReached = false;
 
       // Apply category-specific caps
@@ -78,7 +78,7 @@ export class RewardsCalculator {
       // Calculate reward based on type
       if (rule.rewardType === 'cashback') {
         categoryReward = (categoryEligibleSpend * rule.rewardValue) / 100;
-        categoryRewardUSD = categoryReward; // Already in USD
+        categoryRewardDollars = categoryReward; // already in dollars
       } else if (rule.rewardType === 'miles') {
         if (rule.milesBlockSize) {
           // Block-based miles (e.g., "$5 blocks")
@@ -88,15 +88,15 @@ export class RewardsCalculator {
           // Regular miles per dollar
           categoryReward = categoryEligibleSpend * rule.rewardValue;
         }
-        // Convert miles to USD for comparison
-        categoryRewardUSD = categoryReward * milesValuation;
+        // Convert miles to dollars for comparison
+        categoryRewardDollars = categoryReward * milesValuation;
       }
 
       categoryBreakdowns.push({
         category,
         spend,
         reward: categoryReward,
-        rewardUSD: categoryRewardUSD,
+        rewardDollars: categoryRewardDollars,
         capReached
       });
 
@@ -112,8 +112,8 @@ export class RewardsCalculator {
       // Scale down all category rewards proportionally
       categoryBreakdowns.forEach(breakdown => {
         breakdown.reward *= scaleFactor;
-        if (breakdown.rewardUSD) {
-          breakdown.rewardUSD *= scaleFactor;
+        if (breakdown.rewardDollars) {
+          breakdown.rewardDollars *= scaleFactor;
         }
       });
       
@@ -138,14 +138,14 @@ export class RewardsCalculator {
     const maximumExceeded = !!rule.maximumSpend && eligibleSpend >= rule.maximumSpend;
     const shouldStopUsing = maximumExceeded;
 
-    // Calculate normalized USD value for the total reward
-    let rewardEarnedUSD: number;
+    // Calculate normalized dollar value for the total reward
+    let rewardEarnedDollars: number;
     if (rule.rewardType === 'cashback') {
-      rewardEarnedUSD = rewardEarned;
+      rewardEarnedDollars = rewardEarned;
     } else if (rule.rewardType === 'miles') {
-      rewardEarnedUSD = rewardEarned * milesValuation;
+      rewardEarnedDollars = rewardEarned * milesValuation;
     } else {
-      rewardEarnedUSD = rewardEarned * pointsValuation;
+      rewardEarnedDollars = rewardEarned * pointsValuation;
     }
 
     return {
@@ -155,7 +155,7 @@ export class RewardsCalculator {
       totalSpend,
       eligibleSpend,
       rewardEarned,
-      rewardEarnedUSD,
+      rewardEarnedDollars,
       rewardType: rule.rewardType,
       minimumProgress,
       maximumProgress,
