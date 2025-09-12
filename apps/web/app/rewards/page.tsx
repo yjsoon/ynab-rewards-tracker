@@ -43,7 +43,11 @@ export default function RewardsDashboardPage() {
       return calc.period.includes(currentMonth);
     });
 
-    const totalRewards = currentMonthCalcs.reduce((sum, calc) => sum + calc.rewardEarned, 0);
+    // Normalize rewards to dollars: prefer rewardEarnedDollars; fallback to raw when cashback
+    const toDollars = (c: RewardCalculation) =>
+      (c.rewardEarnedDollars ?? (c.rewardType === 'cashback' ? c.rewardEarned : 0));
+
+    const totalRewards = currentMonthCalcs.reduce((sum, calc) => sum + toDollars(calc), 0);
     const totalSpend = currentMonthCalcs.reduce((sum, calc) => sum + calc.totalSpend, 0);
 
     setTotalRewardsEarned(totalRewards);
@@ -183,7 +187,10 @@ export default function RewardsDashboardPage() {
             <div className="space-y-4">
               {activeCards.map(card => {
                 const cardCalcs = calculations.filter(calc => calc.cardId === card.id);
-                const cardRewards = cardCalcs.reduce((sum, calc) => sum + calc.rewardEarned, 0);
+                const cardRewards = cardCalcs.reduce((sum, calc) => {
+                  const dollars = (calc.rewardEarnedDollars ?? (calc.rewardType === 'cashback' ? calc.rewardEarned : 0));
+                  return sum + dollars;
+                }, 0);
                 const cardSpend = cardCalcs.reduce((sum, calc) => sum + calc.totalSpend, 0);
                 const effectiveRate = cardSpend > 0 ? (cardRewards / cardSpend) * 100 : 0;
 
@@ -276,7 +283,7 @@ export default function RewardsDashboardPage() {
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="font-medium">${calc.rewardEarned.toFixed(2)}</p>
+                      <p className="font-medium">${(calc.rewardEarnedDollars ?? (calc.rewardType === 'cashback' ? calc.rewardEarned : 0)).toFixed(2)}</p>
                       <p className="text-sm text-muted-foreground">earned</p>
                     </div>
                   </div>
