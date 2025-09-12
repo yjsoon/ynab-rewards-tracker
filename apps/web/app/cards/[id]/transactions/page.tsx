@@ -114,8 +114,10 @@ export default function CardTransactionsPage() {
   };
 
   const handleSaveTransaction = (transactionId: string) => {
-    // In a real implementation, this would update the transaction's category
-    // For now, we'll just update the local state
+    // NOTE: This updates local component state only. We do not persist
+    // category changes to storage or YNAB in this MVP. Consider wiring this
+    // to a persistence layer (e.g., local tagMappings save or YNAB patch)
+    // to avoid confusion about changes not sticking across reloads.
     setTransactions(prev => prev.map(txn => 
       txn.id === transactionId 
         ? { ...txn, rewardCategory: selectedCategory }
