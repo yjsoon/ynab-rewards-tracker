@@ -8,7 +8,7 @@ export interface CreditCard {
   name: string;
   issuer?: string;
   type: 'cashback' | 'points' | 'miles';
-  ynabAccountId?: string; // optional for manually created cards, present for YNAB-linked cards
+  ynabAccountId: string; // YNAB account ID
   billingCycle?: {
     type: 'calendar' | 'billing';
     dayOfMonth?: number; // for billing cycle

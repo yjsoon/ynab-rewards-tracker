@@ -95,7 +95,7 @@ export class YnabClient {
 // Helper to get client with current PAT from storage
 export function getYnabClient(pat?: string): YnabClient | null {
   // Use provided PAT or read from storage service for consistency
-  const token = pat || (typeof window !== 'undefined' ? storage.get().ynab.pat : null) || null;
+  const token = pat || (typeof window !== 'undefined' ? storage.getPAT() : null) || null;
   if (!token) return null;
   return new YnabClient(token);
 }

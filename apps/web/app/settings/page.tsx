@@ -302,14 +302,19 @@ export default function SettingsPage() {
       return;
     }
     
+    if (!editingCard?.ynabAccountId) {
+      setConnectionMessage('❌ Cannot save card without YNAB account ID');
+      return;
+    }
+    
     const card: CreditCard = {
-      id: editingCard?.id || `card-${Date.now()}`,
+      id: editingCard.id,
       name: sanitizeInput(cardForm.name),
       issuer: sanitizeInput(cardForm.issuer),
       type: cardForm.type,
-      active: editingCard?.active ?? true,
-      ynabAccountId: editingCard?.ynabAccountId,
-      isManual: editingCard?.isManual ?? true,
+      active: editingCard.active ?? true,
+      ynabAccountId: editingCard.ynabAccountId,
+      isManual: editingCard.isManual ?? false,
     };
     saveCard(card);
     setShowCardForm(false);

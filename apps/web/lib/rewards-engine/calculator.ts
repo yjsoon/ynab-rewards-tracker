@@ -197,7 +197,7 @@ export class RewardsCalculator {
       label = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${dayOfMonth}`;
     }
 
-    return { startDate, endDate, label };
+    return { startDate, endDate, name: label };
   }
 
   /**
