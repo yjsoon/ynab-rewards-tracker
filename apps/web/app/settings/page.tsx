@@ -10,11 +10,17 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { getErrorMessage } from '@/lib/utils';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { getErrorMessage, cn } from '@/lib/utils';
 import { 
   CheckCircle2, 
   CreditCard as CreditCardIcon, 
-  Plus, 
   Trash2, 
   Edit2, 
   Download, 
@@ -165,7 +171,6 @@ export default function SettingsPage() {
             type: 'cashback', // Default, user can edit
             active: true,
             ynabAccountId: account.id,
-            isManual: false,
           };
           saveCard(newCard);
         }
@@ -214,7 +219,6 @@ export default function SettingsPage() {
         type: 'cashback',
         active: true,
         ynabAccountId: accountId,
-        isManual: false,
       };
       saveCard(newCard);
     } else {
@@ -273,15 +277,10 @@ export default function SettingsPage() {
     reader.readAsText(file);
   }
 
-  function handleAddCard() {
-    setEditingCard(null);
-    setCardForm({ name: '', issuer: '', type: 'cashback' });
-    setShowCardForm(true);
-  }
 
   function handleEditCard(card: CreditCard) {
     setEditingCard(card);
-    setCardForm({ name: card.name, issuer: card.issuer, type: card.type });
+    setCardForm({ name: card.name, issuer: card.issuer || '', type: card.type });
     setShowCardForm(true);
   }
 
@@ -301,14 +300,18 @@ export default function SettingsPage() {
       return;
     }
     
+    if (!editingCard?.ynabAccountId) {
+      setConnectionMessage('❌ Cannot save card without YNAB account ID');
+      return;
+    }
+    
     const card: CreditCard = {
-      id: editingCard?.id || `card-${Date.now()}`,
+      id: editingCard.id,
       name: sanitizeInput(cardForm.name),
       issuer: sanitizeInput(cardForm.issuer),
       type: cardForm.type,
-      active: editingCard?.active ?? true,
-      ynabAccountId: editingCard?.ynabAccountId,
-      isManual: editingCard?.isManual ?? true,
+      active: editingCard.active ?? true,
+      ynabAccountId: editingCard.ynabAccountId,
     };
     saveCard(card);
     setShowCardForm(false);
@@ -331,7 +334,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-6 space-y-6">
+    <div className="max-w-6xl mx-auto p-6 space-y-6">
       <h1 className="text-3xl font-bold">Settings</h1>
 
       {/* YNAB Connection */}
@@ -400,21 +403,24 @@ export default function SettingsPage() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Select a budget:</label>
                   <div className="flex gap-2">
-                    <select 
+                    <Select
                       value={selectedBudget.id || ''}
-                      onChange={(e) => {
-                        const budget = budgets.find(b => b.id === e.target.value);
+                      onValueChange={(value) => {
+                        const budget = budgets.find(b => b.id === value);
                         if (budget) handleBudgetSelect(budget.id, budget.name);
                       }}
-                      className="flex-1 px-3 py-2 border rounded-md"
                     >
-                      <option value="">Choose a budget...</option>
-                      {budgets.map(budget => (
-                        <option key={budget.id} value={budget.id}>
-                          {budget.name}
-                        </option>
-                      ))}
-                    </select>
+                      <SelectTrigger className="flex-1">
+                        <SelectValue placeholder="Choose a budget..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {budgets.map(budget => (
+                          <SelectItem key={budget.id} value={budget.id}>
+                            {budget.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     {selectedBudget.id && (
                       <Button 
                         variant="ghost" 
@@ -497,7 +503,12 @@ export default function SettingsPage() {
                   return (
                     <label 
                       key={account.id} 
-                      className="flex items-center space-x-3 p-3 rounded-lg border hover:bg-accent cursor-pointer"
+                      className={cn(
+                        "flex items-center space-x-3 p-3 rounded-lg border cursor-pointer transition-colors",
+                        trackedAccountIds.includes(account.id)
+                          ? "bg-primary/10 border-primary/50 hover:bg-primary/20"
+                          : "hover:bg-secondary/50"
+                      )}
                     >
                       <input
                         type="checkbox"
@@ -533,16 +544,11 @@ export default function SettingsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Button onClick={handleAddCard}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Manual Card
-          </Button>
-
           {showCardForm && (
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg">
-                  {editingCard ? 'Edit Card' : 'Add Manual Card'}
+                  Edit Card
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -570,20 +576,23 @@ export default function SettingsPage() {
                   </div>
                   <div>
                     <label className="text-sm font-medium">Type</label>
-                    <select
+                    <Select
                       value={cardForm.type}
-                      onChange={(e) => {
-                        const value = e.target.value;
+                      onValueChange={(value) => {
                         if (isValidCardType(value)) {
                           setCardForm({ ...cardForm, type: value });
                         }
                       }}
-                      className="w-full px-3 py-2 border rounded-md mt-1"
                     >
-                      <option value="cashback">Cashback</option>
-                      <option value="points">Points</option>
-                      <option value="miles">Miles</option>
-                    </select>
+                      <SelectTrigger className="w-full mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="cashback">Cashback</SelectItem>
+                        <SelectItem value="points">Points</SelectItem>
+                        <SelectItem value="miles">Miles</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="flex gap-2">
                     <Button type="submit">Save Card</Button>
@@ -604,89 +613,43 @@ export default function SettingsPage() {
             <p className="text-sm text-muted-foreground">No cards configured yet.</p>
           ) : (
             <div className="space-y-4">
-              {cards.filter(card => !card.isManual).length > 0 && (
-                <>
-                  <h3 className="font-semibold text-sm">YNAB-Linked Cards</h3>
-                  <div className="space-y-2">
-                    {cards.filter(card => !card.isManual).map((card) => (
-                      <div 
-                        key={card.id} 
-                        className="flex items-center justify-between p-3 rounded-lg border bg-blue-50 dark:bg-blue-950"
-                      >
-                        <div className="flex items-center gap-3">
-                          <Link2 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                          <div>
-                            <div className="font-medium">{card.name}</div>
-                            <div className="text-sm text-muted-foreground">
-                              {card.issuer} • {card.type}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button 
-                            size="sm" 
-                            variant="ghost"
-                            onClick={() => handleEditCard(card)}
-                            aria-label={`Edit ${card.name}`}
-                          >
-                            <Edit2 className="h-4 w-4" aria-hidden="true" />
-                          </Button>
-                          <Button 
-                            size="sm" 
-                            variant="ghost"
-                            onClick={() => setShowDeleteCardDialog(card.id)}
-                            aria-label={`Delete ${card.name}`}
-                          >
-                            <Trash2 className="h-4 w-4" aria-hidden="true" />
-                          </Button>
+              <h3 className="font-semibold text-sm">Linked Cards</h3>
+              <div className="space-y-2">
+                {cards.map((card) => (
+                  <div 
+                    key={card.id} 
+                    className="flex items-center justify-between p-3 rounded-lg border bg-blue-50 dark:bg-blue-950"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Link2 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                      <div>
+                        <div className="font-medium">{card.name}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {card.issuer} • {card.type}
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </>
-              )}
-              
-              {cards.filter(card => card.isManual).length > 0 && (
-                <>
-                  <h3 className="font-semibold text-sm">Manual Cards</h3>
-                  <div className="space-y-2">
-                    {cards.filter(card => card.isManual).map((card) => (
-                      <div 
-                        key={card.id} 
-                        className="flex items-center justify-between p-3 rounded-lg border"
+                    </div>
+                    <div className="flex gap-2">
+                      <Button 
+                        size="sm" 
+                        variant="ghost"
+                        onClick={() => handleEditCard(card)}
+                        aria-label={`Edit ${card.name}`}
                       >
-                        <div className="flex items-center gap-3">
-                          <CreditCardIcon className="h-5 w-5 text-muted-foreground" />
-                          <div>
-                            <div className="font-medium">{card.name}</div>
-                            <div className="text-sm text-muted-foreground">
-                              {card.issuer} • {card.type}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button 
-                            size="sm" 
-                            variant="ghost"
-                            onClick={() => handleEditCard(card)}
-                            aria-label={`Edit ${card.name}`}
-                          >
-                            <Edit2 className="h-4 w-4" aria-hidden="true" />
-                          </Button>
-                          <Button 
-                            size="sm" 
-                            variant="ghost"
-                            onClick={() => setShowDeleteCardDialog(card.id)}
-                            aria-label={`Delete ${card.name}`}
-                          >
-                            <Trash2 className="h-4 w-4" aria-hidden="true" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
+                        <Edit2 className="h-4 w-4" aria-hidden="true" />
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        variant="ghost"
+                        onClick={() => setShowDeleteCardDialog(card.id)}
+                        aria-label={`Delete ${card.name}`}
+                      >
+                        <Trash2 className="h-4 w-4" aria-hidden="true" />
+                      </Button>
+                    </div>
                   </div>
-                </>
-              )}
+                ))}
+              </div>
             </div>
           )}
         </CardContent>

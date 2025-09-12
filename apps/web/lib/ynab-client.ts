@@ -3,6 +3,8 @@
  * Uses local API proxy routes to avoid CORS issues
  */
 
+import { storage } from './storage';
+
 export class YnabClient {
   private pat: string;
 
@@ -92,7 +94,8 @@ export class YnabClient {
 
 // Helper to get client with current PAT from storage
 export function getYnabClient(pat?: string): YnabClient | null {
-  const token = pat || (typeof window !== 'undefined' ? localStorage.getItem('ynab-pat') : null);
+  // Use provided PAT or read from storage service for consistency
+  const token = pat || (typeof window !== 'undefined' ? storage.getPAT() : null) || null;
   if (!token) return null;
   return new YnabClient(token);
 }

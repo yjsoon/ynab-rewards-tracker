@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Home, Settings, CreditCard } from 'lucide-react';
+import { ThemeToggle } from '@/components/theme-toggle';
 import { cn } from '@/lib/utils';
 
 export function Navigation() {
@@ -15,7 +16,7 @@ export function Navigation() {
   ];
 
   return (
-    <nav className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
+    <nav className="border-b bg-gradient-to-r from-primary/5 via-background to-primary/3 backdrop-blur-md sticky top-0 z-50 shadow-sm">
       <div className="max-w-6xl mx-auto px-6">
         <div className="flex h-14 items-center justify-between">
           <div className="flex items-center gap-6">
@@ -47,6 +48,10 @@ export function Navigation() {
                 );
               })}
             </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
           </div>
 
           {/* Mobile navigation */}

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useYnabPAT, useCreditCards } from '@/hooks/useLocalStorage';
 import { YnabClient } from '@/lib/ynab-client';
 import { storage } from '@/lib/storage';
+import { cn } from '@/lib/utils';
 import { SetupPrompt } from '@/components/SetupPrompt';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -47,6 +48,7 @@ export default function DashboardPage() {
   const [selectedBudget, setSelectedBudget] = useState<{ id?: string; name?: string }>({});
   const [trackedAccounts, setTrackedAccounts] = useState<string[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [accountsMap, setAccountsMap] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showSetupPrompt, setShowSetupPrompt] = useState(false);
@@ -58,6 +60,13 @@ export default function DashboardPage() {
     setError('');
     try {
       const client = new YnabClient(pat);
+      
+      // First get accounts to map IDs to names
+      const accounts = await client.getAccounts(budgetId);
+      const accMap = new Map<string, string>();
+      accounts.forEach((acc: any) => accMap.set(acc.id, acc.name));
+      setAccountsMap(accMap);
+      
       // Get transactions from the last N days
       const sinceDate = new Date();
       sinceDate.setDate(sinceDate.getDate() - TRANSACTION_LOOKBACK_DAYS);
@@ -232,29 +241,88 @@ export default function DashboardPage() {
         </Alert>
       )}
 
-      {/* Quick Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">YNAB Status</CardTitle>
-            <Wallet className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center space-x-2">
-              {pat ? (
-                <CheckCircle2 className="h-8 w-8 text-green-500" aria-hidden="true" />
-              ) : (
-                <XCircle className="h-8 w-8 text-red-500" aria-hidden="true" />
-              )}
-              <p className="text-2xl font-bold">{pat ? 'Connected' : 'Not Connected'}</p>
+      {/* Cards Overview */}
+      <Card className="mb-8">
+        <CardHeader>
+          <CardTitle>Your Reward Cards</CardTitle>
+          <CardDescription>
+            Manage your credit cards and their reward rules
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {cards.length === 0 ? (
+            <div className="text-center py-8">
+              <CreditCard className="h-12 w-12 text-muted-foreground mx-auto mb-4" aria-hidden="true" />
+              <p className="text-lg mb-4 text-muted-foreground">
+                No cards configured yet
+              </p>
+              <Button asChild>
+                <Link href="/settings">
+                  <CreditCard className="mr-2 h-4 w-4" aria-hidden="true" />
+                  Add Your First Card
+                </Link>
+              </Button>
             </div>
-          </CardContent>
-        </Card>
-        
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {cards.map((card) => (
+                <Card 
+                  key={card.id} 
+                  className="group relative overflow-hidden border-2 hover:border-primary/50 transition-all bg-gradient-to-br from-primary/5 via-transparent to-primary/10 flex flex-col"
+                >
+                  <CardHeader>
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <CardTitle className="text-lg">{card.name}</CardTitle>
+                        <CardDescription className="mt-1">
+                          {card.type === 'cashback' ? 'Cashback Card' : 
+                           card.type === 'miles' ? 'Miles Card' : 
+                           card.type === 'points' ? 'Points Card' : 'Reward Card'}
+                        </CardDescription>
+                      </div>
+                      <Badge 
+                        variant={card.active ? 'default' : 'secondary'} 
+                        className={cn(
+                          "shrink-0",
+                          card.active && "bg-primary text-primary-foreground"
+                        )}
+                      >
+                        {card.active ? 'Active' : 'Inactive'}
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="flex-1 flex flex-col">
+                    <div className="space-y-3 flex-1">
+                      {/* Placeholder for rewards summary */}
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Current Period:</span>
+                        <span className="font-medium">Coming Soon</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Rewards Earned:</span>
+                        <span className="font-medium">Coming Soon</span>
+                      </div>
+                    </div>
+                    <div className="pt-3 mt-auto">
+                      <Button variant="ghost" size="icon" asChild className="w-full hover:bg-primary/10">
+                        <Link href={`/cards/${card.id}`}>
+                          <ArrowRight className="h-5 w-5" />
+                        </Link>
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Active Budget</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
           </CardHeader>
           <CardContent>
             <p className="text-xl font-bold truncate">
@@ -271,25 +339,11 @@ export default function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Tracked Accounts</CardTitle>
-            <Calendar className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold">{trackedAccounts.length}</p>
             <Button variant="link" size="sm" asChild className="px-0">
               <Link href="/settings">Manage</Link>
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Reward Cards</CardTitle>
-            <CreditCard className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">{cards.length}</p>
-            <Button variant="link" size="sm" asChild className="px-0">
-              <Link href="/settings">Configure</Link>
             </Button>
           </CardContent>
         </Card>
@@ -323,16 +377,27 @@ export default function DashboardPage() {
                   <thead>
                     <tr className="border-b" role="row">
                       <th className="text-left p-2 font-medium" scope="col">Date</th>
+                      <th className="text-left p-2 font-medium" scope="col">Account</th>
                       <th className="text-left p-2 font-medium" scope="col">Payee</th>
                       <th className="text-left p-2 font-medium" scope="col">Category</th>
                       <th className="text-right p-2 font-medium" scope="col">Amount</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {transactions.map((txn) => (
-                      <tr key={txn.id} className="border-b" role="row">
+                    {transactions.map((txn, index) => (
+                      <tr 
+                        key={txn.id} 
+                        className={cn(
+                          "border-b",
+                          index % 2 === 0 ? "bg-transparent" : "bg-muted/30"
+                        )}
+                        role="row"
+                      >
                         <td className="p-2 text-sm">
                           {new Date(txn.date).toLocaleDateString()}
+                        </td>
+                        <td className="p-2 text-sm font-medium">
+                          {accountsMap.get(txn.account_id) || 'Unknown'}
                         </td>
                         <td className="p-2 text-sm">{txn.payee_name}</td>
                         <td className="p-2 text-sm">
@@ -351,69 +416,6 @@ export default function DashboardPage() {
               <p className="text-center py-8 text-muted-foreground">No recent transactions found.</p>
             )}
           </CardContent>
-        </Card>
-      )}
-
-      {/* Cards Overview */}
-      <Card className="mb-8">
-        <CardHeader>
-          <CardTitle>Your Reward Cards</CardTitle>
-          <CardDescription>
-            Manage your credit cards and their reward rules
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {cards.length === 0 ? (
-            <div className="text-center py-8">
-              <CreditCard className="h-12 w-12 text-muted-foreground mx-auto mb-4" aria-hidden="true" />
-              <p className="text-lg mb-4 text-muted-foreground">
-                No cards configured yet
-              </p>
-              <Button asChild>
-                <Link href="/settings">
-                  <CreditCard className="mr-2 h-4 w-4" aria-hidden="true" />
-                  Add Your First Card
-                </Link>
-              </Button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {cards.map((card) => (
-                <Card key={card.id} className={card.ynabAccountId ? 'border-primary/50' : ''}>
-                  <CardHeader>
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <CardTitle className="text-lg">{card.name}</CardTitle>
-                        <CardDescription>{card.issuer}</CardDescription>
-                      </div>
-                      {card.ynabAccountId && (
-                        <Badge variant="secondary">YNAB Linked</Badge>
-                      )}
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <Badge variant="outline">{card.type}</Badge>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Coming Soon */}
-      {isFullyConfigured && (
-        <Card className="text-center">
-          <CardHeader>
-            <div className="flex justify-center mb-4">
-              <Construction className="h-12 w-12 text-yellow-500" aria-hidden="true" />
-            </div>
-            <CardTitle className="text-2xl">Rewards Calculation Coming Soon</CardTitle>
-            <CardDescription className="text-base">
-              We're working on calculating your rewards based on your YNAB transactions and card rules.
-              You're all set up and ready - rewards tracking will be available in the next update!
-            </CardDescription>
-          </CardHeader>
         </Card>
       )}
     </div>

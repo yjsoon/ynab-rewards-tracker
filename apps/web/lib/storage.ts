@@ -8,23 +8,66 @@ export interface CreditCard {
   name: string;
   issuer: string;
   type: 'cashback' | 'points' | 'miles';
-  color?: string;
+  ynabAccountId: string; // YNAB account ID (required; no manual cards)
+  billingCycle?: {
+    type: 'calendar' | 'billing';
+    dayOfMonth?: number; // for billing cycle
+  };
   active: boolean;
-  ynabAccountId?: string; // Link to YNAB account if connected
-  isManual?: boolean; // True if manually added, false if from YNAB
 }
 
 export interface RewardRule {
   id: string;
   cardId: string;
   name: string;
-  category: string; // YNAB category or 'all'
-  rewardType: 'percent' | 'points' | 'miles';
-  rewardValue: number; // e.g., 2 for 2% or 2x points
-  capAmount?: number; // spending cap in dollars
-  capPeriod?: 'monthly' | 'quarterly' | 'annually';
-  priority: number;
+  rewardType: 'cashback' | 'miles';
+  rewardValue: number; // percentage or miles per dollar
+  milesBlockSize?: number; // e.g., 5 for "$5 blocks"
+  categories: string[]; // Reward categories (mapped from YNAB flags/tags)
+  minimumSpend?: number;
+  maximumSpend?: number;
+  categoryCaps?: CategoryCap[];
+  startDate: string;
+  endDate: string;
   active: boolean;
+  priority: number;
+}
+
+export interface CategoryCap {
+  category: string;
+  maxSpend: number;
+}
+
+export interface TagMapping {
+  id: string;
+  cardId: string;
+  ynabTag: string;
+  rewardCategory: string;
+}
+
+export interface RewardCalculation {
+  cardId: string;
+  ruleId: string;
+  period: string;
+  totalSpend: number;
+  eligibleSpend: number;
+  rewardEarned: number; // Raw reward units (dollars for cashback, miles/points for others)
+  rewardEarnedDollars?: number; // Normalized dollar value for comparison
+  rewardType: 'cashback' | 'miles' | 'points'; // Track the type for clarity
+  minimumProgress?: number;
+  maximumProgress?: number;
+  categoryBreakdowns: CategoryBreakdown[];
+  minimumMet: boolean;
+  maximumExceeded: boolean;
+  shouldStopUsing: boolean;
+}
+
+export interface CategoryBreakdown {
+  category: string;
+  spend: number;
+  reward: number; // Raw reward units
+  rewardDollars?: number; // Normalized dollar value
+  capReached: boolean;
 }
 
 export interface YnabConnection {
@@ -38,12 +81,16 @@ export interface YnabConnection {
 export interface AppSettings {
   theme?: 'light' | 'dark' | 'auto';
   currency?: string;
+  milesValuation?: number; // Dollar value per mile (default: 0.01)
+  pointsValuation?: number; // Dollar value per point (default: 0.01)
 }
 
 export interface StorageData {
   ynab: YnabConnection;
   cards: CreditCard[];
   rules: RewardRule[];
+  tagMappings: TagMapping[];
+  calculations: RewardCalculation[];
   settings: AppSettings;
   cachedData?: {
     budgets?: any[];
@@ -64,7 +111,54 @@ class StorageService {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
-        return JSON.parse(stored);
+        const data = JSON.parse(stored);
+        // Migrate existing cards without billingCycle
+        if (data.cards) {
+          data.cards = data.cards.map((card: any) => {
+            if (!card.billingCycle) {
+              return {
+                ...card,
+                billingCycle: {
+                  type: 'calendar' as const // dayOfMonth only applies to 'billing'
+                }
+              };
+            }
+            return card;
+          });
+        }
+        // Migrations: field renames and defaults
+        try {
+          // Ensure issuer defaults to a string
+          if (Array.isArray(data.cards)) {
+            data.cards = data.cards.map((card: any) => ({
+              issuer: card?.issuer ?? 'Unknown',
+              ...card,
+            }));
+          }
+
+          if (Array.isArray(data.calculations)) {
+            data.calculations = data.calculations.map((calc: any) => {
+              if (calc && typeof calc === 'object') {
+                if (calc.rewardEarnedUSD != null && calc.rewardEarnedDollars == null) {
+                  calc.rewardEarnedDollars = calc.rewardEarnedUSD;
+                  delete calc.rewardEarnedUSD;
+                }
+                if (Array.isArray(calc.categoryBreakdowns)) {
+                  calc.categoryBreakdowns = calc.categoryBreakdowns.map((cb: any) => {
+                    if (cb && typeof cb === 'object' && cb.rewardUSD != null && cb.rewardDollars == null) {
+                      cb.rewardDollars = cb.rewardUSD;
+                      delete cb.rewardUSD;
+                    }
+                    return cb;
+                  });
+                }
+              }
+              return calc;
+            });
+          }
+        } catch {}
+
+        return data;
       }
     } catch (error) {
       // Log error in development, but gracefully fall back to defaults
@@ -81,6 +175,8 @@ class StorageService {
       ynab: {},
       cards: [],
       rules: [],
+      tagMappings: [],
+      calculations: [],
       settings: {
         theme: 'light',
         currency: 'USD',
@@ -195,6 +291,70 @@ class StorageService {
   deleteRule(ruleId: string): void {
     const storage = this.getStorage();
     storage.rules = storage.rules.filter(r => r.id !== ruleId);
+    this.setStorage(storage);
+  }
+
+  // Tag mappings management
+  getTagMappings(): TagMapping[] {
+    return this.getStorage().tagMappings || [];
+  }
+
+  getCardTagMappings(cardId: string): TagMapping[] {
+    return this.getTagMappings().filter(m => m.cardId === cardId);
+  }
+
+  saveTagMapping(mapping: TagMapping): void {
+    const storage = this.getStorage();
+    const index = storage.tagMappings.findIndex(m => m.id === mapping.id);
+    if (index >= 0) {
+      storage.tagMappings[index] = mapping;
+    } else {
+      storage.tagMappings.push(mapping);
+    }
+    this.setStorage(storage);
+  }
+
+  deleteTagMapping(mappingId: string): void {
+    const storage = this.getStorage();
+    storage.tagMappings = storage.tagMappings.filter(m => m.id !== mappingId);
+    this.setStorage(storage);
+  }
+
+  // Calculations management
+  getCalculations(): RewardCalculation[] {
+    return this.getStorage().calculations || [];
+  }
+
+  getCardCalculations(cardId: string): RewardCalculation[] {
+    return this.getCalculations().filter(c => c.cardId === cardId);
+  }
+
+  saveCalculation(calculation: RewardCalculation): void {
+    const storage = this.getStorage();
+    const index = storage.calculations.findIndex(c => 
+      c.cardId === calculation.cardId && 
+      c.ruleId === calculation.ruleId && 
+      c.period === calculation.period
+    );
+    if (index >= 0) {
+      storage.calculations[index] = calculation;
+    } else {
+      storage.calculations.push(calculation);
+    }
+    this.setStorage(storage);
+  }
+
+  deleteCalculation(cardId: string, ruleId: string, period: string): void {
+    const storage = this.getStorage();
+    storage.calculations = storage.calculations.filter(c => 
+      !(c.cardId === cardId && c.ruleId === ruleId && c.period === period)
+    );
+    this.setStorage(storage);
+  }
+
+  clearCalculations(): void {
+    const storage = this.getStorage();
+    storage.calculations = [];
     this.setStorage(storage);
   }
 
