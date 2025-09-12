@@ -3,16 +3,16 @@
 Updated 12 Sep 2025 — prioritised next steps to align the app with the intended behaviour. British spelling is used in copy; code identifiers remain unchanged.
 
 ## P1 — Next Actions
-- Implement Rules & Mappings UI
-  - Add pages under `app/cards/[id]/rules/(new|[ruleId]/edit)` and `app/cards/[id]/mappings/(new|[mappingId]/edit)`.
-  - Persist via `storage.ts` (`saveRule`, `saveTagMapping`); support per‑category caps, minimum/maximum spend, block miles, and billing window.
+- Implement Rules & Mappings UI — initial version done
+  - Status: pages added under `app/cards/[id]/rules/(new|[ruleId]/edit)` and `app/cards/[id]/mappings/(new|[mappingId]/edit)`; persisted via `storage.ts`.
+  - Follow‑ups: better validation, friendlier category input, polish.
 
-- Wire the Calculation Pipeline
-  - For each active card: fetch transactions (YNAB PAT + selected budget), apply tag mappings, derive the current period (`RewardsCalculator.calculatePeriod`), compute, and `saveCalculation`.
-  - Provide a “Compute Now” button and trigger recompute on app open; show last‑computed timestamp.
+- Wire the Calculation Pipeline — initial version done
+  - Status: “Compute Now” on Rewards runs fetch → match → calculate for the current period and saves results.
+  - Follow‑ups: show “last computed” timestamp; optional auto‑recompute on app open; per‑period selective clearing instead of full clear.
 
 - Enforce Rule Windows
-  - In `calculateRuleRewards`, skip or clamp calculations when the period is outside `startDate`/`endDate`.
+  - In `calculateRuleRewards`, add calculator‑level checks for `startDate`/`endDate` (current orchestration skips out‑of‑window rules already).
 
 - Expose Valuation Controls in Settings
   - Add `milesValuation` / `pointsValuation` inputs; plumb through to the calculator and recommendations.

@@ -83,3 +83,17 @@ Guardrails (unchanged)
 - Do not reintroduce manual cards; all cards are YNAB‑linked.
 - Do not store or export the PAT.
 - Do not mix reward units when comparing; always use normalised dollars.
+
+## Progress Update — 12 Sep 2025
+
+Initial P1 work has been scaffolded:
+- Rules and mappings UI added under `app/cards/[id]/rules/*` and `app/cards/[id]/mappings/*`; persisted via `storage.ts`.
+- “Compute Now” action on Rewards dashboard fetches YNAB transactions, applies tag mappings, computes the current period per rule, and saves calculations.
+- New orchestration utility `lib/rewards-engine/compute.ts` to coordinate fetch + match + calculate.
+- `RewardRule.rewardType` extended to include `'points'`; storage now exposes `getSettings`/`updateSettings`.
+
+Still pending from P1 (planned next):
+- Surface valuation controls in Settings and plumb into recommendations.
+- Add `AbortController` to longer‑running fetches.
+- Enforce rule windows within the calculator (currently enforced in orchestration).
+- Remove Prisma/DB artefacts from the web app to keep it strictly client‑side.
