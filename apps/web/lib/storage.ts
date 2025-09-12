@@ -6,12 +6,14 @@
 export interface CreditCard {
   id: string;
   name: string;
-  type: 'cashback' | 'miles';
-  ynabAccountId: string;
-  billingCycle: {
+  issuer?: string;
+  type: 'cashback' | 'points' | 'miles';
+  ynabAccountId?: string; // optional for manually created cards
+  billingCycle?: {
     type: 'calendar' | 'billing';
     dayOfMonth?: number; // for billing cycle
   };
+  isManual?: boolean; // true for manually created cards
   active: boolean;
 }
 

@@ -282,7 +282,7 @@ export default function SettingsPage() {
 
   function handleEditCard(card: CreditCard) {
     setEditingCard(card);
-    setCardForm({ name: card.name, issuer: card.issuer, type: card.type });
+    setCardForm({ name: card.name, issuer: card.issuer || '', type: card.type });
     setShowCardForm(true);
   }
 

@@ -124,7 +124,7 @@ export class RecommendationEngine {
       if (eligibleRules.length === 0) return;
 
       // Find best rule for this category
-      let bestRule: RewardRule | null = null;
+      let bestRule: RewardRule | undefined;
       let bestEffectiveRate = 0;
 
       eligibleRules.forEach(rule => {
@@ -159,15 +159,16 @@ export class RecommendationEngine {
       });
 
       if (bestRule) {
-        const bestCard = cards.find(c => c.id === bestRule!.cardId)!;
+        const rule = bestRule;  // TypeScript narrowing workaround
+        const bestCard = cards.find(c => c.id === rule.cardId)!;
         const calculation = calculations.find(calc => 
-          calc.cardId === bestRule!.cardId && 
-          calc.ruleId === bestRule!.id
+          calc.cardId === rule.cardId && 
+          calc.ruleId === rule.id
         );
 
-        let reason = `Best rate: ${bestRule.rewardType === 'cashback' 
-          ? `${bestRule.rewardValue}%` 
-          : `${bestRule.rewardValue}x miles`}`;
+        let reason = `Best rate: ${rule.rewardType === 'cashback' 
+          ? `${rule.rewardValue}%` 
+          : `${rule.rewardValue}x miles`}`;
 
         if (calculation?.maximumProgress && calculation.maximumProgress > 80) {
           reason += ` (${Math.round(calculation.maximumProgress)}% of cap used)`;

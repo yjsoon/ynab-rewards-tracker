@@ -7,6 +7,7 @@ import { useYnabPAT, useCreditCards, useTagMappings } from '@/hooks/useLocalStor
 import { YnabClient } from '@/lib/ynab-client';
 import { storage } from '@/lib/storage';
 import { TransactionMatcher } from '@/lib/rewards-engine';
+import type { Transaction } from '@/types/transaction';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -77,7 +78,7 @@ export default function CardTransactionsPage() {
       });
 
       // Filter for this card's account and apply tag mappings
-      const cardTransactions = allTransactions.filter(txn => 
+      const cardTransactions = allTransactions.filter((txn: Transaction) => 
         txn.account_id === card.ynabAccountId
       );
 

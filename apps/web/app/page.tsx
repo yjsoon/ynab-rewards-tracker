@@ -64,7 +64,7 @@ export default function DashboardPage() {
       // First get accounts to map IDs to names
       const accounts = await client.getAccounts(budgetId);
       const accMap = new Map<string, string>();
-      accounts.forEach(acc => accMap.set(acc.id, acc.name));
+      accounts.forEach((acc: any) => accMap.set(acc.id, acc.name));
       setAccountsMap(accMap);
       
       // Get transactions from the last N days

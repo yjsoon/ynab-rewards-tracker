@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   ArrowLeft,
   Settings,
-  CreditCard,
+  CreditCard as CreditCardIcon,
   Target,
   Tag,
   TrendingUp,
@@ -46,7 +46,7 @@ export default function CardDetailPage() {
       <div className="max-w-4xl mx-auto p-6">
         <div className="flex items-center justify-center min-h-[200px]">
           <div className="text-center">
-            <CreditCard className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <CreditCardIcon className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <p className="text-lg text-muted-foreground">Loading card details...</p>
           </div>
         </div>
