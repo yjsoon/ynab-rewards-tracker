@@ -6,7 +6,7 @@
 export interface CreditCard {
   id: string;
   name: string;
-  issuer?: string;
+  issuer: string;
   type: 'cashback' | 'points' | 'miles';
   ynabAccountId: string; // YNAB account ID (required; no manual cards)
   billingCycle?: {
@@ -126,8 +126,16 @@ class StorageService {
             return card;
           });
         }
-        // Migrations for renamed fields
+        // Migrations: field renames and defaults
         try {
+          // Ensure issuer defaults to a string
+          if (Array.isArray(data.cards)) {
+            data.cards = data.cards.map((card: any) => ({
+              issuer: card?.issuer ?? 'Unknown',
+              ...card,
+            }));
+          }
+
           if (Array.isArray(data.calculations)) {
             data.calculations = data.calculations.map((calc: any) => {
               if (calc && typeof calc === 'object') {
