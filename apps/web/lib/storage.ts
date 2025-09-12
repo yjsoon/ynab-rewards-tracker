@@ -20,7 +20,7 @@ export interface RewardRule {
   id: string;
   cardId: string;
   name: string;
-  rewardType: 'cashback' | 'miles';
+  rewardType: 'cashback' | 'miles' | 'points';
   rewardValue: number; // percentage or miles per dollar
   milesBlockSize?: number; // e.g., 5 for "$5 blocks"
   categories: string[]; // Reward categories (mapped from YNAB flags/tags)
@@ -196,6 +196,20 @@ class StorageService {
         console.error('Failed to set localStorage:', error);
       }
     }
+  }
+
+  // Settings
+  getSettings(): AppSettings {
+    return this.getStorage().settings || {};
+  }
+
+  updateSettings(settings: Partial<AppSettings>): void {
+    const storage = this.getStorage();
+    storage.settings = {
+      ...storage.settings,
+      ...settings,
+    };
+    this.setStorage(storage);
   }
 
   // PAT management

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useCreditCards, useRewardRules, useRewardCalculations } from '@/hooks/useLocalStorage';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,12 +20,16 @@ import {
   Settings
 } from 'lucide-react';
 import { RewardsCalculator, RecommendationEngine } from '@/lib/rewards-engine';
+import { computeCurrentPeriod } from '@/lib/rewards-engine/compute';
+import { storage } from '@/lib/storage';
 import type { RewardCalculation, CategoryBreakdown } from '@/lib/storage';
 
 export default function RewardsDashboardPage() {
   const { cards } = useCreditCards();
   const { rules } = useRewardRules();
-  const { calculations } = useRewardCalculations();
+  const { calculations, saveCalculation, clearCalculations } = useRewardCalculations();
+  const [computing, setComputing] = useState(false);
+  const [computeMessage, setComputeMessage] = useState('');
   
   const [totalRewardsEarned, setTotalRewardsEarned] = useState(0);
   const [currentPeriodSpend, setCurrentPeriodSpend] = useState(0);
@@ -59,6 +63,31 @@ export default function RewardsDashboardPage() {
   }, [calculations, activeCards]);
 
   const hasData = activeCards.length > 0 && activeRules.length > 0;
+
+  const handleCompute = useCallback(async () => {
+    setComputeMessage('');
+    const pat = storage.getPAT();
+    const budget = storage.getSelectedBudget();
+    if (!pat || !budget.id) {
+      setComputeMessage('Please configure your YNAB token and select a budget before computing.');
+      return;
+    }
+    setComputing(true);
+    try {
+      // Optionally clear only current-period calcs; for now, clear all to avoid duplicates
+      // A smarter approach would delete by (card, rule, period) as we recompute
+      // but saveCalculation will overwrite existing entries for the same key tuple.
+      const settings = storage.getSettings();
+      const calcs = await computeCurrentPeriod(pat, budget.id, activeCards, rules, storage.getTagMappings(), settings);
+      calcs.forEach(c => saveCalculation(c));
+      setComputeMessage(`Computed ${calcs.length} rule(s) for the current period.`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setComputeMessage(`Computation failed: ${msg}`);
+    } finally {
+      setComputing(false);
+    }
+  }, [activeCards, rules, saveCalculation]);
 
   if (!hasData) {
     return (
@@ -95,7 +124,17 @@ export default function RewardsDashboardPage() {
 
   return (
     <div className="max-w-6xl mx-auto p-6">
-      <h1 className="text-3xl font-bold mb-8">Rewards Dashboard</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-3xl font-bold">Rewards Dashboard</h1>
+        <Button onClick={handleCompute} disabled={computing || !hasData} variant="outline">
+          {computing ? 'Computing…' : 'Compute Now'}
+        </Button>
+      </div>
+      {computeMessage && (
+        <Alert className="mb-6">
+          <AlertDescription>{computeMessage}</AlertDescription>
+        </Alert>
+      )}
 
       {/* Alerts */}
       {alerts.length > 0 && (
