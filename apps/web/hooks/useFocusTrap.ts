@@ -27,33 +27,27 @@ export function useFocusTrap(isActive = false) {
     firstElement.focus();
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Tab') return;
-
-      // If shift+tab on first element, focus last
-      if (e.shiftKey && document.activeElement === firstElement) {
-        e.preventDefault();
-        lastElement.focus();
-      }
-      // If tab on last element, focus first
-      else if (!e.shiftKey && document.activeElement === lastElement) {
-        e.preventDefault();
-        firstElement.focus();
-      }
-    };
-
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      if (e.key === 'Tab') {
+        // If shift+tab on first element, focus last
+        if (e.shiftKey && document.activeElement === firstElement) {
+          e.preventDefault();
+          lastElement.focus();
+        }
+        // If tab on last element, focus first
+        else if (!e.shiftKey && document.activeElement === lastElement) {
+          e.preventDefault();
+          firstElement.focus();
+        }
+      } else if (e.key === 'Escape') {
         // Return focus to previously focused element
         previouslyFocused?.focus();
       }
     };
 
     container.addEventListener('keydown', handleKeyDown);
-    container.addEventListener('keydown', handleEscape);
 
     return () => {
       container.removeEventListener('keydown', handleKeyDown);
-      container.removeEventListener('keydown', handleEscape);
       // Return focus to previously focused element
       previouslyFocused?.focus();
     };

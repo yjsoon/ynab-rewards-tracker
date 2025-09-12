@@ -30,7 +30,7 @@ export function validateYnabToken(token: string): { valid: boolean; error?: stri
     return { valid: false, error: 'Token appears to be too short' };
   }
 
-  if (!/^[a-zA-Z0-9-_]+$/.test(token)) {
+  if (!/^[a-zA-Z0-9-]+$/.test(token)) {
     return { valid: false, error: 'Token contains invalid characters' };
   }
 

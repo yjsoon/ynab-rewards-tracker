@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { getErrorMessage } from '@/lib/utils';
 import { 
   CheckCircle2, 
   CreditCard as CreditCardIcon, 
@@ -120,8 +121,7 @@ export default function SettingsPage() {
         handleBudgetSelect(fetchedBudgets[0].id, fetchedBudgets[0].name);
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      setConnectionMessage(`Failed to fetch budgets: ${errorMessage}`);
+      setConnectionMessage(`Failed to fetch budgets: ${getErrorMessage(error)}`);
     } finally {
       setLoadingBudgets(false);
     }
@@ -143,8 +143,7 @@ export default function SettingsPage() {
       // Sync tracked accounts with existing cards
       syncCardsWithAccounts(openAccounts);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      setConnectionMessage(`Failed to fetch accounts: ${errorMessage}`);
+      setConnectionMessage(`Failed to fetch accounts: ${getErrorMessage(error)}`);
     } finally {
       setLoadingAccounts(false);
     }
@@ -241,8 +240,7 @@ export default function SettingsPage() {
       const budgets = await client.getBudgets();
       setConnectionMessage(`✅ Connected! Found ${budgets.length} budget(s)`);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      setConnectionMessage(`❌ Connection failed: ${errorMessage}`);
+      setConnectionMessage(`❌ Connection failed: ${getErrorMessage(error)}`);
     } finally {
       setTestingConnection(false);
     }
@@ -269,8 +267,7 @@ export default function SettingsPage() {
         importSettings(event.target?.result as string);
         setConnectionMessage('✅ Settings imported successfully');
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        setConnectionMessage(`❌ Failed to import settings: ${errorMessage}`);
+        setConnectionMessage(`❌ Failed to import settings: ${getErrorMessage(error)}`);
       }
     };
     reader.readAsText(file);
