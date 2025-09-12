@@ -1,10 +1,29 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useYnabPAT, useCreditCards, useSettings } from '@/hooks/useLocalStorage';
 import { YnabClient } from '@/lib/ynab-client';
 import { CreditCard, storage } from '@/lib/storage';
+import { sanitizeInput, validateYnabToken, validateCardName, validateIssuer } from '@/lib/validation';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { 
+  CheckCircle2, 
+  CreditCard as CreditCardIcon, 
+  Plus, 
+  Trash2, 
+  Edit2, 
+  Download, 
+  Upload, 
+  AlertCircle,
+  RefreshCw,
+  Link2,
+  Wallet,
+  DollarSign
+} from 'lucide-react';
 
 interface YnabBudget {
   id: string;
@@ -34,32 +53,6 @@ const ACCOUNT_TYPE_LABELS: Record<string, string> = {
 function isValidCardType(value: string): value is 'cashback' | 'points' | 'miles' {
   return value === 'cashback' || value === 'points' || value === 'miles';
 }
-
-// Style constants
-const styles = {
-  section: { marginBottom: 40 },
-  inputFull: { width: '100%', padding: 8, marginTop: 5 },
-  buttonSpacing: { marginLeft: 10 },
-  cardItem: {
-    padding: 10,
-    marginBottom: 10,
-    border: '1px solid #ddd',
-    borderRadius: 4,
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  ynabCardItem: {
-    padding: 10,
-    marginBottom: 10,
-    border: '1px solid #ddd',
-    borderRadius: 4,
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#f0f8ff',
-  },
-} as const;
 
 export default function SettingsPage() {
   const { pat, setPAT, isLoading: patLoading } = useYnabPAT();
@@ -127,7 +120,7 @@ export default function SettingsPage() {
         handleBudgetSelect(fetchedBudgets[0].id, fetchedBudgets[0].name);
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage = error instanceof Error ? error.message : String(error);
       setConnectionMessage(`Failed to fetch budgets: ${errorMessage}`);
     } finally {
       setLoadingBudgets(false);
@@ -150,7 +143,7 @@ export default function SettingsPage() {
       // Sync tracked accounts with existing cards
       syncCardsWithAccounts(openAccounts);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage = error instanceof Error ? error.message : String(error);
       setConnectionMessage(`Failed to fetch accounts: ${errorMessage}`);
     } finally {
       setLoadingAccounts(false);
@@ -183,7 +176,12 @@ export default function SettingsPage() {
 
   async function handleSaveToken(e: React.FormEvent) {
     e.preventDefault();
-    if (!tokenInput.trim()) return;
+    
+    const validation = validateYnabToken(tokenInput);
+    if (!validation.valid) {
+      setConnectionMessage(`❌ ${validation.error}`);
+      return;
+    }
 
     setPAT(tokenInput);
     setConnectionMessage('Token saved! Fetching budgets...');
@@ -241,10 +239,10 @@ export default function SettingsPage() {
     try {
       const client = new YnabClient(pat);
       const budgets = await client.getBudgets();
-      setConnectionMessage(`Connected successfully! Found ${budgets.length} budget(s)`);
+      setConnectionMessage(`✅ Connected! Found ${budgets.length} budget(s)`);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      setConnectionMessage(`Connection failed: ${errorMessage}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      setConnectionMessage(`❌ Connection failed: ${errorMessage}`);
     } finally {
       setTestingConnection(false);
     }
@@ -269,9 +267,10 @@ export default function SettingsPage() {
     reader.onload = (event) => {
       try {
         importSettings(event.target?.result as string);
+        setConnectionMessage('✅ Settings imported successfully');
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        alert(`Failed to import settings: ${errorMessage}`);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        setConnectionMessage(`❌ Failed to import settings: ${errorMessage}`);
       }
     };
     reader.readAsText(file);
@@ -291,10 +290,24 @@ export default function SettingsPage() {
 
   function handleSaveCard(e: React.FormEvent) {
     e.preventDefault();
+    
+    // Validate inputs
+    const nameValidation = validateCardName(cardForm.name);
+    if (!nameValidation.valid) {
+      setConnectionMessage(`❌ ${nameValidation.error}`);
+      return;
+    }
+    
+    const issuerValidation = validateIssuer(cardForm.issuer);
+    if (!issuerValidation.valid) {
+      setConnectionMessage(`❌ ${issuerValidation.error}`);
+      return;
+    }
+    
     const card: CreditCard = {
       id: editingCard?.id || `card-${Date.now()}`,
-      name: cardForm.name,
-      issuer: cardForm.issuer,
+      name: sanitizeInput(cardForm.name),
+      issuer: sanitizeInput(cardForm.issuer),
       type: cardForm.type,
       active: editingCard?.active ?? true,
       ynabAccountId: editingCard?.ynabAccountId,
@@ -303,6 +316,7 @@ export default function SettingsPage() {
     saveCard(card);
     setShowCardForm(false);
     setCardForm({ name: '', issuer: '', type: 'cashback' });
+    setConnectionMessage('');
   }
 
   function handleClearAll() {
@@ -316,301 +330,410 @@ export default function SettingsPage() {
   }
 
   if (patLoading || cardsLoading) {
-    return <div style={{ padding: 20 }}>Loading settings...</div>;
+    return <div className="p-5">Loading settings...</div>;
   }
 
   return (
-    <div style={{ maxWidth: 800, margin: '20px auto', padding: 20 }}>
-      <h1>Settings</h1>
+    <div className="max-w-4xl mx-auto p-6 space-y-6">
+      <h1 className="text-3xl font-bold">Settings</h1>
 
       {/* YNAB Connection */}
-      <section style={styles.section}>
-        <h2>YNAB Connection</h2>
-        {!pat ? (
-          <form onSubmit={handleSaveToken}>
-            <p>Get your Personal Access Token from your{' '}
-              <a href="https://app.ynab.com/settings/developer" target="_blank" rel="noopener noreferrer">
-                YNAB Developer Settings
-              </a>
-            </p>
-            <input
-              type="password"
-              value={tokenInput}
-              onChange={(e) => setTokenInput(e.target.value)}
-              placeholder="Paste your YNAB Personal Access Token"
-              style={{ width: '100%', padding: 8, marginTop: 10 }}
-            />
-            <button type="submit" style={{ marginTop: 10 }}>
-              Save Token
-            </button>
-          </form>
-        ) : (
-          <div>
-            <p style={{ color: 'green' }}>Token configured</p>
-            
-            {/* Budget Selection */}
-            {selectedBudget.id && !showBudgetSelector ? (
-              <div style={{ marginTop: 15 }}>
-                <p><strong>Selected Budget:</strong> {selectedBudget.name}</p>
-                <button onClick={() => {
-                  fetchBudgets();
-                  setShowBudgetSelector(true);
-                }}>Change Budget</button>
+      <Card>
+        <CardHeader>
+          <CardTitle>YNAB Connection</CardTitle>
+          <CardDescription>
+            Connect your YNAB account to sync transactions and budgets
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {!pat ? (
+            <form onSubmit={handleSaveToken} className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Get your Personal Access Token from your{' '}
+                <a 
+                  href="https://app.ynab.com/settings/developer" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  YNAB Developer Settings
+                </a>
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  value={tokenInput}
+                  onChange={(e) => setTokenInput(e.target.value)}
+                  placeholder="Paste your YNAB Personal Access Token"
+                  className="flex-1 px-3 py-2 border rounded-md"
+                />
+                <Button type="submit">Save Token</Button>
               </div>
-            ) : loadingBudgets ? (
-              <p>Loading budgets...</p>
-            ) : (budgets.length > 0 || showBudgetSelector) ? (
-              <div style={{ marginTop: 15 }}>
-                <label>
-                  Select a budget:
-                  <select 
-                    value={selectedBudget.id || ''}
-                    onChange={(e) => {
-                      const budget = budgets.find(b => b.id === e.target.value);
-                      if (budget) handleBudgetSelect(budget.id, budget.name);
-                    }}
-                    style={{ marginLeft: 10, padding: 5 }}
-                  >
-                    <option value="">Choose a budget...</option>
-                    {budgets.map(budget => (
-                      <option key={budget.id} value={budget.id}>
-                        {budget.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                {selectedBudget.id && (
-                  <button onClick={() => setShowBudgetSelector(false)} style={{ marginLeft: 10 }}>
-                    Cancel
-                  </button>
-                )}
+            </form>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-green-600">
+                <CheckCircle2 className="h-5 w-5" aria-hidden="true" />
+                <span className="font-medium">Token configured</span>
               </div>
-            ) : (
-              <button onClick={fetchBudgets} style={{ marginTop: 10 }}>
-                Load Budgets
-              </button>
-            )}
-            
-            <div style={{ marginTop: 10 }}>
-              <button onClick={testConnection} disabled={testingConnection}>
-                {testingConnection ? 'Testing...' : 'Test Connection'}
-              </button>
-              <button onClick={() => {
-                setPAT('');
-                setBudgets([]);
-                setSelectedBudget({});
-                setAccounts([]);
-                setTrackedAccountIds([]);
-              }} style={{ marginLeft: 10 }}>
-                Clear Token
-              </button>
+              
+              {/* Budget Selection */}
+              {selectedBudget.id && !showBudgetSelector ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">Selected Budget</p>
+                      <p className="text-lg">{selectedBudget.name}</p>
+                    </div>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => {
+                        fetchBudgets();
+                        setShowBudgetSelector(true);
+                      }}
+                    >
+                      Change Budget
+                    </Button>
+                  </div>
+                </div>
+              ) : loadingBudgets ? (
+                <p className="text-sm">Loading budgets...</p>
+              ) : (budgets.length > 0 || showBudgetSelector) ? (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Select a budget:</label>
+                  <div className="flex gap-2">
+                    <select 
+                      value={selectedBudget.id || ''}
+                      onChange={(e) => {
+                        const budget = budgets.find(b => b.id === e.target.value);
+                        if (budget) handleBudgetSelect(budget.id, budget.name);
+                      }}
+                      className="flex-1 px-3 py-2 border rounded-md"
+                    >
+                      <option value="">Choose a budget...</option>
+                      {budgets.map(budget => (
+                        <option key={budget.id} value={budget.id}>
+                          {budget.name}
+                        </option>
+                      ))}
+                    </select>
+                    {selectedBudget.id && (
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => setShowBudgetSelector(false)}
+                      >
+                        Cancel
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <Button 
+                  variant="outline"
+                  onClick={fetchBudgets}
+                >
+                  Load Budgets
+                </Button>
+              )}
+              
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline"
+                  onClick={testConnection} 
+                  disabled={testingConnection}
+                >
+                  {testingConnection ? (
+                    <>
+                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                      Testing...
+                    </>
+                  ) : (
+                    'Test Connection'
+                  )}
+                </Button>
+                <Button 
+                  variant="destructive"
+                  onClick={() => {
+                    setPAT('');
+                    setBudgets([]);
+                    setSelectedBudget({});
+                    setAccounts([]);
+                    setTrackedAccountIds([]);
+                  }}
+                >
+                  Clear Token
+                </Button>
+              </div>
             </div>
-          </div>
-        )}
-        {connectionMessage && <p style={{ marginTop: 10 }}>{connectionMessage}</p>}
-      </section>
+          )}
+          {connectionMessage && (
+            <Alert className="mt-4">
+              <AlertCircle className="h-4 w-4" aria-hidden="true" />
+              <AlertDescription>{connectionMessage}</AlertDescription>
+            </Alert>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Accounts for Rewards Tracking */}
       {selectedBudget.id && (
-        <section style={styles.section}>
-          <h2>Accounts for Rewards Tracking</h2>
-          <p>Select which accounts you want to track for rewards (including checking, savings, and credit cards):</p>
-          
-          {loadingAccounts ? (
-            <p>Loading accounts...</p>
-          ) : accounts.length > 0 ? (
-            <div style={{ 
-              border: '1px solid #ddd', 
-              borderRadius: 8, 
-              padding: 15,
-              marginTop: 15 
-            }}>
-              {accounts.map(account => {
-                const accountTypeLabel = ACCOUNT_TYPE_LABELS[account.type] || account.type;
-                
-                return (
-                  <label key={account.id} style={{ 
-                    display: 'flex', 
-                    alignItems: 'center',
-                    padding: '8px 0',
-                    cursor: 'pointer',
-                    borderBottom: '1px solid #f0f0f0'
-                  }}>
-                    <input
-                      type="checkbox"
-                      checked={trackedAccountIds.includes(account.id)}
-                      onChange={() => handleAccountToggle(account.id, account.name)}
-                      style={{ marginRight: 10 }}
-                    />
-                    <div style={{ flex: 1 }}>
-                      <span>{account.name}</span>
-                      <span style={{ marginLeft: 10, color: '#888', fontSize: '0.85em' }}>
-                        {accountTypeLabel}
-                      </span>
-                    </div>
-                    <span style={{ color: '#666', fontSize: '0.9em' }}>
-                      Balance: ${(account.balance / 1000).toFixed(2)}
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          ) : (
-            <p>No accounts found in this budget.</p>
-          )}
-        </section>
+        <Card>
+          <CardHeader>
+            <CardTitle>Accounts for Rewards Tracking</CardTitle>
+            <CardDescription>
+              Select which accounts you want to track for rewards (including checking, savings, and credit cards)
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {loadingAccounts ? (
+              <p className="text-sm">Loading accounts...</p>
+            ) : accounts.length > 0 ? (
+              <div className="space-y-2">
+                {accounts.map(account => {
+                  const accountTypeLabel = ACCOUNT_TYPE_LABELS[account.type] || account.type;
+                  const Icon = account.type === 'creditCard' ? CreditCardIcon : 
+                               account.type === 'checking' ? Wallet :
+                               DollarSign;
+                  
+                  return (
+                    <label 
+                      key={account.id} 
+                      className="flex items-center space-x-3 p-3 rounded-lg border hover:bg-accent cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={trackedAccountIds.includes(account.id)}
+                        onChange={() => handleAccountToggle(account.id, account.name)}
+                        className="rounded"
+                      />
+                      <Icon className="h-5 w-5 text-muted-foreground" />
+                      <div className="flex-1">
+                        <div className="font-medium">{account.name}</div>
+                        <div className="text-sm text-muted-foreground">{accountTypeLabel}</div>
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        ${(account.balance / 1000).toFixed(2)}
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No accounts found in this budget.</p>
+            )}
+          </CardContent>
+        </Card>
       )}
 
-      {/* Cards Management */}
-      <section style={styles.section}>
-        <h2>Rewards Cards Management</h2>
-        <p>Manage your cards and their reward rules:</p>
-        
-        <button onClick={handleAddCard} style={{ marginBottom: 20 }}>
-          + Add Manual Card
-        </button>
+      {/* Rewards Cards Management */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Rewards Cards Management</CardTitle>
+          <CardDescription>
+            Manage your cards and their reward rules
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Button onClick={handleAddCard}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Manual Card
+          </Button>
 
-        {showCardForm && (
-          <form onSubmit={handleSaveCard} style={{ 
-            border: '1px solid #ccc', 
-            padding: 20, 
-            marginBottom: 20,
-            borderRadius: 8 
-          }}>
-            <h3>{editingCard ? 'Edit Card' : 'Add Manual Card'}</h3>
-            <div style={{ marginBottom: 10 }}>
-              <label>
-                Card Name:
-                <input
-                  type="text"
-                  value={cardForm.name}
-                  onChange={(e) => setCardForm({ ...cardForm, name: e.target.value })}
-                  required
-                  style={styles.inputFull}
-                />
-              </label>
-            </div>
-            <div style={{ marginBottom: 10 }}>
-              <label>
-                Issuer:
-                <input
-                  type="text"
-                  value={cardForm.issuer}
-                  onChange={(e) => setCardForm({ ...cardForm, issuer: e.target.value })}
-                  required
-                  placeholder="e.g., Chase, Amex, Citi"
-                  style={styles.inputFull}
-                />
-              </label>
-            </div>
-            <div style={{ marginBottom: 10 }}>
-              <label>
-                Type:
-                <select
-                  value={cardForm.type}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    if (isValidCardType(value)) {
-                      setCardForm({ ...cardForm, type: value });
-                    }
-                  }}
-                  style={styles.inputFull}
-                >
-                  <option value="cashback">Cashback</option>
-                  <option value="points">Points</option>
-                  <option value="miles">Miles</option>
-                </select>
-              </label>
-            </div>
-            <button type="submit">Save Card</button>
-            <button type="button" onClick={() => setShowCardForm(false)} style={{ marginLeft: 10 }}>
-              Cancel
-            </button>
-          </form>
-        )}
+          {showCardForm && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">
+                  {editingCard ? 'Edit Card' : 'Add Manual Card'}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleSaveCard} className="space-y-4">
+                  <div>
+                    <label className="text-sm font-medium">Card Name</label>
+                    <input
+                      type="text"
+                      value={cardForm.name}
+                      onChange={(e) => setCardForm({ ...cardForm, name: e.target.value })}
+                      required
+                      className="w-full px-3 py-2 border rounded-md mt-1"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Issuer</label>
+                    <input
+                      type="text"
+                      value={cardForm.issuer}
+                      onChange={(e) => setCardForm({ ...cardForm, issuer: e.target.value })}
+                      required
+                      placeholder="e.g., Chase, Amex, Citi"
+                      className="w-full px-3 py-2 border rounded-md mt-1"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Type</label>
+                    <select
+                      value={cardForm.type}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (isValidCardType(value)) {
+                          setCardForm({ ...cardForm, type: value });
+                        }
+                      }}
+                      className="w-full px-3 py-2 border rounded-md mt-1"
+                    >
+                      <option value="cashback">Cashback</option>
+                      <option value="points">Points</option>
+                      <option value="miles">Miles</option>
+                    </select>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button type="submit">Save Card</Button>
+                    <Button 
+                      type="button" 
+                      variant="outline"
+                      onClick={() => setShowCardForm(false)}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
+          )}
 
-        <div>
           {cards.length === 0 ? (
-            <p>No cards configured yet.</p>
+            <p className="text-sm text-muted-foreground">No cards configured yet.</p>
           ) : (
-            <div>
-              <h3>YNAB-Linked Cards</h3>
-              <ul style={{ listStyle: 'none', padding: 0 }}>
-                {cards.filter(card => !card.isManual).map((card) => (
-                  <li key={card.id} style={styles.ynabCardItem}>
-                    <div>
-                      <strong>{card.name}</strong>
-                      <span style={{ marginLeft: 10, color: '#666' }}>
-                        {card.issuer} • {card.type} • YNAB-linked
-                      </span>
-                    </div>
-                    <div>
-                      <button onClick={() => handleEditCard(card)} style={{ marginRight: 10 }}>
-                        Edit
-                      </button>
-                      <button onClick={() => setShowDeleteCardDialog(card.id)}>
-                        Remove
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-              
-              {cards.some(card => card.isManual) && (
+            <div className="space-y-4">
+              {cards.filter(card => !card.isManual).length > 0 && (
                 <>
-                  <h3>Manual Cards</h3>
-                  <ul style={{ listStyle: 'none', padding: 0 }}>
-                    {cards.filter(card => card.isManual).map((card) => (
-                      <li key={card.id} style={styles.cardItem}>
-                        <div>
-                          <strong>{card.name}</strong>
-                          <span style={{ marginLeft: 10, color: '#666' }}>
-                            {card.issuer} • {card.type}
-                          </span>
+                  <h3 className="font-semibold text-sm">YNAB-Linked Cards</h3>
+                  <div className="space-y-2">
+                    {cards.filter(card => !card.isManual).map((card) => (
+                      <div 
+                        key={card.id} 
+                        className="flex items-center justify-between p-3 rounded-lg border bg-blue-50 dark:bg-blue-950"
+                      >
+                        <div className="flex items-center gap-3">
+                          <Link2 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                          <div>
+                            <div className="font-medium">{card.name}</div>
+                            <div className="text-sm text-muted-foreground">
+                              {card.issuer} • {card.type}
+                            </div>
+                          </div>
                         </div>
-                        <div>
-                          <button onClick={() => handleEditCard(card)} style={{ marginRight: 10 }}>
-                            Edit
-                          </button>
-                          <button onClick={() => setShowDeleteCardDialog(card.id)}>
-                            Delete
-                          </button>
+                        <div className="flex gap-2">
+                          <Button 
+                            size="sm" 
+                            variant="ghost"
+                            onClick={() => handleEditCard(card)}
+                            aria-label={`Edit ${card.name}`}
+                          >
+                            <Edit2 className="h-4 w-4" aria-hidden="true" />
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="ghost"
+                            onClick={() => setShowDeleteCardDialog(card.id)}
+                            aria-label={`Delete ${card.name}`}
+                          >
+                            <Trash2 className="h-4 w-4" aria-hidden="true" />
+                          </Button>
                         </div>
-                      </li>
+                      </div>
                     ))}
-                  </ul>
+                  </div>
+                </>
+              )}
+              
+              {cards.filter(card => card.isManual).length > 0 && (
+                <>
+                  <h3 className="font-semibold text-sm">Manual Cards</h3>
+                  <div className="space-y-2">
+                    {cards.filter(card => card.isManual).map((card) => (
+                      <div 
+                        key={card.id} 
+                        className="flex items-center justify-between p-3 rounded-lg border"
+                      >
+                        <div className="flex items-center gap-3">
+                          <CreditCardIcon className="h-5 w-5 text-muted-foreground" />
+                          <div>
+                            <div className="font-medium">{card.name}</div>
+                            <div className="text-sm text-muted-foreground">
+                              {card.issuer} • {card.type}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button 
+                            size="sm" 
+                            variant="ghost"
+                            onClick={() => handleEditCard(card)}
+                            aria-label={`Edit ${card.name}`}
+                          >
+                            <Edit2 className="h-4 w-4" aria-hidden="true" />
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="ghost"
+                            onClick={() => setShowDeleteCardDialog(card.id)}
+                            aria-label={`Delete ${card.name}`}
+                          >
+                            <Trash2 className="h-4 w-4" aria-hidden="true" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </>
               )}
             </div>
           )}
-        </div>
-      </section>
+        </CardContent>
+      </Card>
 
       {/* Data Management */}
-      <section style={styles.section}>
-        <h2>Data Management</h2>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <button onClick={handleExport}>
-            Export Settings
-          </button>
-          <button onClick={() => fileInputRef.current?.click()}>
-            Import Settings
-          </button>
-          <button onClick={() => setShowClearDialog(true)} style={{ backgroundColor: '#dc3545', color: 'white' }}>
-            Clear All Data
-          </button>
-        </div>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".json"
-          onChange={handleImport}
-          style={{ display: 'none' }}
-        />
-        <p style={{ marginTop: 10, fontSize: '0.9em', color: '#666' }}>
-          Export saves your cards and rules (but not your PAT). Import merges with existing data.
-        </p>
-      </section>
+      <Card>
+        <CardHeader>
+          <CardTitle>Data Management</CardTitle>
+          <CardDescription>
+            Export, import, or clear all your settings and data
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={handleExport}>
+              <Download className="mr-2 h-4 w-4" />
+              Export Settings
+            </Button>
+            <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
+              <Upload className="mr-2 h-4 w-4" />
+              Import Settings
+            </Button>
+            <Button 
+              variant="destructive"
+              onClick={() => setShowClearDialog(true)}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Clear All Data
+            </Button>
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json"
+            onChange={handleImport}
+            className="hidden"
+            aria-label="Import settings file"
+          />
+          <p className="text-sm text-muted-foreground mt-3">
+            Export saves your cards and rules (but not your PAT). Import merges with existing data.
+          </p>
+        </CardContent>
+      </Card>
 
       {/* Confirmation Dialogs */}
       <ConfirmDialog
