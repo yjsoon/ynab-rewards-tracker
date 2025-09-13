@@ -15,7 +15,7 @@ Updated 12 Sep 2025 — prioritised next steps to align the app with the intende
   - In `calculateRuleRewards`, add calculator‑level checks for `startDate`/`endDate` (current orchestration skips out‑of‑window rules already).
 
 - Expose Valuation Controls in Settings
-  - Add `milesValuation` / `pointsValuation` inputs; plumb through to the calculator and recommendations.
+  - Add `milesValuation` input; plumb through to the calculator and recommendations.
   - Replace hard‑coded 0.01 and block efficiency assumptions in category recommendations (optionally add a block efficiency knob).
 
 - Add Abortable Fetches
@@ -37,7 +37,7 @@ Updated 12 Sep 2025 — prioritised next steps to align the app with the intende
   - Base effective‑rate comparisons on normalised dollars and respect `shouldStopUsing`; re‑run when valuation settings change.
 
 - Tests
-  - Calculator: category caps, overall cap scaling, miles/points and block rules, progress flags, window enforcement.
+  - Calculator: category caps, overall cap scaling, miles and block rules, progress flags, window enforcement.
   - Recommendations: effective‑rate selection and “avoid/use” alerts; settings‑driven valuations.
 
 - Clean Up Legacy Path

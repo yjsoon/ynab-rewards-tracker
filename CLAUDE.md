@@ -20,12 +20,12 @@ This repo hosts a client‑side YNAB Rewards Tracker. It analyzes YNAB transacti
 - `types/transaction.ts` — client transaction types and reward adornments
 
 ## Data Model (storage)
-- `CreditCard`: `{ id, name, issuer, type: 'cashback'|'points'|'miles', ynabAccountId, billingCycle?, active }`
+- `CreditCard`: `{ id, name, issuer, type: 'cashback'|'miles', ynabAccountId, billingCycle?, active }`
   - `ynabAccountId` is required; there are no manual cards.
-- `RewardRule`: percentages or miles/points per dollar, optional caps (overall and per category).
+- `RewardRule`: percentages or miles per dollar, optional caps (overall and per category).
 - `TagMapping`: maps YNAB flags/tags to reward categories.
 - `RewardCalculation`: includes raw `rewardEarned` and normalized `rewardEarnedDollars` for cross‑card comparisons.
-- `AppSettings`: default currency label, and valuation knobs: `milesValuation`, `pointsValuation` (dollars per unit).
+- `AppSettings`: default currency label, and valuation knob: `milesValuation` (dollars per mile).
 
 Conventions:
 - Use “dollars” in identifiers (not “USD”). UI shows `$` but avoids hard coding currency copy.
@@ -56,4 +56,3 @@ Conventions:
 - Add abortable fetches in dashboard/transactions
 - Tests for calculator/recommendations
 - Remove legacy `lib/reward-engine/rules.ts` (singular)
-

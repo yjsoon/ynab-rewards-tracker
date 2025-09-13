@@ -276,8 +276,7 @@ export default function DashboardPage() {
                         <CardTitle className="text-lg">{card.name}</CardTitle>
                         <CardDescription className="mt-1">
                           {card.type === 'cashback' ? 'Cashback Card' : 
-                           card.type === 'miles' ? 'Miles Card' : 
-                           card.type === 'points' ? 'Points Card' : 'Reward Card'}
+                           card.type === 'miles' ? 'Miles Card' : 'Reward Card'}
                         </CardDescription>
                       </div>
                       <Badge 

@@ -31,7 +31,6 @@ export class RewardsCalculator {
   ): RewardCalculation {
     // Get valuation rates from settings (default 1 cent per mile/point)
     const milesValuation = settings?.milesValuation || 0.01;
-    const pointsValuation = settings?.pointsValuation || 0.01;
 
     // Filter transactions to this period and eligible categories
     const eligibleTransactions = transactions.filter(txn => {
@@ -142,13 +141,9 @@ export class RewardsCalculator {
     const shouldStopUsing = maximumExceeded;
 
     // Calculate normalized dollar value for the total reward
-    let rewardEarnedDollars: number;
-    if (rule.rewardType === 'cashback') {
-      rewardEarnedDollars = rewardEarned;
-    } else if (rule.rewardType === 'miles') {
+    let rewardEarnedDollars: number = rewardEarned; // default for cashback
+    if (rule.rewardType === 'miles') {
       rewardEarnedDollars = rewardEarned * milesValuation;
-    } else {
-      rewardEarnedDollars = rewardEarned * pointsValuation;
     }
 
     return {

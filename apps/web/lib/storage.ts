@@ -7,7 +7,7 @@ export interface CreditCard {
   id: string;
   name: string;
   issuer: string;
-  type: 'cashback' | 'points' | 'miles';
+  type: 'cashback' | 'miles';
   ynabAccountId: string; // YNAB account ID (required; no manual cards)
   billingCycle?: {
     type: 'calendar' | 'billing';
@@ -20,7 +20,7 @@ export interface RewardRule {
   id: string;
   cardId: string;
   name: string;
-  rewardType: 'cashback' | 'miles' | 'points';
+  rewardType: 'cashback' | 'miles';
   rewardValue: number; // percentage or miles per dollar
   milesBlockSize?: number; // e.g., 5 for "$5 blocks"
   categories: string[]; // Reward categories (mapped from YNAB flags/tags)
@@ -51,9 +51,9 @@ export interface RewardCalculation {
   period: string;
   totalSpend: number;
   eligibleSpend: number;
-  rewardEarned: number; // Raw reward units (dollars for cashback, miles/points for others)
+  rewardEarned: number; // Raw reward units (dollars for cashback, miles for others)
   rewardEarnedDollars?: number; // Normalized dollar value for comparison
-  rewardType: 'cashback' | 'miles' | 'points'; // Track the type for clarity
+  rewardType: 'cashback' | 'miles'; // Track the type for clarity
   minimumProgress?: number;
   maximumProgress?: number;
   categoryBreakdowns: CategoryBreakdown[];
@@ -82,7 +82,6 @@ export interface AppSettings {
   theme?: 'light' | 'dark' | 'auto';
   currency?: string;
   milesValuation?: number; // Dollar value per mile (default: 0.01)
-  pointsValuation?: number; // Dollar value per point (default: 0.01)
 }
 
 export interface StorageData {
@@ -143,6 +142,10 @@ class StorageService {
                   calc.rewardEarnedDollars = calc.rewardEarnedUSD;
                   delete calc.rewardEarnedUSD;
                 }
+                // Migration: collapse 'points' into 'miles'
+                if (calc.rewardType === 'points') {
+                  calc.rewardType = 'miles';
+                }
                 if (Array.isArray(calc.categoryBreakdowns)) {
                   calc.categoryBreakdowns = calc.categoryBreakdowns.map((cb: any) => {
                     if (cb && typeof cb === 'object' && cb.rewardUSD != null && cb.rewardDollars == null) {
@@ -155,6 +158,36 @@ class StorageService {
               }
               return calc;
             });
+          }
+
+          // Migration: convert any 'points' card/rule types to 'miles'
+          if (Array.isArray(data.cards)) {
+            data.cards = data.cards.map((card: any) => {
+              if (card?.type === 'points') {
+                card.type = 'miles';
+              }
+              return card;
+            });
+          }
+          if (Array.isArray(data.rules)) {
+            data.rules = data.rules.map((rule: any) => {
+              if (rule?.rewardType === 'points') {
+                rule.rewardType = 'miles';
+              }
+              return rule;
+            });
+          }
+
+          // Migration: if pointsValuation exists and milesValuation is undefined, copy it over; then drop pointsValuation
+          if (data.settings) {
+            const mv = data.settings.milesValuation;
+            const pv = (data.settings as any).pointsValuation;
+            if ((mv == null || typeof mv !== 'number') && typeof pv === 'number') {
+              data.settings.milesValuation = pv;
+            }
+            if ('pointsValuation' in data.settings) {
+              delete (data.settings as any).pointsValuation;
+            }
           }
         } catch {}
 

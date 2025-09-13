@@ -70,7 +70,7 @@ export default function NewRulePage() {
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.name.trim()) { setMessage('Please enter a rule name.'); return; }
-    if (!['cashback','miles','points'].includes(form.rewardType)) { setMessage('Invalid reward type.'); return; }
+    if (!['cashback','miles'].includes(form.rewardType)) { setMessage('Invalid reward type.'); return; }
     if (!isFinite(form.rewardValue) || form.rewardValue <= 0) { setMessage('Enter a positive reward value.'); return; }
     saveRule({ ...form, name: form.name.trim() });
     router.push(`/cards/${cardId}`);
@@ -99,13 +99,12 @@ export default function NewRulePage() {
                 <select className="w-full px-3 py-2 border rounded" value={form.rewardType} onChange={e => setForm({ ...form, rewardType: e.target.value as any })}>
                   <option value="cashback">Cashback</option>
                   <option value="miles">Miles</option>
-                  <option value="points">Points</option>
                 </select>
               </div>
               <div>
                 <label className="block text-sm mb-1">Reward value</label>
                 <input type="number" step="0.01" className="w-full px-3 py-2 border rounded" value={form.rewardValue} onChange={e => setForm({ ...form, rewardValue: Number(e.target.value) })} />
-                <p className="text-xs text-muted-foreground mt-1">% for cashback; units per dollar for miles/points</p>
+                <p className="text-xs text-muted-foreground mt-1">% for cashback; units per dollar for miles</p>
               </div>
               <div>
                 <label className="block text-sm mb-1">Block size ($)</label>
@@ -184,4 +183,3 @@ export default function NewRulePage() {
     </div>
   );
 }
-

@@ -24,7 +24,7 @@ export interface TransactionWithRewards extends Transaction {
 export interface AppliedRule {
   ruleId: string;
   ruleName: string;
-  rewardType: 'cashback' | 'miles' | 'points';
+  rewardType: 'cashback' | 'miles';
   rewardValue: number;
   earnedAmount: number;
 }
