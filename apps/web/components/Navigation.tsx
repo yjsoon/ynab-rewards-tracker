@@ -22,7 +22,7 @@ export function Navigation() {
           <div className="flex items-center gap-6">
             <Link href="/" className="flex items-center space-x-2 font-bold text-lg">
               <CreditCard className="h-6 w-6" />
-              <span>YNAB Rewards</span>
+              <span>YJAB</span>
             </Link>
             
             <div className="hidden md:flex items-center gap-1">

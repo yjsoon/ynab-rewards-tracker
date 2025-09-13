@@ -5,7 +5,7 @@ import { ThemeProvider } from '@/components/theme-provider';
 import './globals.css';
 
 export const metadata = {
-  title: 'YNAB Counter',
+  title: "YJAB – YJ's Awards Buddy",
   description: 'Track credit card rewards using your YNAB data.'
 };
 

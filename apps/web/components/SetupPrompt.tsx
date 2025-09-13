@@ -23,7 +23,7 @@ export function SetupPrompt({ onDismiss }: SetupPromptProps) {
   return (
     <Alert className="relative bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800">
       <Sparkles className="h-4 w-4 text-amber-600 dark:text-amber-400" aria-hidden="true" />
-      <AlertTitle className="text-lg font-semibold">Welcome to YNAB Rewards Tracker!</AlertTitle>
+      <AlertTitle className="text-lg font-semibold">Welcome to YJAB – YJ's Awards Buddy!</AlertTitle>
       <AlertDescription className="mt-2">
         <Button
           onClick={handleDismiss}
@@ -36,7 +36,7 @@ export function SetupPrompt({ onDismiss }: SetupPromptProps) {
         </Button>
         
         <p className="mb-4">
-          Get started by connecting your YNAB account to start tracking credit card rewards and maximizing your cashback.
+          Get started by connecting your YNAB account to track credit‑card rewards and maximise your cashback.
         </p>
         
         <div className="mb-4">

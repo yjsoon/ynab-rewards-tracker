@@ -1,5 +1,5 @@
 /**
- * Client-side storage utilities for YNAB Rewards Tracker
+ * Client-side storage utilities for YJAB – YJ's Awards Buddy
  * All user data is stored in browser localStorage
  */
 
