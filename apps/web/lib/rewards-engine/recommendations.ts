@@ -2,7 +2,7 @@
  * Smart recommendations for card usage
  */
 
-import type { RewardCalculation, CreditCard, RewardRule } from '@/lib/storage';
+import type { RewardCalculation, CreditCard, RewardRule, AppSettings } from '@/lib/storage';
 
 export interface CardRecommendation {
   cardId: string;
@@ -107,7 +107,8 @@ export class RecommendationEngine {
   static generateCategoryRecommendations(
     cards: CreditCard[],
     rules: RewardRule[],
-    calculations: RewardCalculation[]
+    calculations: RewardCalculation[],
+    settings?: AppSettings
   ): CategoryRecommendation[] {
     const categoryRecommendations: CategoryRecommendation[] = [];
     
@@ -141,16 +142,23 @@ export class RecommendationEngine {
 
         if (calculation?.shouldStopUsing) return;
 
-        // Calculate effective rate (accounting for caps and blocks)
+        // Prefer observed, normalised dollars from current calculations for this category
         let effectiveRate = 0;
-        if (rule.rewardType === 'cashback') {
-          effectiveRate = rule.rewardValue / 100;
-        } else if (rule.rewardType === 'miles') {
-          if (rule.milesBlockSize) {
-            // For block-based, assume average efficiency
-            effectiveRate = rule.rewardValue * 0.8; // 80% efficiency assumption
-          } else {
-            effectiveRate = rule.rewardValue * 0.01; // Assume 1¢ per mile
+        const calc = calculations.find(c => c.cardId === rule.cardId && c.ruleId === rule.id);
+        const catBreakdown = calc?.categoryBreakdowns.find(cb => cb.category === category);
+        if (catBreakdown && catBreakdown.spend > 0) {
+          const dollars = (catBreakdown.rewardDollars != null)
+            ? catBreakdown.rewardDollars
+            : (rule.rewardType === 'cashback' ? catBreakdown.reward : 0);
+          effectiveRate = dollars / catBreakdown.spend;
+        } else {
+          // Fallback to theoretical using settings valuations (normalised dollars per dollar spend)
+          const milesVal = settings?.milesValuation ?? 0.01;
+          if (rule.rewardType === 'cashback') {
+            effectiveRate = rule.rewardValue / 100;
+          } else if (rule.rewardType === 'miles') {
+            // Without observed spend, approximate per-dollar rate with valuation; block slippage is context-dependent
+            effectiveRate = rule.rewardValue * milesVal;
           }
         }
 
@@ -168,9 +176,7 @@ export class RecommendationEngine {
           calc.ruleId === rule.id
         );
 
-        let reason = `Best rate: ${rule.rewardType === 'cashback' 
-          ? `${rule.rewardValue}%` 
-          : `${rule.rewardValue}x miles`}`;
+        let reason = `Best effective rate based on current period and settings`;
 
         if (calculation?.maximumProgress && calculation.maximumProgress > 80) {
           reason += ` (${Math.round(calculation.maximumProgress)}% of cap used)`;
@@ -180,7 +186,7 @@ export class RecommendationEngine {
           category,
           bestCardId: bestCard.id,
           bestCardName: bestCard.name,
-          expectedReward: bestEffectiveRate * 100, // As percentage
+          expectedReward: bestEffectiveRate * 100, // percentage
           rewardType: bestRule.rewardType,
           reason
         });
