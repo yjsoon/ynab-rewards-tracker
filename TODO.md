@@ -1,30 +1,55 @@
 # TODO
 
-Updated 12 Sep 2025 — prioritised next steps to align the app with the intended behaviour. British spelling is used in copy; code identifiers remain unchanged.
+Updated 13 Sep 2025 — prioritised next steps for YJAB (British spelling in copy; code identifiers unchanged).
 
 ## P1 — Next Actions
-- Implement Rules & Mappings UI — initial version done
-  - Status: pages added under `app/cards/[id]/rules/(new|[ruleId]/edit)` and `app/cards/[id]/mappings/(new|[mappingId]/edit)`; persisted via `storage.ts`.
-  - Follow‑ups: better validation, friendlier category input, polish.
+- Persist per‑transaction overrides
+  - Add a `transactionOverrides` store keyed by `{budgetId, accountId, transactionId}` with an optional `rewardCategory` and an optional `overrideDate` (for period moves).
+  - Apply overrides in `TransactionMatcher.applyTagMappings` after tag mapping resolution.
+  - UI: enable inline edit in TransactionsPreview and full Transactions to save overrides when “Apply to tag” isn’t desired.
 
-- Wire the Calculation Pipeline — initial version done
-  - Status: “Compute Now” on Rewards runs fetch → match → calculate for the current period and saves results.
-  - Follow‑ups: show “last computed” timestamp; optional auto‑recompute on app open; per‑period selective clearing instead of full clear.
+- Shared TransactionsList
+  - Extract a reusable list component used by card preview and full transactions page (sorting, paging, inline edit hooks, loading/empty states).
 
-- Enforce Rule Windows
-  - In `calculateRuleRewards`, add calculator‑level checks for `startDate`/`endDate` (current orchestration skips out‑of‑window rules already).
+- Calculator window enforcement
+  - Add `startDate`/`endDate` checks inside `calculateRuleRewards` (in addition to orchestration guard); include a unit test.
 
-- Expose Valuation Controls in Settings
-  - Add `milesValuation` input; plumb through to the calculator and recommendations.
-  - Replace hard‑coded 0.01 and block efficiency assumptions in category recommendations (optionally add a block efficiency knob).
+- Tests
+  - Calculator: category caps, overall cap scaling, miles block rules, window enforcement, “stop using”.
+  - Recommendations: effective‑rate selection and stop‑using logic using normalised dollars.
 
-- Add Abortable Fetches
-  - Use `AbortController` in `app/page.tsx` and `app/cards/[id]/transactions/page.tsx` to prevent state updates after unmount.
+- A11y pass
+  - Add `id`/`htmlFor` to form controls in RuleForm/Settings; ensure buttons have discernible text.
 
-- Remove Prisma/DB Artefacts from Web App — done
-  - Dropped `@prisma/client` and `@ynab-counter/db` from `apps/web` deps; deleted `apps/web/lib/db.ts` and `apps/web/types/prisma.d.ts`.
-  - Removed `transpilePackages` entry for DB in `apps/web/next.config.js`.
-  - `packages/db` remains quarantined for future server use; not referenced by web.
+## P2 — Quality and UX
+- Branding assets
+  - Favicon + OG images for YJAB; update `app/layout.tsx` metadata.
+
+- Recommendations UX
+  - Show “why” tooltips (valuation used, cap progress) and quick links to rule/mappings.
+
+- Progress & Limits UX
+  - Display min/max spend progress, show “stop using” badges, and indicate when caps are near.
+
+- MappingForm extraction
+  - Create a shared form for new/edit tag mappings with simple validation and suggestions from existing categories.
+
+## P3 — Enhancements
+- Allow moving a transaction between periods (local override of date; never patch YNAB).
+- Background refresh while the app is open with visible “last computed”.
+- Lightweight local analytics for the rewards engine (toggle in dev).
+
+## Recently Shipped (13 Sep 2025)
+- Rebrand to YJAB in UI and docs.
+- Shared RuleForm with zod validation; chips UX (enter/backspace).
+- Valuation controls wired to engine and recommendations (normalised dollars).
+- Abortable fetches for dashboard, transactions, and compute.
+- Rewards: “Last computed” timestamp + per‑period recompute.
+- Category recommendations surfaced on Rewards page.
+- Card Transactions tab implemented with inline editing + “apply to tag”.
+- Mappings index page added (no more 404).
+- Compute fetch consolidated to once per run; per‑card filtering.
+- Prisma/DB artefacts purged from the web app.
 
 ## P2 — Quality and UX
 - Persist Category Edits in Transactions
