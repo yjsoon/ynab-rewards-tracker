@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useCreditCards, useRewardRules, useRewardCalculations } from '@/hooks/useLocalStorage';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -30,6 +30,7 @@ export default function RewardsDashboardPage() {
   const { calculations, saveCalculation, clearCalculations } = useRewardCalculations();
   const [computing, setComputing] = useState(false);
   const [computeMessage, setComputeMessage] = useState('');
+  const computeAbortRef = useRef<AbortController | null>(null);
   
   const [totalRewardsEarned, setTotalRewardsEarned] = useState(0);
   const [currentPeriodSpend, setCurrentPeriodSpend] = useState(0);
@@ -74,20 +75,44 @@ export default function RewardsDashboardPage() {
     }
     setComputing(true);
     try {
+      // Abort any in-flight compute
+      if (computeAbortRef.current) {
+        computeAbortRef.current.abort();
+      }
+      const controller = new AbortController();
+      computeAbortRef.current = controller;
       // Optionally clear only current-period calcs; for now, clear all to avoid duplicates
       // A smarter approach would delete by (card, rule, period) as we recompute
       // but saveCalculation will overwrite existing entries for the same key tuple.
       const settings = storage.getSettings();
-      const calcs = await computeCurrentPeriod(pat, budget.id, activeCards, rules, storage.getTagMappings(), settings);
+      const calcs = await computeCurrentPeriod(
+        pat,
+        budget.id,
+        activeCards,
+        rules,
+        storage.getTagMappings(),
+        settings,
+        controller.signal
+      );
       calcs.forEach(c => saveCalculation(c));
       setComputeMessage(`Computed ${calcs.length} rule(s) for the current period.`);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setComputeMessage(`Computation failed: ${msg}`);
+      // Swallow aborts quietly
+      if ((err as any)?.name !== 'AbortError') {
+        const msg = err instanceof Error ? err.message : String(err);
+        setComputeMessage(`Computation failed: ${msg}`);
+      }
     } finally {
       setComputing(false);
     }
   }, [activeCards, rules, saveCalculation]);
+
+  useEffect(() => {
+    return () => {
+      // Abort on unmount
+      computeAbortRef.current?.abort();
+    };
+  }, []);
 
   if (!hasData) {
     return (

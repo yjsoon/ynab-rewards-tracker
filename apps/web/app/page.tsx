@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useYnabPAT, useCreditCards } from '@/hooks/useLocalStorage';
 import { YnabClient } from '@/lib/ynab-client';
@@ -52,6 +52,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showSetupPrompt, setShowSetupPrompt] = useState(false);
+  const dashboardAbortRef = useRef<AbortController | null>(null);
 
   const loadRecentTransactions = useCallback(async (budgetId: string) => {
     if (!pat) return;
@@ -60,9 +61,15 @@ export default function DashboardPage() {
     setError('');
     try {
       const client = new YnabClient(pat);
+      // Abort any in-flight request
+      if (dashboardAbortRef.current) {
+        dashboardAbortRef.current.abort();
+      }
+      const controller = new AbortController();
+      dashboardAbortRef.current = controller;
       
       // First get accounts to map IDs to names
-      const accounts = await client.getAccounts(budgetId);
+      const accounts = await client.getAccounts(budgetId, { signal: controller.signal });
       const accMap = new Map<string, string>();
       accounts.forEach((acc: any) => accMap.set(acc.id, acc.name));
       setAccountsMap(accMap);
@@ -72,12 +79,15 @@ export default function DashboardPage() {
       sinceDate.setDate(sinceDate.getDate() - TRANSACTION_LOOKBACK_DAYS);
       const txns = await client.getTransactions(budgetId, {
         since_date: sinceDate.toISOString().split('T')[0],
+        signal: controller.signal,
       });
       // Show only the most recent transactions
       setTransactions(txns.slice(0, RECENT_TRANSACTIONS_LIMIT));
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      setError(`Failed to load transactions: ${errorMessage}`);
+      if ((err as any)?.name !== 'AbortError') {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        setError(`Failed to load transactions: ${errorMessage}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -102,6 +112,12 @@ export default function DashboardPage() {
       loadRecentTransactions(budget.id);
     }
   }, [pat, loadRecentTransactions]);
+
+  useEffect(() => {
+    return () => {
+      dashboardAbortRef.current?.abort();
+    };
+  }, []);
 
   const handleDismissSetup = () => {
     if (typeof window !== 'undefined') {

@@ -31,25 +31,25 @@ export class YnabClient {
   }
 
   // Budgets
-  async getBudgets() {
-    const result = await this.request('budgets');
+  async getBudgets(init?: RequestInit) {
+    const result = await this.request('budgets', init);
     return result.data.budgets;
   }
 
-  async getBudget(budgetId: string) {
-    const result = await this.request(`budgets/${budgetId}`);
+  async getBudget(budgetId: string, init?: RequestInit) {
+    const result = await this.request(`budgets/${budgetId}`, init);
     return result.data.budget;
   }
 
   // Accounts
-  async getAccounts(budgetId: string) {
-    const result = await this.request(`budgets/${budgetId}/accounts`);
+  async getAccounts(budgetId: string, init?: RequestInit) {
+    const result = await this.request(`budgets/${budgetId}/accounts`, init);
     return result.data.accounts;
   }
 
   // Categories
-  async getCategories(budgetId: string) {
-    const result = await this.request(`budgets/${budgetId}/categories`);
+  async getCategories(budgetId: string, init?: RequestInit) {
+    const result = await this.request(`budgets/${budgetId}/categories`, init);
     return result.data.category_groups;
   }
 
@@ -59,6 +59,7 @@ export class YnabClient {
     options?: { 
       since_date?: string;
       type?: 'uncategorized' | 'unapproved';
+      signal?: AbortSignal;
     }
   ) {
     const params = new URLSearchParams();
@@ -66,18 +67,20 @@ export class YnabClient {
     if (options?.type) params.append('type', options.type);
     
     const query = params.toString() ? `?${params.toString()}` : '';
-    const result = await this.request(`budgets/${budgetId}/transactions${query}`);
+    const result = await this.request(`budgets/${budgetId}/transactions${query}`, {
+      signal: options?.signal
+    });
     return result.data.transactions;
   }
 
-  async getTransaction(budgetId: string, transactionId: string) {
-    const result = await this.request(`budgets/${budgetId}/transactions/${transactionId}`);
+  async getTransaction(budgetId: string, transactionId: string, init?: RequestInit) {
+    const result = await this.request(`budgets/${budgetId}/transactions/${transactionId}`, init);
     return result.data.transaction;
   }
 
   // Payees
-  async getPayees(budgetId: string) {
-    const result = await this.request(`budgets/${budgetId}/payees`);
+  async getPayees(budgetId: string, init?: RequestInit) {
+    const result = await this.request(`budgets/${budgetId}/payees`, init);
     return result.data.payees;
   }
 

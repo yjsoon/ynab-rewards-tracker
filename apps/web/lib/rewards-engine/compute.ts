@@ -34,7 +34,8 @@ export async function computeCurrentPeriod(
   cards: CreditCard[],
   allRules: RewardRule[],
   allMappings: TagMapping[],
-  settings?: AppSettings
+  settings?: AppSettings,
+  signal?: AbortSignal
 ): Promise<RewardCalculation[]> {
   const client = new YnabClient(pat);
   const results: RewardCalculation[] = [];
@@ -46,7 +47,7 @@ export async function computeCurrentPeriod(
 
     // Fetch transactions since period start
     const since = formatIsoDate(period.startDate);
-    const txns = await client.getTransactions(budgetId, { since_date: since });
+    const txns = await client.getTransactions(budgetId, { since_date: since, signal });
 
     // Apply tag mappings for this card, then filter for account and date range
     const mappings = allMappings.filter(m => m.cardId === card.id);
@@ -67,4 +68,3 @@ export async function computeCurrentPeriod(
 
   return results;
 }
-

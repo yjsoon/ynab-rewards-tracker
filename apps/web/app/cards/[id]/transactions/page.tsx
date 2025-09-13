@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useYnabPAT, useCreditCards, useTagMappings } from '@/hooks/useLocalStorage';
@@ -44,6 +44,7 @@ export default function CardTransactionsPage() {
   const [error, setError] = useState('');
   const [editingTransaction, setEditingTransaction] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState('');
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const foundCard = cards.find(c => c.id === cardId);
@@ -68,6 +69,12 @@ export default function CardTransactionsPage() {
     
     try {
       const client = new YnabClient(pat);
+      // Abort any previous request
+      if (abortRef.current) {
+        abortRef.current.abort();
+      }
+      const controller = new AbortController();
+      abortRef.current = controller;
       
       // Get transactions from the last N days
       const sinceDate = new Date();
@@ -75,6 +82,7 @@ export default function CardTransactionsPage() {
       
       const allTransactions = await client.getTransactions(selectedBudget.id, {
         since_date: sinceDate.toISOString().split('T')[0],
+        signal: controller.signal,
       });
 
       // Filter for this card's account and apply tag mappings
@@ -94,8 +102,10 @@ export default function CardTransactionsPage() {
 
       setTransactions(enrichedTransactions);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      setError(`Failed to load transactions: ${errorMessage}`);
+      if ((err as any)?.name !== 'AbortError') {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        setError(`Failed to load transactions: ${errorMessage}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -106,6 +116,12 @@ export default function CardTransactionsPage() {
       loadTransactions();
     }
   }, [card, loadTransactions]);
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
 
   const handleEditTransaction = (transactionId: string) => {
     setEditingTransaction(transactionId);
