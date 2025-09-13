@@ -57,8 +57,8 @@ const ACCOUNT_TYPE_LABELS: Record<string, string> = {
 };
 
 // Type guard for card types
-function isValidCardType(value: string): value is 'cashback' | 'points' | 'miles' {
-  return value === 'cashback' || value === 'points' || value === 'miles';
+function isValidCardType(value: string): value is 'cashback' | 'miles' {
+  return value === 'cashback' || value === 'miles';
 }
 
 export default function SettingsPage() {
@@ -82,13 +82,21 @@ export default function SettingsPage() {
   const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [showBudgetSelector, setShowBudgetSelector] = useState(false);
 
+  // Valuation settings
+  const initialSettings = useMemo(() => storage.getSettings(), []);
+  const [milesValuation, setMilesValuation] = useState<number>(
+    typeof initialSettings.milesValuation === 'number' ? initialSettings.milesValuation : 0.01
+  );
+  // Points removed; only miles valuation remains
+  const [valuationMessage, setValuationMessage] = useState<string>("");
+
   // Card form state
   const [showCardForm, setShowCardForm] = useState(false);
   const [editingCard, setEditingCard] = useState<CreditCard | null>(null);
   type CardFormData = {
     name: string;
     issuer: string;
-    type: 'cashback' | 'points' | 'miles';
+    type: 'cashback' | 'miles';
   };
 
   const [cardForm, setCardForm] = useState<CardFormData>({
@@ -275,6 +283,15 @@ export default function SettingsPage() {
       }
     };
     reader.readAsText(file);
+  }
+
+  function handleSaveValuations(e: React.FormEvent) {
+    e.preventDefault();
+    const mv = isFinite(milesValuation) && milesValuation >= 0 ? milesValuation : 0.01;
+    storage.updateSettings({ milesValuation: mv });
+    setValuationMessage('Saved valuations. Recommendations will use normalised dollars.');
+    // brief clear
+    setTimeout(() => setValuationMessage(''), 2500);
   }
 
 
@@ -544,6 +561,40 @@ export default function SettingsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Reward Valuations */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Reward Valuation</CardTitle>
+              <CardDescription>
+                Set how much a mile is worth in dollars. Used to normalise rewards and tune recommendations.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSaveValuations} className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className="text-sm font-medium">Dollars per mile</label>
+                  <input
+                    type="number"
+                    step="0.001"
+                    min="0"
+                    value={milesValuation}
+                    onChange={(e) => setMilesValuation(Number(e.target.value))}
+                    className="w-full px-3 py-2 border rounded-md mt-1"
+                    placeholder="0.01"
+                    aria-label="Miles valuation in dollars per mile"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">Typical range 0.010–0.020. Defaults to 0.010.</p>
+                </div>
+                {/* Points removed */}
+                <div className="md:col-span-2 flex items-center gap-2">
+                  <Button type="submit">Save Valuations</Button>
+                  {valuationMessage && (
+                    <span className="text-sm text-muted-foreground">{valuationMessage}</span>
+                  )}
+                </div>
+              </form>
+            </CardContent>
+          </Card>
           {showCardForm && (
             <Card>
               <CardHeader>
@@ -588,12 +639,11 @@ export default function SettingsPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="cashback">Cashback</SelectItem>
-                        <SelectItem value="points">Points</SelectItem>
-                        <SelectItem value="miles">Miles</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                    <SelectItem value="cashback">Cashback</SelectItem>
+                    <SelectItem value="miles">Miles</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
                   <div className="flex gap-2">
                     <Button type="submit">Save Card</Button>
                     <Button 
