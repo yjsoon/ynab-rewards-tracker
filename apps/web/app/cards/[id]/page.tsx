@@ -151,9 +151,9 @@ export default function CardDetailPage() {
       <Tabs defaultValue="overview" className="space-y-6">
         <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="transactions">Transactions</TabsTrigger>
           <TabsTrigger value="rules">Rules ({activeRules.length})</TabsTrigger>
           <TabsTrigger value="mappings">Mappings ({totalMappings})</TabsTrigger>
-          <TabsTrigger value="transactions">Transactions</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
