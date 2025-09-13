@@ -416,7 +416,7 @@ export default function DashboardPage() {
                         </td>
                         <td className="p-2 text-sm">{txn.payee_name}</td>
                         <td className="p-2 text-sm">
-                          {txn.category_name || 'Uncategorized'}
+                          {txn.category_name || 'Uncategorised'}
                         </td>
                         <td className="p-2 text-sm text-right font-mono">
                           ${Math.abs(txn.amount / 1000).toFixed(2)}

@@ -222,7 +222,7 @@ export default function CardTransactionsPage() {
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Uncategorized</CardTitle>
+            <CardTitle className="text-sm font-medium">Uncategorised</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold text-orange-600">{uncategorizedTransactions.length}</p>
@@ -319,7 +319,7 @@ export default function CardTransactionsPage() {
                     
                     <div className="flex items-center gap-4 text-sm">
                       <span className="text-muted-foreground">
-                        Category: {txn.category_name || 'Uncategorized'}
+                        Category: {txn.category_name || 'Uncategorised'}
                       </span>
                       
                       {editingTransaction === txn.id ? (

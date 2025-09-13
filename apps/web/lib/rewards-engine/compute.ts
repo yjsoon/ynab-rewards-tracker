@@ -41,26 +41,26 @@ export async function computeCurrentPeriod(
   const results: RewardCalculation[] = [];
 
   const activeCards = cards.filter(c => c.active);
+  if (activeCards.length === 0) return results;
 
-  for (const card of activeCards) {
-    const period = RewardsCalculator.calculatePeriod(card);
+  // Optimisation: single fetch for all transactions since the earliest period start
+  const periods = activeCards.map(c => RewardsCalculator.calculatePeriod(c));
+  const earliest = periods.reduce((min, p) => p.startDate < min ? p.startDate : min, periods[0].startDate);
+  const since = formatIsoDate(earliest);
+  const allTxns = await client.getTransactions(budgetId, { since_date: since, signal });
 
-    // Fetch transactions since period start
-    const since = formatIsoDate(period.startDate);
-    const txns = await client.getTransactions(budgetId, { since_date: since, signal });
+  for (let i = 0; i < activeCards.length; i++) {
+    const card = activeCards[i];
+    const period = periods[i];
 
-    // Apply tag mappings for this card, then filter for account and date range
     const mappings = allMappings.filter(m => m.cardId === card.id);
-    const withCats = TransactionMatcher.applyTagMappings(txns, mappings);
+    const withCats = TransactionMatcher.applyTagMappings(allTxns, mappings);
     const forCard = TransactionMatcher.filterForCard(withCats, card.ynabAccountId);
     const inRange = TransactionMatcher.filterByDateRange(forCard, period.startDate, period.endDate);
 
-    // Compute for each active rule with overlapping window
     const rules = allRules.filter(r => r.cardId === card.id && r.active);
     for (const rule of rules) {
-      if (!periodOverlapsWindow(period.startDate, period.endDate, rule.startDate, rule.endDate)) {
-        continue;
-      }
+      if (!periodOverlapsWindow(period.startDate, period.endDate, rule.startDate, rule.endDate)) continue;
       const calc = RewardsCalculator.calculateRuleRewards(rule, inRange, period, settings);
       results.push(calc);
     }

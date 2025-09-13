@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useCreditCards, useRewardRules, useTagMappings, useYnabPAT } from '@/hooks/useLocalStorage';
+import { TagMappingManager } from '@/components/TagMappingManager';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -28,7 +29,7 @@ export default function CardDetailPage() {
   
   const { cards } = useCreditCards();
   const { rules } = useRewardRules(cardId);
-  const { mappings } = useTagMappings(cardId);
+  const { mappings, saveMapping, deleteMapping } = useTagMappings(cardId);
   const { pat } = useYnabPAT();
   
   const [card, setCard] = useState<CreditCard | null>(null);
@@ -149,11 +150,10 @@ export default function CardDetailPage() {
 
       {/* Tabs for different sections */}
       <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="transactions">Transactions</TabsTrigger>
-          <TabsTrigger value="rules">Rules ({activeRules.length})</TabsTrigger>
-          <TabsTrigger value="mappings">Mappings ({totalMappings})</TabsTrigger>
+          <TabsTrigger value="rules">Rules & Mappings</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
@@ -169,12 +169,6 @@ export default function CardDetailPage() {
                   <Link href={`/cards/${cardId}/rules/new`}>
                     <Plus className="h-4 w-4 mr-2" />
                     Add Reward Rule
-                  </Link>
-                </Button>
-                <Button variant="outline" asChild className="w-full justify-start">
-                  <Link href={`/cards/${cardId}/mappings`}>
-                    <Tag className="h-4 w-4 mr-2" />
-                    Manage Tag Mappings
                   </Link>
                 </Button>
                 <Button variant="outline" asChild className="w-full justify-start">
@@ -204,35 +198,34 @@ export default function CardDetailPage() {
         </TabsContent>
 
         <TabsContent value="rules" className="space-y-6">
-          <div className="flex justify-between items-center">
-            <div>
-              <h3 className="text-lg font-semibold">Reward Rules</h3>
-              <p className="text-sm text-muted-foreground">Configure how rewards are calculated</p>
-            </div>
-            <Button asChild>
-              <Link href={`/cards/${cardId}/rules/new`}>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Rule
-              </Link>
-            </Button>
-          </div>
-
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Reward Rules</CardTitle>
+                <CardDescription>Configure how rewards are calculated</CardDescription>
+              </div>
+              <Button asChild>
+                <Link href={`/cards/${cardId}/rules/new`}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Rule
+                </Link>
+              </Button>
+            </CardHeader>
+            <CardContent>
           {activeRules.length === 0 ? (
-            <Card>
-              <CardContent className="text-center py-12">
-                <Target className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-semibold mb-2">No Reward Rules</h3>
-                <p className="text-muted-foreground mb-6">
-                  Create reward rules to start calculating your earnings
-                </p>
-                <Button asChild>
-                  <Link href={`/cards/${cardId}/rules/new`}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Create Your First Rule
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
+                <div className="text-center py-12">
+                  <Target className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">No Reward Rules</h3>
+                  <p className="text-muted-foreground mb-6">
+                    Create reward rules to start calculating your earnings
+                  </p>
+                  <Button asChild>
+                    <Link href={`/cards/${cardId}/rules/new`}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create Your First Rule
+                    </Link>
+                  </Button>
+                </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {activeRules.map(rule => (
@@ -283,61 +276,17 @@ export default function CardDetailPage() {
               ))}
             </div>
           )}
+            </CardContent>
+          </Card>
+
+          <TagMappingManager
+            mappings={mappings}
+            onSave={(mapping) => saveMapping({ ...mapping, cardId })}
+            onDelete={deleteMapping}
+            suggestedCategories={rules.flatMap(r => r.categories)}
+          />
         </TabsContent>
 
-        <TabsContent value="mappings" className="space-y-6">
-          <div className="flex justify-between items-center">
-            <div>
-              <h3 className="text-lg font-semibold">Tag Mappings</h3>
-              <p className="text-sm text-muted-foreground">Map YNAB tags to reward categories</p>
-            </div>
-            <Button asChild>
-              <Link href={`/cards/${cardId}/mappings/new`}>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Mapping
-              </Link>
-            </Button>
-          </div>
-
-          {totalMappings === 0 ? (
-            <Card>
-              <CardContent className="text-center py-12">
-                <Tag className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-semibold mb-2">No Tag Mappings</h3>
-                <p className="text-muted-foreground mb-6">
-                  Create mappings to connect YNAB transaction tags to reward categories
-                </p>
-                <Button asChild>
-                  <Link href={`/cards/${cardId}/mappings/new`}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Create Your First Mapping
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="space-y-3">
-              {mappings.map(mapping => (
-                <Card key={mapping.id}>
-                  <CardContent className="py-4">
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center space-x-4">
-                        <Badge variant="outline">{mapping.ynabTag}</Badge>
-                        <span className="text-muted-foreground">→</span>
-                        <span className="font-medium">{mapping.rewardCategory}</span>
-                      </div>
-                      <Button variant="ghost" size="sm" asChild>
-                        <Link href={`/cards/${cardId}/mappings/${mapping.id}/edit`}>
-                          Edit
-                        </Link>
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </TabsContent>
 
         <TabsContent value="transactions" className="space-y-6">
           <TransactionsPreview cardId={cardId} ynabAccountId={card.ynabAccountId} />

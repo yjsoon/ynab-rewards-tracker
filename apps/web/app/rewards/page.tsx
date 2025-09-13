@@ -151,7 +151,7 @@ export default function RewardsDashboardPage() {
             <TrendingUp className="h-16 w-16 text-muted-foreground mx-auto mb-6" />
             <CardTitle className="text-2xl mb-4">Set Up Your Rewards Tracking</CardTitle>
             <CardDescription className="text-lg mb-8 max-w-2xl mx-auto">
-              Configure your credit cards and reward rules to start tracking your earnings and optimize your spending.
+              Configure your credit cards and reward rules to start tracking your earnings and optimise your spending.
             </CardDescription>
             
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
