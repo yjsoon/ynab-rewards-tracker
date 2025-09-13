@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useCreditCards, useRewardRules, useTagMappings, useYnabPAT } from '@/hooks/useLocalStorage';
@@ -19,10 +19,7 @@ import {
   Plus
 } from 'lucide-react';
 import type { CreditCard } from '@/lib/storage';
-import type { Transaction, TransactionWithRewards } from '@/types/transaction';
-import { YnabClient } from '@/lib/ynab-client';
-import { storage } from '@/lib/storage';
-import { TransactionMatcher } from '@/lib/rewards-engine';
+import TransactionsPreview from './TransactionsPreview';
 
 export default function CardDetailPage() {
   const params = useParams();
@@ -35,10 +32,7 @@ export default function CardDetailPage() {
   const { pat } = useYnabPAT();
   
   const [card, setCard] = useState<CreditCard | null>(null);
-  const [transactions, setTransactions] = useState<TransactionWithRewards[]>([]);
-  const [loadingTxns, setLoadingTxns] = useState(false);
-  const [errorTxns, setErrorTxns] = useState('');
-  const abortRef = useRef<AbortController | null>(null);
+  // Transactions preview handled in child component
 
   useEffect(() => {
     const foundCard = cards.find(c => c.id === cardId);
@@ -66,47 +60,7 @@ export default function CardDetailPage() {
   const activeRules = rules.filter(r => r.active);
   const totalMappings = mappings.length;
 
-  const TRANSACTION_LOOKBACK_DAYS = 90;
-
-  const loadTransactions = useCallback(async () => {
-    if (!card || !pat) return;
-
-    const selectedBudget = storage.getSelectedBudget();
-    if (!selectedBudget.id) {
-      setErrorTxns('No budget selected. Please configure YNAB connection.');
-      return;
-    }
-
-    setLoadingTxns(true);
-    setErrorTxns('');
-
-    try {
-      // Abort any inflight
-      abortRef.current?.abort();
-      const controller = new AbortController();
-      abortRef.current = controller;
-
-      const client = new YnabClient(pat);
-      const sinceDate = new Date();
-      sinceDate.setDate(sinceDate.getDate() - TRANSACTION_LOOKBACK_DAYS);
-
-      const all = await client.getTransactions(selectedBudget.id, {
-        since_date: sinceDate.toISOString().split('T')[0],
-        signal: controller.signal,
-      });
-      const cardTxns = all.filter((t: Transaction) => t.account_id === card.ynabAccountId);
-      const enriched = TransactionMatcher.applyTagMappings(cardTxns, mappings);
-      enriched.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      setTransactions(enriched);
-    } catch (err) {
-      if ((err as any)?.name !== 'AbortError') {
-        const msg = err instanceof Error ? err.message : String(err);
-        setErrorTxns(`Failed to load transactions: ${msg}`);
-      }
-    } finally {
-      setLoadingTxns(false);
-    }
-  }, [card, mappings, pat]);
+  // No-op: child component handles its own data fetching
 
   return (
     <div className="max-w-6xl mx-auto p-6">
@@ -386,71 +340,7 @@ export default function CardDetailPage() {
         </TabsContent>
 
         <TabsContent value="transactions" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Recent Transactions</CardTitle>
-                  <CardDescription>View and categorise your card transactions</CardDescription>
-                </div>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={loadTransactions} disabled={loadingTxns}>Refresh</Button>
-                  <Button variant="ghost" size="sm" asChild>
-                    <Link href={`/cards/${cardId}/transactions`}>Open Full View</Link>
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {!pat || !storage.getSelectedBudget().id ? (
-                <div className="text-center py-12 text-muted-foreground">
-                  <Calendar className="h-12 w-12 mx-auto mb-4" />
-                  <p className="text-lg mb-2">YNAB not configured</p>
-                  <p>Connect to YNAB to see your transactions</p>
-                  <Button variant="outline" className="mt-4" asChild>
-                    <Link href="/settings">Configure YNAB Connection</Link>
-                  </Button>
-                </div>
-              ) : loadingTxns && transactions.length === 0 ? (
-                <div className="flex items-center justify-center py-12 text-muted-foreground">
-                  <Calendar className="h-6 w-6 mr-2" /> Loading transactions...
-                </div>
-              ) : errorTxns ? (
-                <div className="text-center py-12 text-red-500">{errorTxns}</div>
-              ) : transactions.filter(t => t.amount < 0).length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground">
-                  <Calendar className="h-8 w-8 mx-auto mb-3" />
-                  <p>No spending transactions found in the last {TRANSACTION_LOOKBACK_DAYS} days.</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {transactions
-                    .filter(t => t.amount < 0)
-                    .slice(0, 25)
-                    .map(txn => (
-                    <div key={txn.id} className="flex items-center justify-between p-3 border rounded-md">
-                      <div>
-                        <div className="flex items-center gap-3">
-                          <span className="font-medium">{txn.payee_name}</span>
-                          {txn.flag_color && (
-                            <Badge variant="outline" className="text-xs">{txn.flag_name || txn.flag_color}</Badge>
-                          )}
-                          <span className="text-xs text-muted-foreground">{new Date(txn.date).toLocaleDateString()}</span>
-                        </div>
-                        <div className="text-sm text-muted-foreground mt-1">
-                          YNAB: {txn.category_name || 'Uncategorised'} • Reward: {txn.rewardCategory || 'None'}
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-mono">${Math.abs(txn.amount/1000).toFixed(2)}</div>
-                        {txn.rewardCategory && <Badge variant="secondary" className="mt-1">Eligible</Badge>}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <TransactionsPreview cardId={cardId} ynabAccountId={card.ynabAccountId} />
         </TabsContent>
       </Tabs>
     </div>
