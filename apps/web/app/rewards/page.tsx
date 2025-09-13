@@ -20,6 +20,7 @@ import {
   Settings
 } from 'lucide-react';
 import { RewardsCalculator, RecommendationEngine } from '@/lib/rewards-engine';
+import type { CategoryRecommendation } from '@/lib/rewards-engine';
 import { computeCurrentPeriod } from '@/lib/rewards-engine/compute';
 import { storage } from '@/lib/storage';
 import type { RewardCalculation, CategoryBreakdown } from '@/lib/storage';
@@ -35,6 +36,7 @@ export default function RewardsDashboardPage() {
   const [totalRewardsEarned, setTotalRewardsEarned] = useState(0);
   const [currentPeriodSpend, setCurrentPeriodSpend] = useState(0);
   const [alerts, setAlerts] = useState<any[]>([]);
+  const [categoryRecs, setCategoryRecs] = useState<CategoryRecommendation[]>([]);
 
   const activeCards = cards.filter(card => card.active);
   const activeRules = rules.filter(rule => rule.active);
@@ -61,7 +63,17 @@ export default function RewardsDashboardPage() {
     // Generate alerts
     const cardAlerts = RecommendationEngine.generateAlerts(activeCards, currentMonthCalcs);
     setAlerts(cardAlerts);
-  }, [calculations, activeCards]);
+    
+    // Category recommendations using settings valuations
+    const settings = storage.getSettings();
+    const recs = RecommendationEngine.generateCategoryRecommendations(
+      activeCards,
+      rules,
+      currentMonthCalcs,
+      settings
+    );
+    setCategoryRecs(recs);
+  }, [calculations, activeCards, rules]);
 
   const hasData = activeCards.length > 0 && activeRules.length > 0;
 
@@ -296,18 +308,32 @@ export default function RewardsDashboardPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Category Breakdown</CardTitle>
-            <CardDescription>Top spending categories this period</CardDescription>
+            <CardTitle>Category Recommendations</CardTitle>
+            <CardDescription>Best card by category using normalised dollars</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {/* Placeholder for category breakdown */}
+            {categoryRecs.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <TrendingUp className="h-8 w-8 mx-auto mb-3" />
-                <p>Category analysis coming soon</p>
-                <p className="text-sm">Set up tag mappings to see breakdown</p>
+                <p>No recommendations yet</p>
+                <p className="text-sm">Compute rewards and add tag mappings to see tips</p>
               </div>
-            </div>
+            ) : (
+              <div className="space-y-3">
+                {categoryRecs.map((rec) => (
+                  <div key={`${rec.category}-${rec.bestCardId}`} className="flex items-center justify-between py-2 border-b last:border-b-0">
+                    <div>
+                      <p className="font-medium">{rec.category}</p>
+                      <p className="text-sm text-muted-foreground">{rec.reason}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-medium">{rec.bestCardName}</p>
+                      <p className="text-sm text-muted-foreground">~{rec.expectedReward.toFixed(1)}% effective</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
