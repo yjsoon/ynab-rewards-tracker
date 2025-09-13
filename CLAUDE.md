@@ -1,6 +1,6 @@
 # AGENTS
 
-This repo hosts a client‑side YNAB Rewards Tracker. It analyzes YNAB transactions to track credit‑card rewards with user‑defined rules. No server DB is used; all user data lives in browser localStorage.
+This repo hosts YJAB — YJ's Awards Buddy. It’s a client‑side rewards tracker that analyses YNAB transactions to track credit‑card rewards with user‑defined rules. No server DB is used; all user data lives in browser localStorage.
 
 ## Snapshot
 - App: Next.js 14 (App Router) + TypeScript
