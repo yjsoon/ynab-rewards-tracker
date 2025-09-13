@@ -21,10 +21,10 @@ Updated 12 Sep 2025 — prioritised next steps to align the app with the intende
 - Add Abortable Fetches
   - Use `AbortController` in `app/page.tsx` and `app/cards/[id]/transactions/page.tsx` to prevent state updates after unmount.
 
-- Remove Prisma/DB Artefacts from Web App
-  - Drop `@prisma/client` and `@ynab-counter/db` from `apps/web` deps; delete `apps/web/lib/db.ts` and `apps/web/types/prisma.d.ts`.
-  - Remove `transpilePackages` entries related to DB in `apps/web/next.config.js`.
-  - Keep `packages/db` only as a quarantined future server component (documented), but not referenced by the web app.
+- Remove Prisma/DB Artefacts from Web App — done
+  - Dropped `@prisma/client` and `@ynab-counter/db` from `apps/web` deps; deleted `apps/web/lib/db.ts` and `apps/web/types/prisma.d.ts`.
+  - Removed `transpilePackages` entry for DB in `apps/web/next.config.js`.
+  - `packages/db` remains quarantined for future server use; not referenced by web.
 
 ## P2 — Quality and UX
 - Persist Category Edits in Transactions
