@@ -287,24 +287,7 @@ export default function DashboardPage() {
                   className="group relative overflow-hidden border-2 hover:border-primary/50 transition-all bg-gradient-to-br from-primary/5 via-transparent to-primary/10 flex flex-col"
                 >
                   <CardHeader>
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <CardTitle className="text-lg">{card.name}</CardTitle>
-                        <CardDescription className="mt-1">
-                          {card.type === 'cashback' ? 'Cashback Card' : 
-                           card.type === 'miles' ? 'Miles Card' : 'Reward Card'}
-                        </CardDescription>
-                      </div>
-                      <Badge 
-                        variant={card.active ? 'default' : 'secondary'} 
-                        className={cn(
-                          "shrink-0",
-                          card.active && "bg-primary text-primary-foreground"
-                        )}
-                      >
-                        {card.active ? 'Active' : 'Inactive'}
-                      </Badge>
-                    </div>
+                    <CardTitle className="text-lg">{card.name}</CardTitle>
                   </CardHeader>
                   <CardContent className="flex-1 flex flex-col">
                     <div className="space-y-3 flex-1">
