@@ -95,7 +95,7 @@ export interface StorageData {
     budgets?: any[];
     accounts?: any[];
     transactions?: any[];
-    lastUpdated?: string;
+    lastUpdated?: string; // also used as last computed timestamp for rewards
   };
 }
 
@@ -402,6 +402,25 @@ class StorageService {
   clearCalculations(): void {
     const storage = this.getStorage();
     storage.calculations = [];
+    this.setStorage(storage);
+  }
+
+  // Delete all calculations for a specific period (e.g., '2025-09' or '2025-09-02')
+  deleteCalculationsForPeriod(period: string): void {
+    const storage = this.getStorage();
+    storage.calculations = (storage.calculations || []).filter(c => c.period !== period);
+    this.setStorage(storage);
+  }
+
+  // Last computed timestamp helpers
+  getLastComputedAt(): string | undefined {
+    return this.getStorage().cachedData?.lastUpdated;
+  }
+
+  setLastComputedAt(isoString: string): void {
+    const storage = this.getStorage();
+    storage.cachedData = storage.cachedData || {};
+    storage.cachedData.lastUpdated = isoString;
     this.setStorage(storage);
   }
 

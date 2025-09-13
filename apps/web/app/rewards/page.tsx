@@ -36,6 +36,7 @@ export default function RewardsDashboardPage() {
   const [totalRewardsEarned, setTotalRewardsEarned] = useState(0);
   const [currentPeriodSpend, setCurrentPeriodSpend] = useState(0);
   const [alerts, setAlerts] = useState<any[]>([]);
+  const [lastComputedAt, setLastComputedAt] = useState<string | null>(null);
   const [categoryRecs, setCategoryRecs] = useState<CategoryRecommendation[]>([]);
 
   const activeCards = cards.filter(card => card.active);
@@ -77,6 +78,12 @@ export default function RewardsDashboardPage() {
 
   const hasData = activeCards.length > 0 && activeRules.length > 0;
 
+  // Load last computed timestamp on mount
+  useEffect(() => {
+    const ts = storage.getLastComputedAt();
+    setLastComputedAt(ts || null);
+  }, []);
+
   const handleCompute = useCallback(async () => {
     setComputeMessage('');
     const pat = storage.getPAT();
@@ -106,7 +113,15 @@ export default function RewardsDashboardPage() {
         settings,
         controller.signal
       );
+      // If we computed a period, replace all calcs for that period to avoid stale entries
+      const periodName = calcs[0]?.period;
+      if (periodName) {
+        storage.deleteCalculationsForPeriod(periodName);
+      }
       calcs.forEach(c => saveCalculation(c));
+      const nowIso = new Date().toISOString();
+      storage.setLastComputedAt(nowIso);
+      setLastComputedAt(nowIso);
       setComputeMessage(`Computed ${calcs.length} rule(s) for the current period.`);
     } catch (err) {
       // Swallow aborts quietly
@@ -171,6 +186,9 @@ export default function RewardsDashboardPage() {
         <Alert className="mb-6">
           <AlertDescription>{computeMessage}</AlertDescription>
         </Alert>
+      )}
+      {lastComputedAt && (
+        <p className="text-sm text-muted-foreground mb-4">Last computed: {new Date(lastComputedAt).toLocaleString()}</p>
       )}
 
       {/* Alerts */}
