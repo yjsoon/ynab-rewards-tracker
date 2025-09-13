@@ -41,6 +41,17 @@ export default function RuleForm({ mode, cardName, initialRule, onSubmit, onCanc
     setErrors(prev => ({ ...prev, category: '' }));
   }
 
+  function handleCategoryKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addCategory();
+    } else if (e.key === 'Backspace' && !categoryInput) {
+      // Delete last chip when input empty
+      const last = (form.categories || [])[((form.categories || []).length - 1)];
+      if (last) removeCategory(last);
+    }
+  }
+
   function removeCategory(category: string) {
     setForm(prev => ({
       ...prev,
@@ -229,7 +240,7 @@ export default function RuleForm({ mode, cardName, initialRule, onSubmit, onCanc
               ))}
             </div>
             <div className="flex gap-2">
-              <input className="flex-1 px-3 py-2 border rounded-md text-sm" placeholder="e.g., dining, online" value={categoryInput} onChange={e => setCategoryInput(e.target.value)} />
+              <input className="flex-1 px-3 py-2 border rounded-md text-sm" placeholder="e.g., dining, online" value={categoryInput} onChange={e => setCategoryInput(e.target.value)} onKeyDown={handleCategoryKeyDown} />
               <Button type="button" variant="secondary" onClick={addCategory}>Add Category</Button>
             </div>
             {errors.category && <p className="text-sm text-red-500">{errors.category}</p>}
@@ -312,4 +323,3 @@ export default function RuleForm({ mode, cardName, initialRule, onSubmit, onCanc
     </form>
   );
 }
-
