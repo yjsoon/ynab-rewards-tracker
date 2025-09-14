@@ -10,15 +10,19 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
+import {
   ArrowLeft,
-  Settings,
   CreditCard as CreditCardIcon,
   Target,
   Tag,
   TrendingUp,
   Calendar,
-  Plus
+  Plus,
+  Zap,
+  Receipt,
+  Shield,
+  DollarSign,
+  Percent
 } from 'lucide-react';
 import type { CreditCard } from '@/lib/storage';
 import TransactionsPreview from './TransactionsPreview';
@@ -82,156 +86,132 @@ export default function CardDetailPage() {
   // No-op: child component handles its own data fetching
 
   return (
-    <div className="max-w-6xl mx-auto p-6">
+    <div className="max-w-7xl mx-auto p-6">
       {/* Header */}
-      <div className="flex items-center gap-4 mb-6">
-        <Button variant="ghost" size="sm" asChild>
-          <Link href="/">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Dashboard
-          </Link>
-        </Button>
+      <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" asChild>
+            <Link href="/">
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold">{card.name}</h1>
+            <p className="text-muted-foreground mt-1">
+              {card.type === 'cashback' ? 'Cashback Rewards' : 'Miles Rewards'} •
+              {card.issuer && ` ${card.issuer} • `}
+              {card.active ? 'Active' : 'Inactive'}
+            </p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" asChild>
+            <Link href={`/cards/${cardId}/rules/new`}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Rule
+            </Link>
+          </Button>
+        </div>
       </div>
 
-      {/* Card Overview */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <div className="flex justify-between items-start">
+      {/* Key Metrics */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-2xl">{card.name}</CardTitle>
-                <CardDescription className="text-base mt-2">
-                  {card.type === 'cashback' ? 'Cashback Card' : 'Miles Card'} • 
-                  {card.billingCycle?.type === 'calendar' ? ' Calendar Month' : 
-                   card.billingCycle?.type === 'billing' ? ` Billing Cycle (${card.billingCycle?.dayOfMonth || 1}th)` : ' Calendar Month'}
-                </CardDescription>
+                <p className="text-sm font-medium text-muted-foreground">Active Rules</p>
+                <p className="text-2xl font-bold mt-1">{activeRules.length}</p>
               </div>
-              <Button variant="outline" size="sm" asChild>
-                <Link href={`/cards/${cardId}/settings`}>
-                  <Settings className="h-4 w-4 mr-2" />
-                  Settings
-                </Link>
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Active Rules</p>
-                <p className="text-2xl font-bold">{activeRules.length}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Tag Mappings</p>
-                <p className="text-2xl font-bold">{totalMappings}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Card Type</p>
-                <Badge variant="outline" className="mt-1">
-                  {card.type === 'cashback' ? 'Cashback' : 'Miles'}
-                </Badge>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Status</p>
-                <Badge variant={card.active ? 'default' : 'secondary'} className="mt-1">
-                  {card.active ? 'Active' : 'Inactive'}
-                </Badge>
+              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Zap className="h-5 w-5 text-primary" />
               </div>
             </div>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center">
-              <TrendingUp className="h-5 w-5 mr-2" />
-              Billing Period
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Current Period</p>
-                <p className="font-medium">{periodLabel}</p>
+                <p className="text-sm font-medium text-muted-foreground">Tag Mappings</p>
+                <p className="text-2xl font-bold mt-1">{totalMappings}</p>
               </div>
+              <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                <Tag className="h-5 w-5 text-blue-500" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Period Type</p>
-                <p className="font-medium">
-                  {card.billingCycle?.type === 'billing' ? 'Billing Cycle' : 'Calendar Month'}
+                <p className="text-sm font-medium text-muted-foreground">Reward Type</p>
+                <p className="text-2xl font-bold mt-1">
+                  {card.type === 'cashback' ? (
+                    <span className="flex items-center gap-1">
+                      <Percent className="h-5 w-5" />
+                      <span>Cash</span>
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1">
+                      <TrendingUp className="h-5 w-5" />
+                      <span>Miles</span>
+                    </span>
+                  )}
                 </p>
               </div>
-              {card.billingCycle?.type === 'billing' && (
-                <div>
-                  <p className="text-sm text-muted-foreground">Cycle Day</p>
-                  <p className="font-medium">{card.billingCycle?.dayOfMonth || 1}th of month</p>
-                </div>
-              )}
+              <div className="h-10 w-10 rounded-lg bg-green-500/10 flex items-center justify-center">
+                <DollarSign className="h-5 w-5 text-green-500" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Current Period</p>
+                <p className="text-sm font-semibold mt-1 leading-relaxed">
+                  {periodLabel.split(' - ')[0]}<br />
+                  to {periodLabel.split(' - ')[1]}
+                </p>
+              </div>
+              <div className="h-10 w-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                <Calendar className="h-5 w-5 text-purple-500" />
+              </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
       {/* Tabs for different sections */}
-      <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="transactions">Transactions</TabsTrigger>
+      <Tabs defaultValue="rules" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-2 max-w-md">
           <TabsTrigger value="rules">Rules & Mappings</TabsTrigger>
+          <TabsTrigger value="transactions">Transactions</TabsTrigger>
         </TabsList>
-
-        <TabsContent value="overview" className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Quick Actions */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Quick Actions</CardTitle>
-                <CardDescription>Manage your card settings and rules</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <Button asChild className="w-full justify-start">
-                  <Link href={`/cards/${cardId}/rules/new`}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Reward Rule
-                  </Link>
-                </Button>
-                <Button variant="outline" asChild className="w-full justify-start">
-                  <Link href={`/cards/${cardId}/transactions`}>
-                    <Calendar className="h-4 w-4 mr-2" />
-                    View Transactions
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
-
-            {/* Recent Activity Placeholder */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Recent Activity</CardTitle>
-                <CardDescription>Transaction summary and rewards earned</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-8 text-muted-foreground">
-                  <TrendingUp className="h-8 w-8 mx-auto mb-3" />
-                  <p>Rewards calculation coming soon</p>
-                  <p className="text-sm">Connect transactions to see activity</p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
 
         <TabsContent value="rules" className="space-y-6">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle>Reward Rules</CardTitle>
-                <CardDescription>Configure how rewards are calculated</CardDescription>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-xl">Reward Rules</CardTitle>
+                  <CardDescription className="mt-1">
+                    Define how rewards are calculated for different spending categories
+                  </CardDescription>
+                </div>
+                <Button asChild size="sm">
+                  <Link href={`/cards/${cardId}/rules/new`}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Rule
+                  </Link>
+                </Button>
               </div>
-              <Button asChild>
-                <Link href={`/cards/${cardId}/rules/new`}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Rule
-                </Link>
-              </Button>
             </CardHeader>
             <CardContent>
           {activeRules.length === 0 ? (
@@ -249,64 +229,68 @@ export default function CardDetailPage() {
                   </Button>
                 </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-4">
               {activeRules.map(rule => (
-                <Card key={rule.id}>
-                  <CardHeader>
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <CardTitle className="text-base">{rule.name}</CardTitle>
-                        <CardDescription>
-                          {rule.rewardType === 'cashback' 
-                            ? `${rule.rewardValue}% cashback`
-                            : `${rule.rewardValue}x miles${rule.milesBlockSize ? ` ($${rule.milesBlockSize} blocks)` : ''}`}
-                        </CardDescription>
-                      </div>
-                      <Badge variant={rule.active ? 'default' : 'secondary'}>
+                <div key={rule.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3">
+                      <h4 className="font-semibold">{rule.name}</h4>
+                      <Badge variant={rule.active ? 'default' : 'secondary'} className="text-xs">
                         {rule.active ? 'Active' : 'Inactive'}
                       </Badge>
                     </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2 text-sm">
-                      <div>
-                        <span className="text-muted-foreground">Categories: </span>
-                        {rule.categories.length > 0 ? rule.categories.join(', ') : 'None'}
-                      </div>
-                      {rule.minimumSpend && (
-                        <div>
-                          <span className="text-muted-foreground">Minimum: </span>
-                          ${rule.minimumSpend.toLocaleString()}
-                        </div>
+                    <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
+                      <span className="font-medium text-foreground">
+                        {rule.rewardType === 'cashback'
+                          ? `${rule.rewardValue}% cashback`
+                          : `${rule.rewardValue}x miles${rule.milesBlockSize ? ` per $${rule.milesBlockSize}` : ''}`}
+                      </span>
+                      {rule.categories.length > 0 && (
+                        <>
+                          <span>•</span>
+                          <span>{rule.categories.join(', ')}</span>
+                        </>
                       )}
-                      {rule.maximumSpend && (
-                        <div>
-                          <span className="text-muted-foreground">Maximum: </span>
-                          ${rule.maximumSpend.toLocaleString()}
-                        </div>
+                      {(rule.minimumSpend || rule.maximumSpend) && (
+                        <>
+                          <span>•</span>
+                          <span>
+                            {rule.minimumSpend && `Min: $${rule.minimumSpend.toLocaleString()}`}
+                            {rule.minimumSpend && rule.maximumSpend && ' / '}
+                            {rule.maximumSpend && `Max: $${rule.maximumSpend.toLocaleString()}`}
+                          </span>
+                        </>
                       )}
                     </div>
-                    <div className="mt-4 pt-4 border-t">
-                      <Button variant="outline" size="sm" asChild>
-                        <Link href={`/cards/${cardId}/rules/${rule.id}/edit`}>
-                          Edit Rule
-                        </Link>
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
+                  </div>
+                  <Button variant="ghost" size="sm" asChild>
+                    <Link href={`/cards/${cardId}/rules/${rule.id}/edit`}>
+                      Edit
+                    </Link>
+                  </Button>
+                </div>
               ))}
             </div>
           )}
             </CardContent>
           </Card>
 
-          <TagMappingManager
-            mappings={mappings}
-            onSave={(mapping) => saveMapping({ ...mapping, cardId })}
-            onDelete={deleteMapping}
-            suggestedCategories={rules.flatMap(r => r.categories)}
-          />
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-xl">Tag Mappings</CardTitle>
+              <CardDescription className="mt-1">
+                Map YNAB flags and tags to reward categories
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <TagMappingManager
+                mappings={mappings}
+                onSave={(mapping) => saveMapping({ ...mapping, cardId })}
+                onDelete={deleteMapping}
+                suggestedCategories={rules.flatMap(r => r.categories)}
+              />
+            </CardContent>
+          </Card>
         </TabsContent>
 
 
