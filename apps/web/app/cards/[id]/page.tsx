@@ -36,6 +36,23 @@ export default function CardDetailPage() {
   const [card, setCard] = useState<CreditCard | null>(null);
   // Transactions preview handled in child component
 
+  // Compute current billing period label; call hook before any early returns
+  const periodLabel = useMemo(() => {
+    if (!card) return '';
+    const period = RewardsCalculator.calculatePeriod(card);
+    const start = period.startDate.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+    const end = period.endDate.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+    return `${start} - ${end}`;
+  }, [card]);
+
   useEffect(() => {
     const foundCard = cards.find(c => c.id === cardId);
     if (foundCard) {
@@ -61,21 +78,6 @@ export default function CardDetailPage() {
 
   const activeRules = rules.filter(r => r.active);
   const totalMappings = mappings.length;
-
-  const periodLabel = useMemo(() => {
-    const period = RewardsCalculator.calculatePeriod(card);
-    const start = period.startDate.toLocaleDateString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
-    const end = period.endDate.toLocaleDateString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
-    return `${start} - ${end}`;
-  }, [card]);
 
   // No-op: child component handles its own data fetching
 
