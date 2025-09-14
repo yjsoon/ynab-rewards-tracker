@@ -6,6 +6,7 @@ import { useYnabPAT, useCreditCards } from '@/hooks/useLocalStorage';
 import { YnabClient } from '@/lib/ynab-client';
 import { storage } from '@/lib/storage';
 import { RewardsCalculator } from '@/lib/rewards-engine';
+import { clampDaysLeft } from '@/lib/date';
 import { cn, absFromMilli, formatDollars } from '@/lib/utils';
 import { SetupPrompt } from '@/components/SetupPrompt';
 import { Button } from '@/components/ui/button';
@@ -155,18 +156,14 @@ export default function DashboardPage() {
   const { cashbackCards, milesCards } = useMemo(() => {
     const now = new Date();
 
-    // Helper to calculate days remaining in billing period
     const getDaysRemaining = (card: typeof cards[0]) => {
       const period = RewardsCalculator.calculatePeriod(card);
-      const daysLeft = Math.ceil((period.endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-      return daysLeft;
+      return clampDaysLeft(period, now);
     };
 
-    // Separate by type
     const cashback = cards.filter(c => c.type === 'cashback');
     const miles = cards.filter(c => c.type === 'miles');
 
-    // Sort each by billing period end (soonest first)
     cashback.sort((a, b) => getDaysRemaining(a) - getDaysRemaining(b));
     miles.sort((a, b) => getDaysRemaining(a) - getDaysRemaining(b));
 
@@ -319,7 +316,7 @@ export default function DashboardPage() {
                 {cashbackCards.map((card) => {
                   const period = RewardsCalculator.calculatePeriod(card);
                   const now = new Date();
-                  const daysLeft = Math.ceil((period.endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                  const daysLeft = clampDaysLeft(period, now);
                   const isEndingSoon = daysLeft <= 7;
                   // TODO: Get rules from storage when implementing progress tracking
                   const hasMaxSpend = false; // Placeholder for now
@@ -379,7 +376,7 @@ export default function DashboardPage() {
                                   "font-medium",
                                   isEndingSoon && "text-orange-600 dark:text-orange-400"
                                 )}>
-                                  {Math.max(daysLeft, 0)} days left
+                                  {daysLeft} days left
                                 </span>
                               </div>
                               {card.active ? (
@@ -410,7 +407,7 @@ export default function DashboardPage() {
                 {milesCards.map((card) => {
                   const period = RewardsCalculator.calculatePeriod(card);
                   const now = new Date();
-                  const daysLeft = Math.ceil((period.endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                  const daysLeft = clampDaysLeft(period, now);
                   const isEndingSoon = daysLeft <= 7;
                   // TODO: Get rules from storage when implementing progress tracking
                   const hasMaxSpend = false; // Placeholder for now
@@ -470,7 +467,7 @@ export default function DashboardPage() {
                                   "font-medium",
                                   isEndingSoon && "text-orange-600 dark:text-orange-400"
                                 )}>
-                                  {Math.max(daysLeft, 0)} days left
+                                  {daysLeft} days left
                                 </span>
                               </div>
                               {card.active ? (

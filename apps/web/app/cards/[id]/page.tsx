@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useCreditCards, useRewardRules, useTagMappings, useYnabPAT } from '@/hooks/useLocalStorage';
 import { TagMappingManager } from '@/components/TagMappingManager';
 import { RewardsCalculator } from '@/lib/rewards-engine';
-import { formatPeriodRange } from '@/lib/date';
+import { formatPeriodRangeParts } from '@/lib/date';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -42,9 +42,9 @@ export default function CardDetailPage() {
   // Transactions preview handled in child component
 
   // Compute current billing period label; call hook before any early returns
-  const periodLabel = useMemo(() => {
-    if (!card) return '';
-    return formatPeriodRange(RewardsCalculator.calculatePeriod(card));
+  const periodParts = useMemo(() => {
+    if (!card) return { start: '', end: '' };
+    return formatPeriodRangeParts(RewardsCalculator.calculatePeriod(card));
   }, [card]);
 
   useEffect(() => {
@@ -166,8 +166,8 @@ export default function CardDetailPage() {
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Current Period</p>
                 <p className="text-sm font-semibold mt-1 leading-relaxed">
-                  {periodLabel.split(' - ')[0]}<br />
-                  to {periodLabel.split(' - ')[1]}
+                  {periodParts.start}<br />
+                  to {periodParts.end}
                 </p>
               </div>
               <div className="h-10 w-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
