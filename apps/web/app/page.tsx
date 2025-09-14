@@ -292,7 +292,7 @@ export default function DashboardPage() {
                   </CardHeader>
                   <CardContent className="flex-1 flex flex-col">
                     <div className="space-y-3 flex-1">
-                      {/* Billing period display */
+                      {/* Billing period display */}
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Billing Period:</span>
                         <span className="font-medium">
