@@ -6,6 +6,7 @@ import { useYnabPAT, useCreditCards } from '@/hooks/useLocalStorage';
 import { YnabClient } from '@/lib/ynab-client';
 import { storage } from '@/lib/storage';
 import { RewardsCalculator } from '@/lib/rewards-engine';
+import { clampDaysLeft } from '@/lib/date';
 import { cn, absFromMilli, formatDollars } from '@/lib/utils';
 import { SetupPrompt } from '@/components/SetupPrompt';
 import { Button } from '@/components/ui/button';
@@ -13,18 +14,19 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { 
-  CheckCircle2, 
-  XCircle, 
-  Circle, 
-  Wallet, 
-  CreditCard, 
-  TrendingUp, 
+import {
+  CheckCircle2,
+  XCircle,
+  Circle,
+  Wallet,
+  CreditCard,
+  TrendingUp,
   Calendar,
   ArrowRight,
   AlertCircle,
   Loader2,
-  Construction
+  Percent,
+  Clock
 } from 'lucide-react';
 import type { Transaction } from '@/types/transaction';
 
@@ -97,7 +99,7 @@ export default function DashboardPage() {
   useEffect(() => {
     // Check if we should show setup prompt (only on client side)
     if (typeof window !== 'undefined') {
-      const hasSeenSetup = localStorage.getItem('hasSeenSetupPrompt');
+      const hasSeenSetup = storage.getHasSeenSetupPrompt();
       if (!pat && !hasSeenSetup) {
         setShowSetupPrompt(true);
       }
@@ -122,7 +124,7 @@ export default function DashboardPage() {
 
   const handleDismissSetup = () => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('hasSeenSetupPrompt', 'true');
+      storage.setHasSeenSetupPrompt(true);
     }
     setShowSetupPrompt(false);
   };
@@ -145,10 +147,28 @@ export default function DashboardPage() {
     [setupStatus]
   );
 
-  const setupPercentage = useMemo(() => 
+  const setupPercentage = useMemo(() =>
     (setupProgress / 4) * 100,
     [setupProgress]
   );
+
+  // Group and sort cards
+  const { cashbackCards, milesCards } = useMemo(() => {
+    const now = new Date();
+
+    const getDaysRemaining = (card: typeof cards[0]) => {
+      const period = RewardsCalculator.calculatePeriod(card);
+      return clampDaysLeft(period, now);
+    };
+
+    const cashback = cards.filter(c => c.type === 'cashback');
+    const miles = cards.filter(c => c.type === 'miles');
+
+    cashback.sort((a, b) => getDaysRemaining(a) - getDaysRemaining(b));
+    miles.sort((a, b) => getDaysRemaining(a) - getDaysRemaining(b));
+
+    return { cashbackCards: cashback, milesCards: miles };
+  }, [cards]);
 
   // Empty state when nothing is configured
   if (!pat) {
@@ -259,15 +279,15 @@ export default function DashboardPage() {
       )}
 
       {/* Cards Overview */}
-      <Card className="mb-8">
-        <CardHeader>
-          <CardTitle>Your Reward Cards</CardTitle>
-          <CardDescription>
-            Manage your credit cards and their reward rules
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {cards.length === 0 ? (
+      {cards.length === 0 ? (
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle>Your Reward Cards</CardTitle>
+            <CardDescription>
+              Manage your credit cards and their reward rules
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
             <div className="text-center py-8">
               <CreditCard className="h-12 w-12 text-muted-foreground mx-auto mb-4" aria-hidden="true" />
               <p className="text-lg mb-4 text-muted-foreground">
@@ -280,49 +300,193 @@ export default function DashboardPage() {
                 </Link>
               </Button>
             </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {cards.map((card) => (
-                <Card 
-                  key={card.id} 
-                  className="group relative overflow-hidden border-2 hover:border-primary/50 transition-all bg-gradient-to-br from-primary/5 via-transparent to-primary/10 flex flex-col"
-                >
-                  <CardHeader>
-                    <CardTitle className="text-lg">{card.name}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="flex-1 flex flex-col">
-                    <div className="space-y-3 flex-1">
-                      {/* Billing period display */
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Billing Period:</span>
-                        <span className="font-medium">
-                          {(() => {
-                            const period = RewardsCalculator.calculatePeriod(card);
-                            const start = period.startDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-                            const end = period.endDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-                            return `${start} - ${end}`;
-                          })()}
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Rewards Earned:</span>
-                        <span className="font-medium">Coming Soon</span>
-                      </div>
-                    </div>
-                    <div className="pt-3 mt-auto">
-                      <Button variant="ghost" size="icon" asChild className="w-full hover:bg-primary/10">
-                        <Link href={`/cards/${card.id}`}>
-                          <ArrowRight className="h-5 w-5" />
-                        </Link>
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-8 mb-8">
+          {/* Cashback Cards */}
+          {cashbackCards.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 mb-4">
+                <Percent className="h-5 w-5 text-green-600" aria-hidden="true" />
+                <h2 className="text-xl font-semibold">Cashback Cards</h2>
+                <Badge variant="secondary">{cashbackCards.length}</Badge>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {cashbackCards.map((card) => {
+                  const period = RewardsCalculator.calculatePeriod(card);
+                  const now = new Date();
+                  const daysLeft = clampDaysLeft(period, now);
+                  const isEndingSoon = daysLeft <= 7;
+                  // TODO: Get rules from storage when implementing progress tracking
+                  const hasMaxSpend = false; // Placeholder for now
+
+                  return (
+                    <Link
+                      key={card.id}
+                      href={`/cards/${card.id}`}
+                      className="block group"
+                    >
+                      <Card className={cn(
+                        "relative overflow-hidden border-2 transition-all flex flex-col h-full cursor-pointer hover:shadow-lg",
+                        isEndingSoon ? "border-orange-200 dark:border-orange-900" : "hover:border-primary/50",
+                        "bg-gradient-to-br from-green-500/5 via-transparent to-green-500/10"
+                      )}>
+                        {/* Card Type Badge */}
+                        <div className="absolute top-3 right-3">
+                          <Badge variant="secondary" className="bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300">
+                            <Percent className="h-3 w-3 mr-1" aria-hidden="true" />
+                            Cash
+                          </Badge>
+                        </div>
+
+                        <CardHeader className="pb-3">
+                          <CardTitle className="text-lg pr-16">{card.name}</CardTitle>
+                        </CardHeader>
+                        <CardContent className="flex-1 flex flex-col">
+                          {/* Rewards Display - Prominent */}
+                          <div className="bg-primary/5 rounded-lg p-3 mb-3">
+                            <div className="text-center">
+                              <p className="text-2xl font-bold text-primary">$0.00</p>
+                              <p className="text-xs text-muted-foreground mt-1">This Period (Coming Soon)</p>
+                            </div>
+                          </div>
+
+                          {/* Progress to Cap (if applicable) */}
+                          {hasMaxSpend && (
+                            <div className="mb-3">
+                              <div className="flex justify-between text-xs mb-1">
+                                <span className="text-muted-foreground">Cap Progress</span>
+                                <span className="font-medium">$0 / $X</span>
+                              </div>
+                              <Progress value={0} className="h-2" />
+                            </div>
+                          )}
+
+                          {/* Period Info with Urgency */}
+                          <div className="mt-auto pt-2 border-t">
+                            <div className="flex items-center justify-between text-sm">
+                              <div className="flex items-center gap-1">
+                                {isEndingSoon ? (
+                                  <Clock className="h-4 w-4 text-orange-500" aria-hidden="true" />
+                                ) : (
+                                  <Calendar className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                                )}
+                                <span className={cn(
+                                  "font-medium",
+                                  isEndingSoon && "text-orange-600 dark:text-orange-400"
+                                )}>
+                                  {daysLeft} days left
+                                </span>
+                              </div>
+                              {card.active ? (
+                                <Badge variant="outline" className="text-xs">Active</Badge>
+                              ) : (
+                                <Badge variant="secondary" className="text-xs">Inactive</Badge>
+                              )}
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </Link>
+                  );
+                })}
+              </div>
             </div>
           )}
-        </CardContent>
-      </Card>
+
+          {/* Miles Cards */}
+          {milesCards.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 mb-4">
+                <TrendingUp className="h-5 w-5 text-blue-600" aria-hidden="true" />
+                <h2 className="text-xl font-semibold">Miles Cards</h2>
+                <Badge variant="secondary">{milesCards.length}</Badge>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {milesCards.map((card) => {
+                  const period = RewardsCalculator.calculatePeriod(card);
+                  const now = new Date();
+                  const daysLeft = clampDaysLeft(period, now);
+                  const isEndingSoon = daysLeft <= 7;
+                  // TODO: Get rules from storage when implementing progress tracking
+                  const hasMaxSpend = false; // Placeholder for now
+
+                  return (
+                    <Link
+                      key={card.id}
+                      href={`/cards/${card.id}`}
+                      className="block group"
+                    >
+                      <Card className={cn(
+                        "relative overflow-hidden border-2 transition-all flex flex-col h-full cursor-pointer hover:shadow-lg",
+                        isEndingSoon ? "border-orange-200 dark:border-orange-900" : "hover:border-primary/50",
+                        "bg-gradient-to-br from-blue-500/5 via-transparent to-blue-500/10"
+                      )}>
+                        {/* Card Type Badge */}
+                        <div className="absolute top-3 right-3">
+                          <Badge variant="secondary" className="bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300">
+                            <TrendingUp className="h-3 w-3 mr-1" aria-hidden="true" />
+                            Miles
+                          </Badge>
+                        </div>
+
+                        <CardHeader className="pb-3">
+                          <CardTitle className="text-lg pr-16">{card.name}</CardTitle>
+                        </CardHeader>
+                        <CardContent className="flex-1 flex flex-col">
+                          {/* Rewards Display - Prominent */}
+                          <div className="bg-primary/5 rounded-lg p-3 mb-3">
+                            <div className="text-center">
+                              <p className="text-2xl font-bold text-primary">0</p>
+                              <p className="text-xs text-muted-foreground mt-1">Miles This Period (Coming Soon)</p>
+                            </div>
+                          </div>
+
+                          {/* Progress to Cap (if applicable) */}
+                          {hasMaxSpend && (
+                            <div className="mb-3">
+                              <div className="flex justify-between text-xs mb-1">
+                                <span className="text-muted-foreground">Cap Progress</span>
+                                <span className="font-medium">$0 / $X</span>
+                              </div>
+                              <Progress value={0} className="h-2" />
+                            </div>
+                          )}
+
+                          {/* Period Info with Urgency */}
+                          <div className="mt-auto pt-2 border-t">
+                            <div className="flex items-center justify-between text-sm">
+                              <div className="flex items-center gap-1">
+                                {isEndingSoon ? (
+                                  <Clock className="h-4 w-4 text-orange-500" aria-hidden="true" />
+                                ) : (
+                                  <Calendar className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                                )}
+                                <span className={cn(
+                                  "font-medium",
+                                  isEndingSoon && "text-orange-600 dark:text-orange-400"
+                                )}>
+                                  {daysLeft} days left
+                                </span>
+                              </div>
+                              {card.active ? (
+                                <Badge variant="outline" className="text-xs">Active</Badge>
+                              ) : (
+                                <Badge variant="secondary" className="text-xs">Inactive</Badge>
+                              )}
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">

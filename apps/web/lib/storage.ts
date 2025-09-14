@@ -100,6 +100,7 @@ export interface StorageData {
 }
 
 const STORAGE_KEY = 'ynab-rewards-tracker';
+const UI_SEEN_SETUP_KEY = 'ynab-rewards-tracker:hasSeenSetupPrompt';
 
 class StorageService {
   private getStorage(): StorageData {
@@ -230,6 +231,29 @@ class StorageService {
       if (process.env.NODE_ENV === 'development') {
         console.error('Failed to set localStorage:', error);
       }
+    }
+  }
+
+  // Lightweight UI flags (kept outside main blob)
+  getHasSeenSetupPrompt(): boolean {
+    if (typeof window === 'undefined') return false;
+    try {
+      return localStorage.getItem(UI_SEEN_SETUP_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  }
+
+  setHasSeenSetupPrompt(seen: boolean): void {
+    if (typeof window === 'undefined') return;
+    try {
+      if (seen) {
+        localStorage.setItem(UI_SEEN_SETUP_KEY, 'true');
+      } else {
+        localStorage.removeItem(UI_SEEN_SETUP_KEY);
+      }
+    } catch {
+      // ignore – non-critical UI hint
     }
   }
 
