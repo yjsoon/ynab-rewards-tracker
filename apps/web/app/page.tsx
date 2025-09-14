@@ -283,41 +283,37 @@ export default function DashboardPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {cards.map((card) => (
-                <Card 
-                  key={card.id} 
-                  className="group relative overflow-hidden border-2 hover:border-primary/50 transition-all bg-gradient-to-br from-primary/5 via-transparent to-primary/10 flex flex-col"
+                <Link
+                  key={card.id}
+                  href={`/cards/${card.id}`}
+                  className="block group"
                 >
-                  <CardHeader>
-                    <CardTitle className="text-lg">{card.name}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="flex-1 flex flex-col">
-                    <div className="space-y-3 flex-1">
-                      {/* Billing period display */}
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Billing Period:</span>
-                        <span className="font-medium">
-                          {(() => {
-                            const period = RewardsCalculator.calculatePeriod(card);
-                            const start = period.startDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-                            const end = period.endDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-                            return `${start} - ${end}`;
-                          })()}
-                        </span>
+                  <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all bg-gradient-to-br from-primary/5 via-transparent to-primary/10 flex flex-col h-full cursor-pointer hover:shadow-lg">
+                    <CardHeader>
+                      <CardTitle className="text-lg">{card.name}</CardTitle>
+                    </CardHeader>
+                    <CardContent className="flex-1 flex flex-col">
+                      <div className="space-y-3 flex-1">
+                        {/* Billing period display */}
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Billing Period:</span>
+                          <span className="font-medium">
+                            {(() => {
+                              const period = RewardsCalculator.calculatePeriod(card);
+                              const start = period.startDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+                              const end = period.endDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+                              return `${start} - ${end}`;
+                            })()}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Rewards Earned:</span>
+                          <span className="font-medium">Coming Soon</span>
+                        </div>
                       </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Rewards Earned:</span>
-                        <span className="font-medium">Coming Soon</span>
-                      </div>
-                    </div>
-                    <div className="pt-3 mt-auto">
-                      <Button variant="ghost" size="icon" asChild className="w-full hover:bg-primary/10">
-                        <Link href={`/cards/${card.id}`}>
-                          <ArrowRight className="h-5 w-5" />
-                        </Link>
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
+                    </CardContent>
+                  </Card>
+                </Link>
               ))}
             </div>
           )}
