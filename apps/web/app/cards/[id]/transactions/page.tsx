@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import type { TransactionWithRewards } from '@/types/transaction';
 import type { CreditCard } from '@/lib/storage';
+import { absFromMilli, formatDollars } from '@/lib/utils';
 
 const TRANSACTION_LOOKBACK_DAYS = 90;
 
@@ -258,7 +259,7 @@ export default function CardTransactionsPage() {
             <strong>{uncategorizedTransactions.length} transactions</strong> need categories assigned.
             <Link href={`/cards/${cardId}/mappings`} className="ml-2 underline">
               Set up tag mappings
-            </Link> to automatically categorize transactions.
+            </Link> to automatically categorise transactions.
           </AlertDescription>
         </Alert>
       )}
@@ -361,7 +362,7 @@ export default function CardTransactionsPage() {
                   
                   <div className="text-right ml-4">
                     <p className="font-mono font-medium">
-                      ${Math.abs(txn.amount / 1000).toFixed(2)}
+                      {formatDollars(absFromMilli(txn.amount))}
                     </p>
                     {txn.rewardCategory && (
                       <Badge 

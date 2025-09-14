@@ -1,3 +1,4 @@
+// Note: This module uses Node's crypto; do not import in client components.
 import { randomBytes, createCipheriv, createDecipheriv } from 'crypto';
 
 const ALGORITHM = 'aes-256-gcm';

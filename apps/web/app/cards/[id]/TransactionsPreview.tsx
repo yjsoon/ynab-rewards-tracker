@@ -11,6 +11,7 @@ import { storage } from '@/lib/storage';
 import { useYnabPAT, useTagMappings } from '@/hooks/useLocalStorage';
 import type { Transaction, TransactionWithRewards } from '@/types/transaction';
 import { TransactionMatcher } from '@/lib/rewards-engine';
+import { absFromMilli, formatDollars } from '@/lib/utils';
 
 interface Props {
   cardId: string;
@@ -196,7 +197,7 @@ export default function TransactionsPreview({ cardId, ynabAccountId }: Props) {
                     )}
                   </div>
                   <div className="text-right">
-                    <div className="font-mono">${Math.abs(txn.amount/1000).toFixed(2)}</div>
+                    <div className="font-mono">{formatDollars(absFromMilli(txn.amount))}</div>
                     {txn.rewardCategory && <Badge variant="secondary" className="mt-1">Eligible</Badge>}
                   </div>
                 </div>

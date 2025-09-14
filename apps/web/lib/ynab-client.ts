@@ -23,8 +23,14 @@ export class YnabClient {
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || error.error || 'YNAB API error');
+      try {
+        const error = await response.json();
+        const message = error?.message || error?.error || JSON.stringify(error);
+        throw new Error(message || 'YNAB API error');
+      } catch {
+        const text = await response.text().catch(() => '');
+        throw new Error(text || 'YNAB API error');
+      }
     }
 
     return response.json();

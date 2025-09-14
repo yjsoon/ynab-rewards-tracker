@@ -6,6 +6,34 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
+ * Convert YNAB milliunits to dollars as number
+ */
+export function fromMilli(amount: number): number {
+  return amount / 1000;
+}
+
+/**
+ * Convert YNAB milliunits to dollars, absolute value (useful for spend)
+ */
+export function absFromMilli(amount: number): number {
+  return Math.abs(amount) / 1000;
+}
+
+/**
+ * Format a dollar amount for display
+ */
+export function formatDollars(value: number): string {
+  return `$${value.toFixed(2)}`;
+}
+
+/**
+ * Format Date to YYYY-MM-DD (local date component)
+ */
+export function isoDate(date: Date): string {
+  return date.toISOString().split('T')[0];
+}
+
+/**
  * Extracts error message from various error types
  * @param error - The error object (can be Error, string, or unknown)
  * @returns A string error message

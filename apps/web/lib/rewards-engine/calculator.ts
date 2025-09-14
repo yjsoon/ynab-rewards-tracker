@@ -11,6 +11,7 @@ import type {
   AppSettings 
 } from '@/lib/storage';
 import type { TransactionWithRewards } from '@/types/transaction';
+import { absFromMilli } from '@/lib/utils';
 
 export interface CalculationPeriod {
   startDate: Date;
@@ -56,7 +57,7 @@ export class RewardsCalculator {
     const categorySpends = new Map<string, number>();
     eligibleTransactions.forEach(txn => {
       const category = txn.rewardCategory!;
-      const amount = Math.abs(txn.amount) / 1000;
+      const amount = absFromMilli(txn.amount);
       categorySpends.set(category, (categorySpends.get(category) || 0) + amount);
     });
 

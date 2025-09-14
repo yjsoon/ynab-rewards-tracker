@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useYnabPAT, useCreditCards } from '@/hooks/useLocalStorage';
 import { YnabClient } from '@/lib/ynab-client';
 import { storage } from '@/lib/storage';
-import { cn } from '@/lib/utils';
+import { cn, absFromMilli, formatDollars } from '@/lib/utils';
 import { SetupPrompt } from '@/components/SetupPrompt';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -402,7 +402,7 @@ export default function DashboardPage() {
                           {txn.category_name || 'Uncategorised'}
                         </td>
                         <td className="p-2 text-sm text-right font-mono">
-                          ${Math.abs(txn.amount / 1000).toFixed(2)}
+                          {formatDollars(absFromMilli(txn.amount))}
                         </td>
                       </tr>
                     ))}

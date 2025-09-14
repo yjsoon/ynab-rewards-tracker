@@ -4,6 +4,7 @@
 
 import type { Transaction, TransactionWithRewards } from '@/types/transaction';
 import type { TagMapping } from '@/lib/storage';
+import { absFromMilli } from '@/lib/utils';
 
 export class TransactionMatcher {
   /**
@@ -13,20 +14,26 @@ export class TransactionMatcher {
     transactions: Transaction[],
     tagMappings: TagMapping[]
   ): TransactionWithRewards[] {
+    // Build an index for O(1) lookups; support case-insensitive name matches
+    const byTag = new Map<string, string>();
+    for (const tm of tagMappings) {
+      if (!tm?.ynabTag) continue;
+      byTag.set(tm.ynabTag, tm.rewardCategory);
+      byTag.set(tm.ynabTag.toLowerCase(), tm.rewardCategory);
+    }
+
     return transactions.map(txn => {
-      // Find matching tag mapping
-      const mapping = tagMappings.find(tm => {
-        // Match by flag color or flag name
-        return (
-          (txn.flag_color && tm.ynabTag === txn.flag_color) ||
-          (txn.flag_name && tm.ynabTag === txn.flag_name)
-        );
-      });
+      const colour = txn.flag_color ?? undefined;
+      const name = txn.flag_name ?? undefined;
+      const rewardCategory =
+        (colour && (byTag.get(colour) || byTag.get(colour.toLowerCase()))) ||
+        (name && (byTag.get(name) || byTag.get(name.toLowerCase()))) ||
+        undefined;
 
       const enrichedTxn: TransactionWithRewards = {
         ...txn,
         eligibleAmount: txn.amount < 0 ? Math.abs(txn.amount) : 0, // Only outflows (negative amounts)
-        rewardCategory: mapping?.rewardCategory,
+        rewardCategory,
         appliedRules: [],
         rewardEarned: 0
       };
@@ -85,9 +92,7 @@ export class TransactionMatcher {
    * Calculate total spending for a group of transactions
    */
   static calculateTotalSpend(transactions: TransactionWithRewards[]): number {
-    return transactions.reduce((total, txn) => {
-      return total + Math.abs(txn.amount);
-    }, 0) / 1000; // Convert from milliunits to dollars
+    return transactions.reduce((total, txn) => total + absFromMilli(txn.amount), 0);
   }
 
   /**
