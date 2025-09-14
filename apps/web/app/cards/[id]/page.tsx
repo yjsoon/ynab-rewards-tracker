@@ -126,7 +126,7 @@ export default function CardDetailPage() {
           <CardHeader>
             <CardTitle className="text-lg flex items-center">
               <TrendingUp className="h-5 w-5 mr-2" />
-              Current Period
+              Billing Period
             </CardTitle>
           </CardHeader>
           <CardContent>

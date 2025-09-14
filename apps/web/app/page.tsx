@@ -293,7 +293,7 @@ export default function DashboardPage() {
                     <div className="space-y-3 flex-1">
                       {/* Placeholder for rewards summary */}
                       <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Current Period:</span>
+                        <span className="text-muted-foreground">Billing Period:</span>
                         <span className="font-medium">Coming Soon</span>
                       </div>
                       <div className="flex justify-between text-sm">

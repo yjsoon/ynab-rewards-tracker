@@ -179,6 +179,10 @@ export default function SettingsPage() {
             type: 'cashback', // Default, user can edit
             active: true,
             ynabAccountId: account.id,
+            billingCycle: {
+              type: 'calendar',
+              dayOfMonth: 1,
+            },
           };
           saveCard(newCard);
         }
@@ -227,6 +231,10 @@ export default function SettingsPage() {
         type: 'cashback',
         active: true,
         ynabAccountId: accountId,
+        billingCycle: {
+          type: 'calendar',
+          dayOfMonth: 1,
+        },
       };
       saveCard(newCard);
     } else {
