@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useCreditCards, useRewardRules, useTagMappings, useYnabPAT } from '@/hooks/useLocalStorage';
 import { TagMappingManager } from '@/components/TagMappingManager';
 import { RewardsCalculator } from '@/lib/rewards-engine';
+import { formatPeriodRange } from '@/lib/date';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -43,18 +44,7 @@ export default function CardDetailPage() {
   // Compute current billing period label; call hook before any early returns
   const periodLabel = useMemo(() => {
     if (!card) return '';
-    const period = RewardsCalculator.calculatePeriod(card);
-    const start = period.startDate.toLocaleDateString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
-    const end = period.endDate.toLocaleDateString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
-    return `${start} - ${end}`;
+    return formatPeriodRange(RewardsCalculator.calculatePeriod(card));
   }, [card]);
 
   useEffect(() => {
@@ -72,7 +62,7 @@ export default function CardDetailPage() {
       <div className="max-w-4xl mx-auto p-6">
         <div className="flex items-center justify-center min-h-[200px]">
           <div className="text-center">
-            <CreditCardIcon className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <CreditCardIcon className="h-12 w-12 text-muted-foreground mx-auto mb-4" aria-hidden="true" />
             <p className="text-lg text-muted-foreground">Loading card details...</p>
           </div>
         </div>
@@ -91,8 +81,8 @@ export default function CardDetailPage() {
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" asChild>
-            <Link href="/">
-              <ArrowLeft className="h-5 w-5" />
+            <Link href="/" aria-label="Back to dashboard">
+              <ArrowLeft className="h-5 w-5" aria-hidden="true" />
             </Link>
           </Button>
           <div>
@@ -107,7 +97,7 @@ export default function CardDetailPage() {
         <div className="flex gap-2">
           <Button variant="outline" asChild>
             <Link href={`/cards/${cardId}/rules/new`}>
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className="h-4 w-4 mr-2" aria-hidden="true" />
               Add Rule
             </Link>
           </Button>
@@ -124,7 +114,7 @@ export default function CardDetailPage() {
                 <p className="text-2xl font-bold mt-1">{activeRules.length}</p>
               </div>
               <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Zap className="h-5 w-5 text-primary" />
+                <Zap className="h-5 w-5 text-primary" aria-hidden="true" />
               </div>
             </div>
           </CardContent>
@@ -138,7 +128,7 @@ export default function CardDetailPage() {
                 <p className="text-2xl font-bold mt-1">{totalMappings}</p>
               </div>
               <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                <Tag className="h-5 w-5 text-blue-500" />
+                <Tag className="h-5 w-5 text-blue-500" aria-hidden="true" />
               </div>
             </div>
           </CardContent>
@@ -152,19 +142,19 @@ export default function CardDetailPage() {
                 <p className="text-2xl font-bold mt-1">
                   {card.type === 'cashback' ? (
                     <span className="flex items-center gap-1">
-                      <Percent className="h-5 w-5" />
+                      <Percent className="h-5 w-5" aria-hidden="true" />
                       <span>Cash</span>
                     </span>
                   ) : (
                     <span className="flex items-center gap-1">
-                      <TrendingUp className="h-5 w-5" />
+                      <TrendingUp className="h-5 w-5" aria-hidden="true" />
                       <span>Miles</span>
                     </span>
                   )}
                 </p>
               </div>
               <div className="h-10 w-10 rounded-lg bg-green-500/10 flex items-center justify-center">
-                <DollarSign className="h-5 w-5 text-green-500" />
+                <DollarSign className="h-5 w-5 text-green-500" aria-hidden="true" />
               </div>
             </div>
           </CardContent>
@@ -181,7 +171,7 @@ export default function CardDetailPage() {
                 </p>
               </div>
               <div className="h-10 w-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
-                <Calendar className="h-5 w-5 text-purple-500" />
+                <Calendar className="h-5 w-5 text-purple-500" aria-hidden="true" />
               </div>
             </div>
           </CardContent>
@@ -207,7 +197,7 @@ export default function CardDetailPage() {
                 </div>
                 <Button asChild size="sm">
                   <Link href={`/cards/${cardId}/rules/new`}>
-                    <Plus className="h-4 w-4 mr-2" />
+                    <Plus className="h-4 w-4 mr-2" aria-hidden="true" />
                     Add Rule
                   </Link>
                 </Button>
@@ -216,14 +206,14 @@ export default function CardDetailPage() {
             <CardContent>
           {activeRules.length === 0 ? (
                 <div className="text-center py-12">
-                  <Target className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <Target className="h-12 w-12 text-muted-foreground mx-auto mb-4" aria-hidden="true" />
                   <h3 className="text-lg font-semibold mb-2">No Reward Rules</h3>
                   <p className="text-muted-foreground mb-6">
                     Create reward rules to start calculating your earnings
                   </p>
                   <Button asChild>
                     <Link href={`/cards/${cardId}/rules/new`}>
-                      <Plus className="h-4 w-4 mr-2" />
+                      <Plus className="h-4 w-4 mr-2" aria-hidden="true" />
                       Create Your First Rule
                     </Link>
                   </Button>

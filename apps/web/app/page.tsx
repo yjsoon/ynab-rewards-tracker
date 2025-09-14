@@ -24,11 +24,8 @@ import {
   ArrowRight,
   AlertCircle,
   Loader2,
-  Construction,
-  DollarSign,
   Percent,
-  Clock,
-  Zap
+  Clock
 } from 'lucide-react';
 import type { Transaction } from '@/types/transaction';
 
@@ -101,7 +98,7 @@ export default function DashboardPage() {
   useEffect(() => {
     // Check if we should show setup prompt (only on client side)
     if (typeof window !== 'undefined') {
-      const hasSeenSetup = localStorage.getItem('hasSeenSetupPrompt');
+      const hasSeenSetup = storage.getHasSeenSetupPrompt();
       if (!pat && !hasSeenSetup) {
         setShowSetupPrompt(true);
       }
@@ -126,7 +123,7 @@ export default function DashboardPage() {
 
   const handleDismissSetup = () => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('hasSeenSetupPrompt', 'true');
+      storage.setHasSeenSetupPrompt(true);
     }
     setShowSetupPrompt(false);
   };
@@ -314,7 +311,7 @@ export default function DashboardPage() {
           {cashbackCards.length > 0 && (
             <div>
               <div className="flex items-center gap-2 mb-4">
-                <Percent className="h-5 w-5 text-green-600" />
+                <Percent className="h-5 w-5 text-green-600" aria-hidden="true" />
                 <h2 className="text-xl font-semibold">Cashback Cards</h2>
                 <Badge variant="secondary">{cashbackCards.length}</Badge>
               </div>
@@ -341,7 +338,7 @@ export default function DashboardPage() {
                         {/* Card Type Badge */}
                         <div className="absolute top-3 right-3">
                           <Badge variant="secondary" className="bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300">
-                            <Percent className="h-3 w-3 mr-1" />
+                            <Percent className="h-3 w-3 mr-1" aria-hidden="true" />
                             Cash
                           </Badge>
                         </div>
@@ -374,15 +371,15 @@ export default function DashboardPage() {
                             <div className="flex items-center justify-between text-sm">
                               <div className="flex items-center gap-1">
                                 {isEndingSoon ? (
-                                  <Clock className="h-4 w-4 text-orange-500" />
+                                  <Clock className="h-4 w-4 text-orange-500" aria-hidden="true" />
                                 ) : (
-                                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                                  <Calendar className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                                 )}
                                 <span className={cn(
                                   "font-medium",
                                   isEndingSoon && "text-orange-600 dark:text-orange-400"
                                 )}>
-                                  {daysLeft} days left
+                                  {Math.max(daysLeft, 0)} days left
                                 </span>
                               </div>
                               {card.active ? (
@@ -405,7 +402,7 @@ export default function DashboardPage() {
           {milesCards.length > 0 && (
             <div>
               <div className="flex items-center gap-2 mb-4">
-                <TrendingUp className="h-5 w-5 text-blue-600" />
+                <TrendingUp className="h-5 w-5 text-blue-600" aria-hidden="true" />
                 <h2 className="text-xl font-semibold">Miles Cards</h2>
                 <Badge variant="secondary">{milesCards.length}</Badge>
               </div>
@@ -432,7 +429,7 @@ export default function DashboardPage() {
                         {/* Card Type Badge */}
                         <div className="absolute top-3 right-3">
                           <Badge variant="secondary" className="bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300">
-                            <TrendingUp className="h-3 w-3 mr-1" />
+                            <TrendingUp className="h-3 w-3 mr-1" aria-hidden="true" />
                             Miles
                           </Badge>
                         </div>
@@ -465,15 +462,15 @@ export default function DashboardPage() {
                             <div className="flex items-center justify-between text-sm">
                               <div className="flex items-center gap-1">
                                 {isEndingSoon ? (
-                                  <Clock className="h-4 w-4 text-orange-500" />
+                                  <Clock className="h-4 w-4 text-orange-500" aria-hidden="true" />
                                 ) : (
-                                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                                  <Calendar className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                                 )}
                                 <span className={cn(
                                   "font-medium",
                                   isEndingSoon && "text-orange-600 dark:text-orange-400"
                                 )}>
-                                  {daysLeft} days left
+                                  {Math.max(daysLeft, 0)} days left
                                 </span>
                               </div>
                               {card.active ? (
