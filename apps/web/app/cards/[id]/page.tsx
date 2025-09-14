@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useCreditCards, useRewardRules, useTagMappings, useYnabPAT } from '@/hooks/useLocalStorage';
 import { TagMappingManager } from '@/components/TagMappingManager';
+import { RewardsCalculator } from '@/lib/rewards-engine';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -60,6 +61,21 @@ export default function CardDetailPage() {
 
   const activeRules = rules.filter(r => r.active);
   const totalMappings = mappings.length;
+
+  const periodLabel = useMemo(() => {
+    const period = RewardsCalculator.calculatePeriod(card);
+    const start = period.startDate.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+    const end = period.endDate.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+    return `${start} - ${end}`;
+  }, [card]);
 
   // No-op: child component handles its own data fetching
 
@@ -131,6 +147,10 @@ export default function CardDetailPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
+              <div>
+                <p className="text-sm text-muted-foreground">Current Period</p>
+                <p className="font-medium">{periodLabel}</p>
+              </div>
               <div>
                 <p className="text-sm text-muted-foreground">Period Type</p>
                 <p className="font-medium">

@@ -189,6 +189,8 @@ class StorageService {
               delete (data.settings as any).pointsValuation;
             }
           }
+
+          // Note: billingCycle defaulting handled earlier when reading cards
         } catch {}
 
         return data;

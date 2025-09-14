@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useYnabPAT, useCreditCards } from '@/hooks/useLocalStorage';
 import { YnabClient } from '@/lib/ynab-client';
 import { storage } from '@/lib/storage';
+import { RewardsCalculator } from '@/lib/rewards-engine';
 import { cn, absFromMilli, formatDollars } from '@/lib/utils';
 import { SetupPrompt } from '@/components/SetupPrompt';
 import { Button } from '@/components/ui/button';
@@ -291,10 +292,17 @@ export default function DashboardPage() {
                   </CardHeader>
                   <CardContent className="flex-1 flex flex-col">
                     <div className="space-y-3 flex-1">
-                      {/* Placeholder for rewards summary */}
+                      {/* Billing period display */
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Billing Period:</span>
-                        <span className="font-medium">Coming Soon</span>
+                        <span className="font-medium">
+                          {(() => {
+                            const period = RewardsCalculator.calculatePeriod(card);
+                            const start = period.startDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+                            const end = period.endDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+                            return `${start} - ${end}`;
+                          })()}
+                        </span>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Rewards Earned:</span>
