@@ -4,6 +4,11 @@ import { useState, useEffect, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useCreditCards, useRewardRules, useTagMappings, useYnabPAT } from '@/hooks/useLocalStorage';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { TagMappingManager } from '@/components/TagMappingManager';
 import { RewardsCalculator } from '@/lib/rewards-engine';
 import { formatPeriodRangeParts } from '@/lib/date';
@@ -27,6 +32,8 @@ import {
 } from 'lucide-react';
 import type { CreditCard } from '@/lib/storage';
 import TransactionsPreview from './TransactionsPreview';
+import SpendingStatus from './SpendingStatus';
+import CardSettings from './CardSettings';
 
 export default function CardDetailPage() {
   const params = useParams();
@@ -104,86 +111,27 @@ export default function CardDetailPage() {
         </div>
       </div>
 
-      {/* Key Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Active Rules</p>
-                <p className="text-2xl font-bold mt-1">{activeRules.length}</p>
-              </div>
-              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Zap className="h-5 w-5 text-primary" aria-hidden="true" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Primary Spending Status - Most Important */}
+      {pat && (
+        <SpendingStatus
+          card={card}
+          rules={rules}
+          mappings={mappings}
+          pat={pat}
+        />
+      )}
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Tag Mappings</p>
-                <p className="text-2xl font-bold mt-1">{totalMappings}</p>
-              </div>
-              <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                <Tag className="h-5 w-5 text-blue-500" aria-hidden="true" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Reward Type</p>
-                <p className="text-2xl font-bold mt-1">
-                  {card.type === 'cashback' ? (
-                    <span className="flex items-center gap-1">
-                      <Percent className="h-5 w-5" aria-hidden="true" />
-                      <span>Cash</span>
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-1">
-                      <TrendingUp className="h-5 w-5" aria-hidden="true" />
-                      <span>Miles</span>
-                    </span>
-                  )}
-                </p>
-              </div>
-              <div className="h-10 w-10 rounded-lg bg-green-500/10 flex items-center justify-center">
-                <DollarSign className="h-5 w-5 text-green-500" aria-hidden="true" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Current Period</p>
-                <p className="text-sm font-semibold mt-1 leading-relaxed">
-                  {periodParts.start}<br />
-                  to {periodParts.end}
-                </p>
-              </div>
-              <div className="h-10 w-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
-                <Calendar className="h-5 w-5 text-purple-500" aria-hidden="true" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Tabs for different sections */}
-      <Tabs defaultValue="rules" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2 max-w-md">
-          <TabsTrigger value="rules">Rules & Mappings</TabsTrigger>
+      {/* Secondary content in tabs */}
+      <Tabs defaultValue="transactions" className="space-y-6 mt-8">
+        <TabsList className="grid w-full grid-cols-3 max-w-lg">
           <TabsTrigger value="transactions">Transactions</TabsTrigger>
+          <TabsTrigger value="rules">Rules</TabsTrigger>
+          <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="transactions" className="space-y-6">
+          <TransactionsPreview cardId={cardId} ynabAccountId={card.ynabAccountId} />
+        </TabsContent>
 
         <TabsContent value="rules" className="space-y-6">
           <Card>
@@ -283,9 +231,8 @@ export default function CardDetailPage() {
           </Card>
         </TabsContent>
 
-
-        <TabsContent value="transactions" className="space-y-6">
-          <TransactionsPreview cardId={cardId} ynabAccountId={card.ynabAccountId} />
+        <TabsContent value="settings" className="space-y-6">
+          <CardSettings card={card} onUpdate={(updatedCard) => setCard(updatedCard)} />
         </TabsContent>
       </Tabs>
     </div>

@@ -50,7 +50,12 @@ export function useCreditCards() {
     loadCards();
   }, [loadCards]);
 
-  return { cards, saveCard, deleteCard, isLoading };
+  const updateCard = useCallback((card: CreditCard) => {
+    storage.saveCard(card);
+    loadCards();
+  }, [loadCards]);
+
+  return { cards, saveCard, updateCard, deleteCard, isLoading };
 }
 
 export function useRewardRules(cardId?: string) {

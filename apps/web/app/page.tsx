@@ -9,6 +9,7 @@ import { RewardsCalculator } from '@/lib/rewards-engine';
 import { clampDaysLeft } from '@/lib/date';
 import { cn, absFromMilli, formatDollars } from '@/lib/utils';
 import { SetupPrompt } from '@/components/SetupPrompt';
+import { CardSpendingSummary } from '@/components/CardSpendingSummary';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
@@ -26,7 +27,8 @@ import {
   AlertCircle,
   Loader2,
   Percent,
-  Clock
+  Clock,
+  Settings2
 } from 'lucide-react';
 import type { Transaction } from '@/types/transaction';
 
@@ -175,9 +177,7 @@ export default function DashboardPage() {
     return (
       <div className="max-w-6xl mx-auto p-6">
         {showSetupPrompt && <SetupPrompt onDismiss={handleDismissSetup} />}
-        
-        <h1 className="text-3xl font-bold mb-8">Dashboard</h1>
-        
+
         <Card className="text-center p-12">
           <div className="mb-6">
             <Wallet className="h-16 w-16 text-muted-foreground mx-auto mb-4" aria-hidden="true" />
@@ -222,8 +222,6 @@ export default function DashboardPage() {
 
   return (
     <div className="max-w-6xl mx-auto p-6">
-      <h1 className="text-3xl font-bold mb-8">Dashboard</h1>
-
       {/* Setup Progress */}
       {!isFullyConfigured && (
         <Alert className="mb-6">
@@ -332,36 +330,33 @@ export default function DashboardPage() {
                         isEndingSoon ? "border-orange-200 dark:border-orange-900" : "hover:border-primary/50",
                         "bg-gradient-to-br from-green-500/5 via-transparent to-green-500/10"
                       )}>
-                        {/* Card Type Badge */}
-                        <div className="absolute top-3 right-3">
-                          <Badge variant="secondary" className="bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300">
-                            <Percent className="h-3 w-3 mr-1" aria-hidden="true" />
-                            Cash
-                          </Badge>
+                        {/* Edit Button */}
+                        <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              window.location.href = `/cards/${card.id}`;
+                            }}
+                            aria-label="Edit card"
+                          >
+                            <Settings2 className="h-4 w-4" />
+                          </Button>
                         </div>
 
                         <CardHeader className="pb-3">
-                          <CardTitle className="text-lg pr-16">{card.name}</CardTitle>
+                          <div>
+                            <CardTitle className="text-lg pr-12">{card.name}</CardTitle>
+                            {card.issuer && (
+                              <p className="text-xs text-muted-foreground mt-1">{card.issuer}</p>
+                            )}
+                          </div>
                         </CardHeader>
                         <CardContent className="flex-1 flex flex-col">
-                          {/* Rewards Display - Prominent */}
-                          <div className="bg-primary/5 rounded-lg p-3 mb-3">
-                            <div className="text-center">
-                              <p className="text-2xl font-bold text-primary">$0.00</p>
-                              <p className="text-xs text-muted-foreground mt-1">This Period (Coming Soon)</p>
-                            </div>
-                          </div>
-
-                          {/* Progress to Cap (if applicable) */}
-                          {hasMaxSpend && (
-                            <div className="mb-3">
-                              <div className="flex justify-between text-xs mb-1">
-                                <span className="text-muted-foreground">Cap Progress</span>
-                                <span className="font-medium">$0 / $X</span>
-                              </div>
-                              <Progress value={0} className="h-2" />
-                            </div>
-                          )}
+                          {/* Spending Summary - Real Data */}
+                          <CardSpendingSummary card={card} pat={pat} />
 
                           {/* Period Info with Urgency */}
                           <div className="mt-auto pt-2 border-t">
@@ -423,36 +418,33 @@ export default function DashboardPage() {
                         isEndingSoon ? "border-orange-200 dark:border-orange-900" : "hover:border-primary/50",
                         "bg-gradient-to-br from-blue-500/5 via-transparent to-blue-500/10"
                       )}>
-                        {/* Card Type Badge */}
-                        <div className="absolute top-3 right-3">
-                          <Badge variant="secondary" className="bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300">
-                            <TrendingUp className="h-3 w-3 mr-1" aria-hidden="true" />
-                            Miles
-                          </Badge>
+                        {/* Edit Button */}
+                        <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              window.location.href = `/cards/${card.id}`;
+                            }}
+                            aria-label="Edit card"
+                          >
+                            <Settings2 className="h-4 w-4" />
+                          </Button>
                         </div>
 
                         <CardHeader className="pb-3">
-                          <CardTitle className="text-lg pr-16">{card.name}</CardTitle>
+                          <div>
+                            <CardTitle className="text-lg pr-12">{card.name}</CardTitle>
+                            {card.issuer && (
+                              <p className="text-xs text-muted-foreground mt-1">{card.issuer}</p>
+                            )}
+                          </div>
                         </CardHeader>
                         <CardContent className="flex-1 flex flex-col">
-                          {/* Rewards Display - Prominent */}
-                          <div className="bg-primary/5 rounded-lg p-3 mb-3">
-                            <div className="text-center">
-                              <p className="text-2xl font-bold text-primary">0</p>
-                              <p className="text-xs text-muted-foreground mt-1">Miles This Period (Coming Soon)</p>
-                            </div>
-                          </div>
-
-                          {/* Progress to Cap (if applicable) */}
-                          {hasMaxSpend && (
-                            <div className="mb-3">
-                              <div className="flex justify-between text-xs mb-1">
-                                <span className="text-muted-foreground">Cap Progress</span>
-                                <span className="font-medium">$0 / $X</span>
-                              </div>
-                              <Progress value={0} className="h-2" />
-                            </div>
-                          )}
+                          {/* Spending Summary - Real Data */}
+                          <CardSpendingSummary card={card} pat={pat} />
 
                           {/* Period Info with Urgency */}
                           <div className="mt-auto pt-2 border-t">
