@@ -122,18 +122,33 @@ export default function CardDetailPage() {
       )}
 
       {/* Secondary content in tabs */}
-      <Tabs defaultValue="transactions" className="space-y-6 mt-8">
-        <TabsList className="grid w-full grid-cols-3 max-w-lg">
-          <TabsTrigger value="transactions">Transactions</TabsTrigger>
-          <TabsTrigger value="rules">Rules</TabsTrigger>
-          <TabsTrigger value="settings">Settings</TabsTrigger>
+      <Tabs defaultValue="transactions" className="mt-8">
+        <TabsList className="grid w-full grid-cols-3 h-12 p-1 bg-muted/50">
+          <TabsTrigger
+            value="transactions"
+            className="data-[state=active]:bg-background data-[state=active]:shadow-md data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground font-medium transition-all"
+          >
+            Transactions
+          </TabsTrigger>
+          <TabsTrigger
+            value="rules"
+            className="data-[state=active]:bg-background data-[state=active]:shadow-md data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground font-medium transition-all"
+          >
+            Rules
+          </TabsTrigger>
+          <TabsTrigger
+            value="settings"
+            className="data-[state=active]:bg-background data-[state=active]:shadow-md data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground font-medium transition-all"
+          >
+            Settings
+          </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="transactions" className="space-y-6">
+        <TabsContent value="transactions" className="mt-6">
           <TransactionsPreview cardId={cardId} ynabAccountId={card.ynabAccountId} />
         </TabsContent>
 
-        <TabsContent value="rules" className="space-y-6">
+        <TabsContent value="rules" className="mt-6 space-y-6">
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -231,7 +246,7 @@ export default function CardDetailPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="settings" className="space-y-6">
+        <TabsContent value="settings" className="mt-6">
           <CardSettings card={card} onUpdate={(updatedCard) => setCard(updatedCard)} />
         </TabsContent>
       </Tabs>
