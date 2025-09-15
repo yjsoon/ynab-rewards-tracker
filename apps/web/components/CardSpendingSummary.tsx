@@ -15,9 +15,12 @@ import type { Transaction, TransactionWithRewards } from '@/types/transaction';
 interface CardSpendingSummaryProps {
   card: CreditCard;
   pat?: string;
+  // Optional: if provided, component will not fetch and will use these
+  // budget-wide transactions (it will filter to this card + period).
+  prefetchedTransactions?: Transaction[];
 }
 
-export function CardSpendingSummary({ card, pat }: CardSpendingSummaryProps) {
+export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardSpendingSummaryProps) {
   const [transactions, setTransactions] = useState<TransactionWithRewards[]>([]);
   const [rules, setRules] = useState<RewardRule[]>([]);
   const [mappings, setMappings] = useState<TagMapping[]>([]);
@@ -34,8 +37,20 @@ export function CardSpendingSummary({ card, pat }: CardSpendingSummaryProps) {
     setMappings(storedMappings);
   }, [card.id]);
 
-  // Load transactions for current period
+  // Use prefetched budget-wide transactions if provided; otherwise fetch
   const loadTransactions = useCallback(async () => {
+    // Use prefetched data path
+    if (prefetchedTransactions && prefetchedTransactions.length >= 0) {
+      const cardTxns = prefetchedTransactions.filter((t: Transaction) =>
+        t.account_id === card.ynabAccountId && new Date(t.date) >= period.startDate && new Date(t.date) <= period.endDate
+      );
+      const enriched = TransactionMatcher.applyTagMappings(cardTxns, mappings);
+      setTransactions(enriched);
+      setLoading(false);
+      return;
+    }
+
+    // Fallback: fetch for this card/period only
     if (!pat || !card.ynabAccountId) {
       setLoading(false);
       return;
@@ -52,12 +67,9 @@ export function CardSpendingSummary({ card, pat }: CardSpendingSummaryProps) {
       const allTxns = await client.getTransactions(budgetId, {
         since_date: period.startDate.toISOString().split('T')[0],
       });
-
       const cardTxns = allTxns.filter((t: Transaction) =>
-        t.account_id === card.ynabAccountId &&
-        new Date(t.date) <= period.endDate
+        t.account_id === card.ynabAccountId && new Date(t.date) <= period.endDate
       );
-
       const enriched = TransactionMatcher.applyTagMappings(cardTxns, mappings);
       setTransactions(enriched);
     } catch (error) {
@@ -65,7 +77,7 @@ export function CardSpendingSummary({ card, pat }: CardSpendingSummaryProps) {
     } finally {
       setLoading(false);
     }
-  }, [pat, card.ynabAccountId, period, mappings]);
+  }, [prefetchedTransactions, pat, card.ynabAccountId, period, mappings]);
 
   useEffect(() => {
     loadTransactions();
@@ -98,7 +110,7 @@ export function CardSpendingSummary({ card, pat }: CardSpendingSummaryProps) {
         settings
       );
 
-      totalRewardsDollars += calculations.rewardEarnedDollars;
+      totalRewardsDollars += calculations.rewardEarnedDollars ?? 0;
 
       if (rule.minimumSpend) {
         hasMinimum = true;

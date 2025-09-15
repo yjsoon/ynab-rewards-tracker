@@ -53,6 +53,7 @@ export default function DashboardPage() {
   const [selectedBudget, setSelectedBudget] = useState<{ id?: string; name?: string }>({});
   const [trackedAccounts, setTrackedAccounts] = useState<string[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [allBudgetTransactions, setAllBudgetTransactions] = useState<Transaction[]>([]);
   const [accountsMap, setAccountsMap] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -79,15 +80,28 @@ export default function DashboardPage() {
       accounts.forEach((acc: any) => accMap.set(acc.id, acc.name));
       setAccountsMap(accMap);
       
-      // Get transactions from the last N days
-      const sinceDate = new Date();
-      sinceDate.setDate(sinceDate.getDate() - TRANSACTION_LOOKBACK_DAYS);
+      // Compute earliest needed window across active cards (for card tiles)
+      const activeCards = cards.filter(c => c.active);
+      const periods = activeCards.map(c => RewardsCalculator.calculatePeriod(c));
+      const earliestStart = periods.length > 0
+        ? new Date(Math.min(...periods.map(p => p.startDate.getTime())))
+        : (() => { const d = new Date(); d.setDate(d.getDate() - TRANSACTION_LOOKBACK_DAYS); return d; })();
+
       const txns = await client.getTransactions(budgetId, {
-        since_date: sinceDate.toISOString().split('T')[0],
+        since_date: earliestStart.toISOString().split('T')[0],
         signal: controller.signal,
       });
-      // Show only the most recent transactions
-      setTransactions(txns.slice(0, RECENT_TRANSACTIONS_LIMIT));
+
+      setAllBudgetTransactions(txns);
+
+      // Derive recent preview from budget-wide fetch (last N days)
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - TRANSACTION_LOOKBACK_DAYS);
+      const recent = txns
+        .filter((t: Transaction) => new Date(t.date) >= cutoff)
+        .sort((a: Transaction, b: Transaction) => new Date(b.date).getTime() - new Date(a.date).getTime())
+        .slice(0, RECENT_TRANSACTIONS_LIMIT);
+      setTransactions(recent);
     } catch (err) {
       if ((err as any)?.name !== 'AbortError') {
         const errorMessage = err instanceof Error ? err.message : String(err);
@@ -96,7 +110,7 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [pat]);
+  }, [pat, cards]);
 
   useEffect(() => {
     // Check if we should show setup prompt (only on client side)
@@ -347,20 +361,15 @@ export default function DashboardPage() {
                         </div>
 
                         <CardHeader className="pb-3">
-                          <div>
-                            <CardTitle className="text-lg pr-12">{card.name}</CardTitle>
-                            {card.issuer && (
-                              <p className="text-xs text-muted-foreground mt-1">{card.issuer}</p>
-                            )}
-                          </div>
+                          <CardTitle className="text-lg pr-12">{card.name}</CardTitle>
                         </CardHeader>
                         <CardContent className="flex-1 flex flex-col">
                           {/* Spending Summary - Real Data */}
-                          <CardSpendingSummary card={card} pat={pat} />
+                          <CardSpendingSummary card={card} pat={pat} prefetchedTransactions={allBudgetTransactions} />
 
                           {/* Period Info with Urgency */}
                           <div className="mt-auto pt-2 border-t">
-                            <div className="flex items-center justify-between text-sm">
+                            <div className="flex items-center text-sm">
                               <div className="flex items-center gap-1">
                                 {isEndingSoon ? (
                                   <Clock className="h-4 w-4 text-orange-500" aria-hidden="true" />
@@ -374,11 +383,6 @@ export default function DashboardPage() {
                                   {daysLeft} days left
                                 </span>
                               </div>
-                              {card.active ? (
-                                <Badge variant="outline" className="text-xs">Active</Badge>
-                              ) : (
-                                <Badge variant="secondary" className="text-xs">Inactive</Badge>
-                              )}
                             </div>
                           </div>
                         </CardContent>
@@ -435,12 +439,7 @@ export default function DashboardPage() {
                         </div>
 
                         <CardHeader className="pb-3">
-                          <div>
-                            <CardTitle className="text-lg pr-12">{card.name}</CardTitle>
-                            {card.issuer && (
-                              <p className="text-xs text-muted-foreground mt-1">{card.issuer}</p>
-                            )}
-                          </div>
+                          <CardTitle className="text-lg pr-12">{card.name}</CardTitle>
                         </CardHeader>
                         <CardContent className="flex-1 flex flex-col">
                           {/* Spending Summary - Real Data */}
@@ -448,7 +447,7 @@ export default function DashboardPage() {
 
                           {/* Period Info with Urgency */}
                           <div className="mt-auto pt-2 border-t">
-                            <div className="flex items-center justify-between text-sm">
+                            <div className="flex items-center text-sm">
                               <div className="flex items-center gap-1">
                                 {isEndingSoon ? (
                                   <Clock className="h-4 w-4 text-orange-500" aria-hidden="true" />
@@ -462,11 +461,6 @@ export default function DashboardPage() {
                                   {daysLeft} days left
                                 </span>
                               </div>
-                              {card.active ? (
-                                <Badge variant="outline" className="text-xs">Active</Badge>
-                              ) : (
-                                <Badge variant="secondary" className="text-xs">Inactive</Badge>
-                              )}
                             </div>
                           </div>
                         </CardContent>
