@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useYnabPAT, useCreditCards, useSettings } from '@/hooks/useLocalStorage';
 import { YnabClient } from '@/lib/ynab-client';
 import { CreditCard, storage } from '@/lib/storage';
-import { sanitizeInput, validateYnabToken, validateCardName, validateIssuer } from '@/lib/validation';
+import { sanitizeInput, validateYnabToken, validateCardName } from '@/lib/validation';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -619,17 +619,6 @@ export default function SettingsPage() {
                       value={cardForm.name}
                       onChange={(e) => setCardForm({ ...cardForm, name: e.target.value })}
                       required
-                      className="w-full px-3 py-2 border rounded-md mt-1"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium">Issuer</label>
-                    <input
-                      type="text"
-                      value={cardForm.issuer}
-                      onChange={(e) => setCardForm({ ...cardForm, issuer: e.target.value })}
-                      required
-                      placeholder="e.g., Chase, Amex, Citi"
                       className="w-full px-3 py-2 border rounded-md mt-1"
                     />
                   </div>

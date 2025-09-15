@@ -26,7 +26,6 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
 
   const [formData, setFormData] = useState({
     name: card.name,
-    issuer: card.issuer || '',
     type: card.type,
     active: card.active,
     billingCycleType: card.billingCycle?.type || 'calendar',
@@ -41,7 +40,6 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
       const updatedCard: CreditCard = {
         ...card,
         name: formData.name,
-        issuer: formData.issuer || card.issuer,
         type: formData.type,
         active: formData.active,
         billingCycle: formData.billingCycleType === 'billing'
@@ -62,7 +60,6 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
   const handleCancel = () => {
     setFormData({
       name: card.name,
-      issuer: card.issuer || '',
       type: card.type,
       active: card.active,
       billingCycleType: card.billingCycle?.type || 'calendar',
@@ -91,10 +88,6 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
             <div>
               <p className="text-sm font-medium text-muted-foreground">Card Name</p>
               <p className="mt-1 font-medium">{card.name}</p>
-            </div>
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">Issuer</p>
-              <p className="mt-1 font-medium">{card.issuer || 'Not specified'}</p>
             </div>
             <div>
               <p className="text-sm font-medium text-muted-foreground">Reward Type</p>
@@ -148,17 +141,6 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             placeholder="e.g., Chase Sapphire Preferred"
-          />
-        </div>
-
-        {/* Issuer */}
-        <div className="space-y-2">
-          <Label htmlFor="issuer">Issuer</Label>
-          <Input
-            id="issuer"
-            value={formData.issuer}
-            onChange={(e) => setFormData({ ...formData, issuer: e.target.value })}
-            placeholder="e.g., Chase, Amex, Citi"
           />
         </div>
 

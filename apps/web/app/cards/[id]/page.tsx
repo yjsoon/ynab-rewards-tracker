@@ -96,8 +96,7 @@ export default function CardDetailPage() {
             <h1 className="text-3xl font-bold">{card.name}</h1>
             <p className="text-muted-foreground mt-1">
               {card.type === 'cashback' ? 'Cashback Rewards' : 'Miles Rewards'} •
-              {card.issuer && ` ${card.issuer} • `}
-              {card.active ? 'Active' : 'Inactive'}
+              {card.active ? ' Active' : ' Inactive'}
             </p>
           </div>
         </div>
