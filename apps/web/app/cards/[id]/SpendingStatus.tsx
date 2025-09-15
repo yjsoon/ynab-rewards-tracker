@@ -154,7 +154,7 @@ export default function SpendingStatus({ card, rules, mappings, pat }: SpendingS
 
       // Accumulate total rewards
       totalRewards += calculations.rewardEarned;
-      totalRewardsDollars += calculations.rewardEarnedDollars;
+      totalRewardsDollars += calculations.rewardEarnedDollars ?? 0;
 
       // Track miles separately for miles cards
       if (rule.rewardType === 'miles') {
