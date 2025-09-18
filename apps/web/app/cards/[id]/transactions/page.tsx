@@ -28,7 +28,7 @@ import type { TransactionWithRewards } from '@/types/transaction';
 import type { CreditCard } from '@/lib/storage';
 import { absFromMilli, formatDollars } from '@/lib/utils';
 
-const TRANSACTION_LOOKBACK_DAYS = 90;
+const TRANSACTION_LOOKBACK_DAYS = 45;
 
 export default function CardTransactionsPage() {
   const params = useParams();

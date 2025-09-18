@@ -9,6 +9,7 @@ import { RewardsCalculator } from '@/lib/rewards-engine';
 import { clampDaysLeft } from '@/lib/date';
 import { cn, absFromMilli, formatDollars } from '@/lib/utils';
 import { SetupPrompt } from '@/components/SetupPrompt';
+import { CardSpendingSummary } from '@/components/CardSpendingSummary';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
@@ -26,7 +27,8 @@ import {
   AlertCircle,
   Loader2,
   Percent,
-  Clock
+  Clock,
+  Settings2
 } from 'lucide-react';
 import type { Transaction } from '@/types/transaction';
 
@@ -51,6 +53,7 @@ export default function DashboardPage() {
   const [selectedBudget, setSelectedBudget] = useState<{ id?: string; name?: string }>({});
   const [trackedAccounts, setTrackedAccounts] = useState<string[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [allBudgetTransactions, setAllBudgetTransactions] = useState<Transaction[]>([]);
   const [accountsMap, setAccountsMap] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -59,17 +62,19 @@ export default function DashboardPage() {
 
   const loadRecentTransactions = useCallback(async (budgetId: string) => {
     if (!pat) return;
-    
+
     setLoading(true);
     setError('');
+
+    // Abort any in-flight request
+    if (dashboardAbortRef.current) {
+      dashboardAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    dashboardAbortRef.current = controller;
+
     try {
       const client = new YnabClient(pat);
-      // Abort any in-flight request
-      if (dashboardAbortRef.current) {
-        dashboardAbortRef.current.abort();
-      }
-      const controller = new AbortController();
-      dashboardAbortRef.current = controller;
       
       // First get accounts to map IDs to names
       const accounts = await client.getAccounts(budgetId, { signal: controller.signal });
@@ -77,24 +82,41 @@ export default function DashboardPage() {
       accounts.forEach((acc: any) => accMap.set(acc.id, acc.name));
       setAccountsMap(accMap);
       
-      // Get transactions from the last N days
-      const sinceDate = new Date();
-      sinceDate.setDate(sinceDate.getDate() - TRANSACTION_LOOKBACK_DAYS);
+      // Compute earliest needed window across active cards (for card tiles)
+      const activeCards = cards.filter(c => c.active);
+      const periods = activeCards.map(c => RewardsCalculator.calculatePeriod(c));
+      const earliestStart = periods.length > 0
+        ? new Date(Math.min(...periods.map(p => p.startDate.getTime())))
+        : (() => { const d = new Date(); d.setDate(d.getDate() - TRANSACTION_LOOKBACK_DAYS); return d; })();
+
       const txns = await client.getTransactions(budgetId, {
-        since_date: sinceDate.toISOString().split('T')[0],
+        since_date: earliestStart.toISOString().split('T')[0],
         signal: controller.signal,
       });
-      // Show only the most recent transactions
-      setTransactions(txns.slice(0, RECENT_TRANSACTIONS_LIMIT));
+
+      setAllBudgetTransactions(txns);
+
+      // Derive recent preview from budget-wide fetch (last N days)
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - TRANSACTION_LOOKBACK_DAYS);
+      const recent = txns
+        .filter((t: Transaction) => trackedAccounts.length === 0 || trackedAccounts.includes(t.account_id))
+        .filter((t: Transaction) => new Date(t.date) >= cutoff)
+        .sort((a: Transaction, b: Transaction) => new Date(b.date).getTime() - new Date(a.date).getTime())
+        .slice(0, RECENT_TRANSACTIONS_LIMIT);
+      setTransactions(recent);
     } catch (err) {
       if ((err as any)?.name !== 'AbortError') {
         const errorMessage = err instanceof Error ? err.message : String(err);
         setError(`Failed to load transactions: ${errorMessage}`);
       }
     } finally {
-      setLoading(false);
+      if (dashboardAbortRef.current === controller) {
+        setLoading(false);
+        dashboardAbortRef.current = null;
+      }
     }
-  }, [pat]);
+  }, [pat, cards]);
 
   useEffect(() => {
     // Check if we should show setup prompt (only on client side)
@@ -175,9 +197,7 @@ export default function DashboardPage() {
     return (
       <div className="max-w-6xl mx-auto p-6">
         {showSetupPrompt && <SetupPrompt onDismiss={handleDismissSetup} />}
-        
-        <h1 className="text-3xl font-bold mb-8">Dashboard</h1>
-        
+
         <Card className="text-center p-12">
           <div className="mb-6">
             <Wallet className="h-16 w-16 text-muted-foreground mx-auto mb-4" aria-hidden="true" />
@@ -222,8 +242,6 @@ export default function DashboardPage() {
 
   return (
     <div className="max-w-6xl mx-auto p-6">
-      <h1 className="text-3xl font-bold mb-8">Dashboard</h1>
-
       {/* Setup Progress */}
       {!isFullyConfigured && (
         <Alert className="mb-6">
@@ -332,40 +350,32 @@ export default function DashboardPage() {
                         isEndingSoon ? "border-orange-200 dark:border-orange-900" : "hover:border-primary/50",
                         "bg-gradient-to-br from-green-500/5 via-transparent to-green-500/10"
                       )}>
-                        {/* Card Type Badge */}
-                        <div className="absolute top-3 right-3">
-                          <Badge variant="secondary" className="bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300">
-                            <Percent className="h-3 w-3 mr-1" aria-hidden="true" />
-                            Cash
-                          </Badge>
+                        {/* Edit Button */}
+                        <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              window.location.href = `/cards/${card.id}`;
+                            }}
+                            aria-label="Edit card"
+                          >
+                            <Settings2 className="h-4 w-4" />
+                          </Button>
                         </div>
 
                         <CardHeader className="pb-3">
-                          <CardTitle className="text-lg pr-16">{card.name}</CardTitle>
+                          <CardTitle className="text-lg pr-12">{card.name}</CardTitle>
                         </CardHeader>
                         <CardContent className="flex-1 flex flex-col">
-                          {/* Rewards Display - Prominent */}
-                          <div className="bg-primary/5 rounded-lg p-3 mb-3">
-                            <div className="text-center">
-                              <p className="text-2xl font-bold text-primary">$0.00</p>
-                              <p className="text-xs text-muted-foreground mt-1">This Period (Coming Soon)</p>
-                            </div>
-                          </div>
-
-                          {/* Progress to Cap (if applicable) */}
-                          {hasMaxSpend && (
-                            <div className="mb-3">
-                              <div className="flex justify-between text-xs mb-1">
-                                <span className="text-muted-foreground">Cap Progress</span>
-                                <span className="font-medium">$0 / $X</span>
-                              </div>
-                              <Progress value={0} className="h-2" />
-                            </div>
-                          )}
+                          {/* Spending Summary - Real Data */}
+                          <CardSpendingSummary card={card} pat={pat} prefetchedTransactions={allBudgetTransactions} />
 
                           {/* Period Info with Urgency */}
                           <div className="mt-auto pt-2 border-t">
-                            <div className="flex items-center justify-between text-sm">
+                            <div className="flex items-center text-sm">
                               <div className="flex items-center gap-1">
                                 {isEndingSoon ? (
                                   <Clock className="h-4 w-4 text-orange-500" aria-hidden="true" />
@@ -379,11 +389,6 @@ export default function DashboardPage() {
                                   {daysLeft} days left
                                 </span>
                               </div>
-                              {card.active ? (
-                                <Badge variant="outline" className="text-xs">Active</Badge>
-                              ) : (
-                                <Badge variant="secondary" className="text-xs">Inactive</Badge>
-                              )}
                             </div>
                           </div>
                         </CardContent>
@@ -423,40 +428,32 @@ export default function DashboardPage() {
                         isEndingSoon ? "border-orange-200 dark:border-orange-900" : "hover:border-primary/50",
                         "bg-gradient-to-br from-blue-500/5 via-transparent to-blue-500/10"
                       )}>
-                        {/* Card Type Badge */}
-                        <div className="absolute top-3 right-3">
-                          <Badge variant="secondary" className="bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300">
-                            <TrendingUp className="h-3 w-3 mr-1" aria-hidden="true" />
-                            Miles
-                          </Badge>
+                        {/* Edit Button */}
+                        <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              window.location.href = `/cards/${card.id}`;
+                            }}
+                            aria-label="Edit card"
+                          >
+                            <Settings2 className="h-4 w-4" />
+                          </Button>
                         </div>
 
                         <CardHeader className="pb-3">
-                          <CardTitle className="text-lg pr-16">{card.name}</CardTitle>
+                          <CardTitle className="text-lg pr-12">{card.name}</CardTitle>
                         </CardHeader>
                         <CardContent className="flex-1 flex flex-col">
-                          {/* Rewards Display - Prominent */}
-                          <div className="bg-primary/5 rounded-lg p-3 mb-3">
-                            <div className="text-center">
-                              <p className="text-2xl font-bold text-primary">0</p>
-                              <p className="text-xs text-muted-foreground mt-1">Miles This Period (Coming Soon)</p>
-                            </div>
-                          </div>
-
-                          {/* Progress to Cap (if applicable) */}
-                          {hasMaxSpend && (
-                            <div className="mb-3">
-                              <div className="flex justify-between text-xs mb-1">
-                                <span className="text-muted-foreground">Cap Progress</span>
-                                <span className="font-medium">$0 / $X</span>
-                              </div>
-                              <Progress value={0} className="h-2" />
-                            </div>
-                          )}
+                          {/* Spending Summary - Real Data */}
+                          <CardSpendingSummary card={card} pat={pat} prefetchedTransactions={allBudgetTransactions} />
 
                           {/* Period Info with Urgency */}
                           <div className="mt-auto pt-2 border-t">
-                            <div className="flex items-center justify-between text-sm">
+                            <div className="flex items-center text-sm">
                               <div className="flex items-center gap-1">
                                 {isEndingSoon ? (
                                   <Clock className="h-4 w-4 text-orange-500" aria-hidden="true" />
@@ -470,11 +467,6 @@ export default function DashboardPage() {
                                   {daysLeft} days left
                                 </span>
                               </div>
-                              {card.active ? (
-                                <Badge variant="outline" className="text-xs">Active</Badge>
-                              ) : (
-                                <Badge variant="secondary" className="text-xs">Inactive</Badge>
-                              )}
                             </div>
                           </div>
                         </CardContent>
