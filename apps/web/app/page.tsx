@@ -62,17 +62,19 @@ export default function DashboardPage() {
 
   const loadRecentTransactions = useCallback(async (budgetId: string) => {
     if (!pat) return;
-    
+
     setLoading(true);
     setError('');
+
+    // Abort any in-flight request
+    if (dashboardAbortRef.current) {
+      dashboardAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    dashboardAbortRef.current = controller;
+
     try {
       const client = new YnabClient(pat);
-      // Abort any in-flight request
-      if (dashboardAbortRef.current) {
-        dashboardAbortRef.current.abort();
-      }
-      const controller = new AbortController();
-      dashboardAbortRef.current = controller;
       
       // First get accounts to map IDs to names
       const accounts = await client.getAccounts(budgetId, { signal: controller.signal });
@@ -98,6 +100,7 @@ export default function DashboardPage() {
       const cutoff = new Date();
       cutoff.setDate(cutoff.getDate() - TRANSACTION_LOOKBACK_DAYS);
       const recent = txns
+        .filter((t: Transaction) => trackedAccounts.length === 0 || trackedAccounts.includes(t.account_id))
         .filter((t: Transaction) => new Date(t.date) >= cutoff)
         .sort((a: Transaction, b: Transaction) => new Date(b.date).getTime() - new Date(a.date).getTime())
         .slice(0, RECENT_TRANSACTIONS_LIMIT);
@@ -108,7 +111,10 @@ export default function DashboardPage() {
         setError(`Failed to load transactions: ${errorMessage}`);
       }
     } finally {
-      setLoading(false);
+      if (dashboardAbortRef.current === controller) {
+        setLoading(false);
+        dashboardAbortRef.current = null;
+      }
     }
   }, [pat, cards]);
 
@@ -443,7 +449,7 @@ export default function DashboardPage() {
                         </CardHeader>
                         <CardContent className="flex-1 flex flex-col">
                           {/* Spending Summary - Real Data */}
-                          <CardSpendingSummary card={card} pat={pat} />
+                          <CardSpendingSummary card={card} pat={pat} prefetchedTransactions={allBudgetTransactions} />
 
                           {/* Period Info with Urgency */}
                           <div className="mt-auto pt-2 border-t">

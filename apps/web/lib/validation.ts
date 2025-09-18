@@ -70,7 +70,7 @@ export function validateIssuer(issuer: string): { valid: boolean; error?: string
     return { valid: false, error: 'Issuer must be at least 2 characters' };
   }
   if (sanitized.length > 100) {
-    return { valid: false, error: 'Issuer must be less than 100 characters' };
+    return { valid: false, error: 'Issuer must be 100 characters or less' };
   }
   return { valid: true };
 }

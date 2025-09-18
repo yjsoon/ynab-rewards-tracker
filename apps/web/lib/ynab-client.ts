@@ -11,10 +11,11 @@ const inflightGet = new Map<string, Promise<any>>();
 const getCache = new Map<string, { expiry: number; data: any }>();
 const CACHE_TTL_MS = 30_000; // 30s soft cache; YNAB data isn't ultra-realtime
 
-function makeKey(path: string, init?: RequestInit) {
+function makeKey(path: string, pat: string, init?: RequestInit) {
   const method = (init?.method || 'GET').toUpperCase();
   // Only cache GETs without AbortSignals
-  return `${method}:${path}`;
+  // Include PAT in key to prevent cross-token cache reuse
+  return `${method}:${pat}:${path}`;
 }
 
 export class YnabClient {
@@ -27,7 +28,7 @@ export class YnabClient {
   private async request(path: string, options?: RequestInit) {
     const method = (options?.method || 'GET').toUpperCase();
     const hasSignal = !!options?.signal;
-    const key = makeKey(path, options);
+    const key = makeKey(path, this.pat, options);
 
     // Serve from short cache for GETs without signals
     if (method === 'GET' && !hasSignal) {
