@@ -59,6 +59,23 @@ export function validateCardName(name: string): { valid: boolean; error?: string
 }
 
 /**
+ * Validates issuer input
+ */
+export function validateIssuer(issuer: string): { valid: boolean; error?: string } {
+  const sanitized = sanitizeInput(issuer);
+  if (!sanitized) {
+    return { valid: false, error: 'Issuer is required' };
+  }
+  if (sanitized.length < 2) {
+    return { valid: false, error: 'Issuer must be at least 2 characters' };
+  }
+  if (sanitized.length > 100) {
+    return { valid: false, error: 'Issuer must be less than 100 characters' };
+  }
+  return { valid: true };
+}
+
+/**
  * Validates URL for safe external linking
  */
 export function validateUrl(url: string): boolean {

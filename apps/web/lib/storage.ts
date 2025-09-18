@@ -6,6 +6,7 @@
 export interface CreditCard {
   id: string;
   name: string;
+  issuer: string;
   type: 'cashback' | 'miles';
   ynabAccountId: string; // YNAB account ID (required; no manual cards)
   billingCycle?: {

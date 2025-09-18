@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { RewardsCalculator } from '@/lib/rewards-engine';
@@ -25,6 +25,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
   const [rules, setRules] = useState<RewardRule[]>([]);
   const [mappings, setMappings] = useState<TagMapping[]>([]);
   const [loading, setLoading] = useState(true);
+  const abortRef = useRef<AbortController | null>(null);
 
   // Calculate current period
   const period = useMemo(() => RewardsCalculator.calculatePeriod(card), [card]);
@@ -62,26 +63,45 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
       return;
     }
 
+    const client = new YnabClient(pat);
+    if (abortRef.current) {
+      abortRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setLoading(true);
+
     try {
-      const client = new YnabClient(pat);
       const allTxns = await client.getTransactions(budgetId, {
         since_date: period.startDate.toISOString().split('T')[0],
+        signal: controller.signal,
       });
       const cardTxns = allTxns.filter((t: Transaction) =>
         t.account_id === card.ynabAccountId && new Date(t.date) <= period.endDate
       );
       const enriched = TransactionMatcher.applyTagMappings(cardTxns, mappings);
       setTransactions(enriched);
-    } catch (error) {
-      console.error('Failed to load transactions:', error);
+    } catch (error: any) {
+      if (error?.name !== 'AbortError') {
+        console.error('Failed to load transactions:', error);
+      }
     } finally {
-      setLoading(false);
+      if (abortRef.current === controller) {
+        setLoading(false);
+        abortRef.current = null;
+      }
     }
   }, [prefetchedTransactions, pat, card.ynabAccountId, period, mappings]);
 
   useEffect(() => {
     loadTransactions();
   }, [loadTransactions]);
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
 
   // Calculate spending and rewards
   const summary = useMemo(() => {
@@ -177,7 +197,13 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
         </div>
         <div className="bg-green-500/10 rounded-lg p-2 text-center">
           <p className="text-lg font-bold text-green-600 dark:text-green-400">
-            {card.type === 'cashback' ? formatDollars(totalRewardsDollars) : `${Math.round(totalRewardsDollars / 0.01)}`}
+            {card.type === 'cashback'
+              ? formatDollars(totalRewardsDollars)
+              : (() => {
+                  const mv = storage.getSettings().milesValuation ?? 0.01;
+                  const miles = mv > 0 ? Math.round(totalRewardsDollars / mv) : 0;
+                  return miles.toLocaleString();
+                })()}
           </p>
           <p className="text-xs text-muted-foreground">
             {card.type === 'cashback' ? 'Cashback' : 'Miles'}

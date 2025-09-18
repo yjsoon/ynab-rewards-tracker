@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -41,6 +41,7 @@ export default function SpendingStatus({ card, rules, mappings, pat }: SpendingS
   const [transactions, setTransactions] = useState<TransactionWithRewards[]>([]);
   const [loading, setLoading] = useState(true);
   const [settings, setSettings] = useState<AppSettings | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   // Calculate current period
   const period = useMemo(() => RewardsCalculator.calculatePeriod(card), [card]);
@@ -61,10 +62,17 @@ export default function SpendingStatus({ card, rules, mappings, pat }: SpendingS
     if (!budgetId) return;
 
     setLoading(true);
+    const client = new YnabClient(pat);
+    if (abortRef.current) {
+      abortRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
-      const client = new YnabClient(pat);
       const allTxns = await client.getTransactions(budgetId, {
         since_date: period.startDate.toISOString().split('T')[0],
+        signal: controller.signal,
       });
 
       const cardTxns = allTxns.filter((t: Transaction) =>
@@ -74,16 +82,27 @@ export default function SpendingStatus({ card, rules, mappings, pat }: SpendingS
 
       const enriched = TransactionMatcher.applyTagMappings(cardTxns, mappings);
       setTransactions(enriched);
-    } catch (error) {
-      console.error('Failed to load transactions:', error);
+    } catch (error: any) {
+      if (error?.name !== 'AbortError') {
+        console.error('Failed to load transactions:', error);
+      }
     } finally {
-      setLoading(false);
+      if (abortRef.current === controller) {
+        setLoading(false);
+        abortRef.current = null;
+      }
     }
   }, [pat, card.ynabAccountId, period, mappings]);
 
   useEffect(() => {
     loadTransactions();
   }, [loadTransactions]);
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
 
   useEffect(() => {
     const appSettings = storage.getSettings();
