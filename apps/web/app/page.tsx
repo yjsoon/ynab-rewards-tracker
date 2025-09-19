@@ -27,7 +27,6 @@ import {
   AlertCircle,
   Loader2,
   Percent,
-  Clock,
   Settings2
 } from 'lucide-react';
 import type { Transaction } from '@/types/transaction';
@@ -375,25 +374,6 @@ export default function DashboardPage() {
                         <CardContent className="flex-1 flex flex-col">
                           {/* Spending Summary - Real Data */}
                           <CardSpendingSummary card={card} pat={pat} prefetchedTransactions={allBudgetTransactions} />
-
-                          {/* Period Info with Urgency */}
-                          <div className="mt-auto pt-2 border-t">
-                            <div className="flex items-center text-sm">
-                              <div className="flex items-center gap-1">
-                                {isEndingSoon ? (
-                                  <Clock className="h-4 w-4 text-orange-500" aria-hidden="true" />
-                                ) : (
-                                  <Calendar className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                                )}
-                                <span className={cn(
-                                  "font-medium",
-                                  isEndingSoon && "text-orange-600 dark:text-orange-400"
-                                )}>
-                                  {daysLeft} days left
-                                </span>
-                              </div>
-                            </div>
-                          </div>
                         </CardContent>
                       </Card>
                     </Link>
@@ -455,25 +435,6 @@ export default function DashboardPage() {
                         <CardContent className="flex-1 flex flex-col">
                           {/* Spending Summary - Real Data */}
                           <CardSpendingSummary card={card} pat={pat} prefetchedTransactions={allBudgetTransactions} />
-
-                          {/* Period Info with Urgency */}
-                          <div className="mt-auto pt-2 border-t">
-                            <div className="flex items-center text-sm">
-                              <div className="flex items-center gap-1">
-                                {isEndingSoon ? (
-                                  <Clock className="h-4 w-4 text-orange-500" aria-hidden="true" />
-                                ) : (
-                                  <Calendar className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                                )}
-                                <span className={cn(
-                                  "font-medium",
-                                  isEndingSoon && "text-orange-600 dark:text-orange-400"
-                                )}>
-                                  {daysLeft} days left
-                                </span>
-                              </div>
-                            </div>
-                          </div>
                         </CardContent>
                       </Card>
                     </Link>
