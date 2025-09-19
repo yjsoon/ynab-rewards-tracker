@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useYnabPAT, useCreditCards } from '@/hooks/useLocalStorage';
 import { YnabClient } from '@/lib/ynab-client';
 import { storage } from '@/lib/storage';
-import { RewardsCalculator } from '@/lib/rewards-engine';
+import { SimpleRewardsCalculator } from '@/lib/rewards-engine';
 import { clampDaysLeft } from '@/lib/date';
 import { cn, absFromMilli, formatDollars } from '@/lib/utils';
 import { SetupPrompt } from '@/components/SetupPrompt';
@@ -84,9 +84,9 @@ export default function DashboardPage() {
       
       // Compute earliest needed window across active cards (for card tiles)
       const activeCards = cards.filter(c => c.active);
-      const periods = activeCards.map(c => RewardsCalculator.calculatePeriod(c));
+      const periods = activeCards.map(c => SimpleRewardsCalculator.calculatePeriod(c));
       const earliestStart = periods.length > 0
-        ? new Date(Math.min(...periods.map(p => p.startDate.getTime())))
+        ? new Date(Math.min(...periods.map(p => new Date(p.start).getTime())))
         : (() => { const d = new Date(); d.setDate(d.getDate() - TRANSACTION_LOOKBACK_DAYS); return d; })();
 
       const txns = await client.getTransactions(budgetId, {
@@ -179,8 +179,9 @@ export default function DashboardPage() {
     const now = new Date();
 
     const getDaysRemaining = (card: typeof cards[0]) => {
-      const period = RewardsCalculator.calculatePeriod(card);
-      return clampDaysLeft(period, now);
+      const period = SimpleRewardsCalculator.calculatePeriod(card);
+      const periodDate = { startDate: new Date(period.start), endDate: new Date(period.end) };
+      return clampDaysLeft(periodDate, now);
     };
 
     const cashback = cards.filter(c => c.type === 'cashback');
@@ -332,9 +333,10 @@ export default function DashboardPage() {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {cashbackCards.map((card) => {
-                  const period = RewardsCalculator.calculatePeriod(card);
+                  const period = SimpleRewardsCalculator.calculatePeriod(card);
                   const now = new Date();
-                  const daysLeft = clampDaysLeft(period, now);
+                  const periodDate = { startDate: new Date(period.start), endDate: new Date(period.end) };
+                  const daysLeft = clampDaysLeft(periodDate, now);
                   const isEndingSoon = daysLeft <= 7;
                   // TODO: Get rules from storage when implementing progress tracking
                   const hasMaxSpend = false; // Placeholder for now
@@ -350,7 +352,7 @@ export default function DashboardPage() {
                         isEndingSoon ? "border-orange-200 dark:border-orange-900" : "hover:border-primary/50",
                         "bg-gradient-to-br from-green-500/5 via-transparent to-green-500/10"
                       )}>
-                        {/* Edit Button */}
+                        {/* Settings Button */}
                         <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
                           <Button
                             variant="ghost"
@@ -358,9 +360,10 @@ export default function DashboardPage() {
                             className="h-8 w-8"
                             onClick={(e) => {
                               e.preventDefault();
-                              window.location.href = `/cards/${card.id}`;
+                              e.stopPropagation();
+                              window.location.href = `/cards/${card.id}?tab=settings`;
                             }}
-                            aria-label="Edit card"
+                            aria-label="Go to card settings"
                           >
                             <Settings2 className="h-4 w-4" />
                           </Button>
@@ -410,9 +413,10 @@ export default function DashboardPage() {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {milesCards.map((card) => {
-                  const period = RewardsCalculator.calculatePeriod(card);
+                  const period = SimpleRewardsCalculator.calculatePeriod(card);
                   const now = new Date();
-                  const daysLeft = clampDaysLeft(period, now);
+                  const periodDate = { startDate: new Date(period.start), endDate: new Date(period.end) };
+                  const daysLeft = clampDaysLeft(periodDate, now);
                   const isEndingSoon = daysLeft <= 7;
                   // TODO: Get rules from storage when implementing progress tracking
                   const hasMaxSpend = false; // Placeholder for now
@@ -428,7 +432,7 @@ export default function DashboardPage() {
                         isEndingSoon ? "border-orange-200 dark:border-orange-900" : "hover:border-primary/50",
                         "bg-gradient-to-br from-blue-500/5 via-transparent to-blue-500/10"
                       )}>
-                        {/* Edit Button */}
+                        {/* Settings Button */}
                         <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
                           <Button
                             variant="ghost"
@@ -436,9 +440,10 @@ export default function DashboardPage() {
                             className="h-8 w-8"
                             onClick={(e) => {
                               e.preventDefault();
-                              window.location.href = `/cards/${card.id}`;
+                              e.stopPropagation();
+                              window.location.href = `/cards/${card.id}?tab=settings`;
                             }}
-                            aria-label="Edit card"
+                            aria-label="Go to card settings"
                           >
                             <Settings2 className="h-4 w-4" />
                           </Button>

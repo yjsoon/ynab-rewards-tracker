@@ -9,7 +9,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Save, AlertCircle } from 'lucide-react';
+import { Save, AlertCircle, Percent, DollarSign } from 'lucide-react';
 import { useCreditCards } from '@/hooks/useLocalStorage';
 import type { CreditCard } from '@/lib/storage';
 import { validateIssuer, sanitizeInput } from '@/lib/validation';
@@ -32,6 +32,8 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
     active: card.active,
     billingCycleType: card.billingCycle?.type || 'calendar',
     billingCycleDay: card.billingCycle?.dayOfMonth || 1,
+    earningRate: card.earningRate || (card.type === 'cashback' ? 1 : 1),
+    milesBlockSize: card.milesBlockSize || 1,
   });
   const [issuerError, setIssuerError] = useState('');
 
@@ -57,7 +59,9 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
         active: formData.active,
         billingCycle: formData.billingCycleType === 'billing'
           ? { type: 'billing', dayOfMonth: formData.billingCycleDay }
-          : { type: 'calendar' }
+          : { type: 'calendar' },
+        earningRate: formData.earningRate,
+        milesBlockSize: formData.type === 'miles' ? formData.milesBlockSize : undefined,
       };
 
       updateCard(updatedCard);
@@ -78,6 +82,8 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
       active: card.active,
       billingCycleType: card.billingCycle?.type || 'calendar',
       billingCycleDay: card.billingCycle?.dayOfMonth || 1,
+      earningRate: card.earningRate || (card.type === 'cashback' ? 1 : 1),
+      milesBlockSize: card.milesBlockSize || 1,
     });
     setEditing(false);
     setError('');
@@ -131,6 +137,14 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
             <div>
               <p className="text-sm font-medium text-muted-foreground">YNAB Account</p>
               <p className="mt-1 font-mono text-sm text-muted-foreground">{card.ynabAccountId}</p>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Earning Rate</p>
+              <p className="mt-1 font-medium">
+                {card.type === 'cashback'
+                  ? `${card.earningRate || 1}% cashback`
+                  : `${card.earningRate || 1}x miles${card.milesBlockSize && card.milesBlockSize > 1 ? ` per $${card.milesBlockSize}` : ' per dollar'}`}
+              </p>
             </div>
           </div>
         </CardContent>
@@ -248,6 +262,63 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
               </Select>
             </div>
           )}
+        </div>
+
+        {/* Earning Rate */}
+        <div className="space-y-2">
+          <Label htmlFor="earningRate">Earning Rate</Label>
+          <div className="flex items-center gap-2">
+            {formData.type === 'cashback' ? (
+              <>
+                <div className="relative flex-1">
+                  <Input
+                    id="earningRate"
+                    type="number"
+                    value={formData.earningRate}
+                    onChange={(e) => setFormData({ ...formData, earningRate: parseFloat(e.target.value) || 0 })}
+                    step="0.1"
+                    min="0"
+                    max="100"
+                    placeholder="e.g., 2"
+                  />
+                  <Percent className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                </div>
+                <span className="text-sm text-muted-foreground">cashback</span>
+              </>
+            ) : (
+              <>
+                <div className="flex-1">
+                  <Input
+                    id="earningRate"
+                    type="number"
+                    value={formData.earningRate}
+                    onChange={(e) => setFormData({ ...formData, earningRate: parseFloat(e.target.value) || 0 })}
+                    step="0.1"
+                    min="0"
+                    placeholder="e.g., 1.5"
+                  />
+                </div>
+                <span className="text-sm text-muted-foreground">miles per</span>
+                <div className="relative">
+                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="number"
+                    value={formData.milesBlockSize}
+                    onChange={(e) => setFormData({ ...formData, milesBlockSize: parseInt(e.target.value) || 1 })}
+                    step="1"
+                    min="1"
+                    className="w-24 pl-8"
+                    placeholder="1"
+                  />
+                </div>
+              </>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {formData.type === 'cashback'
+              ? 'Percentage of cashback earned on purchases'
+              : 'Number of miles earned per dollar (or per spending block) spent'}
+          </p>
         </div>
 
         {/* Active Status */}

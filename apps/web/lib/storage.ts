@@ -14,6 +14,9 @@ export interface CreditCard {
     dayOfMonth?: number; // for billing cycle
   };
   active: boolean;
+  // Earning rates (replaces the complex rules system)
+  earningRate?: number; // For cashback: percentage (e.g., 2 for 2%). For miles: miles per dollar (e.g., 1.5)
+  milesBlockSize?: number; // For miles cards: minimum spending block (e.g., 5 for "per $5 spent")
 }
 
 export interface RewardRule {
@@ -189,6 +192,31 @@ class StorageService {
             if ('pointsValuation' in data.settings) {
               delete (data.settings as any).pointsValuation;
             }
+          }
+
+          // Migration: Add default earning rates to cards that don't have them
+          if (Array.isArray(data.cards)) {
+            data.cards = data.cards.map((card: any) => {
+              if (!card.earningRate) {
+                // Try to derive from existing rules if any
+                const cardRules = data.rules?.filter((r: any) => r.cardId === card.id && r.active);
+                if (cardRules && cardRules.length > 0) {
+                  // Use the first active rule's reward value as the earning rate
+                  const firstRule = cardRules[0];
+                  card.earningRate = firstRule.rewardValue || (card.type === 'cashback' ? 1 : 1);
+                  if (card.type === 'miles' && firstRule.milesBlockSize) {
+                    card.milesBlockSize = firstRule.milesBlockSize;
+                  }
+                } else {
+                  // Default earning rates
+                  card.earningRate = card.type === 'cashback' ? 1 : 1;
+                  if (card.type === 'miles') {
+                    card.milesBlockSize = 1;
+                  }
+                }
+              }
+              return card;
+            });
           }
 
           // Note: billingCycle defaulting handled earlier when reading cards
