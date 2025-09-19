@@ -143,7 +143,7 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
               <p className="mt-1 font-medium">
                 {card.type === 'cashback'
                   ? `${card.earningRate || 1}% cashback`
-                  : `${card.earningRate || 1}x miles${card.milesBlockSize && card.milesBlockSize > 1 ? ` per $${card.milesBlockSize}` : ' per dollar'}`}
+                  : `${card.earningRate || 1} miles${card.milesBlockSize && card.milesBlockSize > 1 ? ` per $${card.milesBlockSize}` : ' per dollar'}`}
               </p>
             </div>
           </div>
