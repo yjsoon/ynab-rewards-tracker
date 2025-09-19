@@ -35,6 +35,13 @@ import type { Transaction } from '@/types/transaction';
 const TRANSACTION_LOOKBACK_DAYS = 30;
 const RECENT_TRANSACTIONS_LIMIT = 10;
 
+// Helper functions
+const createSettingsClickHandler = (cardId: string) => (e: React.MouseEvent) => {
+  e.preventDefault();
+  e.stopPropagation();
+  window.location.href = `/cards/${cardId}?tab=settings`;
+};
+
 // Types for better type safety
 type SetupStep = 'pat' | 'budget' | 'accounts' | 'cards';
 
@@ -357,11 +364,7 @@ export default function DashboardPage() {
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              window.location.href = `/cards/${card.id}?tab=settings`;
-                            }}
+                            onClick={createSettingsClickHandler(card.id)}
                             aria-label="Go to card settings"
                           >
                             <Settings2 className="h-4 w-4" />
@@ -418,11 +421,7 @@ export default function DashboardPage() {
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              window.location.href = `/cards/${card.id}?tab=settings`;
-                            }}
+                            onClick={createSettingsClickHandler(card.id)}
                             aria-label="Go to card settings"
                           >
                             <Settings2 className="h-4 w-4" />

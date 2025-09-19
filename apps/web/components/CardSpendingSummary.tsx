@@ -40,8 +40,8 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
     if (prefetchedTransactions && prefetchedTransactions.length >= 0) {
       const cardTxns = prefetchedTransactions.filter((t: Transaction) =>
         t.account_id === card.ynabAccountId &&
-        t.date >= period.start &&
-        t.date <= period.end
+          t.date >= period.start &&
+          t.date <= period.end
       );
 
       setTransactions(cardTxns);

@@ -203,13 +203,13 @@ class StorageService {
                 if (cardRules && cardRules.length > 0) {
                   // Use the first active rule's reward value as the earning rate
                   const firstRule = cardRules[0];
-                  card.earningRate = firstRule.rewardValue || (card.type === 'cashback' ? 1 : 1);
+                  card.earningRate = firstRule.rewardValue || 1;
                   if (card.type === 'miles' && firstRule.milesBlockSize) {
                     card.milesBlockSize = firstRule.milesBlockSize;
                   }
                 } else {
                   // Default earning rates
-                  card.earningRate = card.type === 'cashback' ? 1 : 1;
+                  card.earningRate = 1;
                   if (card.type === 'miles') {
                     card.milesBlockSize = 1;
                   }
