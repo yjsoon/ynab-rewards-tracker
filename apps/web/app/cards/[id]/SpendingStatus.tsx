@@ -64,9 +64,9 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
       );
 
       if (!controller.signal.aborted && result?.transactions) {
-        // Filter transactions for this specific account
+        // Filter transactions for this specific account and period
         const accountTransactions = result.transactions.filter(
-          (t: Transaction) => t.account_id === card.ynabAccountId
+          (t: Transaction) => t.account_id === card.ynabAccountId && t.date <= period.end
         );
         setTransactions(accountTransactions);
       }
