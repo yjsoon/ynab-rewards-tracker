@@ -41,7 +41,14 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
 
   // Fetch transactions
   const fetchTransactions = useCallback(async () => {
-    if (!pat || !card.ynabAccountId) return;
+    if (!pat || !card.ynabAccountId) {
+      return;
+    }
+
+    // Abort any previous request
+    if (abortRef.current) {
+      abortRef.current.abort();
+    }
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -49,13 +56,14 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
     try {
       setLoading(true);
       const ynabClient = new YnabClient(pat);
-      const cached = storage.getCachedData();
       const selectedBudget = storage.getSelectedBudget();
       const selectedBudgetId = selectedBudget.id;
 
-      if (!selectedBudgetId) return;
-
-      const result = await ynabClient.getTransactions(
+      if (!selectedBudgetId) {
+        setLoading(false);
+        return;
+      }
+      const allTransactions = await ynabClient.getTransactions(
         selectedBudgetId,
         {
           since_date: period.start,
@@ -63,18 +71,28 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
         }
       );
 
-      if (!controller.signal.aborted && result?.transactions) {
+      if (Array.isArray(allTransactions)) {
         // Filter transactions for this specific account and period
-        const accountTransactions = result.transactions.filter(
-          (t: Transaction) => t.account_id === card.ynabAccountId && t.date <= period.end
+        const accountTransactions = allTransactions.filter(
+          (t: Transaction) =>
+            t.account_id === card.ynabAccountId &&
+            t.date >= period.start &&
+            t.date <= period.end
         );
+
         setTransactions(accountTransactions);
+      } else {
+        setTransactions([]);
       }
     } catch (error) {
       if (!controller.signal.aborted) {
         console.error('Failed to fetch transactions:', error);
+        setTransactions([]);
       }
     } finally {
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+      }
       if (!controller.signal.aborted) {
         setLoading(false);
       }
@@ -87,7 +105,10 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
 
   useEffect(() => {
     return () => {
-      abortRef.current?.abort();
+      if (abortRef.current) {
+        abortRef.current.abort();
+        abortRef.current = null;
+      }
     };
   }, []);
 
@@ -157,13 +178,13 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-2xl">Current Period Status</CardTitle>
-              <CardDescription className="flex items-center gap-2 mt-2">
+              <div className="flex items-center gap-2 mt-2 text-sm text-muted-foreground">
                 <Calendar className="h-4 w-4" />
                 {new Date(period.start).toLocaleDateString()} - {new Date(period.end).toLocaleDateString()}
                 <Badge variant="secondary" className="ml-2">
                   {daysRemaining} {daysRemaining === 1 ? 'day' : 'days'} remaining
                 </Badge>
-              </CardDescription>
+              </div>
             </div>
           </div>
         </CardHeader>

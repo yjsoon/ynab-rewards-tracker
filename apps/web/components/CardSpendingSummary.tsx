@@ -43,6 +43,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
         t.date >= period.start &&
         t.date <= period.end
       );
+
       setTransactions(cardTxns);
       setLoading(false);
       return;
