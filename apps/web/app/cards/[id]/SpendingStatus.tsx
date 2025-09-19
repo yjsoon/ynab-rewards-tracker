@@ -3,104 +3,112 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   AlertCircle,
-  CheckCircle2,
   TrendingUp,
   Calendar,
-  AlertTriangle,
   DollarSign
 } from 'lucide-react';
-import { RewardsCalculator } from '@/lib/rewards-engine';
+import { SimpleRewardsCalculator } from '@/lib/rewards-engine';
 import { YnabClient } from '@/lib/ynab-client';
-import { TransactionMatcher } from '@/lib/rewards-engine';
 import { storage } from '@/lib/storage';
 import { formatDollars } from '@/lib/utils';
-import type { CreditCard, RewardRule, TagMapping, AppSettings } from '@/lib/storage';
-import type { Transaction, TransactionWithRewards } from '@/types/transaction';
+import type { CreditCard, AppSettings } from '@/lib/storage';
+import type { Transaction } from '@/types/transaction';
 
 interface SpendingStatusProps {
   card: CreditCard;
-  rules: RewardRule[];
-  mappings: TagMapping[];
   pat?: string;
 }
 
-interface CategorySpending {
-  category: string;
-  spent: number;
-  limit?: number;
-  reward: number;
-  percentOfLimit?: number;
-  status: 'safe' | 'warning' | 'exceeded';
-}
-
-export default function SpendingStatus({ card, rules, mappings, pat }: SpendingStatusProps) {
-  const [transactions, setTransactions] = useState<TransactionWithRewards[]>([]);
+export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   // Calculate current period
-  const period = useMemo(() => RewardsCalculator.calculatePeriod(card), [card]);
+  const period = useMemo(() => SimpleRewardsCalculator.calculatePeriod(card), [card]);
 
   // Calculate days remaining in period
   const daysRemaining = useMemo(() => {
     const now = new Date();
-    const end = period.endDate;
-    const diffTime = end.getTime() - now.getTime();
-    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    const end = new Date(period.end);
+    const diff = end.getTime() - now.getTime();
+    return Math.ceil(diff / (1000 * 60 * 60 * 24));
   }, [period]);
 
-  // Load transactions for current period
-  const loadTransactions = useCallback(async () => {
-    if (!pat || !card.ynabAccountId) return;
+  // Fetch transactions
+  const fetchTransactions = useCallback(async () => {
+    if (!pat || !card.ynabAccountId) {
+      return;
+    }
 
-    const budgetId = storage.getSelectedBudget().id;
-    if (!budgetId) return;
-
-    setLoading(true);
-    const client = new YnabClient(pat);
+    // Abort any previous request
     if (abortRef.current) {
       abortRef.current.abort();
     }
+
     const controller = new AbortController();
     abortRef.current = controller;
 
     try {
-      const allTxns = await client.getTransactions(budgetId, {
-        since_date: period.startDate.toISOString().split('T')[0],
-        signal: controller.signal,
-      });
+      setLoading(true);
+      const ynabClient = new YnabClient(pat);
+      const selectedBudget = storage.getSelectedBudget();
+      const selectedBudgetId = selectedBudget.id;
 
-      const cardTxns = allTxns.filter((t: Transaction) =>
-        t.account_id === card.ynabAccountId &&
-        new Date(t.date) <= period.endDate
+      if (!selectedBudgetId) {
+        setLoading(false);
+        return;
+      }
+      const allTransactions = await ynabClient.getTransactions(
+        selectedBudgetId,
+        {
+          since_date: period.start,
+          signal: controller.signal
+        }
       );
 
-      const enriched = TransactionMatcher.applyTagMappings(cardTxns, mappings);
-      setTransactions(enriched);
-    } catch (error: any) {
-      if (error?.name !== 'AbortError') {
-        console.error('Failed to load transactions:', error);
+      if (Array.isArray(allTransactions)) {
+        // Filter transactions for this specific account and period
+        const accountTransactions = allTransactions.filter(
+          (t: Transaction) =>
+            t.account_id === card.ynabAccountId &&
+            t.date >= period.start &&
+            t.date <= period.end
+        );
+
+        setTransactions(accountTransactions);
+      } else {
+        setTransactions([]);
+      }
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        console.error('Failed to fetch transactions:', error);
+        setTransactions([]);
       }
     } finally {
       if (abortRef.current === controller) {
-        setLoading(false);
         abortRef.current = null;
       }
+      if (!controller.signal.aborted) {
+        setLoading(false);
+      }
     }
-  }, [pat, card.ynabAccountId, period, mappings]);
+  }, [pat, card.ynabAccountId, period]);
 
   useEffect(() => {
-    loadTransactions();
-  }, [loadTransactions]);
+    fetchTransactions();
+  }, [fetchTransactions]);
 
   useEffect(() => {
     return () => {
-      abortRef.current?.abort();
+      if (abortRef.current) {
+        abortRef.current.abort();
+        abortRef.current = null;
+      }
     };
   }, []);
 
@@ -109,130 +117,44 @@ export default function SpendingStatus({ card, rules, mappings, pat }: SpendingS
     setSettings(appSettings);
   }, []);
 
-  // Calculate spending by category and overall
+  // Calculate spending and rewards
   const spendingAnalysis = useMemo(() => {
-    const activeRules = rules.filter(r => r.active);
-
     // Calculate total spend (all transactions, not just categorized)
     const totalSpend = transactions
       .filter(t => t.amount < 0)
       .reduce((sum, t) => sum + Math.abs(t.amount / 1000), 0);
 
-    // Calculate spending by category
-    const categoryMap = new Map<string, CategorySpending>();
-    let totalRewards = 0;
-    let totalRewardsDollars = 0;
-    let totalMiles = 0;
+    // Calculate rewards based on card earning rate
+    let rewardEarned = 0;
+    let rewardEarnedDollars = 0;
 
-    // Initialize categories from rules
-    activeRules.forEach(rule => {
-      rule.categories.forEach(category => {
-        if (!categoryMap.has(category)) {
-          categoryMap.set(category, {
-            category,
-            spent: 0,
-            reward: 0,
-            status: 'safe'
-          });
-        }
-      });
-    });
-
-    // Calculate actual spending per category
-    let uncategorizedSpend = 0;
-    transactions
-      .filter(t => t.amount < 0)
-      .forEach(t => {
-        const amount = Math.abs(t.amount / 1000);
-
-        if (t.rewardCategory) {
-          const category = t.rewardCategory;
-          if (!categoryMap.has(category)) {
-            categoryMap.set(category, {
-              category,
-              spent: 0,
-              reward: 0,
-              status: 'safe'
-            });
-          }
-          const catData = categoryMap.get(category)!;
-          catData.spent += amount;
+    if (card.earningRate) {
+      if (card.type === 'cashback') {
+        // For cashback cards, earningRate is a percentage
+        rewardEarned = totalSpend * (card.earningRate / 100);
+        rewardEarnedDollars = rewardEarned;
+      } else {
+        // For miles cards, earningRate is miles per dollar (or per block)
+        if (card.milesBlockSize && card.milesBlockSize > 1) {
+          // Calculate based on spending blocks
+          const blocks = Math.floor(totalSpend / card.milesBlockSize);
+          rewardEarned = blocks * card.earningRate;
         } else {
-          uncategorizedSpend += amount;
+          // Simple miles per dollar
+          rewardEarned = totalSpend * card.earningRate;
         }
-      });
-
-    // Apply rule limits and calculate rewards
-    activeRules.forEach(rule => {
-      const calculations = RewardsCalculator.calculateRuleRewards(
-        rule,
-        transactions,
-        period,
-        settings || undefined
-      );
-
-      // Accumulate total rewards
-      totalRewards += calculations.rewardEarned;
-      totalRewardsDollars += calculations.rewardEarnedDollars ?? 0;
-
-      // Track miles separately for miles cards
-      if (rule.rewardType === 'miles') {
-        totalMiles += calculations.rewardEarned;
+        // Convert miles to dollars using valuation
+        const milesValuation = settings?.milesValuation || 0.01;
+        rewardEarnedDollars = rewardEarned * milesValuation;
       }
-
-      // Update category limits and rewards
-      calculations.categoryBreakdowns.forEach(breakdown => {
-        const catData = categoryMap.get(breakdown.category);
-        if (catData) {
-          catData.reward += breakdown.rewardDollars || breakdown.reward;
-
-          // Check for category-specific caps
-          const categoryCap = rule.categoryCaps?.find(cap => cap.category === breakdown.category);
-          if (categoryCap) {
-            catData.limit = categoryCap.maxSpend;
-            catData.percentOfLimit = (catData.spent / categoryCap.maxSpend) * 100;
-
-            if (catData.percentOfLimit >= 100) {
-              catData.status = 'exceeded';
-            } else if (catData.percentOfLimit >= 80) {
-              catData.status = 'warning';
-            }
-          }
-        }
-      });
-    });
-
-    // Check overall minimum and maximum
-    const rulesWithMinimum = activeRules.filter(r => r.minimumSpend);
-    const rulesWithMaximum = activeRules.filter(r => r.maximumSpend);
-
-    const overallMinimum = rulesWithMinimum.length > 0
-      ? Math.min(...rulesWithMinimum.map(r => r.minimumSpend!))
-      : undefined;
-    const overallMaximum = rulesWithMaximum.length > 0
-      ? Math.max(...rulesWithMaximum.map(r => r.maximumSpend!))
-      : undefined;
-
-    const minimumMet = !overallMinimum || totalSpend >= overallMinimum;
-    const maximumExceeded = overallMaximum ? totalSpend >= overallMaximum : false;
+    }
 
     return {
       totalSpend,
-      totalRewardsDollars,
-      totalMiles,
-      uncategorizedSpend,
-      overallMinimum,
-      overallMaximum,
-      minimumMet,
-      maximumExceeded,
-      categories: Array.from(categoryMap.values()).sort((a, b) => {
-        // Sort by status priority: exceeded > warning > safe, then by spent amount
-        const statusOrder = { exceeded: 0, warning: 1, safe: 2 };
-        const statusDiff = statusOrder[a.status] - statusOrder[b.status];
-        return statusDiff !== 0 ? statusDiff : b.spent - a.spent;
-      })
+      rewardEarned,
+      rewardEarnedDollars
     };
-  }, [transactions, rules, period, settings]);
+  }, [transactions, card, settings]);
 
   if (loading) {
     return (
@@ -246,181 +168,74 @@ export default function SpendingStatus({ card, rules, mappings, pat }: SpendingS
     );
   }
 
-  const { totalSpend, totalRewardsDollars, totalMiles, uncategorizedSpend, overallMinimum, overallMaximum, minimumMet, maximumExceeded, categories } = spendingAnalysis;
+  const { totalSpend, rewardEarned, rewardEarnedDollars } = spendingAnalysis;
 
   return (
-    <div className="space-y-4">
-      {/* Critical Alerts */}
-      {maximumExceeded && (
-        <Alert className="border-red-500 bg-red-50 dark:bg-red-950/20">
-          <AlertCircle className="h-4 w-4 text-red-600" />
-          <AlertDescription className="text-red-800 dark:text-red-200">
-            <strong>Maximum spend exceeded!</strong> You've reached the overall spending cap of {formatDollars(overallMaximum!)}.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {categories.some(c => c.status === 'exceeded') && !maximumExceeded && (
-        <Alert className="border-orange-500 bg-orange-50 dark:bg-orange-950/20">
-          <AlertTriangle className="h-4 w-4 text-orange-600" />
-          <AlertDescription className="text-orange-800 dark:text-orange-200">
-            <strong>Category limits reached!</strong> Some categories have hit their maximum spend.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* Primary Spending Overview */}
-      <Card className="border-2">
-        <CardHeader className="pb-3">
+    <div className="space-y-6">
+      {/* Main Status Card */}
+      <Card className="border-primary/20">
+        <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle className="text-xl">Spending Overview</CardTitle>
-            <Badge variant="outline" className="text-sm">
-              {daysRemaining} days left
-            </Badge>
+            <div>
+              <CardTitle className="text-2xl">Current Period Status</CardTitle>
+              <div className="flex items-center gap-2 mt-2 text-sm text-muted-foreground">
+                <Calendar className="h-4 w-4" />
+                {new Date(period.start).toLocaleDateString()} - {new Date(period.end).toLocaleDateString()}
+                <Badge variant="secondary" className="ml-2">
+                  {daysRemaining} {daysRemaining === 1 ? 'day' : 'days'} remaining
+                </Badge>
+              </div>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Minimum Spend Progress */}
-          {overallMinimum && (
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium">Minimum Spend Progress</span>
-                <span className="text-sm text-muted-foreground">
-                  {formatDollars(totalSpend)} / {formatDollars(overallMinimum)}
-                </span>
+          {/* Spending Summary */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="p-4 rounded-lg bg-muted/50">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+                <DollarSign className="h-4 w-4" />
+                Total Spent
               </div>
-              <Progress
-                value={Math.min(100, (totalSpend / overallMinimum) * 100)}
-                className="h-3"
-              />
-              <div className="flex items-center gap-2 mt-2">
-                {minimumMet ? (
-                  <Badge variant="default" className="bg-green-600">
-                    <CheckCircle2 className="h-3 w-3 mr-1" />
-                    Minimum Met
-                  </Badge>
-                ) : (
-                  <Badge variant="secondary">
-                    {formatDollars(overallMinimum - totalSpend)} remaining
-                  </Badge>
-                )}
-              </div>
+              <p className="text-2xl font-bold">{formatDollars(totalSpend)}</p>
             </div>
-          )}
 
-          {/* Maximum Spend Warning */}
-          {overallMaximum && (
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium">Maximum Spend Limit</span>
-                <span className="text-sm text-muted-foreground">
-                  {formatDollars(totalSpend)} / {formatDollars(overallMaximum)}
-                </span>
+            <div className="p-4 rounded-lg bg-muted/50">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+                <TrendingUp className="h-4 w-4" />
+                {card.type === 'cashback' ? 'Cashback Earned' : 'Miles Earned'}
               </div>
-              <Progress
-                value={Math.min(100, (totalSpend / overallMaximum) * 100)}
-                className={`h-3 ${maximumExceeded ? '[&>div]:bg-red-600' : ''}`}
-              />
-              {maximumExceeded && (
-                <Badge variant="destructive" className="mt-2">
-                  Stop using this card
-                </Badge>
-              )}
-            </div>
-          )}
-
-          {/* Total Spend and Rewards */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="text-center py-4">
-              <div className="text-3xl font-bold">{formatDollars(totalSpend)}</div>
-              <div className="text-sm text-muted-foreground mt-1">Total spend</div>
-            </div>
-            <div className="text-center py-4">
-              <div className="text-3xl font-bold text-green-600">
+              <p className="text-2xl font-bold">
                 {card.type === 'cashback'
-                  ? formatDollars(totalRewardsDollars)
-                  : totalMiles.toLocaleString()
-                }
+                  ? formatDollars(rewardEarned)
+                  : `${Math.round(rewardEarned).toLocaleString()} miles`}
+              </p>
+            </div>
+
+            <div className="p-4 rounded-lg bg-muted/50">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+                <DollarSign className="h-4 w-4" />
+                Reward Value
               </div>
-              <div className="text-sm text-muted-foreground mt-1">
-                {card.type === 'cashback' ? 'Rewards earned' : 'Miles earned'}
-              </div>
+              <p className="text-2xl font-bold">{formatDollars(rewardEarnedDollars)}</p>
+              {card.type === 'miles' && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  @ ${settings?.milesValuation || 0.01}/mile
+                </p>
+              )}
             </div>
           </div>
+
+          {/* No earning rate warning */}
+          {!card.earningRate && (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                No earning rate configured. Set your card's earning rate in Settings to track rewards.
+              </AlertDescription>
+            </Alert>
+          )}
         </CardContent>
       </Card>
-
-      {/* Category Spending Breakdown */}
-      {categories.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Category Breakdown</CardTitle>
-            <CardDescription>
-              {categories.some(c => c.limit)
-                ? 'Track spending limits and rewards by category'
-                : 'Spending and rewards by category'}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {categories.map(cat => (
-                <div key={cat.category} className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{cat.category}</span>
-                      {cat.status === 'exceeded' && (
-                        <Badge variant="destructive" className="text-xs">Exceeded</Badge>
-                      )}
-                      {cat.status === 'warning' && (
-                        <Badge variant="outline" className="text-xs border-orange-500 text-orange-600">
-                          Warning
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="text-sm text-right">
-                      <div className="font-mono">{formatDollars(cat.spent)}</div>
-                      {cat.limit ? (
-                        <div className="text-xs text-muted-foreground">
-                          of {formatDollars(cat.limit)} max
-                        </div>
-                      ) : (
-                        <div className="text-xs text-green-600">
-                          +{formatDollars(cat.reward)} rewards
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  {cat.limit && (
-                    <Progress
-                      value={Math.min(100, cat.percentOfLimit!)}
-                      className={`h-2 ${
-                        cat.status === 'exceeded' ? '[&>div]:bg-red-600' :
-                        cat.status === 'warning' ? '[&>div]:bg-orange-500' : ''
-                      }`}
-                    />
-                  )}
-                </div>
-              ))}
-              {uncategorizedSpend > 0 && (
-                <div className="pt-2 border-t">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-muted-foreground">Uncategorized</span>
-                      <Badge variant="secondary" className="text-xs">No rewards</Badge>
-                    </div>
-                    <div className="text-sm text-right">
-                      <div className="font-mono text-muted-foreground">{formatDollars(uncategorizedSpend)}</div>
-                      <div className="text-xs text-muted-foreground">
-                        Configure tag mappings
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }

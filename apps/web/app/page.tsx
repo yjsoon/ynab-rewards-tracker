@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useYnabPAT, useCreditCards } from '@/hooks/useLocalStorage';
 import { YnabClient } from '@/lib/ynab-client';
 import { storage } from '@/lib/storage';
-import { RewardsCalculator } from '@/lib/rewards-engine';
+import { SimpleRewardsCalculator } from '@/lib/rewards-engine';
 import { clampDaysLeft } from '@/lib/date';
 import { cn, absFromMilli, formatDollars } from '@/lib/utils';
 import { SetupPrompt } from '@/components/SetupPrompt';
@@ -27,7 +27,6 @@ import {
   AlertCircle,
   Loader2,
   Percent,
-  Clock,
   Settings2
 } from 'lucide-react';
 import type { Transaction } from '@/types/transaction';
@@ -35,6 +34,13 @@ import type { Transaction } from '@/types/transaction';
 // Constants
 const TRANSACTION_LOOKBACK_DAYS = 30;
 const RECENT_TRANSACTIONS_LIMIT = 10;
+
+// Helper functions
+const createSettingsClickHandler = (cardId: string) => (e: React.MouseEvent) => {
+  e.preventDefault();
+  e.stopPropagation();
+  window.location.href = `/cards/${cardId}?tab=settings`;
+};
 
 // Types for better type safety
 type SetupStep = 'pat' | 'budget' | 'accounts' | 'cards';
@@ -84,9 +90,9 @@ export default function DashboardPage() {
       
       // Compute earliest needed window across active cards (for card tiles)
       const activeCards = cards.filter(c => c.active);
-      const periods = activeCards.map(c => RewardsCalculator.calculatePeriod(c));
+      const periods = activeCards.map(c => SimpleRewardsCalculator.calculatePeriod(c));
       const earliestStart = periods.length > 0
-        ? new Date(Math.min(...periods.map(p => p.startDate.getTime())))
+        ? new Date(Math.min(...periods.map(p => new Date(p.start).getTime())))
         : (() => { const d = new Date(); d.setDate(d.getDate() - TRANSACTION_LOOKBACK_DAYS); return d; })();
 
       const txns = await client.getTransactions(budgetId, {
@@ -179,8 +185,9 @@ export default function DashboardPage() {
     const now = new Date();
 
     const getDaysRemaining = (card: typeof cards[0]) => {
-      const period = RewardsCalculator.calculatePeriod(card);
-      return clampDaysLeft(period, now);
+      const period = SimpleRewardsCalculator.calculatePeriod(card);
+      const periodDate = { startDate: new Date(period.start), endDate: new Date(period.end) };
+      return clampDaysLeft(periodDate, now);
     };
 
     const cashback = cards.filter(c => c.type === 'cashback');
@@ -332,9 +339,10 @@ export default function DashboardPage() {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {cashbackCards.map((card) => {
-                  const period = RewardsCalculator.calculatePeriod(card);
+                  const period = SimpleRewardsCalculator.calculatePeriod(card);
                   const now = new Date();
-                  const daysLeft = clampDaysLeft(period, now);
+                  const periodDate = { startDate: new Date(period.start), endDate: new Date(period.end) };
+                  const daysLeft = clampDaysLeft(periodDate, now);
                   const isEndingSoon = daysLeft <= 7;
                   // TODO: Get rules from storage when implementing progress tracking
                   const hasMaxSpend = false; // Placeholder for now
@@ -350,17 +358,14 @@ export default function DashboardPage() {
                         isEndingSoon ? "border-orange-200 dark:border-orange-900" : "hover:border-primary/50",
                         "bg-gradient-to-br from-green-500/5 via-transparent to-green-500/10"
                       )}>
-                        {/* Edit Button */}
+                        {/* Settings Button */}
                         <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
                           <Button
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              window.location.href = `/cards/${card.id}`;
-                            }}
-                            aria-label="Edit card"
+                            onClick={createSettingsClickHandler(card.id)}
+                            aria-label="Go to card settings"
                           >
                             <Settings2 className="h-4 w-4" />
                           </Button>
@@ -372,25 +377,6 @@ export default function DashboardPage() {
                         <CardContent className="flex-1 flex flex-col">
                           {/* Spending Summary - Real Data */}
                           <CardSpendingSummary card={card} pat={pat} prefetchedTransactions={allBudgetTransactions} />
-
-                          {/* Period Info with Urgency */}
-                          <div className="mt-auto pt-2 border-t">
-                            <div className="flex items-center text-sm">
-                              <div className="flex items-center gap-1">
-                                {isEndingSoon ? (
-                                  <Clock className="h-4 w-4 text-orange-500" aria-hidden="true" />
-                                ) : (
-                                  <Calendar className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                                )}
-                                <span className={cn(
-                                  "font-medium",
-                                  isEndingSoon && "text-orange-600 dark:text-orange-400"
-                                )}>
-                                  {daysLeft} days left
-                                </span>
-                              </div>
-                            </div>
-                          </div>
                         </CardContent>
                       </Card>
                     </Link>
@@ -410,9 +396,10 @@ export default function DashboardPage() {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {milesCards.map((card) => {
-                  const period = RewardsCalculator.calculatePeriod(card);
+                  const period = SimpleRewardsCalculator.calculatePeriod(card);
                   const now = new Date();
-                  const daysLeft = clampDaysLeft(period, now);
+                  const periodDate = { startDate: new Date(period.start), endDate: new Date(period.end) };
+                  const daysLeft = clampDaysLeft(periodDate, now);
                   const isEndingSoon = daysLeft <= 7;
                   // TODO: Get rules from storage when implementing progress tracking
                   const hasMaxSpend = false; // Placeholder for now
@@ -428,17 +415,14 @@ export default function DashboardPage() {
                         isEndingSoon ? "border-orange-200 dark:border-orange-900" : "hover:border-primary/50",
                         "bg-gradient-to-br from-blue-500/5 via-transparent to-blue-500/10"
                       )}>
-                        {/* Edit Button */}
+                        {/* Settings Button */}
                         <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
                           <Button
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              window.location.href = `/cards/${card.id}`;
-                            }}
-                            aria-label="Edit card"
+                            onClick={createSettingsClickHandler(card.id)}
+                            aria-label="Go to card settings"
                           >
                             <Settings2 className="h-4 w-4" />
                           </Button>
@@ -450,25 +434,6 @@ export default function DashboardPage() {
                         <CardContent className="flex-1 flex flex-col">
                           {/* Spending Summary - Real Data */}
                           <CardSpendingSummary card={card} pat={pat} prefetchedTransactions={allBudgetTransactions} />
-
-                          {/* Period Info with Urgency */}
-                          <div className="mt-auto pt-2 border-t">
-                            <div className="flex items-center text-sm">
-                              <div className="flex items-center gap-1">
-                                {isEndingSoon ? (
-                                  <Clock className="h-4 w-4 text-orange-500" aria-hidden="true" />
-                                ) : (
-                                  <Calendar className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                                )}
-                                <span className={cn(
-                                  "font-medium",
-                                  isEndingSoon && "text-orange-600 dark:text-orange-400"
-                                )}>
-                                  {daysLeft} days left
-                                </span>
-                              </div>
-                            </div>
-                          </div>
                         </CardContent>
                       </Card>
                     </Link>
