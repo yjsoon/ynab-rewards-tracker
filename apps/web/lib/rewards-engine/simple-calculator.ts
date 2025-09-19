@@ -35,14 +35,14 @@ export class SimpleRewardsCalculator {
       let startDate: Date;
       let endDate: Date;
 
-      if (now.getDate() < billingDay) {
-        // Current period started last month
-        startDate = new Date(year, month - 1, billingDay);
-        endDate = new Date(year, month, billingDay - 1, 23, 59, 59, 999);
-      } else {
+      if (now.getDate() >= billingDay) {
         // Current period started this month
         startDate = new Date(year, month, billingDay);
         endDate = new Date(year, month + 1, billingDay - 1, 23, 59, 59, 999);
+      } else {
+        // Current period started last month
+        startDate = new Date(year, month - 1, billingDay);
+        endDate = new Date(year, month, billingDay - 1, 23, 59, 59, 999);
       }
 
       return {

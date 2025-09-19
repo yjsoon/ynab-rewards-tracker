@@ -152,8 +152,8 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
         </div>
       </div>
 
-      {/* Earning Rate Display */}
-      <div className="text-center py-2 border-t">
+      {/* Earning Rate and Period Info */}
+      <div className="text-center pt-2 border-t space-y-1">
         <div className="flex items-center justify-center gap-2">
           {card.earningRate ? (
             <>
@@ -180,15 +180,13 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
           )}
         </div>
         {card.type === 'miles' && rewardEarnedDollars > 0 && (
-          <p className="text-xs text-muted-foreground mt-1">
+          <p className="text-xs text-muted-foreground">
             Value: {formatDollars(rewardEarnedDollars)} @ ${settings?.milesValuation || 0.01}/mile
           </p>
         )}
-      </div>
-
-      {/* Period Info */}
-      <div className="text-center text-xs text-muted-foreground">
-        {new Date(period.start).toLocaleDateString()} - {new Date(period.end).toLocaleDateString()}
+        <div className="text-xs text-muted-foreground">
+          {new Date(period.start).toLocaleDateString()} - {new Date(period.end).toLocaleDateString()}
+        </div>
       </div>
     </div>
   );
