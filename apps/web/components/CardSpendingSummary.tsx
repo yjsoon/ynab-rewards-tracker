@@ -109,10 +109,17 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
       settings || undefined
     );
 
+    // Calculate days remaining
+    const now = new Date();
+    const end = new Date(period.end);
+    const diff = end.getTime() - now.getTime();
+    const daysRemaining = Math.ceil(diff / (1000 * 60 * 60 * 24));
+
     return {
       totalSpend: calculation.totalSpend,
       rewardEarned: calculation.rewardEarned,
-      rewardEarnedDollars: calculation.rewardEarnedDollars
+      rewardEarnedDollars: calculation.rewardEarnedDollars,
+      daysRemaining: Math.max(0, daysRemaining)
     };
   }, [card, transactions, period, settings]);
 
@@ -129,7 +136,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
     );
   }
 
-  const { totalSpend, rewardEarned, rewardEarnedDollars } = summary;
+  const { totalSpend, rewardEarned, rewardEarnedDollars, daysRemaining } = summary;
 
   return (
     <div className="space-y-3">
@@ -152,8 +159,8 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
         </div>
       </div>
 
-      {/* Earning Rate and Period Info */}
-      <div className="text-center pt-2 border-t space-y-1">
+      {/* Earning Rate */}
+      <div className="text-center pt-2 space-y-1">
         <div className="flex items-center justify-center gap-2">
           {card.earningRate ? (
             <>
@@ -184,9 +191,12 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
             Value: {formatDollars(rewardEarnedDollars)} @ ${settings?.milesValuation || 0.01}/mile
           </p>
         )}
-        <div className="text-xs text-muted-foreground">
-          {new Date(period.start).toLocaleDateString()} - {new Date(period.end).toLocaleDateString()}
-        </div>
+      </div>
+
+      {/* Period Info - dates left, days right */}
+      <div className="flex justify-between items-center text-xs text-muted-foreground px-1">
+        <span>{new Date(period.start).toLocaleDateString()} - {new Date(period.end).toLocaleDateString()}</span>
+        <span>{daysRemaining} {daysRemaining === 1 ? 'day' : 'days'} left</span>
       </div>
     </div>
   );
