@@ -1,58 +1,296 @@
-# AGENTS
+# YJAB — YJ's Awards Buddy
 
-This repo hosts YJAB — YJ's Awards Buddy. It’s a client‑side rewards tracker that analyses YNAB transactions to track credit‑card rewards with user‑defined rules. No server DB is used; all user data lives in browser localStorage.
+A client‑side rewards tracker that analyses YNAB transactions to track credit card rewards with user‑defined rules. All user data lives in browser localStorage — no server database is used.
 
-## Snapshot
-- App: Next.js 14 (App Router) + TypeScript
-- UI: Tailwind + shadcn/ui + Radix primitives
-- Theming: `next-themes` with light/dark/system
-- Data: Browser `localStorage` (see `apps/web/lib/storage.ts`)
-- YNAB API: proxied via `/api/ynab/*` routes (bearer PAT)
-- Cards: All cards are YNAB‑linked (manual cards removed)
+## Tech Stack
+- **App**: Next.js 14 (App Router) + TypeScript
+- **UI**: Tailwind CSS + shadcn/ui + Radix UI primitives
+- **Theming**: `next-themes` with light/dark/system modes
+- **Data**: Browser `localStorage` (see `apps/web/lib/storage.ts`)
+- **YNAB API**: Proxied via `/api/ynab/*` routes (bearer PAT)
+- **State Management**: React hooks + Context API
 
-## Key Paths (apps/web)
-- `app/` — routes and pages (dashboard, settings, rewards, cards/*)
-- `components/` — UI primitives and app components (Navigation, ThemeToggle)
-- `lib/rewards-engine/` — engine modules: `calculator`, `matcher`, `recommendations`
-- `lib/storage.ts` — localStorage schema + getters/setters + migrations
-- `hooks/useLocalStorage.ts` — React hooks over `storage`
-- `app/api/ynab/*` — thin proxy to YNAB REST API
-- `types/transaction.ts` — client transaction types and reward adornments
+## Core Features
 
-## Data Model (storage)
-- `CreditCard`: `{ id, name, issuer, type: 'cashback'|'miles', ynabAccountId, billingCycle?, active }`
-  - `ynabAccountId` is required; there are no manual cards.
-- `RewardRule`: percentages or miles per dollar, optional caps (overall and per category).
-- `TagMapping`: maps YNAB flags/tags to reward categories.
-- `RewardCalculation`: includes raw `rewardEarned` and normalized `rewardEarnedDollars` for cross‑card comparisons.
-- `AppSettings`: default currency label, and valuation knob: `milesValuation` (dollars per mile).
+### 1. YNAB Integration
+- Connect via Personal Access Token (PAT)
+- Select budget and track credit card accounts
+- Fetch transactions automatically
+- All cards are YNAB‑linked (no manual cards)
 
-Conventions:
-- Use “dollars” in identifiers (not “USD”). UI shows `$` but avoids hard coding currency copy.
-- For time windows, `RewardsCalculator.calculatePeriod` labels months as `YYYY-MM` and billing cycles as `YYYY-MM-DD` (start day).
-- When overall `maximumSpend` is exceeded, the calculator proportionally scales per‑category rewards once at the aggregate level.
-- Recommendation effective rates use normalized dollar rewards.
+### 2. Credit Card Management
+- Support for cashback and miles cards
+- Configurable earning rates per card
+- Billing cycle tracking (calendar month or custom billing day)
+- Active/inactive status for temporary disabling
 
-## Coding Guidelines
-- TypeScript first; keep types aligned with usage (e.g., `issuer` required, `ynabAccountId` required).
-- Avoid adding “manual” card paths; cards are created from tracked YNAB accounts only.
-- Read/write through `storage.ts` (do not reach into `localStorage` directly). Prefer adding migrations when renaming fields.
-- Networking: when adding new fetch flows in React components, use `AbortController` to avoid setting state after unmount.
-- Engine: prefer explicit constants over magic numbers; pull valuations from settings where practical.
-- Keep commits atomic and descriptive.
+### 3. Reward Rules System
+- Multiple rules per card with time windows
+- Category‑based reward rates (cashback % or miles per dollar)
+- Block‑based miles calculation (e.g., "1 mile per $5 spent")
+- Spending caps:
+  - Per‑category caps with automatic limiting
+  - Overall caps with proportional scaling
+  - Minimum spend requirements
+- Priority system for rule application
 
-## Run/Dev (indicative)
-- Install: `pnpm install`
-- Web app: `pnpm --filter ./apps/web dev`
-- PAT: User pastes YNAB PAT under Settings; routes under `/api/ynab/*` forward with the bearer token.
+### 4. Tag Mapping & Categories
+- Map YNAB flags/tags to reward categories
+- Inline category editing in transaction views
+- "Apply to tag" shortcut for bulk mappings
+- Per‑transaction overrides (planned)
 
-## What Not To Do
-- Do not store the PAT in exports/backups (exports already exclude it).
-- Do not reintroduce manual cards.
-- Do not mix reward units when computing effective rates — use normalized dollars.
+### 5. Rewards Calculation Engine
+- Period‑based calculations (monthly or billing cycle)
+- Progress tracking for minimum/maximum spend
+- "Stop using" alerts when caps reached
+- Normalised dollar values for cross‑card comparison
+- Real‑time recomputation with caching
 
-## Open Items (see TODO.md for details)
-- Wire category recommendations to settings valuations
-- Add abortable fetches in dashboard/transactions
-- Tests for calculator/recommendations
-- Remove legacy `lib/reward-engine/rules.ts` (singular)
+### 6. Dashboard & Analytics
+- Overview of all tracked cards
+- Recent transactions with reward annotations
+- Spending status and progress bars
+- Last computed timestamp
+- Category recommendations for optimal rewards
+
+### 7. Settings & Configuration
+- Theme switching (light/dark/system)
+- Currency configuration
+- Miles valuation settings (dollars per mile)
+- Export/import settings (excluding PAT for security)
+- Clear all data option
+
+## Project Structure (apps/web)
+
+```
+apps/web/
+├── app/                      # Next.js App Router pages
+│   ├── api/ynab/            # YNAB API proxy routes
+│   ├── cards/[id]/          # Card detail pages
+│   │   ├── mappings/        # Tag mapping management
+│   │   ├── transactions/    # Transaction list with editing
+│   │   └── page.tsx         # Card overview with tabs
+│   ├── dashboard/           # Main dashboard (redirects to /)
+│   ├── rewards/             # Rewards calculation & display
+│   ├── settings/            # App settings & configuration
+│   ├── layout.tsx           # Root layout with providers
+│   └── page.tsx             # Homepage/dashboard
+│
+├── components/              # React components
+│   ├── ui/                  # shadcn/ui components
+│   ├── CardSpendingSummary.tsx
+│   ├── Navigation.tsx
+│   ├── SetupPrompt.tsx
+│   ├── TagMappingManager.tsx
+│   └── theme‑*.tsx          # Theme components
+│
+├── lib/                     # Core libraries
+│   ├── rewards‑engine/      # Calculation logic
+│   │   ├── calculator.ts    # Core calculation
+│   │   ├── compute.ts       # Orchestration
+│   │   ├── matcher.ts       # Transaction matching
+│   │   └── recommendations.ts
+│   ├── storage.ts           # localStorage service
+│   ├── utils.ts             # Utility functions
+│   └── constants.ts         # App constants
+│
+├── hooks/                   # React hooks
+│   └── useLocalStorage.ts   # Storage hooks
+│
+├── types/                   # TypeScript types
+│   └── transaction.ts       # Transaction types
+│
+└── contexts/                # React contexts
+    └── StorageContext.tsx   # Storage provider
+```
+
+## Data Model
+
+### Core Entities (in storage.ts)
+
+```typescript
+CreditCard {
+  id: string
+  name: string
+  issuer: string
+  type: 'cashback' | 'miles'
+  ynabAccountId: string  // Required YNAB linkage
+  billingCycle?: {
+    type: 'calendar' | 'billing'
+    dayOfMonth?: number  // For billing type
+  }
+  active: boolean
+  earningRate?: number  // % for cashback, miles/$ for miles
+  milesBlockSize?: number  // For block‑based miles
+}
+
+RewardRule {
+  id: string
+  cardId: string
+  name: string
+  rewardType: 'cashback' | 'miles'
+  rewardValue: number
+  milesBlockSize?: number
+  categories: string[]
+  minimumSpend?: number
+  maximumSpend?: number
+  categoryCaps?: CategoryCap[]
+  startDate: string
+  endDate: string
+  active: boolean
+  priority: number
+}
+
+TagMapping {
+  id: string
+  cardId: string
+  ynabTag: string
+  rewardCategory: string
+}
+
+RewardCalculation {
+  cardId: string
+  ruleId: string
+  period: string  // YYYY‑MM or YYYY‑MM‑DD
+  totalSpend: number
+  eligibleSpend: number
+  rewardEarned: number  // Raw units
+  rewardEarnedDollars: number  // Normalised
+  rewardType: 'cashback' | 'miles'
+  categoryBreakdowns: CategoryBreakdown[]
+  minimumMet: boolean
+  maximumExceeded: boolean
+  shouldStopUsing: boolean
+}
+```
+
+## Key Conventions
+
+### Naming & Units
+- Use "dollars" in identifiers (not "USD")
+- UI shows `$` symbol but avoids hardcoding currency
+- Period labels: `YYYY‑MM` (calendar) or `YYYY‑MM‑DD` (billing)
+- All amounts in milliunits internally (YNAB standard)
+
+### Rewards Calculation
+- Raw rewards: cashback in dollars, miles in miles
+- Normalised values: everything converted to dollars for comparison
+- Cap scaling: proportional reduction when overall cap exceeded
+- Effective rates: based on normalised dollar values
+
+### Storage & Migrations
+- All reads/writes through `storage.ts` service
+- Automatic migrations for field renames
+- PAT never included in exports/backups
+- UI state flags kept separate from main storage
+
+### Security & Privacy
+- PAT stored locally only
+- Exports exclude authentication tokens
+- No server‑side data storage
+- All processing happens client‑side
+
+## Development
+
+### Prerequisites
+- Node.js 18+
+- pnpm package manager
+
+### Setup & Run
+```bash
+# Install dependencies
+pnpm install
+
+# Run development server
+pnpm ‑‑filter ./apps/web dev
+
+# Build for production
+pnpm ‑‑filter ./apps/web build
+```
+
+### Environment
+- No `.env` files needed (fully client‑side)
+- PAT entered through UI settings
+- Development runs on `http://localhost:3000`
+
+## Current Roadmap (from TODO.md)
+
+### P1 — Next Actions
+- [ ] Persist per‑transaction category overrides
+- [ ] Shared TransactionsList component for reuse
+- [ ] Calculator window enforcement with tests
+- [ ] Comprehensive test coverage for calculator & recommendations
+- [ ] Accessibility improvements (labels, ARIA)
+
+### P2 — Quality & UX
+- [ ] Branding assets (favicon, OG images)
+- [ ] Recommendations "why" tooltips
+- [ ] Progress & limits UX improvements
+- [ ] MappingForm extraction for reuse
+
+### P3 — Enhancements
+- [ ] Transaction period overrides (local only)
+- [ ] Background refresh while app is open
+- [ ] Debug tooling for rewards engine
+
+### Recently Shipped (Sep 2025)
+- ✅ YJAB rebrand complete
+- ✅ Shared RuleForm with validation
+- ✅ Miles valuation settings integrated
+- ✅ Abortable fetches throughout
+- ✅ "Last computed" timestamps
+- ✅ Category recommendations
+- ✅ Card transactions tab with inline editing
+- ✅ Mappings index page
+- ✅ Optimised compute performance
+- ✅ Removed Prisma/DB artefacts
+
+## Architecture Decisions
+
+### Client‑Only Approach
+- **Decision**: No backend server or database
+- **Rationale**: Privacy‑first, zero hosting costs, instant deployment
+- **Trade‑off**: Limited to single‑device usage
+
+### YNAB Integration
+- **Decision**: All cards must be YNAB‑linked
+- **Rationale**: Single source of truth, automatic transaction sync
+- **Trade‑off**: Cannot track non‑YNAB cards
+
+### Rewards Normalisation
+- **Decision**: Convert all rewards to dollar values
+- **Rationale**: Enable cross‑card comparison regardless of type
+- **Implementation**: Configurable valuation rates in settings
+
+### Period‑Based Calculations
+- **Decision**: Calculate by calendar month or billing cycle
+- **Rationale**: Match real credit card statements
+- **Implementation**: Flexible period calculation in calculator
+
+## Testing Strategy
+- Unit tests for calculation logic
+- Integration tests for YNAB API proxy
+- Component tests for critical UI flows
+- Manual testing for edge cases
+
+## Deployment
+- Vercel recommended for Next.js apps
+- No environment variables needed
+- Static export possible with some limitations
+
+## Contributing Guidelines
+- TypeScript‑first development
+- Follow existing patterns and conventions
+- Test calculations thoroughly
+- Keep commits atomic and descriptive
+- British spelling in user‑facing copy
+- US spelling in code identifiers
+
+## What NOT to Do
+- ❌ Store PAT in exports or backups
+- ❌ Reintroduce manual (non‑YNAB) cards
+- ❌ Mix reward units when comparing
+- ❌ Access localStorage directly (use storage.ts)
+- ❌ Hardcode currency symbols or values
+- ❌ Create server‑side dependencies
