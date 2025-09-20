@@ -199,7 +199,6 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
           card={card}
           state={formData}
           onFieldChange={handleFieldChange}
-          compact={false}
           showNameAndIssuer={true}
           showCardType={true}
           milesValuation={settings?.milesValuation || 0.01}

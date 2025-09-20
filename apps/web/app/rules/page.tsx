@@ -182,7 +182,6 @@ export default function RulesPage() {
                       state={editState[card.id] || {}}
                       onFieldChange={(field, value) => handleFieldChange(card.id, field, value)}
                       isChanged={changedCards.has(card.id)}
-                      compact={true}
                       milesValuation={settings?.milesValuation}
                     />
                   ))}
@@ -217,7 +216,6 @@ export default function RulesPage() {
                       state={editState[card.id] || {}}
                       onFieldChange={(field, value) => handleFieldChange(card.id, field, value)}
                       isChanged={changedCards.has(card.id)}
-                      compact={true}
                       milesValuation={settings?.milesValuation}
                     />
                   ))}

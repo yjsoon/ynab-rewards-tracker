@@ -29,7 +29,6 @@ interface CardSettingsEditorProps {
   state: CardEditState;
   onFieldChange: (field: keyof CardEditState, value: any) => void;
   isChanged?: boolean;
-  compact?: boolean; // For Rules page grid view
   showNameAndIssuer?: boolean; // For individual card page
   showCardType?: boolean; // For individual card page where type can be changed
   milesValuation?: number; // For showing miles value
@@ -40,27 +39,85 @@ export function CardSettingsEditor({
   state,
   onFieldChange,
   isChanged = false,
-  compact = false,
   showNameAndIssuer = false,
   showCardType = false,
   milesValuation = 0.01,
 }: CardSettingsEditorProps) {
   const cardType = state.type ?? card.type;
   
-  if (compact) {
-    // Compact grid layout for Rules page
-    return (
+  return (
+    <div className="space-y-4">
+      {/* Name, Issuer, and Type Row - only shown for individual card settings */}
+      {(showNameAndIssuer || showCardType) && (
+        <div
+          className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4 border rounded-lg ${
+            isChanged ? 'bg-amber-50 dark:bg-amber-950/20 border-amber-300 dark:border-amber-700' : ''
+          }`}
+        >
+          {showNameAndIssuer && (
+            <>
+              <div>
+                <Label htmlFor={`name-${card.id}`} className="text-sm text-muted-foreground">
+                  Card Name
+                </Label>
+                <Input
+                  id={`name-${card.id}`}
+                  value={state.name ?? card.name}
+                  onChange={(e) => onFieldChange('name', e.target.value)}
+                  placeholder="e.g., Chase Sapphire Preferred"
+                  className="h-9 mt-1"
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor={`issuer-${card.id}`} className="text-sm text-muted-foreground">
+                  Issuer
+                </Label>
+                <Input
+                  id={`issuer-${card.id}`}
+                  value={state.issuer ?? card.issuer ?? ''}
+                  onChange={(e) => onFieldChange('issuer', e.target.value)}
+                  placeholder="e.g., Chase, Amex, Citi"
+                  className="h-9 mt-1"
+                />
+              </div>
+            </>
+          )}
+          
+          {showCardType && (
+            <div>
+              <Label className="text-sm text-muted-foreground">Reward Type</Label>
+              <Select
+                value={cardType}
+                onValueChange={(value) => onFieldChange('type', value as 'cashback' | 'miles')}
+              >
+                <SelectTrigger className="h-9 mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cashback">Cashback</SelectItem>
+                  <SelectItem value="miles">Miles/Points</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Main Settings Grid */}
       <div 
         className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 p-4 border rounded-lg ${
-          isChanged ? 'bg-amber-50 dark:bg-amber-950/20 border-amber-300 dark:border-amber-700' : ''
+          isChanged && !showNameAndIssuer ? 'bg-amber-50 dark:bg-amber-950/20 border-amber-300 dark:border-amber-700' : ''
         }`}
       >
         {/* Card Name & Status */}
         <div className="lg:col-span-1">
-          <div className="flex items-center gap-2 mb-2">
-            <CreditCardIcon className="h-4 w-4 text-muted-foreground" />
-            <span className="font-medium">{card.name}</span>
-          </div>
+          {!showNameAndIssuer && (
+            <div className="flex items-center gap-2 mb-2">
+              <CreditCardIcon className="h-4 w-4 text-muted-foreground" />
+              <span className="font-medium">{card.name}</span>
+            </div>
+          )}
           <div className="flex items-center gap-2">
             <Switch
               checked={state.active ?? card.active}
@@ -199,239 +256,12 @@ export function CardSettingsEditor({
               </p>
             </div>
           )}
-          {isChanged && (
+          {isChanged && !showNameAndIssuer && (
             <Badge variant="outline" className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300">
               Modified
             </Badge>
           )}
         </div>
-      </div>
-    );
-  }
-
-  // Full layout for individual card settings
-  return (
-    <div className="space-y-6">
-      {/* Card Name & Issuer */}
-      {showNameAndIssuer && (
-        <>
-          <div className="space-y-2">
-            <Label htmlFor="name">Card Name</Label>
-            <Input
-              id="name"
-              value={state.name ?? card.name}
-              onChange={(e) => onFieldChange('name', e.target.value)}
-              placeholder="e.g., Chase Sapphire Preferred"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="issuer">Issuer</Label>
-            <Input
-              id="issuer"
-              value={state.issuer ?? card.issuer ?? ''}
-              onChange={(e) => onFieldChange('issuer', e.target.value)}
-              placeholder="e.g., Chase, Amex, Citi"
-              minLength={2}
-              maxLength={100}
-            />
-            <p className="text-xs text-muted-foreground">
-              Name of the bank or financial institution
-            </p>
-          </div>
-        </>
-      )}
-
-      {/* Reward Type */}
-      {showCardType && (
-        <div className="space-y-2">
-          <Label>Reward Type</Label>
-          <RadioGroup
-            value={cardType}
-            onValueChange={(value) => onFieldChange('type', value as 'cashback' | 'miles')}
-          >
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="cashback" id="cashback" />
-              <Label htmlFor="cashback" className="font-normal cursor-pointer">
-                Cashback (percentage rewards)
-              </Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="miles" id="miles" />
-              <Label htmlFor="miles" className="font-normal cursor-pointer">
-                Miles/Points (travel rewards)
-              </Label>
-            </div>
-          </RadioGroup>
-        </div>
-      )}
-
-      {/* Billing Cycle */}
-      <div className="space-y-2">
-        <Label>Billing Cycle</Label>
-        <RadioGroup
-          value={state.billingCycleType ?? card.billingCycle?.type ?? 'calendar'}
-          onValueChange={(value) => onFieldChange('billingCycleType', value as 'calendar' | 'billing')}
-        >
-          <div className="flex items-center space-x-2">
-            <RadioGroupItem value="calendar" id="calendar" />
-            <Label htmlFor="calendar" className="font-normal cursor-pointer">
-              Calendar month (1st to last day)
-            </Label>
-          </div>
-          <div className="flex items-center space-x-2">
-            <RadioGroupItem value="billing" id="billing" />
-            <Label htmlFor="billing" className="font-normal cursor-pointer">
-              Custom billing cycle
-            </Label>
-          </div>
-        </RadioGroup>
-
-        {(state.billingCycleType ?? card.billingCycle?.type) === 'billing' && (
-          <div className="ml-6 mt-3">
-            <Label htmlFor="billingDay">Statement closes on day</Label>
-            <Select
-              value={String(state.billingCycleDay ?? card.billingCycle?.dayOfMonth ?? 1)}
-              onValueChange={(value) => onFieldChange('billingCycleDay', parseInt(value))}
-            >
-              <SelectTrigger id="billingDay" className="w-32">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {Array.from({ length: 28 }, (_, i) => i + 1).map(day => (
-                  <SelectItem key={day} value={String(day)}>
-                    {day}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-      </div>
-
-      {/* Earning Rate */}
-      <div className="space-y-2">
-        <Label htmlFor="earningRate">Earning Rate</Label>
-        <div className="flex items-center gap-2">
-          {cardType === 'cashback' ? (
-            <>
-              <div className="relative flex-1">
-                <Input
-                  id="earningRate"
-                  type="number"
-                  value={state.earningRate ?? card.earningRate ?? 1}
-                  onChange={(e) => onFieldChange('earningRate', parseFloat(e.target.value) || 0)}
-                  step="0.1"
-                  min="0"
-                  max="100"
-                  placeholder="e.g., 2"
-                />
-                <Percent className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              </div>
-              <span className="text-sm text-muted-foreground">cashback</span>
-            </>
-          ) : (
-            <>
-              <div className="flex-1">
-                <Input
-                  id="earningRate"
-                  type="number"
-                  value={state.earningRate ?? card.earningRate ?? 1}
-                  onChange={(e) => onFieldChange('earningRate', parseFloat(e.target.value) || 0)}
-                  step="0.1"
-                  min="0"
-                  placeholder="e.g., 1.5"
-                />
-              </div>
-              <span className="text-sm text-muted-foreground">miles per dollar</span>
-            </>
-          )}
-        </div>
-        <p className="text-xs text-muted-foreground">
-          {cardType === 'cashback'
-            ? 'Percentage of cashback earned on purchases'
-            : 'Number of miles earned per dollar spent'}
-        </p>
-      </div>
-
-      {/* Minimum Spend Requirement */}
-      <div className="space-y-2">
-        <Label>Minimum Spend Requirement</Label>
-        <RadioGroup
-          value={
-            state.minimumSpend === null || state.minimumSpend === undefined
-              ? 'not-configured'
-              : state.minimumSpend === 0
-              ? 'no-minimum'
-              : 'has-minimum'
-          }
-          onValueChange={(value) => {
-            if (value === 'not-configured') {
-              onFieldChange('minimumSpend', null);
-            } else if (value === 'no-minimum') {
-              onFieldChange('minimumSpend', 0);
-            } else {
-              onFieldChange('minimumSpend', 1000); // Default $1000
-            }
-          }}
-        >
-          <div className="flex items-center space-x-2">
-            <RadioGroupItem value="not-configured" id="not-configured" />
-            <Label htmlFor="not-configured" className="font-normal cursor-pointer">
-              Not configured (will show setup reminder)
-            </Label>
-          </div>
-          <div className="flex items-center space-x-2">
-            <RadioGroupItem value="no-minimum" id="no-minimum" />
-            <Label htmlFor="no-minimum" className="font-normal cursor-pointer">
-              No minimum spend required
-            </Label>
-          </div>
-          <div className="flex items-center space-x-2">
-            <RadioGroupItem value="has-minimum" id="has-minimum" />
-            <Label htmlFor="has-minimum" className="font-normal cursor-pointer">
-              Has minimum spend requirement
-            </Label>
-          </div>
-        </RadioGroup>
-
-        {state.minimumSpend !== null && state.minimumSpend !== undefined && state.minimumSpend > 0 && (
-          <div className="ml-6 mt-3">
-            <Label htmlFor="minimumSpendAmount">Minimum spend amount</Label>
-            <div className="relative flex-1 mt-1">
-              <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                id="minimumSpendAmount"
-                type="number"
-                value={state.minimumSpend}
-                onChange={(e) => onFieldChange('minimumSpend', parseFloat(e.target.value) || 0)}
-                step="100"
-                min="0"
-                max="100000"
-                placeholder="e.g., 1000"
-                className="pl-8"
-              />
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Amount required to earn rewards for this billing period
-            </p>
-          </div>
-        )}
-      </div>
-
-      {/* Active Status */}
-      <div className="flex items-center justify-between">
-        <div className="space-y-0.5">
-          <Label htmlFor="active">Active Card</Label>
-          <p className="text-sm text-muted-foreground">
-            Include this card in recommendations and tracking
-          </p>
-        </div>
-        <Switch
-          id="active"
-          checked={state.active ?? card.active}
-          onCheckedChange={(checked) => onFieldChange('active', checked)}
-        />
       </div>
     </div>
   );
