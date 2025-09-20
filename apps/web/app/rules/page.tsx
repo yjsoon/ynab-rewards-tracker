@@ -145,10 +145,8 @@ export default function RulesPage() {
             {card.type === 'cashback' ? 'Cashback Rate' : 'Miles Rate'}
           </Label>
           <div className="relative mt-1">
-            {card.type === 'cashback' ? (
+            {card.type === 'cashback' && (
               <Percent className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            ) : (
-              <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             )}
             <Input
               id={`rate-${card.id}`}
@@ -158,28 +156,10 @@ export default function RulesPage() {
               step="0.1"
               min="0"
               max="100"
-              className="pl-8 h-9"
+              className={card.type === 'cashback' ? 'pl-8 h-9' : 'h-9'}
               placeholder={card.type === 'cashback' ? '1.5' : '1'}
             />
           </div>
-          {card.type === 'miles' && (
-            <div className="mt-2">
-              <Label htmlFor={`block-${card.id}`} className="text-xs text-muted-foreground">
-                Per ${' '}
-              </Label>
-              <Input
-                id={`block-${card.id}`}
-                type="number"
-                value={state.milesBlockSize ?? card.milesBlockSize ?? 1}
-                onChange={(e) => handleFieldChange(card.id, 'milesBlockSize', parseFloat(e.target.value) || 1)}
-                step="1"
-                min="1"
-                max="100"
-                className="h-8 mt-1"
-                placeholder="1"
-              />
-            </div>
-          )}
         </div>
 
         {/* Minimum Spend */}
@@ -276,10 +256,12 @@ export default function RulesPage() {
             </div>
           ) : (
             <div className="text-right">
-              <p className="text-sm text-muted-foreground">Miles value</p>
+              <p className="text-sm text-muted-foreground">Miles rate</p>
               <p className="text-lg font-semibold text-blue-600 dark:text-blue-400">
-                {formatDollars((state.earningRate ?? card.earningRate ?? 1) * (settings?.milesValuation || 0.01))}
-                <span className="text-xs text-muted-foreground ml-1">per $</span>
+                {state.earningRate ?? card.earningRate ?? 1} miles
+                <span className="text-xs text-muted-foreground ml-1">
+                  per ${state.milesBlockSize ?? card.milesBlockSize ?? 1}
+                </span>
               </p>
             </div>
           )}
