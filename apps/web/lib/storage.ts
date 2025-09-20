@@ -17,6 +17,8 @@ export interface CreditCard {
   // Earning rates (replaces the complex rules system)
   earningRate?: number; // For cashback: percentage (e.g., 2 for 2%). For miles: miles per dollar (e.g., 1.5)
   milesBlockSize?: number; // For miles cards: minimum spending block (e.g., 5 for "per $5 spent")
+  // Minimum spend requirement (three states: null/undefined = not configured, 0 = no minimum, >0 = has minimum)
+  minimumSpend?: number | null; // Dollar amount required to earn rewards for this period
 }
 
 export interface RewardRule {
@@ -214,6 +216,17 @@ class StorageService {
                     card.milesBlockSize = 1;
                   }
                 }
+              }
+              return card;
+            });
+          }
+
+          // Migration: Add minimumSpend field to cards that don't have it (default to null = not configured)
+          if (Array.isArray(data.cards)) {
+            data.cards = data.cards.map((card: any) => {
+              if (!card.hasOwnProperty('minimumSpend')) {
+                // Default to null (not configured) - users need to explicitly set this
+                card.minimumSpend = null;
               }
               return card;
             });

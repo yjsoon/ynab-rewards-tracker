@@ -34,6 +34,7 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
     billingCycleDay: card.billingCycle?.dayOfMonth || 1,
     earningRate: card.earningRate || (card.type === 'cashback' ? 1 : 1),
     milesBlockSize: card.milesBlockSize || 1,
+    minimumSpend: card.minimumSpend,
   });
   const [issuerError, setIssuerError] = useState('');
 
@@ -62,6 +63,7 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
           : { type: 'calendar' },
         earningRate: formData.earningRate,
         milesBlockSize: formData.type === 'miles' ? formData.milesBlockSize : undefined,
+        minimumSpend: formData.minimumSpend,
       };
 
       updateCard(updatedCard);
@@ -84,6 +86,7 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
       billingCycleDay: card.billingCycle?.dayOfMonth || 1,
       earningRate: card.earningRate || (card.type === 'cashback' ? 1 : 1),
       milesBlockSize: card.milesBlockSize || 1,
+      minimumSpend: card.minimumSpend,
     });
     setEditing(false);
     setError('');
@@ -144,6 +147,16 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
                 {card.type === 'cashback'
                   ? `${card.earningRate || 1}% cashback`
                   : `${card.earningRate || 1} miles${card.milesBlockSize && card.milesBlockSize > 1 ? ` per $${card.milesBlockSize}` : ' per dollar'}`}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Minimum Spend</p>
+              <p className="mt-1 font-medium">
+                {card.minimumSpend === null || card.minimumSpend === undefined
+                  ? 'Not configured'
+                  : card.minimumSpend === 0
+                  ? 'No minimum required'
+                  : `$${card.minimumSpend.toLocaleString()} required`}
               </p>
             </div>
           </div>
@@ -319,6 +332,71 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
               ? 'Percentage of cashback earned on purchases'
               : 'Number of miles earned per dollar (or per spending block) spent'}
           </p>
+        </div>
+
+        {/* Minimum Spend Requirement */}
+        <div className="space-y-2">
+          <Label>Minimum Spend Requirement</Label>
+          <RadioGroup
+            value={
+              formData.minimumSpend === null || formData.minimumSpend === undefined
+                ? 'not-configured'
+                : formData.minimumSpend === 0
+                ? 'no-minimum'
+                : 'has-minimum'
+            }
+            onValueChange={(value) => {
+              if (value === 'not-configured') {
+                setFormData({ ...formData, minimumSpend: null });
+              } else if (value === 'no-minimum') {
+                setFormData({ ...formData, minimumSpend: 0 });
+              } else {
+                setFormData({ ...formData, minimumSpend: 1000 }); // Default $1000
+              }
+            }}
+          >
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="not-configured" id="not-configured" />
+              <Label htmlFor="not-configured" className="font-normal cursor-pointer">
+                Not configured (will show setup reminder)
+              </Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="no-minimum" id="no-minimum" />
+              <Label htmlFor="no-minimum" className="font-normal cursor-pointer">
+                No minimum spend required
+              </Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="has-minimum" id="has-minimum" />
+              <Label htmlFor="has-minimum" className="font-normal cursor-pointer">
+                Has minimum spend requirement
+              </Label>
+            </div>
+          </RadioGroup>
+
+          {formData.minimumSpend !== null && formData.minimumSpend !== undefined && formData.minimumSpend > 0 && (
+            <div className="ml-6 mt-3">
+              <Label htmlFor="minimumSpendAmount">Minimum spend amount</Label>
+              <div className="relative flex-1 mt-1">
+                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="minimumSpendAmount"
+                  type="number"
+                  value={formData.minimumSpend}
+                  onChange={(e) => setFormData({ ...formData, minimumSpend: parseFloat(e.target.value) || 0 })}
+                  step="100"
+                  min="0"
+                  max="100000"
+                  placeholder="e.g., 1000"
+                  className="pl-8"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Amount required to earn rewards for this billing period
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Active Status */}

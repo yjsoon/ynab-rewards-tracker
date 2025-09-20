@@ -12,6 +12,10 @@ export interface SimplifiedCalculation {
   rewardEarned: number; // Raw reward units (dollars for cashback, miles for miles cards)
   rewardEarnedDollars: number; // Normalized dollar value for comparison
   rewardType: 'cashback' | 'miles';
+  // Minimum spend tracking
+  minimumSpend?: number | null; // Required spending threshold (null = not configured, 0 = no minimum, >0 = has minimum)
+  minimumSpendMet: boolean; // Whether minimum spend requirement is satisfied
+  minimumSpendProgress?: number; // Progress toward minimum (0-100) if applicable
 }
 
 export interface CalculationPeriod {
@@ -86,11 +90,22 @@ export class SimpleRewardsCalculator {
       periodTransactions.reduce((sum, txn) => sum + txn.amount, 0)
     ) / 1000;
 
+    // Calculate minimum spend progress and status
+    const minimumSpend = card.minimumSpend;
+    let minimumSpendMet = true; // Default to true for cards without minimum or with 0 minimum
+    let minimumSpendProgress: number | undefined;
+
+    if (minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0) {
+      minimumSpendMet = totalSpend >= minimumSpend;
+      minimumSpendProgress = Math.min(100, (totalSpend / minimumSpend) * 100);
+    }
+
     // Calculate rewards based on card earning rate
     let rewardEarned = 0;
     let rewardEarnedDollars = 0;
 
-    if (card.earningRate) {
+    // Only calculate rewards if minimum spend is met (or not applicable)
+    if (minimumSpendMet && card.earningRate) {
       if (card.type === 'cashback') {
         // For cashback cards, earningRate is a percentage
         rewardEarned = totalSpend * (card.earningRate / 100);
@@ -116,7 +131,10 @@ export class SimpleRewardsCalculator {
       totalSpend,
       rewardEarned,
       rewardEarnedDollars,
-      rewardType: card.type
+      rewardType: card.type,
+      minimumSpend,
+      minimumSpendMet,
+      minimumSpendProgress
     };
   }
 
