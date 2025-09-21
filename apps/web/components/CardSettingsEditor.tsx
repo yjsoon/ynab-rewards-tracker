@@ -165,6 +165,7 @@ export function CardSettingsEditor({
                 // Default to 1 for all cards when switching to blocks
                 onFieldChange('earningBlockSize', 1);
               }
+            }}
           >
             <SelectTrigger className="h-9 mt-1">
               <SelectValue />
