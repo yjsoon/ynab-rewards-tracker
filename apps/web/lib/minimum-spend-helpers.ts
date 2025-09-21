@@ -5,15 +5,15 @@
 /**
  * Check if a minimum spend value is configured (not null or undefined)
  */
-export function isMinimumSpendConfigured(minimumSpend: number | null | undefined): boolean {
-  return minimumSpend !== null && minimumSpend !== undefined;
+export function isMinimumSpendConfigured(minimumSpend: number | null | undefined): minimumSpend is number {
+  return typeof minimumSpend === 'number';
 }
 
 /**
  * Check if a card has a minimum spend requirement (configured and greater than 0)
  */
-export function hasMinimumSpendRequirement(minimumSpend: number | null | undefined): boolean {
-  return isMinimumSpendConfigured(minimumSpend) && minimumSpend! > 0;
+export function hasMinimumSpendRequirement(minimumSpend: number | null | undefined): minimumSpend is number {
+  return isMinimumSpendConfigured(minimumSpend) && minimumSpend > 0;
 }
 
 /**
@@ -26,7 +26,7 @@ export function isMinimumSpendMet(
   if (!hasMinimumSpendRequirement(minimumSpend)) {
     return true; // No requirement or explicitly 0 = always met
   }
-  return totalSpend >= minimumSpend!;
+  return totalSpend >= minimumSpend;
 }
 
 /**
@@ -39,7 +39,7 @@ export function calculateMinimumSpendProgress(
   if (!hasMinimumSpendRequirement(minimumSpend)) {
     return undefined;
   }
-  return Math.min(100, (totalSpend / minimumSpend!) * 100);
+  return Math.min(100, (totalSpend / minimumSpend) * 100);
 }
 
 /**
@@ -63,5 +63,5 @@ export function formatMinimumSpendText(minimumSpend: number | null | undefined):
   if (minimumSpend === 0) {
     return 'No minimum required';
   }
-  return `$${minimumSpend!.toLocaleString()} required`;
+  return `$${minimumSpend.toLocaleString()} required`;
 }

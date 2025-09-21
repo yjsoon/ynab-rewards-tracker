@@ -34,14 +34,17 @@ export class RewardsCalculator {
     const milesValuation = settings?.milesValuation || 0.01;
 
     // Filter transactions to this period and eligible categories
-    const eligibleTransactions = transactions.filter(txn => {
-      const txnDate = new Date(txn.date);
-      return (
-        txnDate >= period.startDate &&
-        txnDate <= period.endDate &&
-        txn.rewardCategory
-      );
-    });
+    const eligibleTransactions = transactions.filter(
+      (txn): txn is TransactionWithRewards & { rewardCategory: string } => {
+        const txnDate = new Date(txn.date);
+        return (
+          txnDate >= period.startDate &&
+          txnDate <= period.endDate &&
+          typeof txn.rewardCategory === 'string' &&
+          txn.rewardCategory.length > 0
+        );
+      }
+    );
 
     // Calculate total and eligible spend
     const totalSpend = Math.abs(
@@ -55,7 +58,7 @@ export class RewardsCalculator {
     // Group by category for breakdown
     const categorySpends = new Map<string, number>();
     eligibleTransactions.forEach(txn => {
-      const category = txn.rewardCategory!;
+      const category = txn.rewardCategory;
       const amount = absFromMilli(txn.amount);
       categorySpends.set(category, (categorySpends.get(category) || 0) + amount);
     });

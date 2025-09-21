@@ -46,11 +46,19 @@ export default function EditMappingPage() {
           <form className="space-y-4" onSubmit={onSubmit}>
             <div>
               <label className="block text-sm mb-1">YNAB tag (flag colour or name)</label>
-              <input className="w-full px-3 py-2 border rounded" value={form.ynabTag} onChange={e => setForm({ ...form!, ynabTag: e.target.value })} />
+              <input
+                className="w-full px-3 py-2 border rounded"
+                value={form.ynabTag}
+                onChange={e => setForm(prev => (prev ? { ...prev, ynabTag: e.target.value } : prev))}
+              />
             </div>
             <div>
               <label className="block text-sm mb-1">Reward category</label>
-              <input className="w-full px-3 py-2 border rounded" value={form.rewardCategory} onChange={e => setForm({ ...form!, rewardCategory: e.target.value })} />
+              <input
+                className="w-full px-3 py-2 border rounded"
+                value={form.rewardCategory}
+                onChange={e => setForm(prev => (prev ? { ...prev, rewardCategory: e.target.value } : prev))}
+              />
             </div>
             <div className="flex gap-2 pt-2">
               <Button type="submit">Save Changes</Button>
@@ -66,4 +74,3 @@ export default function EditMappingPage() {
     </div>
   );
 }
-

@@ -182,12 +182,12 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
               <CheckCircle2 className="h-4 w-4" />
               <p className="text-sm font-medium">No minimum spend required</p>
             </div>
-          ) : minimumSpend! > 0 ? (
+          ) : minimumSpend > 0 ? (
             <>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">Minimum spend progress</span>
                 <span className={minimumSpendMet ? 'text-green-600 dark:text-green-400 font-medium' : 'text-muted-foreground'}>
-                  {formatDollars(totalSpend)} / {formatDollars(minimumSpend!)}
+                  {formatDollars(totalSpend)} / {formatDollars(minimumSpend)}
                 </span>
               </div>
               <Progress
@@ -206,7 +206,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
                   <>
                     <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                     <p className="text-sm font-medium text-amber-600 dark:text-amber-400">
-                      {formatDollars((minimumSpend!) - totalSpend)} to go
+                      {formatDollars(minimumSpend - totalSpend)} to go
                     </p>
                   </>
                 )}
