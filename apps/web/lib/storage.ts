@@ -16,6 +16,8 @@ export interface CreditCard {
   active: boolean;
   // Earning rates (replaces the complex rules system)
   earningRate?: number; // For cashback: percentage (e.g., 2 for 2%). For miles: miles per dollar (e.g., 1.5)
+  // Earning block size for block-based earning (e.g., 1 mile per $5 spent)
+  earningBlockSize?: number | null; // null = down to the cent, number = dollar block size for earning calculation
   // Minimum spend requirement (three states: null = not configured, 0 = no minimum, >0 = has minimum)
   minimumSpend?: number | null; // Dollar amount required to earn rewards for this period
   // Maximum spend limit (three states: null = not configured, 0 = no limit, >0 = has limit)
@@ -39,7 +41,7 @@ export interface RewardRule {
 
 export interface CategoryCap {
   category: string;
-  maxSpend: number;
+  capAmount: number;
 }
 
 export interface TagMapping {
@@ -47,6 +49,14 @@ export interface TagMapping {
   cardId: string;
   ynabTag: string;
   rewardCategory: string;
+}
+
+export interface CategoryBreakdown {
+  category: string;
+  spend: number;
+  reward: number; // Raw reward units
+  rewardDollars?: number; // Normalized dollar value
+  capReached: boolean;
 }
 
 export interface RewardCalculation {
@@ -58,20 +68,12 @@ export interface RewardCalculation {
   rewardEarned: number; // Raw reward units (dollars for cashback, miles for others)
   rewardEarnedDollars?: number; // Normalized dollar value for comparison
   rewardType: 'cashback' | 'miles'; // Track the type for clarity
+  categoryBreakdowns?: CategoryBreakdown[];
   minimumProgress?: number;
   maximumProgress?: number;
-  categoryBreakdowns: CategoryBreakdown[];
   minimumMet: boolean;
   maximumExceeded: boolean;
   shouldStopUsing: boolean;
-}
-
-export interface CategoryBreakdown {
-  category: string;
-  spend: number;
-  reward: number; // Raw reward units
-  rewardDollars?: number; // Normalized dollar value
-  capReached: boolean;
 }
 
 export interface YnabConnection {
@@ -225,7 +227,7 @@ class StorageService {
           // Migration: Add minimumSpend field to cards that don't have it (default to null = not configured)
           if (Array.isArray(data.cards)) {
             data.cards = data.cards.map((card: any) => {
-              if (!Object.hasOwn(card, 'minimumSpend')) {
+              if (!('minimumSpend' in card)) {
                 // Default to null (not configured) - users need to explicitly set this
                 card.minimumSpend = null;
               }
@@ -236,12 +238,28 @@ class StorageService {
           // Migration: Add maximumSpend field to cards that don't have it (default to null = not configured)
           if (Array.isArray(data.cards)) {
             data.cards = data.cards.map((card: any) => {
-              if (!Object.hasOwn(card, 'maximumSpend')) {
+              if (!('maximumSpend' in card)) {
                 // Default to null (not configured) - users need to explicitly set this
                 card.maximumSpend = null;
               }
               return card;
             });
+          }
+
+          // Migration: Add earningBlockSize field to cards that don't have it (default to null = exact earning)
+          if (Array.isArray(data.cards)) {
+            data.cards = data.cards.map((card: any) => {
+              if (!('earningBlockSize' in card)) {
+                // Default to null (exact earning) - users need to explicitly set this
+                card.earningBlockSize = null;
+              }
+              return card;
+            });
+          }
+
+          // Migration: Initialize tagMappings if missing
+          if (!data.tagMappings) {
+            data.tagMappings = [];
           }
 
           // Note: billingCycle defaulting handled earlier when reading cards
@@ -391,6 +409,8 @@ class StorageService {
     storage.cards = storage.cards.filter(c => c.id !== cardId);
     // Also delete associated rules
     storage.rules = storage.rules.filter(r => r.cardId !== cardId);
+    // Also delete associated tag mappings
+    storage.tagMappings = storage.tagMappings.filter(m => m.cardId !== cardId);
     this.setStorage(storage);
   }
 

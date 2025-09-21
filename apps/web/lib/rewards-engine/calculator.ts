@@ -73,8 +73,8 @@ export class RewardsCalculator {
 
       // Apply category-specific caps
       const categoryCap = rule.categoryCaps?.find(cap => cap.category === category);
-      if (categoryCap && spend > categoryCap.maxSpend) {
-        categoryEligibleSpend = categoryCap.maxSpend;
+      if (categoryCap && spend > categoryCap.capAmount) {
+        categoryEligibleSpend = categoryCap.capAmount;
         capReached = true;
       }
 
