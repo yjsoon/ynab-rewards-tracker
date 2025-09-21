@@ -11,6 +11,7 @@
     "start": "pnpm env:sync && pnpm -C apps/web start",
     "typecheck": "pnpm -r --parallel typecheck",
     "lint": "eslint .",
+    "test": "pnpm run lint && pnpm -r test",
     "db:generate": "pnpm env:sync && pnpm -C packages/db generate",
     "db:migrate": "pnpm env:sync && pnpm -C packages/db migrate:dev",
     "db:migrate:init": "pnpm env:sync && pnpm -C packages/db exec prisma migrate dev --name init",
