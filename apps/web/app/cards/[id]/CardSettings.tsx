@@ -94,6 +94,7 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
     setError('');
     setIssuerError('');
   };
+
   if (!editing) {
     return (
       <Card>
