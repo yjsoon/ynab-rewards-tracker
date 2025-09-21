@@ -121,7 +121,7 @@ export class SimpleRewardsCalculator {
     }
     // If maximum spend exceeded, cap at the maximum
     else if (maximumSpendExceeded) {
-      eligibleSpend = maximumSpend || 0;
+      eligibleSpend = maximumSpend as number; // We know it's > 0 when exceeded
     }
 
     // Calculate rewards based on eligible spend only

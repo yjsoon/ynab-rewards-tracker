@@ -101,7 +101,7 @@ export function CardSettingsEditor({
 
       {/* Main Settings Grid */}
       <div
-        className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-4 p-4 border rounded-lg ${
+        className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4 p-4 border rounded-lg ${
           isChanged && !showNameAndIssuer ? 'bg-amber-50 dark:bg-amber-950/20 border-amber-300 dark:border-amber-700' : ''
         }`}
       >
