@@ -62,6 +62,7 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
         issuer: formData.issuer ? sanitizeInput(formData.issuer) : card.issuer,
         type: formData.type || card.type,
         active: formData.active !== undefined ? formData.active : card.active,
+        billingCycle: formData.billingCycleType === 'billing'
           ? { type: 'billing', dayOfMonth: formData.billingCycleDay || 1 }
           : { type: 'calendar' },
         earningRate: formData.earningRate,
@@ -125,6 +126,7 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
             </div>
             <div>
               <p className="text-sm font-medium text-muted-foreground">Status</p>
+              <p className="mt-1 font-medium">
                 {card.active ? 'Active' : 'Inactive'}
               </p>
             </div>
@@ -157,6 +159,7 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
                   ? 'No minimum required'
                   : `$${card.minimumSpend.toLocaleString()} required`}
               </p>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -187,6 +190,7 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
 
         <CardSettingsEditor
           card={card}
+          state={formData}
           onFieldChange={handleFieldChange}
           showNameAndIssuer={true}
           showCardType={true}

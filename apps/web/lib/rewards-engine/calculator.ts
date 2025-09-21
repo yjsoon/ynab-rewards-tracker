@@ -39,8 +39,7 @@ export class RewardsCalculator {
       return (
         txnDate >= period.startDate &&
         txnDate <= period.endDate &&
-        txn.rewardCategory &&
-        rule.categories.includes(txn.rewardCategory)
+        txn.rewardCategory
       );
     });
 
