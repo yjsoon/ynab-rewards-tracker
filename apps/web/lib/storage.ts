@@ -32,10 +32,31 @@ export interface RewardRule {
   rewardValue: number; // percentage or miles per dollar
   minimumSpend?: number;
   maximumSpend?: number;
+  categoryCaps?: CategoryCap[];
   startDate: string;
   endDate: string;
   active: boolean;
   priority: number;
+}
+
+export interface CategoryCap {
+  category: string;
+  capAmount: number;
+}
+
+export interface TagMapping {
+  id: string;
+  cardId: string;
+  ynabTag: string;
+  rewardCategory: string;
+}
+
+export interface CategoryBreakdown {
+  category: string;
+  spend: number;
+  reward: number; // Raw reward units
+  rewardDollars?: number; // Normalized dollar value
+  capReached: boolean;
 }
 
 export interface RewardCalculation {
@@ -47,6 +68,7 @@ export interface RewardCalculation {
   rewardEarned: number; // Raw reward units (dollars for cashback, miles for others)
   rewardEarnedDollars?: number; // Normalized dollar value for comparison
   rewardType: 'cashback' | 'miles'; // Track the type for clarity
+  categoryBreakdowns?: CategoryBreakdown[];
   minimumProgress?: number;
   maximumProgress?: number;
   minimumMet: boolean;
@@ -72,6 +94,7 @@ export interface StorageData {
   ynab: YnabConnection;
   cards: CreditCard[];
   rules: RewardRule[];
+  tagMappings: TagMapping[];
   calculations: RewardCalculation[];
   settings: AppSettings;
   cachedData?: {
@@ -204,7 +227,7 @@ class StorageService {
           // Migration: Add minimumSpend field to cards that don't have it (default to null = not configured)
           if (Array.isArray(data.cards)) {
             data.cards = data.cards.map((card: any) => {
-              if (!Object.hasOwn(card, 'minimumSpend')) {
+              if (!('minimumSpend' in card)) {
                 // Default to null (not configured) - users need to explicitly set this
                 card.minimumSpend = null;
               }
@@ -215,7 +238,7 @@ class StorageService {
           // Migration: Add maximumSpend field to cards that don't have it (default to null = not configured)
           if (Array.isArray(data.cards)) {
             data.cards = data.cards.map((card: any) => {
-              if (!Object.hasOwn(card, 'maximumSpend')) {
+              if (!('maximumSpend' in card)) {
                 // Default to null (not configured) - users need to explicitly set this
                 card.maximumSpend = null;
               }
@@ -226,12 +249,17 @@ class StorageService {
           // Migration: Add earningBlockSize field to cards that don't have it (default to null = exact earning)
           if (Array.isArray(data.cards)) {
             data.cards = data.cards.map((card: any) => {
-              if (!Object.hasOwn(card, 'earningBlockSize')) {
+              if (!('earningBlockSize' in card)) {
                 // Default to null (exact earning) - users need to explicitly set this
                 card.earningBlockSize = null;
               }
               return card;
             });
+          }
+
+          // Migration: Initialize tagMappings if missing
+          if (!data.tagMappings) {
+            data.tagMappings = [];
           }
 
           // Note: billingCycle defaulting handled earlier when reading cards
@@ -254,6 +282,7 @@ class StorageService {
       ynab: {},
       cards: [],
       rules: [],
+      tagMappings: [],
       calculations: [],
       settings: {
         theme: 'light',
@@ -380,6 +409,8 @@ class StorageService {
     storage.cards = storage.cards.filter(c => c.id !== cardId);
     // Also delete associated rules
     storage.rules = storage.rules.filter(r => r.cardId !== cardId);
+    // Also delete associated tag mappings
+    storage.tagMappings = storage.tagMappings.filter(m => m.cardId !== cardId);
     this.setStorage(storage);
   }
 
@@ -406,6 +437,32 @@ class StorageService {
   deleteRule(ruleId: string): void {
     const storage = this.getStorage();
     storage.rules = storage.rules.filter(r => r.id !== ruleId);
+    this.setStorage(storage);
+  }
+
+  // Tag mappings management
+  getTagMappings(): TagMapping[] {
+    return this.getStorage().tagMappings || [];
+  }
+
+  getCardTagMappings(cardId: string): TagMapping[] {
+    return this.getTagMappings().filter(m => m.cardId === cardId);
+  }
+
+  saveTagMapping(mapping: TagMapping): void {
+    const storage = this.getStorage();
+    const index = storage.tagMappings.findIndex(m => m.id === mapping.id);
+    if (index >= 0) {
+      storage.tagMappings[index] = mapping;
+    } else {
+      storage.tagMappings.push(mapping);
+    }
+    this.setStorage(storage);
+  }
+
+  deleteTagMapping(mappingId: string): void {
+    const storage = this.getStorage();
+    storage.tagMappings = storage.tagMappings.filter(m => m.id !== mappingId);
     this.setStorage(storage);
   }
 

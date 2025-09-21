@@ -182,8 +182,12 @@ export function CardSettingsEditor({
                 <span className="text-sm text-muted-foreground">$</span>
                 <Input
                   type="number"
-                  value={state.earningBlockSize !== undefined ? (state.earningBlockSize ?? 1) : (card.earningBlockSize ?? 1)}
-                  onChange={(e) => onFieldChange('earningBlockSize', parseFloat(e.target.value) || 1)}
+                  value={state.earningBlockSize !== undefined ? (state.earningBlockSize ?? '') : (card.earningBlockSize ?? '')}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const num = parseFloat(val);
+                    onFieldChange('earningBlockSize', val === '' || isNaN(num) ? null : num);
+                  }}
                   step="1"
                   min="1"
                   max="100"

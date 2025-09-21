@@ -49,7 +49,7 @@ export default function EditMappingPage() {
               <input
                 className="w-full px-3 py-2 border rounded"
                 value={form.ynabTag}
-                onChange={e => setForm(prev => (prev ? { ...prev, ynabTag: e.target.value } : prev))}
+                onChange={e => setForm((prev: TagMapping | null) => (prev ? { ...prev, ynabTag: e.target.value } : prev))}
               />
             </div>
             <div>
@@ -57,7 +57,7 @@ export default function EditMappingPage() {
               <input
                 className="w-full px-3 py-2 border rounded"
                 value={form.rewardCategory}
-                onChange={e => setForm(prev => (prev ? { ...prev, rewardCategory: e.target.value } : prev))}
+                onChange={e => setForm((prev: TagMapping | null) => (prev ? { ...prev, rewardCategory: e.target.value } : prev))}
               />
             </div>
             <div className="flex gap-2 pt-2">

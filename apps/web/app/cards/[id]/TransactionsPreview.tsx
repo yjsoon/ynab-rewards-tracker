@@ -48,7 +48,7 @@ export default function TransactionsPreview({ cardId, ynabAccountId }: Props) {
         signal: controller.signal,
       });
       const cardTxns = all.filter((t: Transaction) => t.account_id === ynabAccountId);
-      cardTxns.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      cardTxns.sort((a: Transaction, b: Transaction) => new Date(b.date).getTime() - new Date(a.date).getTime());
       setTransactions(cardTxns);
     } catch (err) {
       if ((err as any)?.name !== 'AbortError') {

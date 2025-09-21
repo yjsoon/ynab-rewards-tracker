@@ -128,6 +128,7 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
 
     return {
       totalSpend: calculation.totalSpend,
+      eligibleSpend: calculation.eligibleSpend,
       rewardEarned: calculation.rewardEarned,
       rewardEarnedDollars: calculation.rewardEarnedDollars,
       minimumSpend: calculation.minimumSpend,
