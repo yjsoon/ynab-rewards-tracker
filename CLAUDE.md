@@ -23,6 +23,8 @@ A client‑side rewards tracker that analyses YNAB transactions to track credit 
 - Configurable earning rates per card
 - Billing cycle tracking (calendar month or custom billing day)
 - Active/inactive status for temporary disabling
+- Minimum spend requirements (optional)
+- Maximum spend limits (optional)
 
 ### 3. Reward Rules System
 - Multiple rules per card with time windows
@@ -31,7 +33,6 @@ A client‑side rewards tracker that analyses YNAB transactions to track credit 
 - Spending caps:
   - Per‑category caps with automatic limiting
   - Overall caps with proportional scaling
-  - Minimum spend requirements
 - Priority system for rule application
 
 ### 4. Tag Mapping & Categories
@@ -43,7 +44,8 @@ A client‑side rewards tracker that analyses YNAB transactions to track credit 
 ### 5. Rewards Calculation Engine
 - Period‑based calculations (monthly or billing cycle)
 - Progress tracking for minimum/maximum spend
-- "Stop using" alerts when caps reached
+- "Stop using" alerts when maximum spend reached
+- Eligible spend calculation (respecting both minimum and maximum)
 - Normalised dollar values for cross‑card comparison
 - Real‑time recomputation with caching
 
@@ -123,6 +125,8 @@ CreditCard {
   active: boolean
   earningRate?: number  // % for cashback, miles/$ for miles
   milesBlockSize?: number  // For block‑based miles
+  minimumSpend?: number | null  // Min spend to earn rewards
+  maximumSpend?: number | null  // Max spend that earns rewards
 }
 
 RewardRule {
@@ -176,7 +180,9 @@ RewardCalculation {
 ### Rewards Calculation
 - Raw rewards: cashback in dollars, miles in miles
 - Normalised values: everything converted to dollars for comparison
-- Cap scaling: proportional reduction when overall cap exceeded
+- Eligible spend: amount between minimum and maximum that earns rewards
+- Minimum spend: must be met before any rewards earned
+- Maximum spend: rewards stop accumulating after this limit
 - Effective rates: based on normalised dollar values
 
 ### Storage & Migrations
@@ -245,6 +251,8 @@ pnpm ‑‑filter ./apps/web build
 - ✅ Mappings index page
 - ✅ Optimised compute performance
 - ✅ Removed Prisma/DB artefacts
+- ✅ Maximum spend limits per card
+- ✅ Eligible spend calculation with min/max bounds
 
 ## Architecture Decisions
 

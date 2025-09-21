@@ -1,6 +1,6 @@
 # TODO
 
-Updated 13 Sep 2025 — prioritised next steps for YJAB (British spelling in copy; code identifiers unchanged).
+Updated 21 Sep 2025 — prioritised next steps for YJAB (British spelling in copy; code identifiers unchanged).
 
 ## P1 — Next Actions
 - Persist per‑transaction overrides
@@ -28,8 +28,10 @@ Updated 13 Sep 2025 — prioritised next steps for YJAB (British spelling in cop
 - Recommendations UX
   - Show “why” tooltips (valuation used, cap progress) and quick links to rule/mappings.
 
-- Progress & Limits UX
-  - Display min/max spend progress, show “stop using” badges, and indicate when caps are near.
+- Progress & Limits UX Enhancement
+  - ✅ Display min/max spend progress for cards (completed)
+  - Show "stop using" badges when maximum reached
+  - Indicate when caps are near (warning at 80-90%)
 
 - MappingForm extraction
   - Create a shared form for new/edit tag mappings with simple validation and suggestions from existing categories.
@@ -39,14 +41,23 @@ Updated 13 Sep 2025 — prioritised next steps for YJAB (British spelling in cop
 - Background refresh while the app is open with visible “last computed”.
 - Lightweight local analytics for the rewards engine (toggle in dev).
 
-## Recently Shipped (13 Sep 2025)
+## Recently Shipped (21 Sep 2025)
+- Maximum spend limits per card
+  - Added `maximumSpend` field to CreditCard type with migration support
+  - Created comprehensive helper functions for maximum spend calculations
+  - Updated SimpleRewardsCalculator to respect maximum limits
+  - Added UI controls in CardSettingsEditor for configuring limits
+  - Display progress bars and warnings in CardSpendingSummary and SpendingStatus
+  - Eligible spend calculation respects both minimum and maximum bounds
+
+## Previously Shipped (13 Sep 2025)
 - Rebrand to YJAB in UI and docs.
 - Shared RuleForm with zod validation; chips UX (enter/backspace).
 - Valuation controls wired to engine and recommendations (normalised dollars).
 - Abortable fetches for dashboard, transactions, and compute.
-- Rewards: “Last computed” timestamp + per‑period recompute.
+- Rewards: "Last computed" timestamp + per‑period recompute.
 - Category recommendations surfaced on Rewards page.
-- Card Transactions tab implemented with inline editing + “apply to tag”.
+- Card Transactions tab implemented with inline editing + "apply to tag".
 - Mappings index page added (no more 404).
 - Compute fetch consolidated to once per run; per‑card filtering.
 - Prisma/DB artefacts purged from the web app.
