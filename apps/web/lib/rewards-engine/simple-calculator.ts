@@ -7,13 +7,16 @@ import type { Transaction } from '@/types/transaction';
 import {
   hasMinimumSpendRequirement,
   isMinimumSpendMet,
-  calculateMinimumSpendProgress
+  calculateMinimumSpendProgress,
+  isMaximumSpendExceeded,
+  calculateMaximumSpendProgress
 } from '@/lib/minimum-spend-helpers';
 
 export interface SimplifiedCalculation {
   cardId: string;
   period: string;
   totalSpend: number;
+  eligibleSpend: number; // Spend that actually earns rewards (after min/max limits)
   rewardEarned: number; // Raw reward units (dollars for cashback, miles for miles cards)
   rewardEarnedDollars: number; // Normalized dollar value for comparison
   rewardType: 'cashback' | 'miles';
@@ -21,6 +24,10 @@ export interface SimplifiedCalculation {
   minimumSpend?: number | null; // Required spending threshold (null = not configured, 0 = no minimum, >0 = has minimum)
   minimumSpendMet: boolean; // Whether minimum spend requirement is satisfied
   minimumSpendProgress?: number; // Progress toward minimum (0-100) if applicable
+  // Maximum spend tracking
+  maximumSpend?: number | null; // Spending cap (null = not configured, 0 = no limit, >0 = has limit)
+  maximumSpendExceeded: boolean; // Whether maximum spend limit has been exceeded
+  maximumSpendProgress?: number; // Progress toward maximum (0-100) if applicable
 }
 
 export interface CalculationPeriod {
@@ -100,19 +107,36 @@ export class SimpleRewardsCalculator {
     const minimumSpendMet = isMinimumSpendMet(totalSpend, minimumSpend);
     const minimumSpendProgress = calculateMinimumSpendProgress(totalSpend, minimumSpend);
 
-    // Calculate rewards based on card earning rate
+    // Calculate maximum spend progress and status
+    const maximumSpend = card.maximumSpend;
+    const maximumSpendExceeded = isMaximumSpendExceeded(totalSpend, maximumSpend);
+    const maximumSpendProgress = calculateMaximumSpendProgress(totalSpend, maximumSpend);
+
+    // Calculate eligible spend (spend that earns rewards)
+    let eligibleSpend = totalSpend;
+    
+    // If minimum spend not met, no spend is eligible
+    if (!minimumSpendMet) {
+      eligibleSpend = 0;
+    }
+    // If maximum spend exceeded, cap at the maximum
+    else if (maximumSpendExceeded) {
+      eligibleSpend = maximumSpend as number; // We know it's > 0 when exceeded
+    }
+
+    // Calculate rewards based on eligible spend only
     let rewardEarned = 0;
     let rewardEarnedDollars = 0;
 
-    // Only calculate rewards if minimum spend is met (or not applicable)
-    if (minimumSpendMet && card.earningRate) {
+    // Only calculate rewards if we have eligible spend and an earning rate
+    if (eligibleSpend > 0 && card.earningRate) {
       if (card.type === 'cashback') {
         // For cashback cards, earningRate is a percentage
-        rewardEarned = totalSpend * (card.earningRate / 100);
+        rewardEarned = eligibleSpend * (card.earningRate / 100);
         rewardEarnedDollars = rewardEarned;
       } else {
         // For miles cards, earningRate is miles per dollar
-        rewardEarned = totalSpend * card.earningRate;
+        rewardEarned = eligibleSpend * card.earningRate;
         // Convert miles to dollars using valuation
         rewardEarnedDollars = rewardEarned * milesValuation;
       }
@@ -122,12 +146,16 @@ export class SimpleRewardsCalculator {
       cardId: card.id,
       period: period.label,
       totalSpend,
+      eligibleSpend,
       rewardEarned,
       rewardEarnedDollars,
       rewardType: card.type,
       minimumSpend,
       minimumSpendMet,
-      minimumSpendProgress
+      minimumSpendProgress,
+      maximumSpend,
+      maximumSpendExceeded,
+      maximumSpendProgress
     };
   }
 

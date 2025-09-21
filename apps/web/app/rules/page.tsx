@@ -40,6 +40,7 @@ export default function RulesPage() {
       initialState[card.id] = {
         earningRate: card.earningRate || (card.type === 'cashback' ? 1 : 1),
         minimumSpend: card.minimumSpend,
+        maximumSpend: card.maximumSpend,
         billingCycleType: card.billingCycle?.type || 'calendar',
         billingCycleDay: card.billingCycle?.dayOfMonth || 1,
         active: card.active
@@ -78,6 +79,7 @@ export default function RulesPage() {
           type: changes.type ?? card.type,
           earningRate: changes.earningRate,
           minimumSpend: changes.minimumSpend,
+          maximumSpend: changes.maximumSpend ?? card.maximumSpend,
           billingCycle: changes.billingCycleType === 'billing' 
             ? { type: 'billing', dayOfMonth: changes.billingCycleDay }
             : { type: 'calendar' },

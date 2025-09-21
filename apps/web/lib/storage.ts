@@ -18,6 +18,8 @@ export interface CreditCard {
   earningRate?: number; // For cashback: percentage (e.g., 2 for 2%). For miles: miles per dollar (e.g., 1.5)
   // Minimum spend requirement (three states: null = not configured, 0 = no minimum, >0 = has minimum)
   minimumSpend?: number | null; // Dollar amount required to earn rewards for this period
+  // Maximum spend limit (three states: null = not configured, 0 = no limit, >0 = has limit)
+  maximumSpend?: number | null; // Dollar amount cap for earning rewards this period
 }
 
 export interface RewardRule {
@@ -226,6 +228,17 @@ class StorageService {
               if (!Object.hasOwn(card, 'minimumSpend')) {
                 // Default to null (not configured) - users need to explicitly set this
                 card.minimumSpend = null;
+              }
+              return card;
+            });
+          }
+
+          // Migration: Add maximumSpend field to cards that don't have it (default to null = not configured)
+          if (Array.isArray(data.cards)) {
+            data.cards = data.cards.map((card: any) => {
+              if (!Object.hasOwn(card, 'maximumSpend')) {
+                // Default to null (not configured) - users need to explicitly set this
+                card.maximumSpend = null;
               }
               return card;
             });

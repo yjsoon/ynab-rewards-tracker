@@ -11,6 +11,7 @@ import type { CreditCard } from '@/lib/storage';
 export interface CardEditState {
   earningRate?: number;
   minimumSpend?: number | null;
+  maximumSpend?: number | null; // New field for maximum spend limit
   billingCycleType?: 'calendar' | 'billing';
   billingCycleDay?: number;
   active?: boolean;
@@ -99,8 +100,8 @@ export function CardSettingsEditor({
       )}
 
       {/* Main Settings Grid */}
-      <div 
-        className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 p-4 border rounded-lg ${
+      <div
+        className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4 p-4 border rounded-lg ${
           isChanged && !showNameAndIssuer ? 'bg-amber-50 dark:bg-amber-950/20 border-amber-300 dark:border-amber-700' : ''
         }`}
       >
@@ -189,6 +190,53 @@ export function CardSettingsEditor({
                 max="100000"
                 className="pl-8 h-8"
                 placeholder="1000"
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Maximum Spend */}
+        <div>
+          <Label className="text-sm text-muted-foreground">Maximum Spend</Label>
+          <Select
+            value={
+              state.maximumSpend === null || state.maximumSpend === undefined
+                ? 'not-configured'
+                : state.maximumSpend === 0
+                ? 'no-limit'
+                : 'has-limit'
+            }
+            onValueChange={(value) => {
+              if (value === 'not-configured') {
+                onFieldChange('maximumSpend', null);
+              } else if (value === 'no-limit') {
+                onFieldChange('maximumSpend', 0);
+              } else {
+                onFieldChange('maximumSpend', 5000);
+              }
+            }}
+          >
+            <SelectTrigger className="h-9 mt-1">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="not-configured">Not configured</SelectItem>
+              <SelectItem value="no-limit">No limit</SelectItem>
+              <SelectItem value="has-limit">Has limit</SelectItem>
+            </SelectContent>
+          </Select>
+          {state.maximumSpend !== null && state.maximumSpend !== undefined && state.maximumSpend > 0 && (
+            <div className="relative mt-2">
+              <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+              <Input
+                type="number"
+                value={state.maximumSpend}
+                onChange={(e) => onFieldChange('maximumSpend', parseFloat(e.target.value) || 0)}
+                step="100"
+                min="0"
+                max="100000"
+                className="pl-8 h-8"
+                placeholder="5000"
               />
             </div>
           )}

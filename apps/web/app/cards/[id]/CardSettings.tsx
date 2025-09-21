@@ -31,6 +31,7 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
     billingCycleDay: card.billingCycle?.dayOfMonth || 1,
     earningRate: card.earningRate || (card.type === 'cashback' ? 1 : 1),
     minimumSpend: card.minimumSpend,
+    maximumSpend: card.maximumSpend,
   });
 
   const handleFieldChange = (field: keyof CardEditState, value: any) => {
@@ -67,6 +68,7 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
           : { type: 'calendar' },
         earningRate: formData.earningRate,
         minimumSpend: formData.minimumSpend,
+        maximumSpend: formData.maximumSpend,
       };
 
       updateCard(updatedCard);
@@ -89,6 +91,7 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
       billingCycleDay: card.billingCycle?.dayOfMonth || 1,
       earningRate: card.earningRate || (card.type === 'cashback' ? 1 : 1),
       minimumSpend: card.minimumSpend,
+      maximumSpend: card.maximumSpend,
     });
     setEditing(false);
     setError('');
@@ -159,6 +162,16 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
                   : card.minimumSpend === 0
                   ? 'No minimum required'
                   : `$${card.minimumSpend.toLocaleString()} required`}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Maximum Spend</p>
+              <p className="mt-1 font-medium">
+                {card.maximumSpend === null || card.maximumSpend === undefined
+                  ? 'Not configured'
+                  : card.maximumSpend === 0
+                  ? 'No limit'
+                  : `$${card.maximumSpend.toLocaleString()} limit`}
               </p>
             </div>
           </div>
