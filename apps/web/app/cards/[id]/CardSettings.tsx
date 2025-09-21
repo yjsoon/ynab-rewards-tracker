@@ -30,6 +30,7 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
     billingCycleType: card.billingCycle?.type || 'calendar',
     billingCycleDay: card.billingCycle?.dayOfMonth || 1,
     earningRate: card.earningRate || (card.type === 'cashback' ? 1 : 1),
+    earningBlockSize: card.earningBlockSize,
     minimumSpend: card.minimumSpend,
     maximumSpend: card.maximumSpend,
   });
@@ -67,6 +68,7 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
           ? { type: 'billing', dayOfMonth: formData.billingCycleDay || 1 }
           : { type: 'calendar' },
         earningRate: formData.earningRate,
+        earningBlockSize: formData.earningBlockSize,
         minimumSpend: formData.minimumSpend,
         maximumSpend: formData.maximumSpend,
       };
@@ -90,6 +92,7 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
       billingCycleType: card.billingCycle?.type || 'calendar',
       billingCycleDay: card.billingCycle?.dayOfMonth || 1,
       earningRate: card.earningRate || (card.type === 'cashback' ? 1 : 1),
+      earningBlockSize: card.earningBlockSize,
       minimumSpend: card.minimumSpend,
       maximumSpend: card.maximumSpend,
     });
@@ -152,6 +155,14 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
                 {card.type === 'cashback'
                   ? `${card.earningRate || 1}% cashback`
                   : `${card.earningRate || 1} miles per dollar`}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Earning Method</p>
+              <p className="mt-1 font-medium">
+                {card.earningBlockSize === null || card.earningBlockSize === undefined
+                  ? 'Exact amount (down to the cent)'
+                  : `Fixed blocks: $${card.earningBlockSize} per block`}
               </p>
             </div>
             <div>

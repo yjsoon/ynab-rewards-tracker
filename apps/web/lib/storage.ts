@@ -16,6 +16,8 @@ export interface CreditCard {
   active: boolean;
   // Earning rates (replaces the complex rules system)
   earningRate?: number; // For cashback: percentage (e.g., 2 for 2%). For miles: miles per dollar (e.g., 1.5)
+  // Earning block size for block-based earning (e.g., 1 mile per $5 spent)
+  earningBlockSize?: number | null; // null = down to the cent, number = dollar block size for earning calculation
   // Minimum spend requirement (three states: null = not configured, 0 = no minimum, >0 = has minimum)
   minimumSpend?: number | null; // Dollar amount required to earn rewards for this period
   // Maximum spend limit (three states: null = not configured, 0 = no limit, >0 = has limit)
@@ -30,23 +32,10 @@ export interface RewardRule {
   rewardValue: number; // percentage or miles per dollar
   minimumSpend?: number;
   maximumSpend?: number;
-  categoryCaps?: CategoryCap[];
   startDate: string;
   endDate: string;
   active: boolean;
   priority: number;
-}
-
-export interface CategoryCap {
-  category: string;
-  maxSpend: number;
-}
-
-export interface TagMapping {
-  id: string;
-  cardId: string;
-  ynabTag: string;
-  rewardCategory: string;
 }
 
 export interface RewardCalculation {
@@ -60,18 +49,9 @@ export interface RewardCalculation {
   rewardType: 'cashback' | 'miles'; // Track the type for clarity
   minimumProgress?: number;
   maximumProgress?: number;
-  categoryBreakdowns: CategoryBreakdown[];
   minimumMet: boolean;
   maximumExceeded: boolean;
   shouldStopUsing: boolean;
-}
-
-export interface CategoryBreakdown {
-  category: string;
-  spend: number;
-  reward: number; // Raw reward units
-  rewardDollars?: number; // Normalized dollar value
-  capReached: boolean;
 }
 
 export interface YnabConnection {
@@ -92,7 +72,6 @@ export interface StorageData {
   ynab: YnabConnection;
   cards: CreditCard[];
   rules: RewardRule[];
-  tagMappings: TagMapping[];
   calculations: RewardCalculation[];
   settings: AppSettings;
   cachedData?: {
@@ -244,6 +223,17 @@ class StorageService {
             });
           }
 
+          // Migration: Add earningBlockSize field to cards that don't have it (default to null = exact earning)
+          if (Array.isArray(data.cards)) {
+            data.cards = data.cards.map((card: any) => {
+              if (!Object.hasOwn(card, 'earningBlockSize')) {
+                // Default to null (exact earning) - users need to explicitly set this
+                card.earningBlockSize = null;
+              }
+              return card;
+            });
+          }
+
           // Note: billingCycle defaulting handled earlier when reading cards
         } catch {}
 
@@ -264,7 +254,6 @@ class StorageService {
       ynab: {},
       cards: [],
       rules: [],
-      tagMappings: [],
       calculations: [],
       settings: {
         theme: 'light',
@@ -417,32 +406,6 @@ class StorageService {
   deleteRule(ruleId: string): void {
     const storage = this.getStorage();
     storage.rules = storage.rules.filter(r => r.id !== ruleId);
-    this.setStorage(storage);
-  }
-
-  // Tag mappings management
-  getTagMappings(): TagMapping[] {
-    return this.getStorage().tagMappings || [];
-  }
-
-  getCardTagMappings(cardId: string): TagMapping[] {
-    return this.getTagMappings().filter(m => m.cardId === cardId);
-  }
-
-  saveTagMapping(mapping: TagMapping): void {
-    const storage = this.getStorage();
-    const index = storage.tagMappings.findIndex(m => m.id === mapping.id);
-    if (index >= 0) {
-      storage.tagMappings[index] = mapping;
-    } else {
-      storage.tagMappings.push(mapping);
-    }
-    this.setStorage(storage);
-  }
-
-  deleteTagMapping(mappingId: string): void {
-    const storage = this.getStorage();
-    storage.tagMappings = storage.tagMappings.filter(m => m.id !== mappingId);
     this.setStorage(storage);
   }
 

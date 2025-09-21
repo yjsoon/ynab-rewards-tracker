@@ -217,7 +217,25 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
             </div>
           </div>
 
-          {/* Minimum Spend Alerts */}
+          {/* Earning Block Info */}
+          {card.earningBlockSize && card.earningBlockSize > 0 && spendingAnalysis.eligibleSpend !== undefined && (
+            <Alert className="mt-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                <div className="space-y-1">
+                  <p className="font-medium">Earning blocks: ${card.earningBlockSize} per block</p>
+                  <p className="text-sm">
+                    {Math.floor(spendingAnalysis.eligibleSpend / card.earningBlockSize)} complete blocks earned from ${spendingAnalysis.eligibleSpend.toFixed(2)} eligible spend
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    ${(spendingAnalysis.eligibleSpend % card.earningBlockSize).toFixed(2)} unearned remainder
+                  </p>
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* Minimum Spend Progress */}
           {minimumSpend === null || minimumSpend === undefined ? (
             <Alert className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30">
               <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />

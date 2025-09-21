@@ -38,6 +38,45 @@ export interface CalculationPeriod {
 
 export class SimpleRewardsCalculator {
   /**
+   * Calculate reward for a single transaction based on card settings
+   */
+  static calculateTransactionReward(
+    amount: number, // In dollars (positive)
+    card: CreditCard,
+    settings?: AppSettings
+  ): { reward: number; rewardDollars: number; blockInfo?: string } {
+    const milesValuation = settings?.milesValuation || 0.01;
+    let reward = 0;
+    let rewardDollars = 0;
+    let blockInfo: string | undefined;
+
+    if (!card.earningRate || card.earningRate === 0) {
+      return { reward: 0, rewardDollars: 0 };
+    }
+
+    let earnableAmount = amount;
+    
+    // If block-based earning is configured, round down to complete blocks
+    if (card.earningBlockSize && card.earningBlockSize > 0) {
+      const blocks = Math.floor(amount / card.earningBlockSize);
+      earnableAmount = blocks * card.earningBlockSize;
+      blockInfo = `${blocks} block${blocks !== 1 ? 's' : ''} × $${card.earningBlockSize}`;
+    }
+
+    // Calculate rewards based on earnable amount
+    if (card.type === 'cashback') {
+      // For cashback cards, earningRate is a percentage
+      reward = earnableAmount * (card.earningRate / 100);
+      rewardDollars = reward;
+    } else {
+      // For miles cards, earningRate is miles per dollar
+      reward = earnableAmount * card.earningRate;
+      rewardDollars = reward * milesValuation;
+    }
+
+    return { reward, rewardDollars, blockInfo };
+  }
+  /**
    * Calculate the current period for a card based on billing cycle
    */
   static calculatePeriod(card: CreditCard): CalculationPeriod {
@@ -130,13 +169,22 @@ export class SimpleRewardsCalculator {
 
     // Only calculate rewards if we have eligible spend and an earning rate
     if (eligibleSpend > 0 && card.earningRate) {
+      let earnableSpend = eligibleSpend;
+
+      // If block-based earning is configured, round down to complete blocks
+      if (card.earningBlockSize && card.earningBlockSize > 0) {
+        const blocks = Math.floor(eligibleSpend / card.earningBlockSize);
+        earnableSpend = blocks * card.earningBlockSize;
+      }
+
+      // Calculate rewards based on earnable spend
       if (card.type === 'cashback') {
         // For cashback cards, earningRate is a percentage
-        rewardEarned = eligibleSpend * (card.earningRate / 100);
+        rewardEarned = earnableSpend * (card.earningRate / 100);
         rewardEarnedDollars = rewardEarned;
       } else {
         // For miles cards, earningRate is miles per dollar
-        rewardEarned = eligibleSpend * card.earningRate;
+        rewardEarned = earnableSpend * card.earningRate;
         // Convert miles to dollars using valuation
         rewardEarnedDollars = rewardEarned * milesValuation;
       }
