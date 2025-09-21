@@ -345,7 +345,7 @@ export default function SettingsPage() {
       type: cardForm.type,
       active: editingCard.active ?? true,
       ynabAccountId: editingCard.ynabAccountId,
-      earningRate: cardForm.type === 'cashback' ? 1 : 1,
+      earningRate: 1,
       earningBlockSize: null, // Default to exact earning (down to the cent)
       minimumSpend: null,
       maximumSpend: null,
