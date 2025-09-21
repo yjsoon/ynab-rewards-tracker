@@ -5,12 +5,12 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Calendar, Edit, Save, X, Wand2 } from 'lucide-react';
+import { Calendar } from 'lucide-react';
 import { YnabClient } from '@/lib/ynab-client';
 import { storage } from '@/lib/storage';
-import { useYnabPAT, useTagMappings } from '@/hooks/useLocalStorage';
+import { useYnabPAT, useCreditCards } from '@/hooks/useLocalStorage';
 import type { Transaction, TransactionWithRewards } from '@/types/transaction';
-import { TransactionMatcher } from '@/lib/rewards-engine';
+import { SimpleRewardsCalculator } from '@/lib/rewards-engine';
 import { absFromMilli, formatDollars } from '@/lib/utils';
 
 interface Props {
@@ -22,13 +22,10 @@ const LOOKBACK_DAYS = 90;
 
 export default function TransactionsPreview({ cardId, ynabAccountId }: Props) {
   const { pat } = useYnabPAT();
-  const { mappings, saveMapping } = useTagMappings(cardId);
+  const { cards } = useCreditCards();
   const [transactions, setTransactions] = useState<TransactionWithRewards[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState('');
-  const [message, setMessage] = useState('');
   const abortRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async () => {
@@ -51,9 +48,8 @@ export default function TransactionsPreview({ cardId, ynabAccountId }: Props) {
         signal: controller.signal,
       });
       const cardTxns = all.filter((t: Transaction) => t.account_id === ynabAccountId);
-      const enriched = TransactionMatcher.applyTagMappings(cardTxns, mappings);
-      enriched.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      setTransactions(enriched);
+      cardTxns.sort((a: Transaction, b: Transaction) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      setTransactions(cardTxns);
     } catch (err) {
       if ((err as any)?.name !== 'AbortError') {
         setError(err instanceof Error ? err.message : String(err));
@@ -61,7 +57,7 @@ export default function TransactionsPreview({ cardId, ynabAccountId }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [pat, ynabAccountId, mappings]);
+  }, [pat, ynabAccountId]);
 
   useEffect(() => {
     load();
@@ -71,52 +67,13 @@ export default function TransactionsPreview({ cardId, ynabAccountId }: Props) {
   const budgetId = storage.getSelectedBudget().id;
   const needSetup = !pat || !budgetId;
 
-  function getAvailableCategories(): string[] {
-    const set = new Set<string>();
-    mappings.forEach(m => set.add(m.rewardCategory));
-    return Array.from(set).sort();
-  }
-
-  function startEdit(txn: TransactionWithRewards) {
-    setEditingId(txn.id);
-    setSelectedCategory(txn.rewardCategory || '');
-  }
-
-  function cancelEdit() {
-    setEditingId(null);
-    setSelectedCategory('');
-  }
-
-  function saveEdit(txnId: string) {
-    setTransactions(prev => prev.map(t => t.id === txnId ? { ...t, rewardCategory: selectedCategory || undefined } : t));
-    setEditingId(null);
-    setSelectedCategory('');
-  }
-
-  function genId() {
-    return Math.random().toString(36).slice(2);
-  }
-
-  function applyMappingForTxn(txn: TransactionWithRewards) {
-    if (!selectedCategory) return;
-    const tag = txn.flag_name || txn.flag_color;
-    if (!tag) {
-      setMessage('No YNAB flag on this transaction to map from.');
-      setTimeout(() => setMessage(''), 2500);
-      return;
-    }
-    saveMapping({ id: genId(), cardId, ynabTag: tag, rewardCategory: selectedCategory });
-    setMessage(`Mapped “${tag}” to “${selectedCategory}”.`);
-    setTimeout(() => setMessage(''), 2500);
-  }
-
   return (
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
             <CardTitle>Recent Transactions</CardTitle>
-            <CardDescription>View and categorise your card transactions</CardDescription>
+            <CardDescription>View your recent card transactions</CardDescription>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={load} disabled={loading}>Refresh</Button>
@@ -162,49 +119,34 @@ export default function TransactionsPreview({ cardId, ynabAccountId }: Props) {
                       )}
                       <span className="text-xs text-muted-foreground">{new Date(txn.date).toLocaleDateString()}</span>
                     </div>
-                    {editingId === txn.id ? (
-                      <div className="flex items-center gap-2 mt-2">
-                        <span className="text-sm text-muted-foreground">Reward:</span>
-                        <select
-                          value={selectedCategory}
-                          onChange={(e) => setSelectedCategory(e.target.value)}
-                          className="px-2 py-1 text-xs border rounded"
-                        >
-                          <option value="">None</option>
-                          {getAvailableCategories().map(cat => (
-                            <option key={cat} value={cat}>{cat}</option>
-                          ))}
-                        </select>
-                        <Button size="sm" onClick={() => saveEdit(txn.id)} aria-label="Save category">
-                          <Save className="h-3 w-3" />
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={cancelEdit} aria-label="Cancel">
-                          <X className="h-3 w-3" />
-                        </Button>
-                        {(txn.flag_name || txn.flag_color) && selectedCategory && (
-                          <Button size="sm" variant="outline" onClick={() => applyMappingForTxn(txn)} aria-label="Create mapping from flag">
-                            <Wand2 className="h-3 w-3 mr-1" /> Apply to tag
-                          </Button>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
-                        <span>YNAB: {txn.category_name || 'Uncategorised'} • Reward: {txn.rewardCategory || 'None'}</span>
-                        <Button size="sm" variant="ghost" onClick={() => startEdit(txn)} aria-label="Edit reward category">
-                          <Edit className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    )}
+                    <div className="text-sm text-muted-foreground mt-1">
+                      YNAB Category: {txn.category_name || 'Uncategorised'}
+                    </div>
                   </div>
                   <div className="text-right">
                     <div className="font-mono">{formatDollars(absFromMilli(txn.amount))}</div>
-                    {txn.rewardCategory && <Badge variant="secondary" className="mt-1">Eligible</Badge>}
+                    {(() => {
+                      const card = cards.find(c => c.id === cardId);
+                      if (!card || !card.earningRate) return null;
+                      const settings = storage.getSettings();
+                      const amount = absFromMilli(txn.amount);
+                      const { reward, blockInfo } = SimpleRewardsCalculator.calculateTransactionReward(amount, card, settings);
+                      return (
+                        <div className="mt-1">
+                          <Badge variant="secondary">
+                            {card.type === 'cashback'
+                              ? `+${formatDollars(reward)}`
+                              : `+${Math.round(reward)} miles`}
+                          </Badge>
+                          {blockInfo && card.earningBlockSize && (
+                            <p className="text-xs text-muted-foreground mt-1">{blockInfo}</p>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
             ))}
-            {message && (
-              <p className="text-xs text-muted-foreground pt-1">{message}</p>
-            )}
           </div>
         )}
       </CardContent>

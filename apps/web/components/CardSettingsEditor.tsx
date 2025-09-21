@@ -10,6 +10,7 @@ import type { CreditCard } from '@/lib/storage';
 
 export interface CardEditState {
   earningRate?: number;
+  earningBlockSize?: number | null;
   minimumSpend?: number | null;
   maximumSpend?: number | null; // New field for maximum spend limit
   billingCycleType?: 'calendar' | 'billing';
@@ -146,6 +147,60 @@ export function CardSettingsEditor({
               placeholder={cardType === 'cashback' ? '1.5' : '1'}
             />
           </div>
+        </div>
+
+        {/* Earning Block */}
+        <div>
+          <Label className="text-sm text-muted-foreground">Earning Method</Label>
+          <Select
+            value={
+              state.earningBlockSize !== undefined
+                ? (state.earningBlockSize === null || state.earningBlockSize === 0 ? 'exact' : 'blocks')
+                : (card.earningBlockSize === null || card.earningBlockSize === undefined || card.earningBlockSize === 0 ? 'exact' : 'blocks')
+            }
+            onValueChange={(value) => {
+              if (value === 'exact') {
+                onFieldChange('earningBlockSize', null);
+              } else {
+                // Default to 1 for all cards when switching to blocks
+                onFieldChange('earningBlockSize', 1);
+              }
+            }}
+          >
+            <SelectTrigger className="h-9 mt-1">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="exact">Exact amount</SelectItem>
+              <SelectItem value="blocks">Fixed $ blocks</SelectItem>
+            </SelectContent>
+          </Select>
+          {((state.earningBlockSize !== undefined && state.earningBlockSize !== null) ||
+            (state.earningBlockSize === undefined && card.earningBlockSize !== null)) && (
+            <div className="mt-2 space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">$</span>
+                <Input
+                  type="number"
+                  value={state.earningBlockSize !== undefined ? (state.earningBlockSize ?? '') : (card.earningBlockSize ?? '')}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const num = parseFloat(val);
+                    onFieldChange('earningBlockSize', val === '' || isNaN(num) ? null : num);
+                  }}
+                  step="1"
+                  min="1"
+                  max="100"
+                  className="h-8 w-20"
+                  placeholder="1"
+                />
+                <span className="text-sm text-muted-foreground">per block</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Earns on complete $${state.earningBlockSize !== undefined ? (state.earningBlockSize ?? 1) : (card.earningBlockSize ?? 1)} blocks only
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Minimum Spend */}
