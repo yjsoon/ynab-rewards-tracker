@@ -4,6 +4,11 @@
 
 import type { CreditCard, AppSettings } from '@/lib/storage';
 import type { Transaction } from '@/types/transaction';
+import {
+  hasMinimumSpendRequirement,
+  isMinimumSpendMet,
+  calculateMinimumSpendProgress
+} from '@/lib/minimum-spend-helpers';
 
 export interface SimplifiedCalculation {
   cardId: string;
@@ -12,6 +17,10 @@ export interface SimplifiedCalculation {
   rewardEarned: number; // Raw reward units (dollars for cashback, miles for miles cards)
   rewardEarnedDollars: number; // Normalized dollar value for comparison
   rewardType: 'cashback' | 'miles';
+  // Minimum spend tracking
+  minimumSpend?: number | null; // Required spending threshold (null = not configured, 0 = no minimum, >0 = has minimum)
+  minimumSpendMet: boolean; // Whether minimum spend requirement is satisfied
+  minimumSpendProgress?: number; // Progress toward minimum (0-100) if applicable
 }
 
 export interface CalculationPeriod {
@@ -86,25 +95,24 @@ export class SimpleRewardsCalculator {
       periodTransactions.reduce((sum, txn) => sum + txn.amount, 0)
     ) / 1000;
 
+    // Calculate minimum spend progress and status
+    const minimumSpend = card.minimumSpend;
+    const minimumSpendMet = isMinimumSpendMet(totalSpend, minimumSpend);
+    const minimumSpendProgress = calculateMinimumSpendProgress(totalSpend, minimumSpend);
+
     // Calculate rewards based on card earning rate
     let rewardEarned = 0;
     let rewardEarnedDollars = 0;
 
-    if (card.earningRate) {
+    // Only calculate rewards if minimum spend is met (or not applicable)
+    if (minimumSpendMet && card.earningRate) {
       if (card.type === 'cashback') {
         // For cashback cards, earningRate is a percentage
         rewardEarned = totalSpend * (card.earningRate / 100);
         rewardEarnedDollars = rewardEarned;
       } else {
-        // For miles cards, earningRate is miles per dollar (or per block)
-        if (card.milesBlockSize && card.milesBlockSize > 1) {
-          // Calculate based on spending blocks
-          const blocks = Math.floor(totalSpend / card.milesBlockSize);
-          rewardEarned = blocks * card.earningRate;
-        } else {
-          // Simple miles per dollar
-          rewardEarned = totalSpend * card.earningRate;
-        }
+        // For miles cards, earningRate is miles per dollar
+        rewardEarned = totalSpend * card.earningRate;
         // Convert miles to dollars using valuation
         rewardEarnedDollars = rewardEarned * milesValuation;
       }
@@ -116,7 +124,10 @@ export class SimpleRewardsCalculator {
       totalSpend,
       rewardEarned,
       rewardEarnedDollars,
-      rewardType: card.type
+      rewardType: card.type,
+      minimumSpend,
+      minimumSpendMet,
+      minimumSpendProgress
     };
   }
 

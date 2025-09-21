@@ -79,10 +79,12 @@ export class TransactionMatcher {
 
     transactions.forEach(txn => {
       const category = txn.rewardCategory || 'uncategorized';
-      if (!groups.has(category)) {
-        groups.set(category, []);
+      const existingGroup = groups.get(category);
+      if (existingGroup) {
+        existingGroup.push(txn);
+      } else {
+        groups.set(category, [txn]);
       }
-      groups.get(category)!.push(txn);
     });
 
     return groups;

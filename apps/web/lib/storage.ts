@@ -16,7 +16,8 @@ export interface CreditCard {
   active: boolean;
   // Earning rates (replaces the complex rules system)
   earningRate?: number; // For cashback: percentage (e.g., 2 for 2%). For miles: miles per dollar (e.g., 1.5)
-  milesBlockSize?: number; // For miles cards: minimum spending block (e.g., 5 for "per $5 spent")
+  // Minimum spend requirement (three states: null = not configured, 0 = no minimum, >0 = has minimum)
+  minimumSpend?: number | null; // Dollar amount required to earn rewards for this period
 }
 
 export interface RewardRule {
@@ -25,8 +26,6 @@ export interface RewardRule {
   name: string;
   rewardType: 'cashback' | 'miles';
   rewardValue: number; // percentage or miles per dollar
-  milesBlockSize?: number; // e.g., 5 for "$5 blocks"
-  categories: string[]; // Reward categories (mapped from YNAB flags/tags)
   minimumSpend?: number;
   maximumSpend?: number;
   categoryCaps?: CategoryCap[];
@@ -170,6 +169,10 @@ class StorageService {
               if (card?.type === 'points') {
                 card.type = 'miles';
               }
+              if (card && 'milesBlockSize' in card) {
+                const { milesBlockSize, ...cleanCard } = card;
+                return cleanCard;
+              }
               return card;
             });
           }
@@ -177,6 +180,10 @@ class StorageService {
             data.rules = data.rules.map((rule: any) => {
               if (rule?.rewardType === 'points') {
                 rule.rewardType = 'miles';
+              }
+              if (rule && 'milesBlockSize' in rule) {
+                const { milesBlockSize, ...cleanRule } = rule;
+                return cleanRule;
               }
               return rule;
             });
@@ -204,16 +211,21 @@ class StorageService {
                   // Use the first active rule's reward value as the earning rate
                   const firstRule = cardRules[0];
                   card.earningRate = firstRule.rewardValue || 1;
-                  if (card.type === 'miles' && firstRule.milesBlockSize) {
-                    card.milesBlockSize = firstRule.milesBlockSize;
-                  }
                 } else {
                   // Default earning rates
                   card.earningRate = 1;
-                  if (card.type === 'miles') {
-                    card.milesBlockSize = 1;
-                  }
                 }
+              }
+              return card;
+            });
+          }
+
+          // Migration: Add minimumSpend field to cards that don't have it (default to null = not configured)
+          if (Array.isArray(data.cards)) {
+            data.cards = data.cards.map((card: any) => {
+              if (!Object.hasOwn(card, 'minimumSpend')) {
+                // Default to null (not configured) - users need to explicitly set this
+                card.minimumSpend = null;
               }
               return card;
             });

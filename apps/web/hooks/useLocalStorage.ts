@@ -148,12 +148,23 @@ export function useRewardCalculations(cardId?: string) {
 }
 
 export function useSettings() {
+  const [settings, setSettingsState] = useState(storage.getSettings());
   const [isLoading, setIsLoading] = useState(true);
   const { triggerRefresh } = useStorageContext();
 
   useEffect(() => {
-    setIsLoading(false);
+    const loadSettings = () => {
+      setSettingsState(storage.getSettings());
+      setIsLoading(false);
+    };
+    loadSettings();
   }, []);
+
+  const updateSettings = useCallback((newSettings: Partial<typeof settings>) => {
+    storage.updateSettings(newSettings);
+    setSettingsState(storage.getSettings());
+    triggerRefresh();
+  }, [triggerRefresh]);
 
   const exportSettings = useCallback(() => {
     return storage.exportSettings();
@@ -161,15 +172,17 @@ export function useSettings() {
 
   const importSettings = useCallback((jsonString: string) => {
     storage.importSettings(jsonString);
+    setSettingsState(storage.getSettings());
     // Trigger refresh for all components using storage
     triggerRefresh();
   }, [triggerRefresh]);
 
   const clearAll = useCallback(() => {
     storage.clearAll();
+    setSettingsState(storage.getSettings());
     // Trigger refresh for all components using storage
     triggerRefresh();
   }, [triggerRefresh]);
 
-  return { exportSettings, importSettings, clearAll, isLoading };
+  return { settings, updateSettings, exportSettings, importSettings, clearAll, isLoading };
 }

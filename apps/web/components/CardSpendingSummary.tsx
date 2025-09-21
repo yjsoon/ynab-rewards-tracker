@@ -8,6 +8,12 @@ import { YnabClient } from '@/lib/ynab-client';
 import { storage } from '@/lib/storage';
 import { formatDollars } from '@/lib/utils';
 import { AlertCircle, TrendingUp, CheckCircle2, Percent, DollarSign } from 'lucide-react';
+import {
+  isMinimumSpendConfigured,
+  hasMinimumSpendRequirement,
+  getMinimumSpendStatus,
+  formatMinimumSpendText
+} from '@/lib/minimum-spend-helpers';
 import type { CreditCard, AppSettings } from '@/lib/storage';
 import type { Transaction } from '@/types/transaction';
 
@@ -120,7 +126,10 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
       totalSpend: calculation.totalSpend,
       rewardEarned: calculation.rewardEarned,
       rewardEarnedDollars: calculation.rewardEarnedDollars,
-      daysRemaining: Math.max(0, daysRemaining)
+      daysRemaining: Math.max(0, daysRemaining),
+      minimumSpend: calculation.minimumSpend,
+      minimumSpendMet: calculation.minimumSpendMet,
+      minimumSpendProgress: calculation.minimumSpendProgress
     };
   }, [card, transactions, period, settings]);
 
@@ -137,7 +146,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
     );
   }
 
-  const { totalSpend, rewardEarned, rewardEarnedDollars, daysRemaining } = summary;
+  const { totalSpend, rewardEarned, rewardEarnedDollars, daysRemaining, minimumSpend, minimumSpendMet, minimumSpendProgress } = summary;
 
   return (
     <div className="space-y-3">
@@ -149,16 +158,78 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
         </div>
         <div className="bg-green-500/10 rounded-lg p-2 text-center">
           <p className="text-lg font-bold text-green-600 dark:text-green-400">
-            {card.type === 'cashback'
+            {!minimumSpendMet && hasMinimumSpendRequirement(minimumSpend)
+              ? 'No rewards yet'
+              : card.type === 'cashback'
               ? formatDollars(rewardEarned)
               : `${Math.round(rewardEarned).toLocaleString()}`
             }
           </p>
           <p className="text-xs text-muted-foreground">
-            {card.type === 'cashback' ? 'Cashback' : 'Miles'}
+            {!minimumSpendMet && hasMinimumSpendRequirement(minimumSpend)
+              ? 'Minimum not met'
+              : card.type === 'cashback' ? 'Cashback' : 'Miles'
+            }
           </p>
         </div>
       </div>
+
+      {/* Minimum Spend Status */}
+      {isMinimumSpendConfigured(minimumSpend) && (
+        <div className="space-y-2">
+          {minimumSpend === 0 ? (
+            <div className="flex items-center justify-center gap-2 text-green-600 dark:text-green-400">
+              <CheckCircle2 className="h-4 w-4" />
+              <p className="text-sm font-medium">No minimum spend required</p>
+            </div>
+          ) : minimumSpend > 0 ? (
+            <>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Minimum spend progress</span>
+                <span className={minimumSpendMet ? 'text-green-600 dark:text-green-400 font-medium' : 'text-muted-foreground'}>
+                  {formatDollars(totalSpend)} / {formatDollars(minimumSpend)}
+                </span>
+              </div>
+              <Progress
+                value={minimumSpendProgress || 0}
+                className="h-2"
+              />
+              <div className="flex items-center justify-center gap-2">
+                {minimumSpendMet ? (
+                  <>
+                    <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+                    <p className="text-sm font-medium text-green-600 dark:text-green-400">
+                      Minimum spend met!
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                    <p className="text-sm font-medium text-amber-600 dark:text-amber-400">
+                      {formatDollars(minimumSpend - totalSpend)} to go
+                    </p>
+                  </>
+                )}
+              </div>
+            </>
+          ) : null}
+        </div>
+      )}
+
+      {/* Not Configured Warning */}
+      {!isMinimumSpendConfigured(minimumSpend) && (
+        <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-lg p-3">
+          <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300">
+            <AlertCircle className="h-4 w-4" />
+            <p className="text-sm font-medium">
+              Minimum spend not configured
+            </p>
+          </div>
+          <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+            Set this in card settings to track signup bonuses and minimum spend requirements
+          </p>
+        </div>
+      )}
 
       {/* Earning Rate */}
       <div className="text-center pt-2 space-y-1">
@@ -174,11 +245,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
                 <>
                   <TrendingUp className="h-3 w-3 text-muted-foreground" />
                   <p className="text-sm font-medium">
-                    {card.earningRate} miles
-                    {card.milesBlockSize && card.milesBlockSize > 1
-                      ? ` per $${card.milesBlockSize}`
-                      : ' per dollar'
-                    }
+                    {card.earningRate} miles per dollar
                   </p>
                 </>
               )}

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Home, Settings, CreditCard } from 'lucide-react';
+import { Home, Settings, CreditCard, SlidersHorizontal } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { cn } from '@/lib/utils';
 
@@ -12,6 +12,7 @@ export function Navigation() {
 
   const navLinks = [
     { href: '/', label: 'Dashboard', icon: Home },
+    { href: '/rules', label: 'Rules', icon: SlidersHorizontal },
     { href: '/settings', label: 'Settings', icon: Settings },
   ];
 

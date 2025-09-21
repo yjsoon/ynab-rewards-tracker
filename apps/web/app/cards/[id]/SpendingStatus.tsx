@@ -117,44 +117,24 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
     setSettings(appSettings);
   }, []);
 
-  // Calculate spending and rewards
+  // Calculate spending and rewards using the simplified calculator
   const spendingAnalysis = useMemo(() => {
-    // Calculate total spend (all transactions, not just categorized)
-    const totalSpend = transactions
-      .filter(t => t.amount < 0)
-      .reduce((sum, t) => sum + Math.abs(t.amount / 1000), 0);
-
-    // Calculate rewards based on card earning rate
-    let rewardEarned = 0;
-    let rewardEarnedDollars = 0;
-
-    if (card.earningRate) {
-      if (card.type === 'cashback') {
-        // For cashback cards, earningRate is a percentage
-        rewardEarned = totalSpend * (card.earningRate / 100);
-        rewardEarnedDollars = rewardEarned;
-      } else {
-        // For miles cards, earningRate is miles per dollar (or per block)
-        if (card.milesBlockSize && card.milesBlockSize > 1) {
-          // Calculate based on spending blocks
-          const blocks = Math.floor(totalSpend / card.milesBlockSize);
-          rewardEarned = blocks * card.earningRate;
-        } else {
-          // Simple miles per dollar
-          rewardEarned = totalSpend * card.earningRate;
-        }
-        // Convert miles to dollars using valuation
-        const milesValuation = settings?.milesValuation || 0.01;
-        rewardEarnedDollars = rewardEarned * milesValuation;
-      }
-    }
+    const calculation = SimpleRewardsCalculator.calculateCardRewards(
+      card,
+      transactions,
+      period,
+      settings || undefined
+    );
 
     return {
-      totalSpend,
-      rewardEarned,
-      rewardEarnedDollars
+      totalSpend: calculation.totalSpend,
+      rewardEarned: calculation.rewardEarned,
+      rewardEarnedDollars: calculation.rewardEarnedDollars,
+      minimumSpend: calculation.minimumSpend,
+      minimumSpendMet: calculation.minimumSpendMet,
+      minimumSpendProgress: calculation.minimumSpendProgress
     };
-  }, [transactions, card, settings]);
+  }, [transactions, card, period, settings]);
 
   if (loading) {
     return (
@@ -168,7 +148,7 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
     );
   }
 
-  const { totalSpend, rewardEarned, rewardEarnedDollars } = spendingAnalysis;
+  const { totalSpend, rewardEarned, rewardEarnedDollars, minimumSpend, minimumSpendMet, minimumSpendProgress } = spendingAnalysis;
 
   return (
     <div className="space-y-6">
@@ -205,10 +185,15 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
                 {card.type === 'cashback' ? 'Cashback Earned' : 'Miles Earned'}
               </div>
               <p className="text-2xl font-bold">
-                {card.type === 'cashback'
+                {!minimumSpendMet && minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0
+                  ? 'No rewards yet'
+                  : card.type === 'cashback'
                   ? formatDollars(rewardEarned)
                   : `${Math.round(rewardEarned).toLocaleString()} miles`}
               </p>
+              {!minimumSpendMet && minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0 && (
+                <p className="text-xs text-muted-foreground mt-1">Minimum not met</p>
+              )}
             </div>
 
             <div className="p-4 rounded-lg bg-muted/50">
@@ -216,14 +201,45 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
                 <DollarSign className="h-4 w-4" />
                 Reward Value
               </div>
-              <p className="text-2xl font-bold">{formatDollars(rewardEarnedDollars)}</p>
-              {card.type === 'miles' && (
+              <p className="text-2xl font-bold">
+                {!minimumSpendMet && minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0
+                  ? formatDollars(0)
+                  : formatDollars(rewardEarnedDollars)}
+              </p>
+              {card.type === 'miles' && minimumSpendMet && (
                 <p className="text-xs text-muted-foreground mt-1">
                   @ ${settings?.milesValuation || 0.01}/mile
                 </p>
               )}
+              {!minimumSpendMet && minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0 && (
+                <p className="text-xs text-muted-foreground mt-1">Minimum not met</p>
+              )}
             </div>
           </div>
+
+          {/* Minimum Spend Alerts */}
+          {minimumSpend === null || minimumSpend === undefined ? (
+            <Alert className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30">
+              <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              <AlertDescription className="text-amber-700 dark:text-amber-300">
+                <strong>Minimum spend not configured.</strong> Set this in card settings to track signup bonuses and minimum spend requirements.
+              </AlertDescription>
+            </Alert>
+          ) : minimumSpend > 0 && !minimumSpendMet ? (
+            <Alert className="border-orange-200 bg-orange-50 dark:border-orange-900 dark:bg-orange-950/30">
+              <AlertCircle className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+              <AlertDescription className="text-orange-700 dark:text-orange-300">
+                <strong>Minimum spend requirement not met.</strong> You need to spend {formatDollars((minimumSpend || 0) - totalSpend)} more to earn rewards this period ({minimumSpendProgress?.toFixed(1)}% complete).
+              </AlertDescription>
+            </Alert>
+          ) : minimumSpend > 0 && minimumSpendMet ? (
+            <Alert className="border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950/30">
+              <AlertCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+              <AlertDescription className="text-green-700 dark:text-green-300">
+                <strong>Minimum spend requirement met!</strong> You've spent {formatDollars(totalSpend)} out of the required {formatDollars(minimumSpend)} this period.
+              </AlertDescription>
+            </Alert>
+          ) : null}
 
           {/* No earning rate warning */}
           {!card.earningRate && (
