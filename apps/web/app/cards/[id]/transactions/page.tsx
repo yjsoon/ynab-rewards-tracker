@@ -83,7 +83,7 @@ export default function CardTransactionsPage() {
       );
 
       // Sort by date (newest first)
-      cardTransactions.sort((a, b) =>
+      cardTransactions.sort((a: Transaction, b: Transaction) =>
         new Date(b.date).getTime() - new Date(a.date).getTime()
       );
 

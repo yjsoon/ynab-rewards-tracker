@@ -124,6 +124,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
 
     return {
       totalSpend: calculation.totalSpend,
+      eligibleSpend: calculation.eligibleSpend,
       rewardEarned: calculation.rewardEarned,
       rewardEarnedDollars: calculation.rewardEarnedDollars,
       daysRemaining: Math.max(0, daysRemaining),
