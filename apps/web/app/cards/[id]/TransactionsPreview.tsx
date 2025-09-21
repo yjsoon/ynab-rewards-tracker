@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import { useMemo } from "react";
 import Link from "next/link";
@@ -144,7 +144,7 @@ export default function TransactionsPreview({ card, lookbackDays = LOOKBACK_DAYS
               <div className="mt-4 pt-4 border-t text-center">
                 <Button variant="outline" asChild>
                   <Link href={`/cards/${card.id}/transactions`}>
-                    More transactions({totalSpendingCount} total)
+                    More transactions ({totalSpendingCount} total)
                   </Link>
                 </Button>
               </div>
