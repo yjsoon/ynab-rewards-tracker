@@ -7,29 +7,4 @@ export const YNAB_FLAG_COLORS = [
   { value: 'purple', label: 'Purple', color: '#a855f7' },
 ] as const;
 
-export const COMMON_REWARD_CATEGORIES = [
-  'Dining',
-  'Groceries',
-  'Gas',
-  'Travel',
-  'Online Shopping',
-  'Streaming Services',
-  'Entertainment',
-  'Transit',
-  'Hotels',
-  'Flights',
-  'Rideshare',
-  'Drug Stores',
-  'Home Improvement',
-  'Utilities',
-  'Insurance',
-  'Mobile Wallet',
-  'PayPal',
-  'Wholesale Clubs',
-  'Department Stores',
-  'Sporting Goods',
-  'Everything Else',
-] as const;
-
 export type YnabFlagColor = typeof YNAB_FLAG_COLORS[number]['value'];
-export type RewardCategory = typeof COMMON_REWARD_CATEGORIES[number] | string;

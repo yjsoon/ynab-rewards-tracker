@@ -16,15 +16,5 @@ export interface Transaction {
 export interface TransactionWithRewards extends Transaction {
   // Computed fields for rewards tracking
   eligibleAmount?: number;
-  rewardCategory?: string;
-  appliedRules?: AppliedRule[];
   rewardEarned?: number;
-}
-
-export interface AppliedRule {
-  ruleId: string;
-  ruleName: string;
-  rewardType: 'cashback' | 'miles';
-  rewardValue: number;
-  earnedAmount: number;
 }

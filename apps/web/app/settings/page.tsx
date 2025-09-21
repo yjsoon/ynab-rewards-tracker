@@ -183,6 +183,10 @@ export default function SettingsPage() {
               type: 'calendar',
               dayOfMonth: 1,
             },
+            earningRate: 1, // Default 1% cashback
+            earningBlockSize: null, // Default to exact earning
+            minimumSpend: null,
+            maximumSpend: null,
           };
           saveCard(newCard);
         }
@@ -235,6 +239,10 @@ export default function SettingsPage() {
           type: 'calendar',
           dayOfMonth: 1,
         },
+        earningRate: 1, // Default 1% cashback
+        earningBlockSize: null, // Default to exact earning
+        minimumSpend: null,
+        maximumSpend: null,
       };
       saveCard(newCard);
     } else {
@@ -337,6 +345,10 @@ export default function SettingsPage() {
       type: cardForm.type,
       active: editingCard.active ?? true,
       ynabAccountId: editingCard.ynabAccountId,
+      earningRate: cardForm.type === 'cashback' ? 1 : 1,
+      earningBlockSize: null, // Default to exact earning (down to the cent)
+      minimumSpend: null,
+      maximumSpend: null,
     };
     saveCard(card);
     setShowCardForm(false);

@@ -259,6 +259,22 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
             Value: {formatDollars(rewardEarnedDollars)} @ ${settings?.milesValuation || 0.01}/mile
           </p>
         )}
+        
+        {/* Earning blocks info */}
+        {card.earningBlockSize && card.earningBlockSize > 0 && summary.eligibleSpend !== undefined && summary.eligibleSpend > 0 && (
+          <div className="mt-2 p-2 bg-muted/50 rounded text-xs space-y-0.5">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Earning blocks:</span>
+              <span className="font-medium">{Math.floor(summary.eligibleSpend / card.earningBlockSize)} × ${card.earningBlockSize}</span>
+            </div>
+            {(summary.eligibleSpend % card.earningBlockSize) > 0 && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Unearned:</span>
+                <span>${(summary.eligibleSpend % card.earningBlockSize).toFixed(2)}</span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Period Info - dates left, days right */}

@@ -7,12 +7,11 @@
 import { YnabClient } from '@/lib/ynab-client';
 import { RewardsCalculator } from './calculator';
 import { TransactionMatcher } from './matcher';
-import type { 
+import type {
   AppSettings,
   CreditCard,
   RewardCalculation,
   RewardRule,
-  TagMapping,
 } from '@/lib/storage';
 
 function formatIsoDate(d: Date): string {
@@ -33,7 +32,6 @@ export async function computeCurrentPeriod(
   budgetId: string,
   cards: CreditCard[],
   allRules: RewardRule[],
-  allMappings: TagMapping[],
   settings?: AppSettings,
   signal?: AbortSignal
 ): Promise<RewardCalculation[]> {
@@ -53,9 +51,7 @@ export async function computeCurrentPeriod(
     const card = activeCards[i];
     const period = periods[i];
 
-    const mappings = allMappings.filter(m => m.cardId === card.id);
-    const withCats = TransactionMatcher.applyTagMappings(allTxns, mappings);
-    const forCard = TransactionMatcher.filterForCard(withCats, card.ynabAccountId);
+    const forCard = TransactionMatcher.filterForCard(allTxns, card.ynabAccountId);
     const inRange = TransactionMatcher.filterByDateRange(forCard, period.startDate, period.endDate);
 
     const rules = allRules.filter(r => r.cardId === card.id && r.active);
