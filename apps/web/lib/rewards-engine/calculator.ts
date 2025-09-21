@@ -2,13 +2,11 @@
  * Core rewards calculation logic
  */
 
-import type { 
-  RewardRule, 
-  CreditCard, 
-  TagMapping, 
+import type {
+  RewardRule,
+  CreditCard,
   RewardCalculation,
-  CategoryBreakdown,
-  AppSettings 
+  AppSettings
 } from '@/lib/storage';
 import type { TransactionWithRewards } from '@/types/transaction';
 import { absFromMilli } from '@/lib/utils';
@@ -21,6 +19,7 @@ export interface CalculationPeriod {
 
 export class RewardsCalculator {
   private static readonly DEFAULT_BILLING_DAY = 1;
+
   /**
    * Calculate rewards for a single rule in a given period
    */
@@ -33,113 +32,53 @@ export class RewardsCalculator {
     // Get valuation rates from settings (default 1 cent per mile/point)
     const milesValuation = settings?.milesValuation || 0.01;
 
-    // Filter transactions to this period and eligible categories
-    const eligibleTransactions = transactions.filter(
-      (txn): txn is TransactionWithRewards & { rewardCategory: string } => {
-        const txnDate = new Date(txn.date);
-        return (
-          txnDate >= period.startDate &&
-          txnDate <= period.endDate &&
-          typeof txn.rewardCategory === 'string' &&
-          txn.rewardCategory.length > 0
-        );
-      }
-    );
+    // Filter transactions to this period
+    const eligibleTransactions = transactions.filter(txn => {
+      const txnDate = new Date(txn.date);
+      return txnDate >= period.startDate && txnDate <= period.endDate;
+    });
 
-    // Calculate total and eligible spend
+    // Calculate total spend
     const totalSpend = Math.abs(
-      eligibleTransactions.reduce((sum, txn) => sum + txn.amount, 0)
-    ) / 1000; // Convert from milliunits
+      eligibleTransactions.reduce((sum, txn) => sum + txn.amount, 0) / 1000
+    );
 
     let eligibleSpend = totalSpend;
     let rewardEarned = 0;
-    const categoryBreakdowns: CategoryBreakdown[] = [];
+    let rewardEarnedDollars = 0;
 
-    // Group by category for breakdown
-    const categorySpends = new Map<string, number>();
-    eligibleTransactions.forEach(txn => {
-      const category = txn.rewardCategory;
-      const amount = absFromMilli(txn.amount);
-      categorySpends.set(category, (categorySpends.get(category) || 0) + amount);
-    });
+    // Apply minimum spend requirement
+    const minimumMet = !rule.minimumSpend || totalSpend >= rule.minimumSpend;
+    const minimumProgress = rule.minimumSpend
+      ? Math.min(100, (totalSpend / rule.minimumSpend) * 100)
+      : 100;
 
-    // Calculate rewards per category with caps
-    // First pass: calculate raw rewards without overall cap
-    categorySpends.forEach((spend, category) => {
-      let categoryEligibleSpend = spend;
-      let categoryReward = 0;
-    let categoryRewardDollars = 0;
-      let capReached = false;
-
-      // Apply category-specific caps
-      const categoryCap = rule.categoryCaps?.find(cap => cap.category === category);
-      if (categoryCap && spend > categoryCap.capAmount) {
-        categoryEligibleSpend = categoryCap.capAmount;
-        capReached = true;
+    if (!minimumMet) {
+      // No rewards if minimum not met
+      eligibleSpend = 0;
+      rewardEarned = 0;
+      rewardEarnedDollars = 0;
+    } else {
+      // Apply maximum spend cap if applicable
+      if (rule.maximumSpend && totalSpend > rule.maximumSpend) {
+        eligibleSpend = rule.maximumSpend;
       }
 
-      // Calculate reward based on type
+      // Calculate rewards based on type
       if (rule.rewardType === 'cashback') {
-        categoryReward = (categoryEligibleSpend * rule.rewardValue) / 100;
-        categoryRewardDollars = categoryReward; // already in dollars
-      } else if (rule.rewardType === 'miles') {
-        // Miles per dollar
-        categoryReward = categoryEligibleSpend * rule.rewardValue;
-        // Convert miles to dollars for comparison
-        categoryRewardDollars = categoryReward * milesValuation;
+        rewardEarned = (eligibleSpend * rule.rewardValue) / 100;
+        rewardEarnedDollars = rewardEarned; // already in dollars
+      } else {
+        // Miles/points
+        rewardEarned = eligibleSpend * rule.rewardValue;
+        rewardEarnedDollars = rewardEarned * milesValuation;
       }
-
-      categoryBreakdowns.push({
-        category,
-        spend,
-        reward: categoryReward,
-        rewardDollars: categoryRewardDollars,
-        capReached
-      });
-
-      rewardEarned += categoryReward;
-    });
-
-    // Apply overall spending cap to eligible spend
-    // If total spend exceeds the maximum, we need to scale down rewards proportionally
-    if (rule.maximumSpend && totalSpend > rule.maximumSpend) {
-      const scaleFactor = rule.maximumSpend / totalSpend;
-      eligibleSpend = rule.maximumSpend;
-      
-      // Scale down all category rewards proportionally
-      categoryBreakdowns.forEach(breakdown => {
-        breakdown.reward *= scaleFactor;
-        if (breakdown.rewardDollars) {
-          breakdown.rewardDollars *= scaleFactor;
-        }
-      });
-      
-      // Recalculate total reward
-      rewardEarned = categoryBreakdowns.reduce((sum, cat) => sum + cat.reward, 0);
-    } else if (rule.maximumSpend) {
-      // Even if not exceeded, cap eligible spend at maximum
-      eligibleSpend = Math.min(eligibleSpend, rule.maximumSpend);
     }
 
-    // Calculate progress percentages
-    const minimumProgress = rule.minimumSpend 
-      ? Math.min(100, (eligibleSpend / rule.minimumSpend) * 100)
-      : undefined;
-    
-    const maximumProgress = rule.maximumSpend 
-      ? Math.min(100, (eligibleSpend / rule.maximumSpend) * 100)
-      : undefined;
-
-    // Determine status flags
-    const minimumMet = !rule.minimumSpend || eligibleSpend >= rule.minimumSpend;
-    const maximumExceeded = !!rule.maximumSpend && eligibleSpend >= rule.maximumSpend;
-    const shouldStopUsing = maximumExceeded;
-
-    // Calculate normalized dollar value for the total reward
-    let rewardEarnedDollars: number = rewardEarned; // default for cashback
-    if (rule.rewardType === 'miles') {
-      rewardEarnedDollars = rewardEarned * milesValuation;
-    }
+    const maximumExceeded = !!rule.maximumSpend && totalSpend > rule.maximumSpend;
+    const maximumProgress = rule.maximumSpend
+      ? Math.min(100, (totalSpend / rule.maximumSpend) * 100)
+      : 0;
 
     return {
       cardId: rule.cardId,
@@ -152,45 +91,51 @@ export class RewardsCalculator {
       rewardType: rule.rewardType,
       minimumProgress,
       maximumProgress,
-      categoryBreakdowns,
       minimumMet,
       maximumExceeded,
-      shouldStopUsing
+      shouldStopUsing: maximumExceeded,
     };
   }
 
   /**
-   * Calculate period dates based on card billing cycle
+   * Calculate the current period for a given card
    */
   static calculatePeriod(card: CreditCard, targetDate: Date = new Date()): CalculationPeriod {
     let startDate: Date;
     let endDate: Date;
-    let label: string;
 
-    // Default to calendar month if billingCycle is not defined
-    if (!card.billingCycle || card.billingCycle.type === 'calendar') {
-      // Calendar month
-      startDate = new Date(targetDate.getFullYear(), targetDate.getMonth(), 1);
-      endDate = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0);
-      label = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}`;
-    } else {
-      // Billing cycle
-      const dayOfMonth = card.billingCycle.dayOfMonth || this.DEFAULT_BILLING_DAY;
-      
-      if (targetDate.getDate() >= dayOfMonth) {
-        // Current billing period
-        startDate = new Date(targetDate.getFullYear(), targetDate.getMonth(), dayOfMonth);
-        endDate = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, dayOfMonth - 1);
+    if (card.billingCycle?.type === 'billing' && card.billingCycle.dayOfMonth) {
+      // Custom billing cycle
+      const billingDay = card.billingCycle.dayOfMonth;
+      const year = targetDate.getFullYear();
+      const month = targetDate.getMonth();
+
+      // Determine if we're in current or previous billing cycle
+      const currentCycleStart = new Date(year, month, billingDay);
+      if (targetDate < currentCycleStart) {
+        // We're in the previous billing cycle
+        startDate = new Date(year, month - 1, billingDay);
+        endDate = new Date(year, month, billingDay - 1, 23, 59, 59, 999);
       } else {
-        // Previous billing period
-        startDate = new Date(targetDate.getFullYear(), targetDate.getMonth() - 1, dayOfMonth);
-        endDate = new Date(targetDate.getFullYear(), targetDate.getMonth(), dayOfMonth - 1);
+        // We're in the current billing cycle
+        startDate = currentCycleStart;
+        endDate = new Date(year, month + 1, billingDay - 1, 23, 59, 59, 999);
       }
-      
-      label = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${dayOfMonth}`;
+    } else {
+      // Calendar month (default)
+      const year = targetDate.getFullYear();
+      const month = targetDate.getMonth();
+      startDate = new Date(year, month, 1);
+      endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
     }
 
-    return { startDate, endDate, name: label };
+    const periodName = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}`;
+
+    return {
+      startDate,
+      endDate,
+      name: periodName,
+    };
   }
 
   /**
@@ -201,15 +146,7 @@ export class RewardsCalculator {
     const now = new Date();
 
     for (let i = 0; i < count; i++) {
-      let targetDate: Date;
-      
-      if (!card.billingCycle || card.billingCycle.type === 'calendar') {
-        targetDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      } else {
-        const dayOfMonth = card.billingCycle.dayOfMonth || this.DEFAULT_BILLING_DAY;
-        targetDate = new Date(now.getFullYear(), now.getMonth() - i, dayOfMonth);
-      }
-      
+      const targetDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
       periods.push(this.calculatePeriod(card, targetDate));
     }
 

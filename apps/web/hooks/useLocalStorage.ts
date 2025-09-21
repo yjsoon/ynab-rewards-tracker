@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { storage, StorageData, CreditCard, RewardRule, TagMapping, RewardCalculation } from '@/lib/storage';
+import { storage, StorageData, CreditCard, RewardRule, RewardCalculation } from '@/lib/storage';
 import { useStorageContext } from '@/contexts/StorageContext';
 
 export function useYnabPAT() {
@@ -84,34 +84,6 @@ export function useRewardRules(cardId?: string) {
   }, [loadRules]);
 
   return { rules, saveRule, deleteRule, isLoading };
-}
-
-export function useTagMappings(cardId?: string) {
-  const [mappings, setMappingsState] = useState<TagMapping[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const { refreshTrigger } = useStorageContext();
-
-  const loadMappings = useCallback(() => {
-    const stored = cardId ? storage.getCardTagMappings(cardId) : storage.getTagMappings();
-    setMappingsState(stored);
-  }, [cardId]);
-
-  useEffect(() => {
-    loadMappings();
-    setIsLoading(false);
-  }, [loadMappings, refreshTrigger]);
-
-  const saveMapping = useCallback((mapping: TagMapping) => {
-    storage.saveTagMapping(mapping);
-    loadMappings();
-  }, [loadMappings]);
-
-  const deleteMapping = useCallback((mappingId: string) => {
-    storage.deleteTagMapping(mappingId);
-    loadMappings();
-  }, [loadMappings]);
-
-  return { mappings, saveMapping, deleteMapping, isLoading };
 }
 
 export function useRewardCalculations(cardId?: string) {

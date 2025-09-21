@@ -39,6 +39,7 @@ export default function RulesPage() {
     cards.forEach(card => {
       initialState[card.id] = {
         earningRate: card.earningRate || (card.type === 'cashback' ? 1 : 1),
+        earningBlockSize: card.earningBlockSize,
         minimumSpend: card.minimumSpend,
         maximumSpend: card.maximumSpend,
         billingCycleType: card.billingCycle?.type || 'calendar',
@@ -78,6 +79,7 @@ export default function RulesPage() {
           issuer: changes.issuer ?? card.issuer,
           type: changes.type ?? card.type,
           earningRate: changes.earningRate,
+          earningBlockSize: changes.earningBlockSize,
           minimumSpend: changes.minimumSpend,
           maximumSpend: changes.maximumSpend ?? card.maximumSpend,
           billingCycle: changes.billingCycleType === 'billing' 

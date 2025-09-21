@@ -12,15 +12,6 @@ export interface CardRecommendation {
   action: 'use' | 'avoid' | 'consider';
 }
 
-export interface CategoryRecommendation {
-  category: string;
-  bestCardId: string;
-  bestCardName: string;
-  expectedReward: number;
-  rewardType: 'cashback' | 'miles';
-  reason: string;
-}
-
 export class RecommendationEngine {
   /**
    * Generate card usage recommendations based on current calculations
@@ -99,21 +90,6 @@ export class RecommendationEngine {
     return recommendations.sort((a, b) => 
       priorityOrder[b.priority] - priorityOrder[a.priority]
     );
-  }
-
-  /**
-   * Recommend best card for each category
-   */
-  static generateCategoryRecommendations(
-    cards: CreditCard[],
-    rules: RewardRule[],
-    calculations: RewardCalculation[],
-    settings?: AppSettings
-  ): CategoryRecommendation[] {
-    const categoryRecommendations: CategoryRecommendation[] = [];
-    
-    // Categories system removed in simplification - return empty recommendations
-    return categoryRecommendations;
   }
 
   /**
