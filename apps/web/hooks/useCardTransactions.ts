@@ -91,11 +91,17 @@ export function useCardTransactions(
         );
 
       setTransactions(cardTransactions);
-    } catch (err) {
-      if ((err as any)?.name !== 'AbortError') {
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        setError(`Failed to load transactions: ${errorMessage}`);
+    } catch (err: unknown) {
+      const isAbortError =
+        (err instanceof DOMException && err.name === 'AbortError') ||
+        (err instanceof Error && err.name === 'AbortError');
+
+      if (isAbortError) {
+        return;
       }
+
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      setError(`Failed to load transactions: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
