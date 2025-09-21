@@ -63,5 +63,5 @@ export function formatMinimumSpendText(minimumSpend: number | null | undefined):
   if (minimumSpend === 0) {
     return 'No minimum required';
   }
-  return `$${minimumSpend.toLocaleString()} required`;
+  return `$${minimumSpend!.toLocaleString()} required`;
 }
