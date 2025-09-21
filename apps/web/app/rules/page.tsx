@@ -39,7 +39,6 @@ export default function RulesPage() {
     cards.forEach(card => {
       initialState[card.id] = {
         earningRate: card.earningRate || (card.type === 'cashback' ? 1 : 1),
-        milesBlockSize: card.milesBlockSize || 1,
         minimumSpend: card.minimumSpend,
         billingCycleType: card.billingCycle?.type || 'calendar',
         billingCycleDay: card.billingCycle?.dayOfMonth || 1,
@@ -78,7 +77,6 @@ export default function RulesPage() {
           issuer: changes.issuer ?? card.issuer,
           type: changes.type ?? card.type,
           earningRate: changes.earningRate,
-          milesBlockSize: card.type === 'miles' ? changes.milesBlockSize : undefined,
           minimumSpend: changes.minimumSpend,
           billingCycle: changes.billingCycleType === 'billing' 
             ? { type: 'billing', dayOfMonth: changes.billingCycleDay }
@@ -182,7 +180,6 @@ export default function RulesPage() {
                       state={editState[card.id] || {}}
                       onFieldChange={(field, value) => handleFieldChange(card.id, field, value)}
                       isChanged={changedCards.has(card.id)}
-                      milesValuation={settings?.milesValuation}
                     />
                   ))}
                 </CardContent>
@@ -216,7 +213,6 @@ export default function RulesPage() {
                       state={editState[card.id] || {}}
                       onFieldChange={(field, value) => handleFieldChange(card.id, field, value)}
                       isChanged={changedCards.has(card.id)}
-                      milesValuation={settings?.milesValuation}
                     />
                   ))}
                 </CardContent>

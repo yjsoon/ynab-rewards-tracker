@@ -1,19 +1,10 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useCreditCards, useYnabPAT } from '@/hooks/useLocalStorage';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
-import { SimpleRewardsCalculator } from '@/lib/rewards-engine';
-import { formatPeriodRangeParts } from '@/lib/date';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   ArrowLeft,
@@ -36,13 +27,6 @@ export default function CardDetailPage() {
   
   const [card, setCard] = useState<CreditCard | null>(null);
   // Transactions preview handled in child component
-
-  // Compute current billing period label; call hook before any early returns
-  const periodParts = useMemo(() => {
-    if (!card) return { start: '', end: '' };
-    const period = SimpleRewardsCalculator.calculatePeriod(card);
-    return { start: period.start, end: period.end };
-  }, [card]);
 
   useEffect(() => {
     const foundCard = cards.find(c => c.id === cardId);

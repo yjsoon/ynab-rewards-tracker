@@ -239,11 +239,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
                 <>
                   <TrendingUp className="h-3 w-3 text-muted-foreground" />
                   <p className="text-sm font-medium">
-                    {card.earningRate} miles
-                    {card.milesBlockSize && card.milesBlockSize > 1
-                      ? ` per $${card.milesBlockSize}`
-                      : ' per dollar'
-                    }
+                    {card.earningRate} miles per dollar
                   </p>
                 </>
               )}

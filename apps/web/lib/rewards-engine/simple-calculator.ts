@@ -111,15 +111,8 @@ export class SimpleRewardsCalculator {
         rewardEarned = totalSpend * (card.earningRate / 100);
         rewardEarnedDollars = rewardEarned;
       } else {
-        // For miles cards, earningRate is miles per dollar (or per block)
-        if (card.milesBlockSize && card.milesBlockSize > 1) {
-          // Calculate based on spending blocks
-          const blocks = Math.floor(totalSpend / card.milesBlockSize);
-          rewardEarned = blocks * card.earningRate;
-        } else {
-          // Simple miles per dollar
-          rewardEarned = totalSpend * card.earningRate;
-        }
+        // For miles cards, earningRate is miles per dollar
+        rewardEarned = totalSpend * card.earningRate;
         // Convert miles to dollars using valuation
         rewardEarnedDollars = rewardEarned * milesValuation;
       }

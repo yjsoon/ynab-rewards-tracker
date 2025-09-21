@@ -81,16 +81,8 @@ export class RewardsCalculator {
         categoryReward = (categoryEligibleSpend * rule.rewardValue) / 100;
         categoryRewardDollars = categoryReward; // already in dollars
       } else if (rule.rewardType === 'miles') {
-        if (rule.milesBlockSize) {
-          // Block-based miles (e.g., "$5 blocks"): rewardValue is miles per dollar,
-          // and milesBlockSize is the dollar size of one block. Each full block
-          // yields milesBlockSize * rewardValue miles.
-          const blocks = Math.floor(categoryEligibleSpend / rule.milesBlockSize);
-          categoryReward = blocks * rule.rewardValue * rule.milesBlockSize;
-        } else {
-          // Regular miles per dollar
-          categoryReward = categoryEligibleSpend * rule.rewardValue;
-        }
+        // Miles per dollar
+        categoryReward = categoryEligibleSpend * rule.rewardValue;
         // Convert miles to dollars for comparison
         categoryRewardDollars = categoryReward * milesValuation;
       }

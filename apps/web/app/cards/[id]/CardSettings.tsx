@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Save, AlertCircle } from 'lucide-react';
 import { useCreditCards } from '@/hooks/useLocalStorage';
-import { storage } from '@/lib/storage';
 import type { CreditCard } from '@/lib/storage';
 import { validateIssuer, sanitizeInput } from '@/lib/validation';
 import { CardSettingsEditor, type CardEditState } from '@/components/CardSettingsEditor';
@@ -31,7 +30,6 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
     billingCycleType: card.billingCycle?.type || 'calendar',
     billingCycleDay: card.billingCycle?.dayOfMonth || 1,
     earningRate: card.earningRate || (card.type === 'cashback' ? 1 : 1),
-    milesBlockSize: card.milesBlockSize || 1,
     minimumSpend: card.minimumSpend,
   });
 
@@ -64,11 +62,9 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
         issuer: formData.issuer ? sanitizeInput(formData.issuer) : card.issuer,
         type: formData.type || card.type,
         active: formData.active !== undefined ? formData.active : card.active,
-        billingCycle: formData.billingCycleType === 'billing'
           ? { type: 'billing', dayOfMonth: formData.billingCycleDay || 1 }
           : { type: 'calendar' },
         earningRate: formData.earningRate,
-        milesBlockSize: (formData.type || card.type) === 'miles' ? formData.milesBlockSize : undefined,
         minimumSpend: formData.minimumSpend,
       };
 
@@ -91,14 +87,12 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
       billingCycleType: card.billingCycle?.type || 'calendar',
       billingCycleDay: card.billingCycle?.dayOfMonth || 1,
       earningRate: card.earningRate || (card.type === 'cashback' ? 1 : 1),
-      milesBlockSize: card.milesBlockSize || 1,
       minimumSpend: card.minimumSpend,
     });
     setEditing(false);
     setError('');
     setIssuerError('');
   };
-
   if (!editing) {
     return (
       <Card>
@@ -131,7 +125,6 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
             </div>
             <div>
               <p className="text-sm font-medium text-muted-foreground">Status</p>
-              <p className="mt-1 font-medium">
                 {card.active ? 'Active' : 'Inactive'}
               </p>
             </div>
@@ -164,15 +157,12 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
                   ? 'No minimum required'
                   : `$${card.minimumSpend.toLocaleString()} required`}
               </p>
-            </div>
           </div>
         </CardContent>
       </Card>
     );
   }
 
-  // Get miles valuation from settings
-  const settings = storage.getSettings();
 
   return (
     <Card>
@@ -197,11 +187,9 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
 
         <CardSettingsEditor
           card={card}
-          state={formData}
           onFieldChange={handleFieldChange}
           showNameAndIssuer={true}
           showCardType={true}
-          milesValuation={settings?.milesValuation || 0.01}
         />
 
         {/* Actions */}

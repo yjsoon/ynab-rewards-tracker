@@ -1,19 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Percent, DollarSign, CreditCard as CreditCardIcon } from 'lucide-react';
 import type { CreditCard } from '@/lib/storage';
-import { formatDollars } from '@/lib/utils';
 
 export interface CardEditState {
   earningRate?: number;
-  milesBlockSize?: number;
   minimumSpend?: number | null;
   billingCycleType?: 'calendar' | 'billing';
   billingCycleDay?: number;
@@ -31,7 +27,6 @@ interface CardSettingsEditorProps {
   isChanged?: boolean;
   showNameAndIssuer?: boolean; // For individual card page
   showCardType?: boolean; // For individual card page where type can be changed
-  milesValuation?: number; // For showing miles value
 }
 
 export function CardSettingsEditor({
@@ -41,7 +36,6 @@ export function CardSettingsEditor({
   isChanged = false,
   showNameAndIssuer = false,
   showCardType = false,
-  milesValuation = 0.01,
 }: CardSettingsEditorProps) {
   const cardType = state.type ?? card.type;
   
@@ -251,7 +245,7 @@ export function CardSettingsEditor({
               <p className="text-lg font-semibold text-blue-600 dark:text-blue-400">
                 {state.earningRate ?? card.earningRate ?? 1} miles
                 <span className="text-xs text-muted-foreground ml-1">
-                  per ${state.milesBlockSize ?? card.milesBlockSize ?? 1}
+                  per $1
                 </span>
               </p>
             </div>
