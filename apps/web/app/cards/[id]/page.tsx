@@ -103,7 +103,7 @@ export default function CardDetailPage() {
         </TabsContent>
 
         <TabsContent value="transactions" className="mt-6">
-          <TransactionsPreview cardId={cardId} ynabAccountId={card.ynabAccountId} />
+          <TransactionsPreview card={card} />
         </TabsContent>
       </Tabs>
     </div>

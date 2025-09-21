@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,73 +12,39 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Calendar } from "lucide-react";
-import { YnabClient } from "@/lib/ynab-client";
+import type { CreditCard } from "@/lib/storage";
 import { storage } from "@/lib/storage";
-import { useYnabPAT, useCreditCards } from "@/hooks/useLocalStorage";
-import type { Transaction, TransactionWithRewards } from "@/types/transaction";
+import { useCardTransactions } from "@/hooks/useCardTransactions";
 import { SimpleRewardsCalculator } from "@/lib/rewards-engine";
 import { absFromMilli, formatDollars } from "@/lib/utils";
 
 interface Props {
-  cardId: string;
-  ynabAccountId: string;
+  card: CreditCard;
+  lookbackDays?: number;
 }
 
 const LOOKBACK_DAYS = 90;
 
-export default function TransactionsPreview({ cardId, ynabAccountId }: Props) {
-  const { pat } = useYnabPAT();
-  const { cards } = useCreditCards();
-  const [transactions, setTransactions] = useState<TransactionWithRewards[]>(
-    []
+export default function TransactionsPreview({ card, lookbackDays = LOOKBACK_DAYS }: Props) {
+  const { transactions, loading, error, refresh, connection } = useCardTransactions(
+    card,
+    { lookbackDays }
   );
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const abortRef = useRef<AbortController | null>(null);
 
-  const load = useCallback(async () => {
-    if (!pat) return;
-    const budget = storage.getSelectedBudget();
-    if (!budget.id) return;
+  const needSetup = !connection.hasPat || !connection.hasBudget;
 
-    setLoading(true);
-    setError("");
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
+  const spendingTransactions = useMemo(
+    () => transactions.filter((t) => t.amount < 0),
+    [transactions]
+  );
 
-    try {
-      const client = new YnabClient(pat);
-      const since = new Date();
-      since.setDate(since.getDate() - LOOKBACK_DAYS);
-      const all = await client.getTransactions(budget.id, {
-        since_date: since.toISOString().split("T")[0],
-        signal: controller.signal
-      });
-      const cardTxns = all.filter(
-        (t: Transaction) => t.account_id === ynabAccountId
-      );
-      cardTxns.sort(
-        (a: Transaction, b: Transaction) =>
-          new Date(b.date).getTime() - new Date(a.date).getTime()
-      );
-      setTransactions(cardTxns);
-    } catch (err) {
-      if ((err as any)?.name !== "AbortError") {
-        setError(err instanceof Error ? err.message : String(err));
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [pat, ynabAccountId]);
+  const displayedTransactions = useMemo(
+    () => spendingTransactions.slice(0, 10),
+    [spendingTransactions]
+  );
 
-  useEffect(() => {
-    load();
-    return () => abortRef.current?.abort();
-  }, [load]);
-
-  const budgetId = storage.getSelectedBudget().id;
-  const needSetup = !pat || !budgetId;
+  const totalSpendingCount = spendingTransactions.length;
+  const settings = storage.getSettings();
 
   return (
     <Card>
@@ -90,7 +56,7 @@ export default function TransactionsPreview({ cardId, ynabAccountId }: Props) {
               View your recent card transactions
             </CardDescription>
           </div>
-          <Button variant="outline" size="sm" onClick={load} disabled={loading}>
+          <Button variant="outline" size="sm" onClick={refresh} disabled={loading}>
             Refresh
           </Button>
         </div>
@@ -113,20 +79,25 @@ export default function TransactionsPreview({ cardId, ynabAccountId }: Props) {
           <div className="text-center py-12 text-red-500">
             Failed to load transactions: {error}
           </div>
-        ) : transactions.filter((t) => t.amount < 0).length === 0 ? (
+        ) : totalSpendingCount === 0 ? (
           <div className="text-center py-12 text-muted-foreground">
             <Calendar className="h-8 w-8 mx-auto mb-3" />
             <p>
-              No spending transactions found in the last {LOOKBACK_DAYS} days.
+              No spending transactions found in the last {lookbackDays} days.
             </p>
           </div>
         ) : (
           <>
             <div className="space-y-2">
-              {transactions
-                .filter((t) => t.amount < 0)
-                .slice(0, 10)
-                .map((txn) => (
+              {displayedTransactions.map((txn) => {
+                const amount = absFromMilli(txn.amount);
+                const { reward, blockInfo } = SimpleRewardsCalculator.calculateTransactionReward(
+                  amount,
+                  card,
+                  settings
+                );
+
+                return (
                   <div
                     key={txn.id}
                     className="flex items-center justify-between p-3 border rounded-md">
@@ -148,44 +119,32 @@ export default function TransactionsPreview({ cardId, ynabAccountId }: Props) {
                     </div>
                     <div className="text-right">
                       <div className="font-mono">
-                        {formatDollars(absFromMilli(txn.amount))}
+                        {formatDollars(amount)}
                       </div>
-                      {(() => {
-                        const card = cards.find((c) => c.id === cardId);
-                        if (!card || !card.earningRate) return null;
-                        const settings = storage.getSettings();
-                        const amount = absFromMilli(txn.amount);
-                        const { reward, blockInfo } =
-                          SimpleRewardsCalculator.calculateTransactionReward(
-                            amount,
-                            card,
-                            settings
-                          );
-                        return (
-                          <div className="mt-1">
-                            <Badge variant="secondary">
-                              {card.type === "cashback"
-                                ? `+${formatDollars(reward)}`
-                                : `+${Math.round(reward)} miles`}
-                            </Badge>
-                            {blockInfo && card.earningBlockSize && (
-                              <p className="text-xs text-muted-foreground mt-1">
-                                {blockInfo}
-                              </p>
-                            )}
-                          </div>
-                        );
-                      })()}
+                      {card.earningRate && (
+                        <div className="mt-1">
+                          <Badge variant="secondary">
+                            {card.type === "cashback"
+                              ? `+${formatDollars(reward)}`
+                              : `+${Math.round(reward)} miles`}
+                          </Badge>
+                          {blockInfo && card.earningBlockSize && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {blockInfo}
+                            </p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
-                ))}
+                );
+              })}
             </div>
-            {transactions.filter((t) => t.amount < 0).length > 10 && (
+            {totalSpendingCount > 10 && (
               <div className="mt-4 pt-4 border-t text-center">
                 <Button variant="outline" asChild>
-                  <Link href={`/cards/${cardId}/transactions`}>
-                    More transactions(
-                    {transactions.filter((t) => t.amount < 0).length} total)
+                  <Link href={`/cards/${card.id}/transactions`}>
+                    More transactions({totalSpendingCount} total)
                   </Link>
                 </Button>
               </div>
