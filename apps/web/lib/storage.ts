@@ -16,7 +16,7 @@ export interface CreditCard {
   active: boolean;
   // Earning rates (replaces the complex rules system)
   earningRate?: number; // For cashback: percentage (e.g., 2 for 2%). For miles: miles per dollar (e.g., 1.5)
-  // Minimum spend requirement (three states: null/undefined = not configured, 0 = no minimum, >0 = has minimum)
+  // Minimum spend requirement (three states: null = not configured, 0 = no minimum, >0 = has minimum)
   minimumSpend?: number | null; // Dollar amount required to earn rewards for this period
 }
 
@@ -170,7 +170,8 @@ class StorageService {
                 card.type = 'miles';
               }
               if (card && 'milesBlockSize' in card) {
-                delete card.milesBlockSize;
+                const { milesBlockSize, ...cleanCard } = card;
+                return cleanCard;
               }
               return card;
             });
@@ -181,7 +182,8 @@ class StorageService {
                 rule.rewardType = 'miles';
               }
               if (rule && 'milesBlockSize' in rule) {
-                delete rule.milesBlockSize;
+                const { milesBlockSize, ...cleanRule } = rule;
+                return cleanRule;
               }
               return rule;
             });
@@ -221,7 +223,7 @@ class StorageService {
           // Migration: Add minimumSpend field to cards that don't have it (default to null = not configured)
           if (Array.isArray(data.cards)) {
             data.cards = data.cards.map((card: any) => {
-              if (!card.hasOwnProperty('minimumSpend')) {
+              if (!Object.hasOwn(card, 'minimumSpend')) {
                 // Default to null (not configured) - users need to explicitly set this
                 card.minimumSpend = null;
               }

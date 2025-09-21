@@ -8,6 +8,12 @@ import { YnabClient } from '@/lib/ynab-client';
 import { storage } from '@/lib/storage';
 import { formatDollars } from '@/lib/utils';
 import { AlertCircle, TrendingUp, CheckCircle2, Percent, DollarSign } from 'lucide-react';
+import {
+  isMinimumSpendConfigured,
+  hasMinimumSpendRequirement,
+  getMinimumSpendStatus,
+  formatMinimumSpendText
+} from '@/lib/minimum-spend-helpers';
 import type { CreditCard, AppSettings } from '@/lib/storage';
 import type { Transaction } from '@/types/transaction';
 
@@ -152,7 +158,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
         </div>
         <div className="bg-green-500/10 rounded-lg p-2 text-center">
           <p className="text-lg font-bold text-green-600 dark:text-green-400">
-            {!minimumSpendMet && minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0
+            {!minimumSpendMet && hasMinimumSpendRequirement(minimumSpend)
               ? 'No rewards yet'
               : card.type === 'cashback'
               ? formatDollars(rewardEarned)
@@ -160,7 +166,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
             }
           </p>
           <p className="text-xs text-muted-foreground">
-            {!minimumSpendMet && minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0
+            {!minimumSpendMet && hasMinimumSpendRequirement(minimumSpend)
               ? 'Minimum not met'
               : card.type === 'cashback' ? 'Cashback' : 'Miles'
             }
@@ -169,7 +175,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
       </div>
 
       {/* Minimum Spend Status */}
-      {minimumSpend !== null && minimumSpend !== undefined && (
+      {isMinimumSpendConfigured(minimumSpend) && (
         <div className="space-y-2">
           {minimumSpend === 0 ? (
             <div className="flex items-center justify-center gap-2 text-green-600 dark:text-green-400">
@@ -211,7 +217,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
       )}
 
       {/* Not Configured Warning */}
-      {(minimumSpend === null || minimumSpend === undefined) && (
+      {!isMinimumSpendConfigured(minimumSpend) && (
         <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-lg p-3">
           <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300">
             <AlertCircle className="h-4 w-4" />

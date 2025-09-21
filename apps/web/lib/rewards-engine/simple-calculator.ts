@@ -4,6 +4,11 @@
 
 import type { CreditCard, AppSettings } from '@/lib/storage';
 import type { Transaction } from '@/types/transaction';
+import {
+  hasMinimumSpendRequirement,
+  isMinimumSpendMet,
+  calculateMinimumSpendProgress
+} from '@/lib/minimum-spend-helpers';
 
 export interface SimplifiedCalculation {
   cardId: string;
@@ -92,13 +97,8 @@ export class SimpleRewardsCalculator {
 
     // Calculate minimum spend progress and status
     const minimumSpend = card.minimumSpend;
-    let minimumSpendMet = true; // Default to true for cards without minimum or with 0 minimum
-    let minimumSpendProgress: number | undefined;
-
-    if (minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0) {
-      minimumSpendMet = totalSpend >= minimumSpend;
-      minimumSpendProgress = Math.min(100, (totalSpend / minimumSpend) * 100);
-    }
+    const minimumSpendMet = isMinimumSpendMet(totalSpend, minimumSpend);
+    const minimumSpendProgress = calculateMinimumSpendProgress(totalSpend, minimumSpend);
 
     // Calculate rewards based on card earning rate
     let rewardEarned = 0;
