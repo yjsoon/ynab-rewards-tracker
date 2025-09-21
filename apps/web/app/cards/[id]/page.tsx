@@ -20,7 +20,7 @@ export default function CardDetailPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const cardId = params.id as string;
-  const defaultTab = searchParams.get('tab') || 'transactions';
+  const defaultTab = searchParams.get('tab') || 'settings';
   
   const { cards } = useCreditCards();
   const { pat } = useYnabPAT();
@@ -85,26 +85,25 @@ export default function CardDetailPage() {
       <Tabs defaultValue={defaultTab} className="mt-8">
         <TabsList className="grid w-full grid-cols-2 h-12 p-1 bg-muted/50">
           <TabsTrigger
-            value="transactions"
-            className="data-[state=active]:bg-background data-[state=active]:shadow-md data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground font-medium transition-all"
-          >
-            Transactions
-          </TabsTrigger>
-          <TabsTrigger
             value="settings"
             className="data-[state=active]:bg-background data-[state=active]:shadow-md data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground font-medium transition-all"
           >
             Settings
           </TabsTrigger>
+          <TabsTrigger
+            value="transactions"
+            className="data-[state=active]:bg-background data-[state=active]:shadow-md data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground font-medium transition-all"
+          >
+            Transactions
+          </TabsTrigger>
         </TabsList>
-
-        <TabsContent value="transactions" className="mt-6">
-          <TransactionsPreview cardId={cardId} ynabAccountId={card.ynabAccountId} />
-        </TabsContent>
-
 
         <TabsContent value="settings" className="mt-6">
           <CardSettings card={card} onUpdate={(updatedCard) => setCard(updatedCard)} />
+        </TabsContent>
+
+        <TabsContent value="transactions" className="mt-6">
+          <TransactionsPreview cardId={cardId} ynabAccountId={card.ynabAccountId} />
         </TabsContent>
       </Tabs>
     </div>

@@ -16,13 +16,16 @@ import {
   ArrowLeft,
   Calendar,
   AlertCircle,
-  Loader2
+  Loader2,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import type { TransactionWithRewards } from '@/types/transaction';
 import type { CreditCard } from '@/lib/storage';
 import { absFromMilli, formatDollars } from '@/lib/utils';
 
-const TRANSACTION_LOOKBACK_DAYS = 45;
+const TRANSACTION_LOOKBACK_DAYS = 90;
+const ITEMS_PER_PAGE = 20;
 
 export default function CardTransactionsPage() {
   const params = useParams();
@@ -36,6 +39,7 @@ export default function CardTransactionsPage() {
   const [transactions, setTransactions] = useState<TransactionWithRewards[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -126,6 +130,16 @@ export default function CardTransactionsPage() {
   const spendingTransactions = transactions.filter(txn => txn.amount < 0);
   const totalSpent = Math.abs(spendingTransactions.reduce((sum, txn) => sum + txn.amount, 0)) / 1000;
 
+  // Pagination
+  const totalPages = Math.ceil(spendingTransactions.length / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const paginatedTransactions = spendingTransactions.slice(startIndex, endIndex);
+
+  const goToPage = (page: number) => {
+    setCurrentPage(Math.min(Math.max(1, page), totalPages));
+  };
+
   return (
     <div className="max-w-6xl mx-auto p-6">
       {/* Header */}
@@ -211,8 +225,9 @@ export default function CardTransactionsPage() {
               <p className="text-sm">Try expanding the date range or check your YNAB connection</p>
             </div>
           ) : (
-            <div className="space-y-2">
-              {spendingTransactions.map((txn) => {
+            <>
+              <div className="space-y-2">
+                {paginatedTransactions.map((txn) => {
                 const settings = storage.getSettings();
                 const amount = absFromMilli(txn.amount);
                 const { reward, blockInfo } = SimpleRewardsCalculator.calculateTransactionReward(amount, card, settings);
@@ -259,8 +274,104 @@ export default function CardTransactionsPage() {
                     </div>
                   </div>
                 );
-              })}
-            </div>
+                })}
+              </div>
+
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div className="mt-6 flex items-center justify-between border-t pt-4">
+                  <div className="text-sm text-muted-foreground">
+                    Showing {startIndex + 1}-{Math.min(endIndex, spendingTransactions.length)} of {spendingTransactions.length} transactions
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => goToPage(currentPage - 1)}
+                      disabled={currentPage === 1}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      Previous
+                    </Button>
+
+                    <div className="flex gap-1">
+                      {/* Show first page */}
+                      {currentPage > 3 && (
+                        <>
+                          <Button
+                            variant={currentPage === 1 ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => goToPage(1)}
+                            className="w-10"
+                          >
+                            1
+                          </Button>
+                          {currentPage > 4 && <span className="px-2 py-1">...</span>}
+                        </>
+                      )}
+
+                      {/* Show pages around current */}
+                      {Array.from(
+                        { length: Math.min(5, totalPages) },
+                        (_, i) => {
+                          const pageNum = Math.max(1, Math.min(currentPage - 2 + i, totalPages - 4 + i));
+                          if (pageNum <= 0 || pageNum > totalPages) return null;
+                          if (totalPages <= 5) {
+                            return pageNum;
+                          }
+                          if (currentPage <= 3) {
+                            return Math.min(pageNum, 5);
+                          }
+                          if (currentPage >= totalPages - 2) {
+                            return Math.max(totalPages - 4 + i, 1);
+                          }
+                          return currentPage - 2 + i;
+                        }
+                      )
+                        .filter((p): p is number => p !== null && p > 0 && p <= totalPages)
+                        .filter((p, i, arr) => arr.indexOf(p) === i) // Remove duplicates
+                        .sort((a, b) => a - b)
+                        .map((pageNum) => (
+                          <Button
+                            key={pageNum}
+                            variant={currentPage === pageNum ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => goToPage(pageNum)}
+                            className="w-10"
+                          >
+                            {pageNum}
+                          </Button>
+                        ))}
+
+                      {/* Show last page */}
+                      {currentPage < totalPages - 2 && (
+                        <>
+                          {currentPage < totalPages - 3 && <span className="px-2 py-1">...</span>}
+                          <Button
+                            variant={currentPage === totalPages ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => goToPage(totalPages)}
+                            className="w-10"
+                          >
+                            {totalPages}
+                          </Button>
+                        </>
+                      )}
+                    </div>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => goToPage(currentPage + 1)}
+                      disabled={currentPage === totalPages}
+                    >
+                      Next
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
