@@ -1,6 +1,8 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
 
+import { storage } from '@/lib/storage'
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
@@ -22,11 +24,22 @@ export function absFromMilli(amount: number): number {
 /**
  * Format a dollar amount for display
  */
-export function formatDollars(value: number, locale: string = 'en-US'): string {
-  return `$${value.toLocaleString(locale, {
+export function formatDollars(
+  value: number,
+  options: {
+    locale?: string;
+    currency?: string;
+  } = {}
+): string {
+  const locale = options.locale ?? (typeof navigator !== 'undefined' ? navigator.language : 'en-US');
+  const settingsCurrency = storage.getSettings().currency;
+  const currency = options.currency ?? settingsCurrency ?? 'USD';
+  return new Intl.NumberFormat(locale, {
+    style: 'currency',
+    currency,
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  })}`;
+  }).format(value);
 }
 
 /**

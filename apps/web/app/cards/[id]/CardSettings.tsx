@@ -8,7 +8,7 @@ import { Save, AlertCircle } from 'lucide-react';
 import { useCreditCards } from '@/hooks/useLocalStorage';
 import type { CreditCard } from '@/lib/storage';
 import { validateIssuer, sanitizeInput } from '@/lib/validation';
-import { CardSettingsEditor, type CardEditState } from '@/components/CardSettingsEditor';
+import { CardSettingsEditor, computeCardFieldDiff, type CardEditState } from '@/components/CardSettingsEditor';
 
 interface CardSettingsProps {
   card: CreditCard;
@@ -36,21 +36,8 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
     maximumSpend: card.maximumSpend,
   });
 
-  const hasUnsavedChanges = useMemo(() => {
-    const baselineRate = card.earningRate ?? (card.type === 'cashback' ? 1 : 1);
-    return (
-      (formData.name ?? card.name) !== card.name ||
-      (formData.issuer ?? card.issuer ?? '') !== (card.issuer ?? '') ||
-      (formData.type ?? card.type) !== card.type ||
-      (formData.featured ?? card.featured ?? true) !== (card.featured ?? true) ||
-      (formData.billingCycleType ?? card.billingCycle?.type ?? 'calendar') !== (card.billingCycle?.type ?? 'calendar') ||
-      (formData.billingCycleDay ?? card.billingCycle?.dayOfMonth ?? 1) !== (card.billingCycle?.dayOfMonth ?? 1) ||
-      (formData.earningRate ?? baselineRate) !== baselineRate ||
-      (formData.earningBlockSize ?? card.earningBlockSize ?? null) !== (card.earningBlockSize ?? null) ||
-      (formData.minimumSpend ?? card.minimumSpend ?? null) !== (card.minimumSpend ?? null) ||
-      (formData.maximumSpend ?? card.maximumSpend ?? null) !== (card.maximumSpend ?? null)
-    );
-  }, [card, formData]);
+  const fieldDiffs = useMemo(() => computeCardFieldDiff(card, formData), [card, formData]);
+  const hasUnsavedChanges = useMemo(() => Object.values(fieldDiffs).some(Boolean), [fieldDiffs]);
 
   const handleFieldChange = (field: keyof CardEditState, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));

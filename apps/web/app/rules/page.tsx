@@ -31,6 +31,7 @@ export default function RulesPage() {
   const [changedCards, setChangedCards] = useState<Set<string>>(new Set());
   const [selectedCards, setSelectedCards] = useState<Set<string>>(new Set());
   const [batchRate, setBatchRate] = useState('');
+  const [batchError, setBatchError] = useState('');
 
   // Group cards by type
   const cashbackCards = cards.filter(card => card.type === 'cashback');
@@ -79,14 +80,23 @@ export default function RulesPage() {
       } else {
         next.add(cardId);
       }
+      if (next.size === 0) {
+        setBatchError('');
+      }
       return next;
     });
   };
 
-  const clearSelection = () => setSelectedCards(new Set());
+  const clearSelection = () => {
+    setSelectedCards(new Set());
+    setBatchError('');
+  };
 
   const applyBatchFeatured = (featured: boolean) => {
-    if (selectedCards.size === 0) return;
+    if (selectedCards.size === 0) {
+      setBatchError('Select at least one card before applying a batch action.');
+      return;
+    }
 
     setEditState(prev => {
       const next = { ...prev };
@@ -109,9 +119,13 @@ export default function RulesPage() {
   };
 
   const handleApplyBatchRate = () => {
-    if (selectedCards.size === 0) return;
+    if (selectedCards.size === 0) {
+      setBatchError('Select at least one card before applying a rate.');
+      return;
+    }
     const parsed = parseFloat(batchRate);
-    if (!Number.isFinite(parsed)) {
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      setBatchError('Enter a valid non-negative rate before applying.');
       return;
     }
 
@@ -134,6 +148,7 @@ export default function RulesPage() {
     });
 
     setBatchRate('');
+    setBatchError('');
     setSaveSuccess(false);
   };
 
@@ -388,7 +403,10 @@ export default function RulesPage() {
                     <Input
                       type="number"
                       value={batchRate}
-                      onChange={(e) => setBatchRate(e.target.value)}
+                      onChange={(e) => {
+                        setBatchRate(e.target.value);
+                        setBatchError('');
+                      }}
                       placeholder="Rate"
                       className="h-9 w-24"
                       aria-label="Apply earning rate to selected cards"
@@ -402,6 +420,11 @@ export default function RulesPage() {
                       Apply rate
                     </Button>
                   </div>
+                  {batchError && (
+                    <p className="w-full text-xs text-destructive">
+                      {batchError}
+                    </p>
+                  )}
                   <Button
                     variant="ghost"
                     size="sm"

@@ -151,6 +151,10 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
 
   const { totalSpend, rewardEarned, rewardEarnedDollars, minimumSpend, minimumSpendMet, minimumSpendProgress } = spendingAnalysis;
 
+  const currency = settings?.currency;
+  const formatCurrency = (amount: number) =>
+    formatDollars(amount, currency ? { currency } : {});
+
   return (
     <div className="space-y-6">
       {/* Main Status Card */}
@@ -177,7 +181,7 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
                 <DollarSign className="h-4 w-4" />
                 Total Spent
               </div>
-              <p className="text-2xl font-bold">{formatDollars(totalSpend)}</p>
+              <p className="text-2xl font-bold">{formatCurrency(totalSpend)}</p>
             </div>
 
             <div className="p-4 rounded-lg bg-muted/50">
@@ -189,7 +193,7 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
                 {!minimumSpendMet && minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0
                   ? 'No reward'
                   : card.type === 'cashback'
-                  ? formatDollars(rewardEarned)
+                  ? formatCurrency(rewardEarned)
                   : `${Math.round(rewardEarned).toLocaleString()} miles`}
               </p>
               {!minimumSpendMet && minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0 && (
@@ -204,8 +208,8 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
               </div>
               <p className="text-2xl font-bold">
                 {!minimumSpendMet && minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0
-                  ? formatDollars(0)
-                  : formatDollars(rewardEarnedDollars)}
+                  ? formatCurrency(0)
+                  : formatCurrency(rewardEarnedDollars)}
               </p>
               {card.type === 'miles' && minimumSpendMet && (
                 <p className="text-xs text-muted-foreground mt-1">
@@ -248,14 +252,14 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
             <Alert className="border-orange-200 bg-orange-50 dark:border-orange-900 dark:bg-orange-950/30">
               <AlertCircle className="h-4 w-4 text-orange-600 dark:text-orange-400" />
               <AlertDescription className="text-orange-700 dark:text-orange-300">
-                <strong>Minimum spend requirement not met.</strong> You need to spend {formatDollars((minimumSpend || 0) - totalSpend)} more to earn rewards this period ({minimumSpendProgress?.toFixed(1)}% complete).
+                <strong>Minimum spend requirement not met.</strong> You need to spend {formatCurrency((minimumSpend || 0) - totalSpend)} more to earn rewards this period ({minimumSpendProgress?.toFixed(1)}% complete).
               </AlertDescription>
             </Alert>
           ) : minimumSpend > 0 && minimumSpendMet ? (
             <Alert className="border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950/30">
               <AlertCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
               <AlertDescription className="text-green-700 dark:text-green-300">
-                <strong>Minimum spend requirement met!</strong> You've spent {formatDollars(totalSpend)} out of the required {formatDollars(minimumSpend)} this period.
+                <strong>Minimum spend requirement met!</strong> You've spent {formatCurrency(totalSpend)} out of the required {formatCurrency(minimumSpend ?? 0)} this period.
               </AlertDescription>
             </Alert>
           ) : null}

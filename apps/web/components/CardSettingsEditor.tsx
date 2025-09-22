@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -40,6 +40,37 @@ export interface CardEditState {
   name?: string;
   issuer?: string;
   type?: 'cashback' | 'miles';
+}
+
+export function computeCardFieldDiff(
+  card: CreditCard,
+  state: CardEditState
+) {
+  const cardName = state.name ?? card.name;
+  const issuerName = state.issuer ?? card.issuer ?? '';
+  const cardType = state.type ?? card.type;
+  const isFeatured = state.featured ?? card.featured ?? true;
+  const earningRate = state.earningRate ?? card.earningRate ?? (card.type === 'cashback' ? 1 : 1);
+  const earningBlockSize = state.earningBlockSize ?? card.earningBlockSize ?? null;
+  const minimumSpend = state.minimumSpend ?? card.minimumSpend ?? null;
+  const maximumSpend = state.maximumSpend ?? card.maximumSpend ?? null;
+  const billingCycleType = state.billingCycleType ?? card.billingCycle?.type ?? 'calendar';
+  const billingCycleDay = state.billingCycleDay ?? card.billingCycle?.dayOfMonth ?? 1;
+
+  return {
+    name: cardName !== card.name,
+    issuer: issuerName !== (card.issuer ?? ''),
+    type: cardType !== card.type,
+    featured: isFeatured !== (card.featured ?? true),
+    earningRate: earningRate !== (card.earningRate ?? (card.type === 'cashback' ? 1 : 1)),
+    earningBlockSize:
+      earningBlockSize !== (card.earningBlockSize ?? null),
+    minimumSpend: minimumSpend !== (card.minimumSpend ?? null),
+    maximumSpend: maximumSpend !== (card.maximumSpend ?? null),
+    billingCycle:
+      billingCycleType !== (card.billingCycle?.type ?? 'calendar') ||
+      billingCycleDay !== (card.billingCycle?.dayOfMonth ?? 1),
+  } as const;
 }
 
 interface CardSettingsEditorProps {
@@ -170,26 +201,20 @@ export function CardSettingsEditor({
   const billingCycleDay = state.billingCycleDay ?? card.billingCycle?.dayOfMonth ?? 1;
   const isFeatured = state.featured ?? card.featured ?? true;
 
+  const [blockSizeSnapshot, setBlockSizeSnapshot] = useState(() =>
+    earningBlockSize && earningBlockSize > 0 ? earningBlockSize : 1
+  );
+
+  useEffect(() => {
+    if (earningBlockSize && earningBlockSize > 0 && earningBlockSize !== blockSizeSnapshot) {
+      setBlockSizeSnapshot(earningBlockSize);
+    }
+  }, [earningBlockSize, blockSizeSnapshot]);
+
   const minimumStatus = getMinimumSpendStatus(minimumSpend);
   const maximumStatus = getMaximumSpendStatus(maximumSpend);
 
-  const fieldDirty = useMemo(() => ({
-    name: (state.name ?? card.name) !== card.name,
-    issuer: (state.issuer ?? card.issuer ?? '') !== (card.issuer ?? ''),
-    type: (state.type ?? card.type) !== card.type,
-    featured: (state.featured ?? card.featured ?? true) !== (card.featured ?? true),
-    earningRate: (state.earningRate ?? card.earningRate ?? 1) !== (card.earningRate ?? 1),
-    earningBlockSize:
-      (state.earningBlockSize ?? card.earningBlockSize ?? null) !==
-      (card.earningBlockSize ?? null),
-    minimumSpend: (state.minimumSpend ?? card.minimumSpend ?? null) !== (card.minimumSpend ?? null),
-    maximumSpend: (state.maximumSpend ?? card.maximumSpend ?? null) !== (card.maximumSpend ?? null),
-    billingCycle:
-      (state.billingCycleType ?? card.billingCycle?.type ?? 'calendar') !==
-        (card.billingCycle?.type ?? 'calendar') ||
-      (state.billingCycleDay ?? card.billingCycle?.dayOfMonth ?? 1) !==
-        (card.billingCycle?.dayOfMonth ?? 1),
-  }), [card, state]);
+  const fieldDirty = useMemo(() => computeCardFieldDiff(card, state), [card, state]);
 
   return (
     <div
@@ -329,7 +354,17 @@ export function CardSettingsEditor({
           <div className="space-y-3">
             <Select
               value={earningBlockSize && earningBlockSize > 0 ? 'blocks' : 'exact'}
-              onValueChange={(value) => onFieldChange('earningBlockSize', value === 'exact' ? null : 1)}
+              onValueChange={(value) => {
+                if (value === 'exact') {
+                  if (earningBlockSize && earningBlockSize > 0) {
+                    setBlockSizeSnapshot(earningBlockSize);
+                  }
+                  onFieldChange('earningBlockSize', null);
+                } else {
+                  const nextSize = blockSizeSnapshot && blockSizeSnapshot > 0 ? blockSizeSnapshot : 1;
+                  onFieldChange('earningBlockSize', nextSize);
+                }
+              }}
             >
               <SelectTrigger className="h-9">
                 <SelectValue />
@@ -349,7 +384,13 @@ export function CardSettingsEditor({
                     value={earningBlockSize}
                     onChange={(e) => {
                       const next = parseFloat(e.target.value);
-                      onFieldChange('earningBlockSize', Number.isFinite(next) ? next : 1);
+                      if (Number.isFinite(next) && next > 0) {
+                        setBlockSizeSnapshot(next);
+                        onFieldChange('earningBlockSize', next);
+                      } else {
+                        setBlockSizeSnapshot(1);
+                        onFieldChange('earningBlockSize', 1);
+                      }
                     }}
                     min="1"
                     max="100"

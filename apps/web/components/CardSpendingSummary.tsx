@@ -147,6 +147,10 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
 
   const { totalSpend, rewardEarned, rewardEarnedDollars, daysRemaining, minimumSpend, minimumSpendMet, minimumSpendProgress } = summary;
 
+  const currency = settings?.currency;
+  const formatCurrency = (amount: number) =>
+    formatDollars(amount, currency ? { currency } : {});
+
   const hasMinimum = hasMinimumSpendRequirement(minimumSpend);
   const rewardTileState = !minimumSpendMet && hasMinimum ? 'warn' : minimumSpendMet ? 'success' : 'neutral';
 
@@ -159,7 +163,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
   const rewardValue = !minimumSpendMet && hasMinimum
     ? 'No reward'
     : card.type === 'cashback'
-    ? formatDollars(rewardEarned)
+    ? formatCurrency(rewardEarned)
     : `${Math.round(rewardEarned).toLocaleString()}`;
 
   const rewardLabel = !minimumSpendMet && hasMinimum
@@ -184,7 +188,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
       {/* Spending and Rewards Summary */}
       <div className="grid grid-cols-2 gap-2">
         <div className="rounded-lg bg-muted/10 p-3 text-left">
-          <p className="text-2xl font-semibold tracking-tight">{formatDollars(totalSpend)}</p>
+          <p className="text-2xl font-semibold tracking-tight">{formatCurrency(totalSpend)}</p>
           <p className="text-xs text-muted-foreground uppercase">Spent this period</p>
         </div>
         <div className={`flex min-h-[68px] flex-col justify-center rounded-lg p-3 text-left transition-colors ${rewardTileClasses}`}>
@@ -207,7 +211,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
             <div className="flex items-center justify-between text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               <span>Minimum spend progress</span>
               <span className={minimumSpendMet ? 'text-emerald-600 dark:text-emerald-300' : 'text-muted-foreground'}>
-                {formatDollars(totalSpend)} / {formatDollars(minimumSpend)}
+                {formatCurrency(totalSpend)} / {minimumSpend != null ? formatCurrency(minimumSpend) : formatCurrency(0)}
               </span>
             </div>
             <div className="relative h-2 w-full overflow-hidden rounded-full bg-muted/20">
@@ -225,7 +229,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
               ) : (
                 <>
                   <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-200" />
-                  <span className="text-amber-600 dark:text-amber-200">{formatDollars(remainingSpend)} to go</span>
+                  <span className="text-amber-600 dark:text-amber-200">{formatCurrency(remainingSpend)} to go</span>
                 </>
               )}
             </div>
@@ -268,7 +272,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
         </div>
         {card.type === 'miles' && rewardEarnedDollars > 0 && (
           <p className="text-xs text-muted-foreground">
-            Value: {formatDollars(rewardEarnedDollars)} @ ${settings?.milesValuation || 0.01}/mile
+            Value: {formatCurrency(rewardEarnedDollars)} @ ${settings?.milesValuation || 0.01}/mile
           </p>
         )}
         {card.earningBlockSize && card.earningBlockSize > 0 && summary.eligibleSpend !== undefined && summary.eligibleSpend > 0 && (
