@@ -211,10 +211,10 @@ export function CardSettingsEditor({
     earningBlockSize && earningBlockSize > 0 ? earningBlockSize : 1
   );
   const [minimumInputValue, setMinimumInputValue] = useState(() =>
-    minimumSpend === null || minimumSpend === undefined ? '' : String(minimumSpend)
+    String(minimumSpend ?? '')
   );
   const [maximumInputValue, setMaximumInputValue] = useState(() =>
-    maximumSpend === null || maximumSpend === undefined ? '' : String(maximumSpend)
+    String(maximumSpend ?? '')
   );
 
   useEffect(() => {
@@ -499,7 +499,7 @@ export function CardSettingsEditor({
                       return;
                     }
                     const parsed = Number(value);
-                    if (Number.isFinite(parsed)) {
+                    if (!isNaN(parsed) && parsed >= 0) {
                       onFieldChange('minimumSpend', parsed);
                     }
                   }}
@@ -566,7 +566,7 @@ export function CardSettingsEditor({
                       return;
                     }
                     const parsed = Number(value);
-                    if (Number.isFinite(parsed)) {
+                    if (!isNaN(parsed) && parsed >= 0) {
                       onFieldChange('maximumSpend', parsed);
                     }
                   }}

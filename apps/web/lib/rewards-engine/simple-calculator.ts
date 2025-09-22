@@ -152,6 +152,8 @@ export class SimpleRewardsCalculator {
     const maximumSpendProgress = calculateMaximumSpendProgress(totalSpend, maximumSpend);
 
     // Calculate eligible spend (spend that earns rewards)
+    // eligibleSpendBeforeBlocks: raw eligible spend before applying block-based rounding
+    // eligibleSpend: final eligible spend after applying block-based rounding (if applicable)
     let eligibleSpend = 0;
     let eligibleSpendBeforeBlocks = 0;
 

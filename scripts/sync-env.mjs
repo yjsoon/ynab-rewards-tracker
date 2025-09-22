@@ -59,11 +59,6 @@ function isSqlite(url) {
   return typeof url === 'string' && url.startsWith('file:');
 }
 
-function isAbsoluteFileUrl(url) {
-  // file:// (includes file:///) are absolute; file:./ and file:../ are relative
-  return /^file:\/\//.test(url) || /^file:\/[^.]/.test(url);
-}
-
 function writeDbEnv(vars) {
   const out = { ...vars };
   // Drop keys we explicitly do not propagate to db/.env
