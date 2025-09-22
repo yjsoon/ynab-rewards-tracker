@@ -13,11 +13,12 @@ import { CardSettingsEditor, type CardEditState } from '@/components/CardSetting
 interface CardSettingsProps {
   card: CreditCard;
   onUpdate: (card: CreditCard) => void;
+  initialEditing?: boolean;
 }
 
-export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
+export default function CardSettings({ card, onUpdate, initialEditing = false }: CardSettingsProps) {
   const { updateCard } = useCreditCards();
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(initialEditing);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [issuerError, setIssuerError] = useState('');

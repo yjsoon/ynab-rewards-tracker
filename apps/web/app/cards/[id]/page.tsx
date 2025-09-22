@@ -21,6 +21,7 @@ export default function CardDetailPage() {
   const searchParams = useSearchParams();
   const cardId = params.id as string;
   const defaultTab = searchParams.get('tab') || 'settings';
+  const startEditing = searchParams.get('edit') === '1' || searchParams.get('edit') === 'true';
   
   const { cards } = useCreditCards();
   const { pat } = useYnabPAT();
@@ -99,7 +100,11 @@ export default function CardDetailPage() {
         </TabsList>
 
         <TabsContent value="settings" className="mt-6">
-          <CardSettings card={card} onUpdate={(updatedCard) => setCard(updatedCard)} />
+          <CardSettings
+            card={card}
+            onUpdate={(updatedCard) => setCard(updatedCard)}
+            initialEditing={startEditing}
+          />
         </TabsContent>
 
         <TabsContent value="transactions" className="mt-6">

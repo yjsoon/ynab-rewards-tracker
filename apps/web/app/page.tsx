@@ -39,7 +39,7 @@ const RECENT_TRANSACTIONS_LIMIT = 10;
 const createSettingsClickHandler = (cardId: string) => (e: React.MouseEvent) => {
   e.preventDefault();
   e.stopPropagation();
-  window.location.href = `/cards/${cardId}?tab=settings`;
+  window.location.href = `/cards/${cardId}?tab=settings&edit=1`;
 };
 
 // Types for better type safety
