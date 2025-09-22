@@ -6,7 +6,6 @@ import { useCreditCards, useRewardRules, useRewardCalculations } from '@/hooks/u
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { 
   TrendingUp,
@@ -19,7 +18,7 @@ import {
   Calendar,
   Settings
 } from 'lucide-react';
-import { RewardsCalculator, RecommendationEngine } from '@/lib/rewards-engine';
+import { RecommendationEngine, type CardRecommendation } from '@/lib/rewards-engine';
 import { computeCurrentPeriod } from '@/lib/rewards-engine/compute';
 import { storage } from '@/lib/storage';
 import type { RewardCalculation } from '@/lib/storage';
@@ -27,14 +26,14 @@ import type { RewardCalculation } from '@/lib/storage';
 export default function RewardsDashboardPage() {
   const { cards } = useCreditCards();
   const { rules } = useRewardRules();
-  const { calculations, saveCalculation, clearCalculations } = useRewardCalculations();
+  const { calculations, saveCalculation } = useRewardCalculations();
   const [computing, setComputing] = useState(false);
   const [computeMessage, setComputeMessage] = useState('');
   const computeAbortRef = useRef<AbortController | null>(null);
   
   const [totalRewardsEarned, setTotalRewardsEarned] = useState(0);
   const [currentPeriodSpend, setCurrentPeriodSpend] = useState(0);
-  const [alerts, setAlerts] = useState<any[]>([]);
+  const [alerts, setAlerts] = useState<CardRecommendation[]>([]);
   const [lastComputedAt, setLastComputedAt] = useState<string | null>(null);
 
   const trackedCards = cards;
@@ -112,7 +111,7 @@ export default function RewardsDashboardPage() {
       setComputeMessage(`Computed ${calcs.length} rule(s) for the current period.`);
     } catch (err) {
       // Swallow aborts quietly
-      if ((err as any)?.name !== 'AbortError') {
+      if (!(err instanceof Error) || err.name !== 'AbortError') {
         const msg = err instanceof Error ? err.message : String(err);
         setComputeMessage(`Computation failed: ${msg}`);
       }

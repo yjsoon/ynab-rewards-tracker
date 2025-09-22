@@ -2,7 +2,7 @@
  * Smart recommendations for card usage
  */
 
-import type { RewardCalculation, CreditCard, RewardRule, AppSettings } from '@/lib/storage';
+import type { RewardCalculation, CreditCard } from '@/lib/storage';
 
 export interface CardRecommendation {
   cardId: string;

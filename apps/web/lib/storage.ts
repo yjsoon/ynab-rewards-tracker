@@ -98,15 +98,21 @@ export interface StorageData {
   calculations: RewardCalculation[];
   settings: AppSettings;
   cachedData?: {
-    budgets?: any[];
-    accounts?: any[];
-    transactions?: any[];
+    budgets?: unknown[];
+    accounts?: unknown[];
+    transactions?: unknown[];
     lastUpdated?: string; // also used as last computed timestamp for rewards
   };
 }
 
 const STORAGE_KEY = 'ynab-rewards-tracker';
 const UI_SEEN_SETUP_KEY = 'ynab-rewards-tracker:hasSeenSetupPrompt';
+
+type MutableCard = CreditCard & Record<string, unknown> & { active?: boolean };
+type MutableRule = RewardRule & Record<string, unknown>;
+type MutableCalculation = RewardCalculation & Record<string, unknown>;
+type MutableCategoryBreakdown = CategoryBreakdown & Record<string, unknown>;
+type MutableSettings = AppSettings & Record<string, unknown>;
 
 class StorageService {
   private getStorage(): StorageData {
@@ -117,149 +123,166 @@ class StorageService {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
-        const data = JSON.parse(stored);
+        const data = JSON.parse(stored) as StorageData;
         // Migrate existing cards without billingCycle
-        if (data.cards) {
-          data.cards = data.cards.map((card: any) => {
-            const nextCard = { ...card };
+        if (Array.isArray(data.cards)) {
+          data.cards = data.cards.map((card) => {
+            const nextCard: MutableCard = { ...card } as MutableCard;
             if (!nextCard.billingCycle) {
               nextCard.billingCycle = {
                 type: 'calendar' as const // dayOfMonth only applies to 'billing'
               };
             }
             if (typeof nextCard.featured !== 'boolean') {
-              nextCard.featured = typeof nextCard.active === 'boolean' ? nextCard.active : true;
+              nextCard.featured = typeof nextCard.active === 'boolean' ? Boolean(nextCard.active) : true;
             }
             // Remove 'active' property cleanly using destructuring
             if ('active' in nextCard) {
               const { active, ...cleanCard } = nextCard;
-              return cleanCard;
+              return cleanCard as CreditCard;
             }
-            return nextCard;
+            return nextCard as CreditCard;
           });
         }
         // Migrations: field renames and defaults
         try {
           // Ensure issuer defaults to a string
           if (Array.isArray(data.cards)) {
-            data.cards = data.cards.map((card: any) => ({
-              issuer: card?.issuer ?? 'Unknown',
-              ...card,
-            }));
+            data.cards = data.cards.map((card) => {
+              const mutableCard: MutableCard = { ...card } as MutableCard;
+              if (typeof mutableCard.issuer !== 'string') {
+                mutableCard.issuer = 'Unknown';
+              }
+              return mutableCard as CreditCard;
+            });
           }
 
           if (Array.isArray(data.calculations)) {
-            data.calculations = data.calculations.map((calc: any) => {
-              if (calc && typeof calc === 'object') {
-                if (calc.rewardEarnedUSD != null && calc.rewardEarnedDollars == null) {
-                  calc.rewardEarnedDollars = calc.rewardEarnedUSD;
-                  delete calc.rewardEarnedUSD;
-                }
-                // Migration: collapse 'points' into 'miles'
-                if (calc.rewardType === 'points') {
-                  calc.rewardType = 'miles';
-                }
-                if (Array.isArray(calc.categoryBreakdowns)) {
-                  calc.categoryBreakdowns = calc.categoryBreakdowns.map((cb: any) => {
-                    if (cb && typeof cb === 'object' && cb.rewardUSD != null && cb.rewardDollars == null) {
-                      cb.rewardDollars = cb.rewardUSD;
-                      delete cb.rewardUSD;
-                    }
-                    return cb;
-                  });
-                }
+            data.calculations = data.calculations.map((calc) => {
+              const mutableCalc: MutableCalculation = { ...calc } as MutableCalculation;
+
+              if ('rewardEarnedUSD' in mutableCalc && mutableCalc.rewardEarnedDollars == null) {
+                mutableCalc.rewardEarnedDollars = Number(mutableCalc.rewardEarnedUSD);
+                Reflect.deleteProperty(mutableCalc, 'rewardEarnedUSD');
               }
-              return calc;
+              // Migration: collapse 'points' into 'miles'
+              const calcType = (mutableCalc.rewardType as string | undefined);
+              if (calcType === 'points') {
+                mutableCalc.rewardType = 'miles';
+              }
+              if (Array.isArray(mutableCalc.categoryBreakdowns)) {
+                mutableCalc.categoryBreakdowns = mutableCalc.categoryBreakdowns.map((cb) => {
+                  const mutableBreakdown: MutableCategoryBreakdown = { ...cb } as MutableCategoryBreakdown;
+                  if ('rewardUSD' in mutableBreakdown && mutableBreakdown.rewardDollars == null) {
+                    mutableBreakdown.rewardDollars = Number(mutableBreakdown.rewardUSD);
+                    Reflect.deleteProperty(mutableBreakdown, 'rewardUSD');
+                  }
+                  return mutableBreakdown as CategoryBreakdown;
+                });
+              }
+
+              return mutableCalc as RewardCalculation;
             });
           }
 
           // Migration: convert any 'points' card/rule types to 'miles'
           if (Array.isArray(data.cards)) {
-            data.cards = data.cards.map((card: any) => {
-              if (card?.type === 'points') {
-                card.type = 'miles';
+            data.cards = data.cards.map((card) => {
+              const mutableCard: MutableCard = { ...card } as MutableCard;
+              const cardType = mutableCard.type as string | undefined;
+              if (cardType === 'points') {
+                mutableCard.type = 'miles';
               }
-              if (card && 'milesBlockSize' in card) {
-                const { milesBlockSize, ...cleanCard } = card;
-                return cleanCard;
+              if ('milesBlockSize' in mutableCard) {
+                const { milesBlockSize, ...cleanCard } = mutableCard;
+                return cleanCard as CreditCard;
               }
-              return card;
+              return mutableCard as CreditCard;
             });
           }
           if (Array.isArray(data.rules)) {
-            data.rules = data.rules.map((rule: any) => {
-              if (rule?.rewardType === 'points') {
-                rule.rewardType = 'miles';
+            data.rules = data.rules.map((rule) => {
+              const mutableRule: MutableRule = { ...rule } as MutableRule;
+              const rewardType = mutableRule.rewardType as string | undefined;
+              if (rewardType === 'points') {
+                mutableRule.rewardType = 'miles';
               }
-              if (rule && 'milesBlockSize' in rule) {
-                const { milesBlockSize, ...cleanRule } = rule;
-                return cleanRule;
+              if ('milesBlockSize' in mutableRule) {
+                const { milesBlockSize, ...cleanRule } = mutableRule;
+                return cleanRule as RewardRule;
               }
-              return rule;
+              return mutableRule as RewardRule;
             });
           }
 
           // Migration: if pointsValuation exists and milesValuation is undefined, copy it over; then drop pointsValuation
           if (data.settings) {
-            const mv = data.settings.milesValuation;
-            const pv = (data.settings as any).pointsValuation;
+            const settings = data.settings as MutableSettings;
+            const mv = settings.milesValuation;
+            const pv = settings.pointsValuation;
             if ((mv == null || typeof mv !== 'number') && typeof pv === 'number') {
-              data.settings.milesValuation = pv;
+              settings.milesValuation = pv;
             }
-            if ('pointsValuation' in data.settings) {
-              delete (data.settings as any).pointsValuation;
+            if ('pointsValuation' in settings) {
+              Reflect.deleteProperty(settings, 'pointsValuation');
             }
           }
 
           // Migration: Add default earning rates to cards that don't have them
           if (Array.isArray(data.cards)) {
-            data.cards = data.cards.map((card: any) => {
-              if (!card.earningRate) {
+            data.cards = data.cards.map((card) => {
+              const mutableCard: MutableCard = { ...card } as MutableCard;
+              if (!mutableCard.earningRate) {
                 // Try to derive from existing rules if any
-                const cardRules = data.rules?.filter((r: any) => r.cardId === card.id && r.active);
-                if (cardRules && cardRules.length > 0) {
+                const cardRules = Array.isArray(data.rules)
+                  ? data.rules.filter((rule) => rule.cardId === mutableCard.id && rule.active)
+                  : [];
+                if (cardRules.length > 0) {
                   // Use the first active rule's reward value as the earning rate
                   const firstRule = cardRules[0];
-                  card.earningRate = firstRule.rewardValue || 1;
+                  mutableCard.earningRate = firstRule.rewardValue || 1;
                 } else {
                   // Default earning rates
-                  card.earningRate = 1;
+                  mutableCard.earningRate = 1;
                 }
               }
-              return card;
+              return mutableCard as CreditCard;
             });
           }
 
           // Migration: Add minimumSpend field to cards that don't have it (default to null = not configured)
           if (Array.isArray(data.cards)) {
-            data.cards = data.cards.map((card: any) => {
-              if (!('minimumSpend' in card)) {
+            data.cards = data.cards.map((card) => {
+              const mutableCard: MutableCard = { ...card } as MutableCard;
+              if (!('minimumSpend' in mutableCard)) {
                 // Default to null (not configured) - users need to explicitly set this
-                card.minimumSpend = null;
+                mutableCard.minimumSpend = null;
               }
-              return card;
+              return mutableCard as CreditCard;
             });
           }
 
           // Migration: Add maximumSpend field to cards that don't have it (default to null = not configured)
           if (Array.isArray(data.cards)) {
-            data.cards = data.cards.map((card: any) => {
-              if (!('maximumSpend' in card)) {
+            data.cards = data.cards.map((card) => {
+              const mutableCard: MutableCard = { ...card } as MutableCard;
+              if (!('maximumSpend' in mutableCard)) {
                 // Default to null (not configured) - users need to explicitly set this
-                card.maximumSpend = null;
+                mutableCard.maximumSpend = null;
               }
-              return card;
+              return mutableCard as CreditCard;
             });
           }
 
           // Migration: Add earningBlockSize field to cards that don't have it (default to null = exact earning)
           if (Array.isArray(data.cards)) {
-            data.cards = data.cards.map((card: any) => {
-              if (!('earningBlockSize' in card)) {
+            data.cards = data.cards.map((card) => {
+              const mutableCard: MutableCard = { ...card } as MutableCard;
+              if (!('earningBlockSize' in mutableCard)) {
                 // Default to null (exact earning) - users need to explicitly set this
-                card.earningBlockSize = null;
+                mutableCard.earningBlockSize = null;
               }
-              return card;
+              return mutableCard as CreditCard;
             });
           }
 
@@ -269,7 +292,11 @@ class StorageService {
           }
 
           // Note: billingCycle defaulting handled earlier when reading cards
-        } catch {}
+        } catch (migrationError) {
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Storage migration failed', migrationError);
+          }
+        }
 
         return data;
       }

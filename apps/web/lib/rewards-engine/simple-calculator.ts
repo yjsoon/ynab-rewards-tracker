@@ -5,7 +5,6 @@
 import type { CreditCard, AppSettings } from '@/lib/storage';
 import type { Transaction } from '@/types/transaction';
 import {
-  hasMinimumSpendRequirement,
   isMinimumSpendMet,
   calculateMinimumSpendProgress,
   isMaximumSpendExceeded,

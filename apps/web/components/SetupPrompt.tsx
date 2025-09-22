@@ -23,7 +23,7 @@ export function SetupPrompt({ onDismiss }: SetupPromptProps) {
   return (
     <Alert className="relative bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800">
       <Sparkles className="h-4 w-4 text-amber-600 dark:text-amber-400" aria-hidden="true" />
-      <AlertTitle className="text-lg font-semibold">Welcome to YJAB – YJ's Awards Buddy!</AlertTitle>
+      <AlertTitle className="text-lg font-semibold">Welcome to YJAB – YJ&apos;s Awards Buddy!</AlertTitle>
       <AlertDescription className="mt-2">
         <Button
           onClick={handleDismiss}

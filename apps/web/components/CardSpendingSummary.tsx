@@ -8,9 +8,7 @@ import { formatDollars } from '@/lib/utils';
 import { AlertCircle, TrendingUp, CheckCircle2, Percent } from 'lucide-react';
 import {
   isMinimumSpendConfigured,
-  hasMinimumSpendRequirement,
-  getMinimumSpendStatus,
-  formatMinimumSpendText
+  hasMinimumSpendRequirement
 } from '@/lib/minimum-spend-helpers';
 import type { CreditCard, AppSettings } from '@/lib/storage';
 import type { Transaction } from '@/types/transaction';
@@ -83,8 +81,8 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
         t.account_id === card.ynabAccountId && t.date <= period.end
       );
       setTransactions(cardTxns);
-    } catch (error: any) {
-      if (error?.name !== 'AbortError') {
+    } catch (error) {
+      if (!(error instanceof Error) || error.name !== 'AbortError') {
         console.error('Failed to load transactions:', error);
       }
     } finally {

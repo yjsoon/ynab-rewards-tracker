@@ -3,12 +3,13 @@
  * Uses local API proxy routes to avoid CORS issues
  */
 
+import type { Transaction } from '@/types/transaction';
 import { storage } from './storage';
 
 // Simple in-memory de-dupe and cache for GETs within a short window.
 // Avoids hammering YNAB when multiple components request the same path.
-const inflightGet = new Map<string, Promise<any>>();
-const getCache = new Map<string, { expiry: number; data: any }>();
+const inflightGet = new Map<string, Promise<unknown>>();
+const getCache = new Map<string, { expiry: number; data: unknown }>();
 const CACHE_TTL_MS = 30_000; // 30s soft cache; YNAB data isn't ultra-realtime
 
 function makeKey(path: string, pat: string, init?: RequestInit) {
@@ -18,6 +19,30 @@ function makeKey(path: string, pat: string, init?: RequestInit) {
   return `${method}:${pat}:${path}`;
 }
 
+interface YnabResponse<T> {
+  data: T;
+}
+
+export interface YnabBudgetSummary {
+  id: string;
+  name: string;
+  last_modified_on: string;
+}
+
+export interface YnabAccountSummary {
+  id: string;
+  name: string;
+  type: string;
+  on_budget: boolean;
+  closed: boolean;
+  balance: number;
+}
+
+export interface YnabPayee {
+  id: string;
+  name: string;
+}
+
 export class YnabClient {
   private pat: string;
 
@@ -25,7 +50,7 @@ export class YnabClient {
     this.pat = pat;
   }
 
-  private async request(path: string, options?: RequestInit) {
+  private async request<T>(path: string, options?: RequestInit): Promise<T> {
     const method = (options?.method || 'GET').toUpperCase();
     const hasSignal = !!options?.signal;
     const key = makeKey(path, this.pat, options);
@@ -35,14 +60,14 @@ export class YnabClient {
       const cached = getCache.get(key);
       const now = Date.now();
       if (cached && cached.expiry > now) {
-        return cached.data;
+        return cached.data as T;
       }
 
       const existing = inflightGet.get(key);
-      if (existing) return existing;
+      if (existing) return existing as Promise<T>;
     }
 
-    const doFetch = async (attempt = 1): Promise<any> => {
+    const doFetch = async (attempt = 1): Promise<T> => {
       const response = await fetch(`/api/ynab/${path}`, {
         ...options,
         headers: {
@@ -71,13 +96,13 @@ export class YnabClient {
         }
       }
 
-      return response.json();
+      return response.json() as Promise<T>;
     };
 
     const promise = doFetch();
 
     if (method === 'GET' && !hasSignal) {
-      inflightGet.set(key, promise);
+      inflightGet.set(key, promise as Promise<unknown>);
     }
 
     try {
@@ -95,24 +120,24 @@ export class YnabClient {
 
   // Budgets
   async getBudgets(init?: RequestInit) {
-    const result = await this.request('budgets', init);
+    const result = await this.request<YnabResponse<{ budgets: YnabBudgetSummary[] }>>('budgets', init);
     return result.data.budgets;
   }
 
   async getBudget(budgetId: string, init?: RequestInit) {
-    const result = await this.request(`budgets/${budgetId}`, init);
+    const result = await this.request<YnabResponse<{ budget: unknown }>>(`budgets/${budgetId}`, init);
     return result.data.budget;
   }
 
   // Accounts
-  async getAccounts(budgetId: string, init?: RequestInit) {
-    const result = await this.request(`budgets/${budgetId}/accounts`, init);
+  async getAccounts<TAccount = YnabAccountSummary>(budgetId: string, init?: RequestInit) {
+    const result = await this.request<YnabResponse<{ accounts: TAccount[] }>>(`budgets/${budgetId}/accounts`, init);
     return result.data.accounts;
   }
 
   // Categories
   async getCategories(budgetId: string, init?: RequestInit) {
-    const result = await this.request(`budgets/${budgetId}/categories`, init);
+    const result = await this.request<YnabResponse<{ category_groups: unknown }>>(`budgets/${budgetId}/categories`, init);
     return result.data.category_groups;
   }
 
@@ -130,20 +155,20 @@ export class YnabClient {
     if (options?.type) params.append('type', options.type);
     
     const query = params.toString() ? `?${params.toString()}` : '';
-    const result = await this.request(`budgets/${budgetId}/transactions${query}`, {
+    const result = await this.request<YnabResponse<{ transactions: Transaction[] }>>(`budgets/${budgetId}/transactions${query}`, {
       signal: options?.signal
     });
     return result.data.transactions;
   }
 
   async getTransaction(budgetId: string, transactionId: string, init?: RequestInit) {
-    const result = await this.request(`budgets/${budgetId}/transactions/${transactionId}`, init);
+    const result = await this.request<YnabResponse<{ transaction: Transaction }>>(`budgets/${budgetId}/transactions/${transactionId}`, init);
     return result.data.transaction;
   }
 
   // Payees
   async getPayees(budgetId: string, init?: RequestInit) {
-    const result = await this.request(`budgets/${budgetId}/payees`, init);
+    const result = await this.request<YnabResponse<{ payees: YnabPayee[] }>>(`budgets/${budgetId}/payees`, init);
     return result.data.payees;
   }
 

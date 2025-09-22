@@ -17,12 +17,10 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   CheckCircle2,
-  XCircle,
   Circle,
   Wallet,
   CreditCard,
   TrendingUp,
-  Calendar,
   ArrowRight,
   AlertCircle,
   Loader2,
@@ -43,13 +41,17 @@ const createSettingsClickHandler = (cardId: string) => (e: React.MouseEvent) => 
 };
 
 // Types for better type safety
-type SetupStep = 'pat' | 'budget' | 'accounts' | 'cards';
 
 interface SetupStatus {
   pat: boolean;
   budget: boolean;
   accounts: boolean;
   cards: boolean;
+}
+
+interface YnabAccountSummary {
+  id: string;
+  name: string;
 }
 
 export default function DashboardPage() {
@@ -83,9 +85,11 @@ export default function DashboardPage() {
       const client = new YnabClient(pat);
       
       // First get accounts to map IDs to names
-      const accounts = await client.getAccounts(budgetId, { signal: controller.signal });
+      const accounts = await client.getAccounts<YnabAccountSummary>(budgetId, { signal: controller.signal });
       const accMap = new Map<string, string>();
-      accounts.forEach((acc: any) => accMap.set(acc.id, acc.name));
+      accounts.forEach((acc) => {
+        accMap.set(acc.id, acc.name);
+      });
       setAccountsMap(accMap);
       
       // Compute earliest needed window across featured cards (for card tiles)
@@ -112,7 +116,7 @@ export default function DashboardPage() {
         .slice(0, RECENT_TRANSACTIONS_LIMIT);
       setTransactions(recent);
     } catch (err) {
-      if ((err as any)?.name !== 'AbortError') {
+      if (!(err instanceof Error) || err.name !== 'AbortError') {
         const errorMessage = err instanceof Error ? err.message : String(err);
         setError(`Failed to load transactions: ${errorMessage}`);
       }
@@ -122,7 +126,7 @@ export default function DashboardPage() {
         dashboardAbortRef.current = null;
       }
     }
-  }, [pat, cards]);
+  }, [pat, cards, trackedAccounts]);
 
   useEffect(() => {
     // Check if we should show setup prompt (only on client side)
@@ -346,7 +350,6 @@ export default function DashboardPage() {
                   const daysLeft = clampDaysLeft(periodDate, now);
                   const isEndingSoon = daysLeft <= 7;
                   // TODO: Get rules from storage when implementing progress tracking
-                  const hasMaxSpend = false; // Placeholder for now
 
                   return (
                     <Link
@@ -403,7 +406,6 @@ export default function DashboardPage() {
                   const daysLeft = clampDaysLeft(periodDate, now);
                   const isEndingSoon = daysLeft <= 7;
                   // TODO: Get rules from storage when implementing progress tracking
-                  const hasMaxSpend = false; // Placeholder for now
 
                   return (
                     <Link
