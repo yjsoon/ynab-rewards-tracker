@@ -130,8 +130,10 @@ class StorageService {
             if (typeof nextCard.featured !== 'boolean') {
               nextCard.featured = typeof nextCard.active === 'boolean' ? nextCard.active : true;
             }
+            // Remove 'active' property cleanly using destructuring
             if ('active' in nextCard) {
-              delete nextCard.active;
+              const { active, ...cleanCard } = nextCard;
+              return cleanCard;
             }
             return nextCard;
           });

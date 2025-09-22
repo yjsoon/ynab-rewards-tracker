@@ -211,7 +211,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
             <div className="flex items-center justify-between text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               <span>Minimum spend progress</span>
               <span className={minimumSpendMet ? 'text-emerald-600 dark:text-emerald-300' : 'text-muted-foreground'}>
-                {formatCurrency(totalSpend)} / {minimumSpend != null ? formatCurrency(minimumSpend) : formatCurrency(0)}
+                {formatCurrency(totalSpend)} / {formatCurrency(minimumSpend)}
               </span>
             </div>
             <div className="relative h-2 w-full overflow-hidden rounded-full bg-muted/20">

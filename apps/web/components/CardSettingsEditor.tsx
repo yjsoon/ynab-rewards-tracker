@@ -534,7 +534,11 @@ export function CardSettingsEditor({
                 <Input
                   type="number"
                   value={billingCycleDay}
-                  onChange={(e) => onFieldChange('billingCycleDay', parseInt(e.target.value, 10) || 1)}
+                  onChange={(e) => {
+                    const parsed = parseInt(e.target.value, 10);
+                    // Use 1 as default only if parsing fails (NaN), not for 0
+                    onFieldChange('billingCycleDay', Number.isNaN(parsed) ? 1 : Math.max(1, Math.min(31, parsed)));
+                  }}
                   min="1"
                   max="31"
                   className="h-9"
