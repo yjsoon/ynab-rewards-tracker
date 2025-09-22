@@ -1,16 +1,18 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import Link from 'next/link';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useYnabPAT, useCreditCards, useSettings } from '@/hooks/useLocalStorage';
 import { YnabClient } from '@/lib/ynab-client';
-import type { CreditCard} from '@/lib/storage';
+import type { CreditCard } from '@/lib/storage';
 import { storage } from '@/lib/storage';
-import { sanitizeInput, validateYnabToken, validateCardName, validateIssuer } from '@/lib/validation';
+import { validateYnabToken } from '@/lib/validation';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Switch } from '@/components/ui/switch';
 import {
   Select,
   SelectContent,
@@ -23,12 +25,10 @@ import {
   CheckCircle2, 
   CreditCard as CreditCardIcon, 
   Trash2, 
-  Edit2, 
   Download, 
   Upload, 
   AlertCircle,
   RefreshCw,
-  Link2,
   Wallet,
   DollarSign
 } from 'lucide-react';
@@ -57,11 +57,6 @@ const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   lineOfCredit: 'Line of Credit',
 };
 
-// Type guard for card types
-function isValidCardType(value: string): value is 'cashback' | 'miles' {
-  return value === 'cashback' || value === 'miles';
-}
-
 export default function SettingsPage() {
   const { pat, setPAT, isLoading: patLoading } = useYnabPAT();
   const { cards, saveCard, deleteCard, isLoading: cardsLoading } = useCreditCards();
@@ -71,7 +66,6 @@ export default function SettingsPage() {
   const [testingConnection, setTestingConnection] = useState(false);
   const [connectionMessage, setConnectionMessage] = useState('');
   const [showClearDialog, setShowClearDialog] = useState(false);
-  const [showDeleteCardDialog, setShowDeleteCardDialog] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Budget and account selection state
@@ -91,20 +85,6 @@ export default function SettingsPage() {
   // Points removed; only miles valuation remains
   const [valuationMessage, setValuationMessage] = useState<string>("");
 
-  // Card form state
-  const [showCardForm, setShowCardForm] = useState(false);
-  const [editingCard, setEditingCard] = useState<CreditCard | null>(null);
-  type CardFormData = {
-    name: string;
-    issuer: string;
-    type: 'cashback' | 'miles';
-  };
-
-  const [cardForm, setCardForm] = useState<CardFormData>({
-    name: '',
-    issuer: '',
-    type: 'cashback',
-  });
 
   // Load saved budget and tracked accounts on mount
   useEffect(() => {
@@ -311,52 +291,6 @@ export default function SettingsPage() {
     setTimeout(() => setValuationMessage(''), 2500);
   }
 
-
-  function handleEditCard(card: CreditCard) {
-    setEditingCard(card);
-    setCardForm({ name: card.name, issuer: card.issuer || '', type: card.type });
-    setShowCardForm(true);
-  }
-
-  function handleSaveCard(e: React.FormEvent) {
-    e.preventDefault();
-    
-    // Validate inputs
-    const nameValidation = validateCardName(cardForm.name);
-    if (!nameValidation.valid) {
-      setConnectionMessage(`❌ ${nameValidation.error}`);
-      return;
-    }
-    
-    const issuerValidation = validateIssuer(cardForm.issuer);
-    if (!issuerValidation.valid) {
-      setConnectionMessage(`❌ ${issuerValidation.error}`);
-      return;
-    }
-    
-    if (!editingCard?.ynabAccountId) {
-      setConnectionMessage('❌ Cannot save card without YNAB account ID');
-      return;
-    }
-    
-    const card: CreditCard = {
-      id: editingCard.id,
-      name: sanitizeInput(cardForm.name),
-      issuer: sanitizeInput(cardForm.issuer),
-      type: cardForm.type,
-      active: editingCard.active ?? true,
-      ynabAccountId: editingCard.ynabAccountId,
-      earningRate: 1,
-      earningBlockSize: null, // Default to exact earning (down to the cent)
-      minimumSpend: null,
-      maximumSpend: null,
-    };
-    saveCard(card);
-    setShowCardForm(false);
-    setCardForm({ name: '', issuer: '', type: 'cashback' });
-    setConnectionMessage('');
-  }
-
   function handleClearAll() {
     clearAll();
     setPAT('');
@@ -531,38 +465,75 @@ export default function SettingsPage() {
             {loadingAccounts ? (
               <p className="text-sm">Loading accounts...</p>
             ) : accounts.length > 0 ? (
-              <div className="space-y-2">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {accounts.map(account => {
                   const accountTypeLabel = ACCOUNT_TYPE_LABELS[account.type] || account.type;
                   const Icon = account.type === 'creditCard' ? CreditCardIcon : 
                                account.type === 'checking' ? Wallet :
                                DollarSign;
-                  
+                  const isTracked = trackedAccountIds.includes(account.id);
+                  const linkedCard = cards.find(c => c.ynabAccountId === account.id);
+
                   return (
-                    <label 
+                    <div
                       key={account.id} 
                       className={cn(
-                        "flex items-center space-x-3 p-3 rounded-lg border cursor-pointer transition-colors",
-                        trackedAccountIds.includes(account.id)
-                          ? "bg-primary/10 border-primary/50 hover:bg-primary/20"
-                          : "hover:bg-secondary/50"
+                        "flex h-full flex-col justify-between rounded-xl border p-4 text-left transition-shadow",
+                        isTracked
+                          ? "border-primary/60 bg-primary/5 shadow-sm"
+                          : "hover:border-primary/40"
                       )}
                     >
-                      <input
-                        type="checkbox"
-                        checked={trackedAccountIds.includes(account.id)}
-                        onChange={() => handleAccountToggle(account.id, account.name)}
-                        className="rounded"
-                      />
-                      <Icon className="h-5 w-5 text-muted-foreground" />
-                      <div className="flex-1">
-                        <div className="font-medium">{account.name}</div>
-                        <div className="text-sm text-muted-foreground">{accountTypeLabel}</div>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <Icon className="h-5 w-5 text-muted-foreground" />
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{account.name}</span>
+                              {isTracked && (
+                                <Badge variant="outline" className="bg-primary/10 text-primary">
+                                  Tracking
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="text-sm text-muted-foreground">{accountTypeLabel}</div>
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-1">
+                          <Switch
+                            id={`account-${account.id}`}
+                            checked={isTracked}
+                            onCheckedChange={() => handleAccountToggle(account.id, account.name)}
+                            aria-label={isTracked ? `Stop tracking ${account.name}` : `Track ${account.name}`}
+                          />
+                          <span className="text-xs text-muted-foreground">Track</span>
+                        </div>
                       </div>
-                      <div className="text-sm text-muted-foreground">
-                        ${(account.balance / 1000).toFixed(2)}
+
+                      <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
+                        <span>Balance</span>
+                        <span>${(account.balance / 1000).toFixed(2)}</span>
                       </div>
-                    </label>
+
+                      {isTracked && linkedCard ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="mt-4 w-full justify-center"
+                          asChild
+                        >
+<Link href={`/cards/${linkedCard.id}?tab=settings`} aria-label={`View ${linkedCard.name} details`}>
+                            View card details
+                          </Link>
+                        </Button>
+                      ) : (
+                        <p className="mt-4 text-xs text-muted-foreground">
+                          {isTracked
+                            ? 'Card initialised, sync pending. Give it a moment.'
+                            : 'Switch on tracking to create a linked rewards card.'}
+                        </p>
+                      )}
+                    </div>
                   );
                 })}
               </div>
@@ -576,159 +547,34 @@ export default function SettingsPage() {
       {/* Rewards Cards Management */}
       <Card>
         <CardHeader>
-          <CardTitle>Rewards Cards Management</CardTitle>
+          <CardTitle>Rewards Preferences</CardTitle>
           <CardDescription>
-            Manage your cards and their reward rules
+            Optimise valuations for your rewards. Use the tracked accounts grid above to dive straight into detailed card settings.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Reward Valuations */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Reward Valuation</CardTitle>
-              <CardDescription>
-                Set how much a mile is worth in dollars. Used to normalise rewards and tune recommendations.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleSaveValuations} className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <label className="text-sm font-medium">Dollars per mile</label>
-                  <input
-                    type="number"
-                    step="0.001"
-                    min="0"
-                    value={milesValuation}
-                    onChange={(e) => setMilesValuation(Number(e.target.value))}
-                    className="w-full px-3 py-2 border rounded-md mt-1"
-                    placeholder="0.01"
-                    aria-label="Miles valuation in dollars per mile"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">Typical range 0.010–0.020. Defaults to 0.010.</p>
-                </div>
-                {/* Points removed */}
-                <div className="md:col-span-2 flex items-center gap-2">
-                  <Button type="submit">Save Valuations</Button>
-                  {valuationMessage && (
-                    <span className="text-sm text-muted-foreground">{valuationMessage}</span>
-                  )}
-                </div>
-              </form>
-            </CardContent>
-          </Card>
-          {showCardForm && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">
-                  Edit Card
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleSaveCard} className="space-y-4">
-                  <div>
-                    <label className="text-sm font-medium">Card Name</label>
-                    <input
-                      type="text"
-                      value={cardForm.name}
-                      onChange={(e) => setCardForm({ ...cardForm, name: e.target.value })}
-                      required
-                      className="w-full px-3 py-2 border rounded-md mt-1"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium" htmlFor="card-issuer">Issuer</label>
-                    <input
-                      id="card-issuer"
-                      type="text"
-                      value={cardForm.issuer}
-                      onChange={(e) => setCardForm({ ...cardForm, issuer: e.target.value })}
-                      required
-                      minLength={2}
-                      maxLength={100}
-                      className="w-full px-3 py-2 border rounded-md mt-1"
-                      placeholder="e.g., DBS, UOB, Citibank"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      We use this to group cards by bank or issuer.
-                    </p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium">Type</label>
-                    <Select
-                      value={cardForm.type}
-                      onValueChange={(value) => {
-                        if (isValidCardType(value)) {
-                          setCardForm({ ...cardForm, type: value });
-                        }
-                      }}
-                    >
-                      <SelectTrigger className="w-full mt-1">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                    <SelectItem value="cashback">Cashback</SelectItem>
-                    <SelectItem value="miles">Miles</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-                  <div className="flex gap-2">
-                    <Button type="submit">Save Card</Button>
-                    <Button 
-                      type="button" 
-                      variant="outline"
-                      onClick={() => setShowCardForm(false)}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                </form>
-              </CardContent>
-            </Card>
-          )}
-
-          {cards.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No cards configured yet.</p>
-          ) : (
-            <div className="space-y-4">
-              <h3 className="font-semibold text-sm">Linked Cards</h3>
-              <div className="space-y-2">
-                {cards.map((card) => (
-                  <div 
-                    key={card.id} 
-                    className="flex items-center justify-between p-3 rounded-lg border bg-blue-50 dark:bg-blue-950"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Link2 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                      <div>
-                        <div className="font-medium">{card.name}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {card.issuer} • {card.type}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button 
-                        size="sm" 
-                        variant="ghost"
-                        onClick={() => handleEditCard(card)}
-                        aria-label={`Edit ${card.name}`}
-                      >
-                        <Edit2 className="h-4 w-4" aria-hidden="true" />
-                      </Button>
-                      <Button 
-                        size="sm" 
-                        variant="ghost"
-                        onClick={() => setShowDeleteCardDialog(card.id)}
-                        aria-label={`Delete ${card.name}`}
-                      >
-                        <Trash2 className="h-4 w-4" aria-hidden="true" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+        <CardContent>
+          <form onSubmit={handleSaveValuations} className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="text-sm font-medium">Dollars per mile</label>
+              <input
+                type="number"
+                step="0.001"
+                min="0"
+                value={milesValuation}
+                onChange={(e) => setMilesValuation(Number(e.target.value))}
+                className="w-full px-3 py-2 border rounded-md mt-1"
+                placeholder="0.01"
+                aria-label="Miles valuation in dollars per mile"
+              />
+              <p className="text-xs text-muted-foreground mt-1">Typical range 0.010–0.020. Defaults to 0.010.</p>
             </div>
-          )}
+            <div className="md:col-span-2 flex items-center gap-2">
+              <Button type="submit">Save Valuations</Button>
+              {valuationMessage && (
+                <span className="text-sm text-muted-foreground">{valuationMessage}</span>
+              )}
+            </div>
+          </form>
         </CardContent>
       </Card>
 
@@ -783,27 +629,6 @@ export default function SettingsPage() {
         onCancel={() => setShowClearDialog(false)}
       />
 
-      <ConfirmDialog
-        isOpen={!!showDeleteCardDialog}
-        title="Delete Card"
-        message="Are you sure you want to delete this card? This will also delete all associated reward rules."
-        confirmText="Delete"
-        cancelText="Cancel"
-        onConfirm={() => {
-          if (showDeleteCardDialog) {
-            deleteCard(showDeleteCardDialog);
-            // If it's a YNAB-linked card, also remove from tracked accounts
-            const card = cards.find(c => c.id === showDeleteCardDialog);
-            if (card?.ynabAccountId) {
-              const newTrackedIds = trackedAccountIds.filter(id => id !== card.ynabAccountId);
-              setTrackedAccountIds(newTrackedIds);
-              storage.setTrackedAccountIds(newTrackedIds);
-            }
-            setShowDeleteCardDialog(null);
-          }
-        }}
-        onCancel={() => setShowDeleteCardDialog(null)}
-      />
     </div>
   );
 }
