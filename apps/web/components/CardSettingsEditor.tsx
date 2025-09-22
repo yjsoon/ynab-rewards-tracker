@@ -80,14 +80,19 @@ function SettingCapsule({
         className={`${capsuleBaseClasses} cursor-not-allowed border-dashed text-muted-foreground/70`}
         aria-disabled
       >
-        <div className="flex items-center gap-2">
-          {icon}
-          <div className="flex flex-col">
-            <span className="font-medium">{label}</span>
-            {description && <span className="text-xs text-muted-foreground">{description}</span>}
+        <div className="flex w-full items-center gap-3">
+          <div className="flex flex-1 items-center gap-2">
+            {icon}
+            <div className="flex flex-col">
+              <span className="font-medium">{label}</span>
+              {description && <span className="text-xs text-muted-foreground">{description}</span>}
+            </div>
           </div>
+          <div className="hidden h-8 border-l border-border/60 sm:block" aria-hidden="true" />
+          <span className="rounded-full bg-muted/30 px-3 py-1 text-xs font-medium text-muted-foreground">
+            {value}
+          </span>
         </div>
-        <span>{value}</span>
       </div>
     );
   }
@@ -101,18 +106,21 @@ function SettingCapsule({
             isDirty ? 'border-amber-300 bg-amber-50/60 dark:border-amber-700 dark:bg-amber-900/20' : ''
           }`}
         >
-          <div className="flex items-center gap-2">
-            {icon}
-            <div className="flex flex-col">
-              <span className="font-medium leading-none">{label}</span>
-              {description && (
-                <span className="text-xs text-muted-foreground leading-tight">{description}</span>
-              )}
+          <div className="flex w-full items-center gap-3">
+            <div className="flex flex-1 items-center gap-2">
+              {icon}
+              <div className="flex flex-col text-left">
+                <span className="font-medium leading-none">{label}</span>
+                {description && (
+                  <span className="text-xs text-muted-foreground leading-tight">{description}</span>
+                )}
+              </div>
             </div>
+            <div className="hidden h-8 border-l border-border/60 sm:block" aria-hidden="true" />
+            <span className="max-w-[140px] truncate rounded-full bg-muted/40 px-3 py-1 text-xs font-medium text-muted-foreground sm:text-sm">
+              {value}
+            </span>
           </div>
-          <span className="max-w-[140px] truncate text-xs text-muted-foreground sm:text-sm">
-            {value}
-          </span>
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-72 space-y-3">
