@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useYnabPAT, useCreditCards, useSettings } from '@/hooks/useLocalStorage';
 import { YnabClient } from '@/lib/ynab-client';
 import type { CreditCard } from '@/lib/storage';
@@ -184,6 +184,64 @@ export default function SettingsPage() {
     return new Map(entries);
   }, [cards]);
 
+  const syncCardsWithAccounts = useCallback((ynabAccounts: YnabAccount[]) => {
+    const savedTrackedIds = storage.getTrackedAccountIds();
+
+    ynabAccounts.forEach((account) => {
+      if (!savedTrackedIds.includes(account.id)) {
+        return;
+      }
+
+      const existingCard = cardsByAccountId.get(account.id);
+      if (!existingCard) {
+        saveCard(buildTrackedCard(account.id, account.name));
+      }
+    });
+  }, [cardsByAccountId, saveCard]);
+
+  const fetchAccounts = useCallback(async (budgetId: string) => {
+    if (!pat) return;
+
+    setLoadingAccounts(true);
+    try {
+      const client = new YnabClient(pat);
+      const fetchedAccounts = await client.getAccounts<YnabAccount>(budgetId);
+      const openAccounts = fetchedAccounts.filter((acc) => !acc.closed && acc.on_budget);
+      setAccounts(openAccounts);
+      syncCardsWithAccounts(openAccounts);
+    } catch (error) {
+      setConnectionMessage(`Failed to fetch accounts: ${getErrorMessage(error)}`);
+    } finally {
+      setLoadingAccounts(false);
+    }
+  }, [pat, syncCardsWithAccounts]);
+
+  const handleBudgetSelect = useCallback((budgetId: string, budgetName: string) => {
+    storage.setSelectedBudget(budgetId, budgetName);
+    setSelectedBudget({ id: budgetId, name: budgetName });
+    setShowBudgetSelector(false);
+    fetchAccounts(budgetId);
+  }, [fetchAccounts]);
+
+  const fetchBudgets = useCallback(async () => {
+    if (!pat) return;
+
+    setLoadingBudgets(true);
+    try {
+      const client = new YnabClient(pat);
+      const fetchedBudgets = await client.getBudgets();
+      setBudgets(fetchedBudgets);
+
+      if (fetchedBudgets.length === 1) {
+        handleBudgetSelect(fetchedBudgets[0].id, fetchedBudgets[0].name);
+      }
+    } catch (error) {
+      setConnectionMessage(`Failed to fetch budgets: ${getErrorMessage(error)}`);
+    } finally {
+      setLoadingBudgets(false);
+    }
+  }, [pat, handleBudgetSelect]);
+
   useEffect(() => {
     if (!valuationMessage) return;
     const timeout = setTimeout(() => setValuationMessage(''), 2500);
@@ -196,72 +254,13 @@ export default function SettingsPage() {
     setSelectedBudget(savedBudget);
     setTrackedAccountIds(storage.getTrackedAccountIds());
     
-    // If we have a PAT and selected budget, fetch accounts
     if (pat && savedBudget.id) {
       fetchAccounts(savedBudget.id);
-    }
-    // If we have a PAT but no budget, fetch budgets
-    else if (pat && !savedBudget.id) {
+    } else if (pat && !savedBudget.id) {
       fetchBudgets();
     }
-  }, [pat]);
+  }, [pat, fetchAccounts, fetchBudgets]);
 
-  async function fetchBudgets() {
-    if (!pat) return;
-    
-    setLoadingBudgets(true);
-    try {
-      const client = new YnabClient(pat);
-      const fetchedBudgets = await client.getBudgets();
-      setBudgets(fetchedBudgets);
-      
-      // If only one budget, auto-select it
-      if (fetchedBudgets.length === 1) {
-        handleBudgetSelect(fetchedBudgets[0].id, fetchedBudgets[0].name);
-      }
-    } catch (error) {
-      setConnectionMessage(`Failed to fetch budgets: ${getErrorMessage(error)}`);
-    } finally {
-      setLoadingBudgets(false);
-    }
-  }
-
-  async function fetchAccounts(budgetId: string) {
-    if (!pat) return;
-    
-    setLoadingAccounts(true);
-    try {
-      const client = new YnabClient(pat);
-      const fetchedAccounts = await client.getAccounts(budgetId);
-      // Filter to only show open accounts (all types - checking, savings, credit cards, etc.)
-      const openAccounts = fetchedAccounts.filter(
-        (acc: YnabAccount) => !acc.closed && acc.on_budget
-      );
-      setAccounts(openAccounts);
-      
-      // Sync tracked accounts with existing cards
-      syncCardsWithAccounts(openAccounts);
-    } catch (error) {
-      setConnectionMessage(`Failed to fetch accounts: ${getErrorMessage(error)}`);
-    } finally {
-      setLoadingAccounts(false);
-    }
-  }
-
-  function syncCardsWithAccounts(ynabAccounts: YnabAccount[]) {
-    const savedTrackedIds = storage.getTrackedAccountIds();
-    
-    ynabAccounts.forEach((account) => {
-      if (!savedTrackedIds.includes(account.id)) {
-        return;
-      }
-
-      const existingCard = cardsByAccountId.get(account.id);
-      if (!existingCard) {
-        saveCard(buildTrackedCard(account.id, account.name));
-      }
-    });
-  }
 
   async function handleSaveToken(e: React.FormEvent) {
     e.preventDefault();
@@ -278,13 +277,6 @@ export default function SettingsPage() {
     
     // Immediately fetch budgets after saving token
     fetchBudgets();
-  }
-
-  function handleBudgetSelect(budgetId: string, budgetName: string) {
-    storage.setSelectedBudget(budgetId, budgetName);
-    setSelectedBudget({ id: budgetId, name: budgetName });
-    setShowBudgetSelector(false);
-    fetchAccounts(budgetId);
   }
 
   function handleAccountToggle(accountId: string, accountName: string) {

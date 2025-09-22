@@ -9,8 +9,6 @@ import type {
   AppSettings
 } from '@/lib/storage';
 import type { TransactionWithRewards } from '@/types/transaction';
-import { absFromMilli } from '@/lib/utils';
-
 export interface CalculationPeriod {
   startDate: Date;
   endDate: Date;

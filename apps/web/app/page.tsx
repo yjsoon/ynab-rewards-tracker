@@ -17,12 +17,10 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   CheckCircle2,
-  XCircle,
   Circle,
   Wallet,
   CreditCard,
   TrendingUp,
-  Calendar,
   ArrowRight,
   AlertCircle,
   Loader2,
@@ -35,6 +33,11 @@ import type { Transaction } from '@/types/transaction';
 const TRANSACTION_LOOKBACK_DAYS = 30;
 const RECENT_TRANSACTIONS_LIMIT = 10;
 
+const arraysEqual = (a: string[], b: string[]) => {
+  if (a.length !== b.length) return false;
+  return a.every((value, index) => value === b[index]);
+};
+
 // Helper functions
 const createSettingsClickHandler = (cardId: string) => (e: React.MouseEvent) => {
   e.preventDefault();
@@ -43,13 +46,17 @@ const createSettingsClickHandler = (cardId: string) => (e: React.MouseEvent) => 
 };
 
 // Types for better type safety
-type SetupStep = 'pat' | 'budget' | 'accounts' | 'cards';
 
 interface SetupStatus {
   pat: boolean;
   budget: boolean;
   accounts: boolean;
   cards: boolean;
+}
+
+interface YnabAccountSummary {
+  id: string;
+  name: string;
 }
 
 export default function DashboardPage() {
@@ -65,14 +72,35 @@ export default function DashboardPage() {
   const [error, setError] = useState('');
   const [showSetupPrompt, setShowSetupPrompt] = useState(false);
   const dashboardAbortRef = useRef<AbortController | null>(null);
+  const hasHydratedSettingsRef = useRef(false);
+  const lastFetchKeyRef = useRef('');
 
-  const loadRecentTransactions = useCallback(async (budgetId: string) => {
+  const featuredCards = useMemo(
+    () => cards.filter((card) => (card.featured ?? true)),
+    [cards]
+  );
+
+  const earliestTrackedWindow = useMemo(() => {
+    if (featuredCards.length === 0) {
+      const fallback = new Date();
+      fallback.setDate(fallback.getDate() - TRANSACTION_LOOKBACK_DAYS);
+      return fallback.toISOString().split('T')[0];
+    }
+
+    const earliestMillis = featuredCards
+      .map((card) => SimpleRewardsCalculator.calculatePeriod(card))
+      .map((period) => new Date(period.start).getTime())
+      .reduce((min, current) => Math.min(min, current), Number.POSITIVE_INFINITY);
+
+    return new Date(earliestMillis).toISOString().split('T')[0];
+  }, [featuredCards]);
+
+  const loadRecentTransactions = useCallback(async (budgetId: string, accountFilter: string[]) => {
     if (!pat) return;
 
     setLoading(true);
     setError('');
 
-    // Abort any in-flight request
     if (dashboardAbortRef.current) {
       dashboardAbortRef.current.abort();
     }
@@ -81,40 +109,34 @@ export default function DashboardPage() {
 
     try {
       const client = new YnabClient(pat);
-      
-      // First get accounts to map IDs to names
-      const accounts = await client.getAccounts(budgetId, { signal: controller.signal });
+
+      const accounts = await client.getAccounts<YnabAccountSummary>(budgetId, { signal: controller.signal });
       const accMap = new Map<string, string>();
-      accounts.forEach((acc: any) => accMap.set(acc.id, acc.name));
+      accounts.forEach((acc) => {
+        accMap.set(acc.id, acc.name);
+      });
       setAccountsMap(accMap);
-      
-      // Compute earliest needed window across featured cards (for card tiles)
-      const featuredCards = cards.filter(c => c.featured ?? true);
-      const periods = featuredCards.map(c => SimpleRewardsCalculator.calculatePeriod(c));
-      const earliestStart = periods.length > 0
-        ? new Date(Math.min(...periods.map(p => new Date(p.start).getTime())))
-        : (() => { const d = new Date(); d.setDate(d.getDate() - TRANSACTION_LOOKBACK_DAYS); return d; })();
 
       const txns = await client.getTransactions(budgetId, {
-        since_date: earliestStart.toISOString().split('T')[0],
+        since_date: earliestTrackedWindow,
         signal: controller.signal,
       });
 
       setAllBudgetTransactions(txns);
 
-      // Derive recent preview from budget-wide fetch (last N days)
       const cutoff = new Date();
       cutoff.setDate(cutoff.getDate() - TRANSACTION_LOOKBACK_DAYS);
       const recent = txns
-        .filter((t: Transaction) => trackedAccounts.length === 0 || trackedAccounts.includes(t.account_id))
+        .filter((t: Transaction) => accountFilter.length === 0 || accountFilter.includes(t.account_id))
         .filter((t: Transaction) => new Date(t.date) >= cutoff)
         .sort((a: Transaction, b: Transaction) => new Date(b.date).getTime() - new Date(a.date).getTime())
         .slice(0, RECENT_TRANSACTIONS_LIMIT);
       setTransactions(recent);
     } catch (err) {
-      if ((err as any)?.name !== 'AbortError') {
+      if (!(err instanceof Error) || err.name !== 'AbortError') {
         const errorMessage = err instanceof Error ? err.message : String(err);
         setError(`Failed to load transactions: ${errorMessage}`);
+        lastFetchKeyRef.current = '';
       }
     } finally {
       if (dashboardAbortRef.current === controller) {
@@ -122,27 +144,55 @@ export default function DashboardPage() {
         dashboardAbortRef.current = null;
       }
     }
-  }, [pat, cards]);
+  }, [pat, earliestTrackedWindow]);
 
   useEffect(() => {
-    // Check if we should show setup prompt (only on client side)
-    if (typeof window !== 'undefined') {
-      const hasSeenSetup = storage.getHasSeenSetupPrompt();
-      if (!pat && !hasSeenSetup) {
-        setShowSetupPrompt(true);
-      }
+    if (hasHydratedSettingsRef.current) {
+      return;
+    }
+    hasHydratedSettingsRef.current = true;
+
+    if (typeof window === 'undefined') {
+      return;
     }
 
-    // Load saved settings
-    const budget = storage.getSelectedBudget();
-    setSelectedBudget(budget);
-    setTrackedAccounts(storage.getTrackedAccountIds());
+    const storedBudget = (storage.getSelectedBudget() ?? {}) as { id?: string; name?: string };
+    setSelectedBudget((previous) => {
+      const sameId = (previous.id ?? '') === (storedBudget.id ?? '');
+      const sameName = (previous.name ?? '') === (storedBudget.name ?? '');
+      return sameId && sameName ? previous : storedBudget;
+    });
 
-    // Load transactions if we have everything configured
-    if (pat && budget.id) {
-      loadRecentTransactions(budget.id);
+    const storedTrackedAccounts = storage.getTrackedAccountIds() ?? [];
+    setTrackedAccounts((previous) => (arraysEqual(previous, storedTrackedAccounts) ? previous : storedTrackedAccounts));
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
     }
-  }, [pat, loadRecentTransactions]);
+
+    const hasSeenSetup = storage.getHasSeenSetupPrompt();
+    const shouldShowSetup = !pat && !hasSeenSetup;
+    setShowSetupPrompt((previous) => (previous === shouldShowSetup ? previous : shouldShowSetup));
+  }, [pat]);
+
+  useEffect(() => {
+    if (!pat || !selectedBudget.id) {
+      lastFetchKeyRef.current = '';
+      return;
+    }
+
+    const sortedAccountsKey = [...trackedAccounts].sort().join('|');
+    const fetchKey = [pat, selectedBudget.id, sortedAccountsKey, earliestTrackedWindow].join('::');
+
+    if (lastFetchKeyRef.current === fetchKey) {
+      return;
+    }
+
+    lastFetchKeyRef.current = fetchKey;
+    loadRecentTransactions(selectedBudget.id, trackedAccounts);
+  }, [pat, selectedBudget.id, trackedAccounts, earliestTrackedWindow, loadRecentTransactions]);
 
   useEffect(() => {
     return () => {
@@ -190,7 +240,6 @@ export default function DashboardPage() {
       return clampDaysLeft(periodDate, now);
     };
 
-    const featuredCards = cards.filter(c => c.featured ?? true);
     const cashback = featuredCards.filter(c => c.type === 'cashback');
     const miles = featuredCards.filter(c => c.type === 'miles');
 
@@ -198,7 +247,7 @@ export default function DashboardPage() {
     miles.sort((a, b) => getDaysRemaining(a) - getDaysRemaining(b));
 
     return { cashbackCards: cashback, milesCards: miles };
-  }, [cards]);
+  }, [featuredCards]);
 
   // Empty state when nothing is configured
   if (!pat) {
@@ -346,7 +395,6 @@ export default function DashboardPage() {
                   const daysLeft = clampDaysLeft(periodDate, now);
                   const isEndingSoon = daysLeft <= 7;
                   // TODO: Get rules from storage when implementing progress tracking
-                  const hasMaxSpend = false; // Placeholder for now
 
                   return (
                     <Link
@@ -403,7 +451,6 @@ export default function DashboardPage() {
                   const daysLeft = clampDaysLeft(periodDate, now);
                   const isEndingSoon = daysLeft <= 7;
                   // TODO: Get rules from storage when implementing progress tracking
-                  const hasMaxSpend = false; // Placeholder for now
 
                   return (
                     <Link

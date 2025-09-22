@@ -109,6 +109,11 @@ apps/web/
 
 ## Data Model
 
+### Resetting Local Storage
+- Browser state lives entirely under the `ynab-rewards-tracker` key.
+- The storage service checks `STORAGE_VERSION` / `STORAGE_VERSION_KEY` in `apps/web/lib/storage.ts`. Bump `STORAGE_VERSION` and restart to force-clear cached budgets/cards/settings and the setup prompt flag.
+- `storage.clearAll()` now also clears the version marker, giving you a manual wipe hook if needed inside the app.
+
 ### Core Entities (in storage.ts)
 
 ```typescript
