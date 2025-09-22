@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { storage, StorageData, CreditCard, RewardRule, RewardCalculation } from '@/lib/storage';
+import type { CreditCard, RewardRule, RewardCalculation } from '@/lib/storage';
+import { storage, StorageData } from '@/lib/storage';
 import { useStorageContext } from '@/contexts/StorageContext';
 
 export function useYnabPAT() {

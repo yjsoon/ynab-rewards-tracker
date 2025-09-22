@@ -3,7 +3,8 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useYnabPAT, useCreditCards, useSettings } from '@/hooks/useLocalStorage';
 import { YnabClient } from '@/lib/ynab-client';
-import { CreditCard, storage } from '@/lib/storage';
+import type { CreditCard} from '@/lib/storage';
+import { storage } from '@/lib/storage';
 import { sanitizeInput, validateYnabToken, validateCardName, validateIssuer } from '@/lib/validation';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { Button } from '@/components/ui/button';
