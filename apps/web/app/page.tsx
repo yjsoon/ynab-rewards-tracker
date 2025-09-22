@@ -457,7 +457,7 @@ export default function DashboardPage() {
             </p>
             {selectedBudget.id && (
               <Button variant="link" size="sm" asChild className="px-0">
-                <Link href="/settings">Change</Link>
+                <Link href="/settings#settings-budget">Change</Link>
               </Button>
             )}
           </CardContent>
@@ -470,7 +470,7 @@ export default function DashboardPage() {
           <CardContent>
             <p className="text-3xl font-bold">{trackedAccounts.length}</p>
             <Button variant="link" size="sm" asChild className="px-0">
-              <Link href="/settings">Manage</Link>
+              <Link href="/settings#settings-accounts">Manage</Link>
             </Button>
           </CardContent>
         </Card>

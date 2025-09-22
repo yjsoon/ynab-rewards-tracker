@@ -378,7 +378,7 @@ export default function SettingsPage() {
       <h1 className="text-3xl font-bold">Settings</h1>
 
       {/* YNAB Connection */}
-      <Card>
+      <Card id="settings-budget">
         <CardHeader>
           <CardTitle>YNAB Connection</CardTitle>
           <CardDescription>
@@ -522,7 +522,7 @@ export default function SettingsPage() {
 
       {/* Accounts for Rewards Tracking */}
       {selectedBudget.id && (
-        <Card>
+        <Card id="settings-accounts">
           <CardHeader>
             <CardTitle>Accounts for Rewards Tracking</CardTitle>
             <CardDescription>
