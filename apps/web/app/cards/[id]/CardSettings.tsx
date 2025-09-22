@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -35,6 +35,22 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
     minimumSpend: card.minimumSpend,
     maximumSpend: card.maximumSpend,
   });
+
+  const hasUnsavedChanges = useMemo(() => {
+    const baselineRate = card.earningRate ?? (card.type === 'cashback' ? 1 : 1);
+    return (
+      (formData.name ?? card.name) !== card.name ||
+      (formData.issuer ?? card.issuer ?? '') !== (card.issuer ?? '') ||
+      (formData.type ?? card.type) !== card.type ||
+      (formData.active ?? card.active) !== card.active ||
+      (formData.billingCycleType ?? card.billingCycle?.type ?? 'calendar') !== (card.billingCycle?.type ?? 'calendar') ||
+      (formData.billingCycleDay ?? card.billingCycle?.dayOfMonth ?? 1) !== (card.billingCycle?.dayOfMonth ?? 1) ||
+      (formData.earningRate ?? baselineRate) !== baselineRate ||
+      (formData.earningBlockSize ?? card.earningBlockSize ?? null) !== (card.earningBlockSize ?? null) ||
+      (formData.minimumSpend ?? card.minimumSpend ?? null) !== (card.minimumSpend ?? null) ||
+      (formData.maximumSpend ?? card.maximumSpend ?? null) !== (card.maximumSpend ?? null)
+    );
+  }, [card, formData]);
 
   const handleFieldChange = (field: keyof CardEditState, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -220,6 +236,8 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
           onFieldChange={handleFieldChange}
           showNameAndIssuer={true}
           showCardType={true}
+          defaultExpanded={true}
+          isChanged={hasUnsavedChanges}
         />
 
         {/* Actions */}

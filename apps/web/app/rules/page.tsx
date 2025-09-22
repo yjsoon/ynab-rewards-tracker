@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Input } from '@/components/ui/input';
 import { 
   Save, 
   CreditCard as CreditCardIcon,
@@ -28,6 +29,8 @@ export default function RulesPage() {
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [changedCards, setChangedCards] = useState<Set<string>>(new Set());
+  const [selectedCards, setSelectedCards] = useState<Set<string>>(new Set());
+  const [batchRate, setBatchRate] = useState('');
 
   // Group cards by type
   const cashbackCards = cards.filter(card => card.type === 'cashback');
@@ -48,6 +51,8 @@ export default function RulesPage() {
       };
     });
     setEditState(initialState);
+    setChangedCards(new Set());
+    setSelectedCards(new Set());
   }, [cards]);
 
   const handleFieldChange = (cardId: string, field: keyof SingleCardEditState, value: any) => {
@@ -58,7 +63,77 @@ export default function RulesPage() {
         [field]: value
       }
     }));
-    setChangedCards(prev => new Set([...prev, cardId]));
+    setChangedCards(prev => {
+      const next = new Set(prev);
+      next.add(cardId);
+      return next;
+    });
+    setSaveSuccess(false);
+  };
+
+  const toggleCardSelection = (cardId: string) => {
+    setSelectedCards(prev => {
+      const next = new Set(prev);
+      if (next.has(cardId)) {
+        next.delete(cardId);
+      } else {
+        next.add(cardId);
+      }
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelectedCards(new Set());
+
+  const applyBatchActive = (active: boolean) => {
+    if (selectedCards.size === 0) return;
+
+    setEditState(prev => {
+      const next = { ...prev };
+      selectedCards.forEach(cardId => {
+        const current = next[cardId] ?? {};
+        next[cardId] = {
+          ...current,
+          active,
+        };
+      });
+      return next;
+    });
+
+    setChangedCards(prev => {
+      const next = new Set(prev);
+      selectedCards.forEach(id => next.add(id));
+      return next;
+    });
+    setSaveSuccess(false);
+  };
+
+  const handleApplyBatchRate = () => {
+    if (selectedCards.size === 0) return;
+    const parsed = parseFloat(batchRate);
+    if (!Number.isFinite(parsed)) {
+      return;
+    }
+
+    setEditState(prev => {
+      const next = { ...prev };
+      selectedCards.forEach(cardId => {
+        const current = next[cardId] ?? {};
+        next[cardId] = {
+          ...current,
+          earningRate: parsed,
+        };
+      });
+      return next;
+    });
+
+    setChangedCards(prev => {
+      const next = new Set(prev);
+      selectedCards.forEach(id => next.add(id));
+      return next;
+    });
+
+    setBatchRate('');
     setSaveSuccess(false);
   };
 
@@ -101,6 +176,9 @@ export default function RulesPage() {
     }
   };
 
+  const selectedCount = selectedCards.size;
+  const changedCount = changedCards.size;
+  const showStickyBar = selectedCount > 0 || changedCount > 0;
 
   if (cards.length === 0) {
     return (
@@ -121,28 +199,33 @@ export default function RulesPage() {
 
   return (
     <div className="container mx-auto max-w-6xl px-4 py-8">
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-bold">Card Rules & Settings</h1>
           <p className="text-muted-foreground mt-1">
             Configure earning rates, minimum spend, and billing cycles for all your cards
           </p>
         </div>
-        {changedCards.size > 0 && (
-          <div className="flex items-center gap-3">
-            <Badge variant="outline" className="bg-amber-100 dark:bg-amber-900/30">
-              {changedCards.size} unsaved {changedCards.size === 1 ? 'change' : 'changes'}
+        <div className="flex flex-wrap items-center gap-3">
+          {selectedCount > 0 && (
+            <Badge variant="secondary" className="bg-primary/10 text-primary">
+              {selectedCount} selected
             </Badge>
-            <Button 
-              onClick={handleSaveAll} 
-              disabled={saving}
-              className="gap-2"
-            >
-              <Save className="h-4 w-4" />
-              {saving ? 'Saving...' : 'Save All Changes'}
-            </Button>
-          </div>
-        )}
+          )}
+          {changedCount > 0 && (
+            <Badge variant="outline" className="bg-amber-100 dark:bg-amber-900/30">
+              {changedCount} unsaved {changedCount === 1 ? 'change' : 'changes'}
+            </Badge>
+          )}
+          <Button
+            onClick={handleSaveAll}
+            disabled={changedCount === 0 || saving}
+            className="gap-2"
+          >
+            <Save className="h-4 w-4" />
+            {saving ? 'Saving...' : 'Save all changes'}
+          </Button>
+        </div>
       </div>
 
       {saveSuccess && (
@@ -184,6 +267,18 @@ export default function RulesPage() {
                       state={editState[card.id] || {}}
                       onFieldChange={(field, value) => handleFieldChange(card.id, field, value)}
                       isChanged={changedCards.has(card.id)}
+                      isSelected={selectedCards.has(card.id)}
+                      leadingAccessory={(
+                        <div className="pt-1">
+                          <input
+                            type="checkbox"
+                            aria-label={`Select ${card.name}`}
+                            className="mt-2 h-4 w-4 cursor-pointer rounded border-border text-primary focus:ring-2 focus:ring-primary accent-primary"
+                            checked={selectedCards.has(card.id)}
+                            onChange={() => toggleCardSelection(card.id)}
+                          />
+                        </div>
+                      )}
                     />
                   ))}
                 </CardContent>
@@ -217,6 +312,18 @@ export default function RulesPage() {
                       state={editState[card.id] || {}}
                       onFieldChange={(field, value) => handleFieldChange(card.id, field, value)}
                       isChanged={changedCards.has(card.id)}
+                      isSelected={selectedCards.has(card.id)}
+                      leadingAccessory={(
+                        <div className="pt-1">
+                          <input
+                            type="checkbox"
+                            aria-label={`Select ${card.name}`}
+                            className="mt-2 h-4 w-4 cursor-pointer rounded border-border text-primary focus:ring-2 focus:ring-primary accent-primary"
+                            checked={selectedCards.has(card.id)}
+                            onChange={() => toggleCardSelection(card.id)}
+                          />
+                        </div>
+                      )}
                     />
                   ))}
                 </CardContent>
@@ -242,6 +349,80 @@ export default function RulesPage() {
           )}
         </TabsContent>
       </Tabs>
+
+      {showStickyBar && (
+        <div className="fixed bottom-6 left-1/2 z-40 w-full max-w-3xl -translate-x-1/2 rounded-2xl border bg-background/90 p-4 shadow-xl backdrop-blur">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold text-foreground">
+                {selectedCount > 0
+                  ? `${selectedCount} card${selectedCount === 1 ? '' : 's'} selected`
+                  : 'Keeping cards tidy'}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {changedCount > 0
+                  ? `${changedCount} card${changedCount === 1 ? ' has' : 's have'} unsaved edits`
+                  : 'Select cards to batch-edit or tweak details above'}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              {selectedCount > 0 && (
+                <>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => applyBatchActive(true)}
+                    >
+                      Mark active
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => applyBatchActive(false)}
+                    >
+                      Mark inactive
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      value={batchRate}
+                      onChange={(e) => setBatchRate(e.target.value)}
+                      placeholder="Rate"
+                      className="h-9 w-24"
+                      aria-label="Apply earning rate to selected cards"
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={batchRate.trim() === ''}
+                      onClick={handleApplyBatchRate}
+                    >
+                      Apply rate
+                    </Button>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={clearSelection}
+                  >
+                    Clear selection
+                  </Button>
+                </>
+              )}
+              <Button
+                onClick={handleSaveAll}
+                disabled={changedCount === 0 || saving}
+                className="gap-2"
+              >
+                <Save className="h-4 w-4" />
+                {saving ? 'Saving...' : 'Save changes'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
