@@ -83,6 +83,7 @@ interface CardSettingsEditorProps {
   defaultExpanded?: boolean;
   leadingAccessory?: React.ReactNode;
   isSelected?: boolean;
+  highlightUnsetMinimum?: boolean;
 }
 
 const capsuleBaseClasses =
@@ -95,6 +96,7 @@ function SettingCapsule({
   icon,
   children,
   isDirty,
+  emphasise = false,
   disabled = false,
 }: {
   label: string;
@@ -103,6 +105,7 @@ function SettingCapsule({
   icon?: React.ReactNode;
   children: React.ReactNode;
   isDirty?: boolean;
+  emphasise?: boolean;
   disabled?: boolean;
 }) {
   if (disabled) {
@@ -135,6 +138,8 @@ function SettingCapsule({
           type="button"
           className={`${capsuleBaseClasses} border-border bg-background/40 hover:bg-accent/40 ${
             isDirty ? 'border-amber-300 bg-amber-50/60 dark:border-amber-700 dark:bg-amber-900/20' : ''
+          } ${
+            emphasise ? 'border-sky-300 bg-sky-50/70 dark:border-sky-800 dark:bg-sky-900/25' : ''
           }`}
         >
           <div className="flex w-full items-center gap-3">
@@ -187,6 +192,7 @@ export function CardSettingsEditor({
   defaultExpanded = false,
   leadingAccessory,
   isSelected = false,
+  highlightUnsetMinimum = false,
 }: CardSettingsEditorProps) {
   const [advancedOpen, setAdvancedOpen] = useState(defaultExpanded);
 
@@ -204,6 +210,12 @@ export function CardSettingsEditor({
   const [blockSizeSnapshot, setBlockSizeSnapshot] = useState(() =>
     earningBlockSize && earningBlockSize > 0 ? earningBlockSize : 1
   );
+  const [minimumInputValue, setMinimumInputValue] = useState(() =>
+    minimumSpend === null || minimumSpend === undefined ? '' : String(minimumSpend)
+  );
+  const [maximumInputValue, setMaximumInputValue] = useState(() =>
+    maximumSpend === null || maximumSpend === undefined ? '' : String(maximumSpend)
+  );
 
   useEffect(() => {
     if (earningBlockSize && earningBlockSize > 0 && earningBlockSize !== blockSizeSnapshot) {
@@ -211,8 +223,17 @@ export function CardSettingsEditor({
     }
   }, [earningBlockSize, blockSizeSnapshot]);
 
+  useEffect(() => {
+    setMinimumInputValue(minimumSpend === null || minimumSpend === undefined ? '' : String(minimumSpend));
+  }, [minimumSpend]);
+
+  useEffect(() => {
+    setMaximumInputValue(maximumSpend === null || maximumSpend === undefined ? '' : String(maximumSpend));
+  }, [maximumSpend]);
+
   const minimumStatus = getMinimumSpendStatus(minimumSpend);
   const maximumStatus = getMaximumSpendStatus(maximumSpend);
+  const shouldHighlightMinimum = highlightUnsetMinimum && minimumStatus === 'not-configured';
 
   const fieldDirty = useMemo(() => computeCardFieldDiff(card, state), [card, state]);
 
@@ -435,6 +456,7 @@ export function CardSettingsEditor({
           value={formatMinimumSpendText(minimumSpend)}
           icon={<Target className="h-4 w-4 text-muted-foreground" />}
           isDirty={fieldDirty.minimumSpend}
+          emphasise={shouldHighlightMinimum}
         >
           <div className="space-y-3">
             <Select
@@ -442,10 +464,14 @@ export function CardSettingsEditor({
               onValueChange={(value) => {
                 if (value === 'not-configured') {
                   onFieldChange('minimumSpend', null);
+                  setMinimumInputValue('');
                 } else if (value === 'no-minimum') {
                   onFieldChange('minimumSpend', 0);
+                  setMinimumInputValue('0');
                 } else {
-                  onFieldChange('minimumSpend', minimumSpend && minimumSpend > 0 ? minimumSpend : 1000);
+                  const nextValue = minimumSpend && minimumSpend > 0 ? minimumSpend : 1000;
+                  onFieldChange('minimumSpend', nextValue);
+                  setMinimumInputValue(String(nextValue));
                 }
               }}
             >
@@ -460,13 +486,28 @@ export function CardSettingsEditor({
                 ))}
               </SelectContent>
             </Select>
-            {minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0 && (
+            {minimumStatus === 'has-minimum' && (
               <div className="relative">
                 <DollarSign className="absolute left-3 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   type="number"
-                  value={minimumSpend}
-                  onChange={(e) => onFieldChange('minimumSpend', parseFloat(e.target.value) || 0)}
+                  value={minimumInputValue}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setMinimumInputValue(value);
+                    if (value === '') {
+                      return;
+                    }
+                    const parsed = Number(value);
+                    if (Number.isFinite(parsed)) {
+                      onFieldChange('minimumSpend', parsed);
+                    }
+                  }}
+                  onBlur={() => {
+                    if (minimumInputValue === '') {
+                      onFieldChange('minimumSpend', null);
+                    }
+                  }}
                   step="50"
                   min="0"
                   max="100000"
@@ -490,10 +531,14 @@ export function CardSettingsEditor({
               onValueChange={(value) => {
                 if (value === 'not-configured') {
                   onFieldChange('maximumSpend', null);
+                  setMaximumInputValue('');
                 } else if (value === 'no-limit') {
                   onFieldChange('maximumSpend', 0);
+                  setMaximumInputValue('0');
                 } else {
-                  onFieldChange('maximumSpend', maximumSpend && maximumSpend > 0 ? maximumSpend : 5000);
+                  const nextValue = maximumSpend && maximumSpend > 0 ? maximumSpend : 5000;
+                  onFieldChange('maximumSpend', nextValue);
+                  setMaximumInputValue(String(nextValue));
                 }
               }}
             >
@@ -508,13 +553,28 @@ export function CardSettingsEditor({
                 ))}
               </SelectContent>
             </Select>
-            {maximumSpend !== null && maximumSpend !== undefined && maximumSpend > 0 && (
+            {maximumStatus === 'has-limit' && (
               <div className="relative">
                 <DollarSign className="absolute left-3 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   type="number"
-                  value={maximumSpend}
-                  onChange={(e) => onFieldChange('maximumSpend', parseFloat(e.target.value) || 0)}
+                  value={maximumInputValue}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setMaximumInputValue(value);
+                    if (value === '') {
+                      return;
+                    }
+                    const parsed = Number(value);
+                    if (Number.isFinite(parsed)) {
+                      onFieldChange('maximumSpend', parsed);
+                    }
+                  }}
+                  onBlur={() => {
+                    if (maximumInputValue === '') {
+                      onFieldChange('maximumSpend', null);
+                    }
+                  }}
                   step="50"
                   min="0"
                   max="100000"

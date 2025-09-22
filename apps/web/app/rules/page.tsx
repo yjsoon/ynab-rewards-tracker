@@ -311,6 +311,7 @@ export default function RulesPage() {
                       isChanged={changedCards.has(card.id)}
                       isSelected={selectedCards.has(card.id)}
                       showCardType
+                      highlightUnsetMinimum
                       leadingAccessory={(
                         <div className="pt-1">
                           <input
@@ -357,6 +358,7 @@ export default function RulesPage() {
                       isChanged={changedCards.has(card.id)}
                       isSelected={selectedCards.has(card.id)}
                       showCardType
+                      highlightUnsetMinimum
                       leadingAccessory={(
                         <div className="pt-1">
                           <input

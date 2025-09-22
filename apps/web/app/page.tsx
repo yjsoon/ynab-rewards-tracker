@@ -221,6 +221,11 @@ export default function DashboardPage() {
     [setupStatus]
   );
 
+  const hasUnsetMinimumSpend = useMemo(
+    () => cards.some(card => card.minimumSpend === null || card.minimumSpend === undefined),
+    [cards]
+  );
+
   const setupProgress = useMemo(() => 
     Object.values(setupStatus).filter(Boolean).length,
     [setupStatus]
@@ -354,7 +359,7 @@ export default function DashboardPage() {
         </Alert>
       )}
 
-      {isFullyConfigured && cards.length > 0 && rules.length === 0 && (
+      {isFullyConfigured && cards.length > 0 && rules.length === 0 && hasUnsetMinimumSpend && (
         <Alert className="mb-6 border-primary/20 bg-primary/5">
           <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
             <span>
