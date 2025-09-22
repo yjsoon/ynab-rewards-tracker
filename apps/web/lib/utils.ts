@@ -22,8 +22,11 @@ export function absFromMilli(amount: number): number {
 /**
  * Format a dollar amount for display
  */
-export function formatDollars(value: number): string {
-  return `$${value.toFixed(2)}`;
+export function formatDollars(value: number, locale: string = 'en-US'): string {
+  return `$${value.toLocaleString(locale, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 /**
