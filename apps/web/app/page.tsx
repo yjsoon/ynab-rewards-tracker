@@ -39,7 +39,7 @@ const RECENT_TRANSACTIONS_LIMIT = 10;
 const createSettingsClickHandler = (cardId: string) => (e: React.MouseEvent) => {
   e.preventDefault();
   e.stopPropagation();
-  window.location.href = `/cards/${cardId}?tab=settings`;
+  window.location.href = `/cards/${cardId}?tab=settings&edit=1`;
 };
 
 // Types for better type safety
@@ -88,9 +88,9 @@ export default function DashboardPage() {
       accounts.forEach((acc: any) => accMap.set(acc.id, acc.name));
       setAccountsMap(accMap);
       
-      // Compute earliest needed window across active cards (for card tiles)
-      const activeCards = cards.filter(c => c.active);
-      const periods = activeCards.map(c => SimpleRewardsCalculator.calculatePeriod(c));
+      // Compute earliest needed window across featured cards (for card tiles)
+      const featuredCards = cards.filter(c => c.featured ?? true);
+      const periods = featuredCards.map(c => SimpleRewardsCalculator.calculatePeriod(c));
       const earliestStart = periods.length > 0
         ? new Date(Math.min(...periods.map(p => new Date(p.start).getTime())))
         : (() => { const d = new Date(); d.setDate(d.getDate() - TRANSACTION_LOOKBACK_DAYS); return d; })();
@@ -190,8 +190,9 @@ export default function DashboardPage() {
       return clampDaysLeft(periodDate, now);
     };
 
-    const cashback = cards.filter(c => c.type === 'cashback');
-    const miles = cards.filter(c => c.type === 'miles');
+    const featuredCards = cards.filter(c => c.featured ?? true);
+    const cashback = featuredCards.filter(c => c.type === 'cashback');
+    const miles = featuredCards.filter(c => c.type === 'miles');
 
     cashback.sort((a, b) => getDaysRemaining(a) - getDaysRemaining(b));
     miles.sort((a, b) => getDaysRemaining(a) - getDaysRemaining(b));

@@ -21,6 +21,7 @@ export default function CardDetailPage() {
   const searchParams = useSearchParams();
   const cardId = params.id as string;
   const defaultTab = searchParams.get('tab') || 'settings';
+  const startEditing = searchParams.get('edit') === '1' || searchParams.get('edit') === 'true';
   
   const { cards } = useCreditCards();
   const { pat } = useYnabPAT();
@@ -67,7 +68,7 @@ export default function CardDetailPage() {
             <h1 className="text-3xl font-bold">{card.name}</h1>
             <p className="text-muted-foreground mt-1">
               {card.type === 'cashback' ? 'Cashback Rewards' : 'Miles Rewards'} •
-              {card.active ? ' Active' : ' Inactive'}
+              {card.featured ? ' Featured on dashboard' : ' Hidden from dashboard'}
             </p>
           </div>
         </div>
@@ -99,7 +100,11 @@ export default function CardDetailPage() {
         </TabsList>
 
         <TabsContent value="settings" className="mt-6">
-          <CardSettings card={card} onUpdate={(updatedCard) => setCard(updatedCard)} />
+          <CardSettings
+            card={card}
+            onUpdate={(updatedCard) => setCard(updatedCard)}
+            initialEditing={startEditing}
+          />
         </TabsContent>
 
         <TabsContent value="transactions" className="mt-6">

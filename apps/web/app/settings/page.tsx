@@ -63,7 +63,7 @@ function buildTrackedCard(accountId: string, accountName: string): CreditCard {
     name: accountName,
     issuer: 'Unknown',
     type: 'cashback',
-    active: true,
+    featured: true,
     ynabAccountId: accountId,
     billingCycle: {
       type: 'calendar',

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -8,16 +8,17 @@ import { Save, AlertCircle } from 'lucide-react';
 import { useCreditCards } from '@/hooks/useLocalStorage';
 import type { CreditCard } from '@/lib/storage';
 import { validateIssuer, sanitizeInput } from '@/lib/validation';
-import { CardSettingsEditor, type CardEditState } from '@/components/CardSettingsEditor';
+import { CardSettingsEditor, computeCardFieldDiff, type CardEditState } from '@/components/CardSettingsEditor';
 
 interface CardSettingsProps {
   card: CreditCard;
   onUpdate: (card: CreditCard) => void;
+  initialEditing?: boolean;
 }
 
-export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
+export default function CardSettings({ card, onUpdate, initialEditing = false }: CardSettingsProps) {
   const { updateCard } = useCreditCards();
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(initialEditing);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [issuerError, setIssuerError] = useState('');
@@ -26,7 +27,7 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
     name: card.name,
     issuer: card.issuer || '',
     type: card.type,
-    active: card.active,
+    featured: card.featured ?? true,
     billingCycleType: card.billingCycle?.type || 'calendar',
     billingCycleDay: card.billingCycle?.dayOfMonth || 1,
     earningRate: card.earningRate || (card.type === 'cashback' ? 1 : 1),
@@ -35,7 +36,10 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
     maximumSpend: card.maximumSpend,
   });
 
-  const handleFieldChange = (field: keyof CardEditState, value: any) => {
+  const fieldDiffs = useMemo(() => computeCardFieldDiff(card, formData), [card, formData]);
+  const hasUnsavedChanges = useMemo(() => Object.values(fieldDiffs).some(Boolean), [fieldDiffs]);
+
+  const handleFieldChange = (field: keyof CardEditState, value: unknown) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     if (field === 'issuer') {
       setIssuerError('');
@@ -63,7 +67,7 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
         name: formData.name || card.name,
         issuer: formData.issuer ? sanitizeInput(formData.issuer) : card.issuer,
         type: formData.type || card.type,
-        active: formData.active !== undefined ? formData.active : card.active,
+        featured: formData.featured !== undefined ? formData.featured : (card.featured ?? true),
         billingCycle: formData.billingCycleType === 'billing'
           ? { type: 'billing', dayOfMonth: formData.billingCycleDay || 1 }
           : { type: 'calendar' },
@@ -88,7 +92,7 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
       name: card.name,
       issuer: card.issuer || '',
       type: card.type,
-      active: card.active,
+      featured: card.featured ?? true,
       billingCycleType: card.billingCycle?.type || 'calendar',
       billingCycleDay: card.billingCycle?.dayOfMonth || 1,
       earningRate: card.earningRate || (card.type === 'cashback' ? 1 : 1),
@@ -132,9 +136,9 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
               </p>
             </div>
             <div>
-              <p className="text-sm font-medium text-muted-foreground">Status</p>
+              <p className="text-sm font-medium text-muted-foreground">Dashboard placement</p>
               <p className="mt-1 font-medium">
-                {card.active ? 'Active' : 'Inactive'}
+                {card.featured ? 'Featured on dashboard' : 'Hidden from dashboard'}
               </p>
             </div>
             <div>
@@ -219,6 +223,8 @@ export default function CardSettings({ card, onUpdate }: CardSettingsProps) {
           onFieldChange={handleFieldChange}
           showNameAndIssuer={true}
           showCardType={true}
+          defaultExpanded={true}
+          isChanged={hasUnsavedChanges}
         />
 
         {/* Actions */}

@@ -13,7 +13,7 @@ export interface CreditCard {
     type: 'calendar' | 'billing';
     dayOfMonth?: number; // for billing cycle
   };
-  active: boolean;
+  featured: boolean; // Controls dashboard visibility; tracking is handled in settings
   // Earning rates (replaces the complex rules system)
   earningRate?: number; // For cashback: percentage (e.g., 2 for 2%). For miles: miles per dollar (e.g., 1.5)
   // Earning block size for block-based earning (e.g., 1 mile per $5 spent)
@@ -121,15 +121,21 @@ class StorageService {
         // Migrate existing cards without billingCycle
         if (data.cards) {
           data.cards = data.cards.map((card: any) => {
-            if (!card.billingCycle) {
-              return {
-                ...card,
-                billingCycle: {
-                  type: 'calendar' as const // dayOfMonth only applies to 'billing'
-                }
+            const nextCard = { ...card };
+            if (!nextCard.billingCycle) {
+              nextCard.billingCycle = {
+                type: 'calendar' as const // dayOfMonth only applies to 'billing'
               };
             }
-            return card;
+            if (typeof nextCard.featured !== 'boolean') {
+              nextCard.featured = typeof nextCard.active === 'boolean' ? nextCard.active : true;
+            }
+            // Remove 'active' property cleanly using destructuring
+            if ('active' in nextCard) {
+              const { active, ...cleanCard } = nextCard;
+              return cleanCard;
+            }
+            return nextCard;
           });
         }
         // Migrations: field renames and defaults
