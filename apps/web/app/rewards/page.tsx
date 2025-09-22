@@ -37,7 +37,7 @@ export default function RewardsDashboardPage() {
   const [alerts, setAlerts] = useState<any[]>([]);
   const [lastComputedAt, setLastComputedAt] = useState<string | null>(null);
 
-  const activeCards = cards.filter(card => card.active);
+  const trackedCards = cards;
   const activeRules = rules.filter(rule => rule.active);
 
   // Calculate summary stats
@@ -60,11 +60,11 @@ export default function RewardsDashboardPage() {
     setCurrentPeriodSpend(totalSpend);
 
     // Generate alerts
-    const cardAlerts = RecommendationEngine.generateAlerts(activeCards, currentMonthCalcs);
+    const cardAlerts = RecommendationEngine.generateAlerts(trackedCards, currentMonthCalcs);
     setAlerts(cardAlerts);
-  }, [calculations, activeCards, rules]);
+  }, [calculations, trackedCards, rules]);
 
-  const hasData = activeCards.length > 0 && activeRules.length > 0;
+  const hasData = trackedCards.length > 0 && activeRules.length > 0;
 
   // Load last computed timestamp on mount
   useEffect(() => {
@@ -95,7 +95,7 @@ export default function RewardsDashboardPage() {
       const calcs = await computeCurrentPeriod(
         pat,
         budget.id,
-        activeCards,
+        trackedCards,
         rules,
         settings,
         controller.signal
@@ -119,7 +119,7 @@ export default function RewardsDashboardPage() {
     } finally {
       setComputing(false);
     }
-  }, [activeCards, rules, saveCalculation]);
+  }, [trackedCards, rules, saveCalculation]);
 
   useEffect(() => {
     return () => {
@@ -231,11 +231,11 @@ export default function RewardsDashboardPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Cards</CardTitle>
+          <CardTitle className="text-sm font-medium">Tracked Cards</CardTitle>
             <Target className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{activeCards.length}</div>
+            <div className="text-2xl font-bold">{trackedCards.length}</div>
             <p className="text-xs text-muted-foreground">{activeRules.length} reward rules</p>
           </CardContent>
         </Card>
@@ -266,7 +266,7 @@ export default function RewardsDashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {activeCards.map(card => {
+              {trackedCards.map(card => {
                 const cardCalcs = calculations.filter(calc => calc.cardId === card.id);
                 const cardRewards = cardCalcs.reduce((sum, calc) => {
                   const dollars = (calc.rewardEarnedDollars ?? (calc.rewardType === 'cashback' ? calc.rewardEarned : 0));

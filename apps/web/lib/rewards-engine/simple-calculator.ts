@@ -224,14 +224,14 @@ export class SimpleRewardsCalculator {
     period: CalculationPeriod,
     settings?: AppSettings
   ): { card: CreditCard; calculation: SimplifiedCalculation } | null {
-    const activeCards = cards.filter(c => c.active && c.earningRate);
+    const eligibleCards = cards.filter(c => c.earningRate);
 
-    if (activeCards.length === 0) return null;
+    if (eligibleCards.length === 0) return null;
 
-    let bestCard = activeCards[0];
+    let bestCard = eligibleCards[0];
     let bestCalculation = this.calculateCardRewards(bestCard, transactions, period, settings);
 
-    for (const card of activeCards.slice(1)) {
+    for (const card of eligibleCards.slice(1)) {
       const calculation = this.calculateCardRewards(card, transactions, period, settings);
       if (calculation.rewardEarnedDollars > bestCalculation.rewardEarnedDollars) {
         bestCard = card;

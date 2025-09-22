@@ -47,7 +47,7 @@ export default function RulesPage() {
         maximumSpend: card.maximumSpend,
         billingCycleType: card.billingCycle?.type || 'calendar',
         billingCycleDay: card.billingCycle?.dayOfMonth || 1,
-        active: card.active
+        featured: card.featured ?? true,
       };
     });
     setEditState(initialState);
@@ -85,7 +85,7 @@ export default function RulesPage() {
 
   const clearSelection = () => setSelectedCards(new Set());
 
-  const applyBatchActive = (active: boolean) => {
+  const applyBatchFeatured = (featured: boolean) => {
     if (selectedCards.size === 0) return;
 
     setEditState(prev => {
@@ -94,7 +94,7 @@ export default function RulesPage() {
         const current = next[cardId] ?? {};
         next[cardId] = {
           ...current,
-          active,
+          featured,
         };
       });
       return next;
@@ -160,7 +160,7 @@ export default function RulesPage() {
           billingCycle: changes.billingCycleType === 'billing' 
             ? { type: 'billing', dayOfMonth: changes.billingCycleDay }
             : { type: 'calendar' },
-          active: changes.active !== undefined ? changes.active : card.active
+          featured: changes.featured !== undefined ? changes.featured : (card.featured ?? true),
         };
 
         updateCard(updatedCard);
@@ -372,16 +372,16 @@ export default function RulesPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => applyBatchActive(true)}
+                      onClick={() => applyBatchFeatured(true)}
                     >
-                      Mark active
+                      Feature on dashboard
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => applyBatchActive(false)}
+                      onClick={() => applyBatchFeatured(false)}
                     >
-                      Mark inactive
+                      Hide from dashboard
                     </Button>
                   </div>
                   <div className="flex items-center gap-2">

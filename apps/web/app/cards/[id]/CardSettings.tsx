@@ -27,7 +27,7 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
     name: card.name,
     issuer: card.issuer || '',
     type: card.type,
-    active: card.active,
+    featured: card.featured ?? true,
     billingCycleType: card.billingCycle?.type || 'calendar',
     billingCycleDay: card.billingCycle?.dayOfMonth || 1,
     earningRate: card.earningRate || (card.type === 'cashback' ? 1 : 1),
@@ -42,7 +42,7 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
       (formData.name ?? card.name) !== card.name ||
       (formData.issuer ?? card.issuer ?? '') !== (card.issuer ?? '') ||
       (formData.type ?? card.type) !== card.type ||
-      (formData.active ?? card.active) !== card.active ||
+      (formData.featured ?? card.featured ?? true) !== (card.featured ?? true) ||
       (formData.billingCycleType ?? card.billingCycle?.type ?? 'calendar') !== (card.billingCycle?.type ?? 'calendar') ||
       (formData.billingCycleDay ?? card.billingCycle?.dayOfMonth ?? 1) !== (card.billingCycle?.dayOfMonth ?? 1) ||
       (formData.earningRate ?? baselineRate) !== baselineRate ||
@@ -80,7 +80,7 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
         name: formData.name || card.name,
         issuer: formData.issuer ? sanitizeInput(formData.issuer) : card.issuer,
         type: formData.type || card.type,
-        active: formData.active !== undefined ? formData.active : card.active,
+        featured: formData.featured !== undefined ? formData.featured : (card.featured ?? true),
         billingCycle: formData.billingCycleType === 'billing'
           ? { type: 'billing', dayOfMonth: formData.billingCycleDay || 1 }
           : { type: 'calendar' },
@@ -105,7 +105,7 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
       name: card.name,
       issuer: card.issuer || '',
       type: card.type,
-      active: card.active,
+      featured: card.featured ?? true,
       billingCycleType: card.billingCycle?.type || 'calendar',
       billingCycleDay: card.billingCycle?.dayOfMonth || 1,
       earningRate: card.earningRate || (card.type === 'cashback' ? 1 : 1),
@@ -149,9 +149,9 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
               </p>
             </div>
             <div>
-              <p className="text-sm font-medium text-muted-foreground">Status</p>
+              <p className="text-sm font-medium text-muted-foreground">Dashboard placement</p>
               <p className="mt-1 font-medium">
-                {card.active ? 'Active' : 'Inactive'}
+                {card.featured ? 'Featured on dashboard' : 'Hidden from dashboard'}
               </p>
             </div>
             <div>

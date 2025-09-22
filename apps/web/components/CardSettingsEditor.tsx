@@ -36,7 +36,7 @@ export interface CardEditState {
   maximumSpend?: number | null;
   billingCycleType?: 'calendar' | 'billing';
   billingCycleDay?: number;
-  active?: boolean;
+  featured?: boolean;
   name?: string;
   issuer?: string;
   type?: 'cashback' | 'miles';
@@ -160,7 +160,7 @@ export function CardSettingsEditor({
   const maximumSpend = state.maximumSpend ?? card.maximumSpend ?? null;
   const billingCycleType = state.billingCycleType ?? card.billingCycle?.type ?? 'calendar';
   const billingCycleDay = state.billingCycleDay ?? card.billingCycle?.dayOfMonth ?? 1;
-  const isActive = state.active ?? card.active;
+  const isFeatured = state.featured ?? card.featured ?? true;
 
   const minimumStatus = getMinimumSpendStatus(minimumSpend);
   const maximumStatus = getMaximumSpendStatus(maximumSpend);
@@ -169,7 +169,7 @@ export function CardSettingsEditor({
     name: (state.name ?? card.name) !== card.name,
     issuer: (state.issuer ?? card.issuer ?? '') !== (card.issuer ?? ''),
     type: (state.type ?? card.type) !== card.type,
-    active: (state.active ?? card.active) !== card.active,
+    featured: (state.featured ?? card.featured ?? true) !== (card.featured ?? true),
     earningRate: (state.earningRate ?? card.earningRate ?? 1) !== (card.earningRate ?? 1),
     earningBlockSize:
       (state.earningBlockSize ?? card.earningBlockSize ?? null) !==
@@ -224,13 +224,17 @@ export function CardSettingsEditor({
                 : `${earningRate.toFixed(2)} miles/$1`}
             </span>
           </div>
-          <div className="flex items-center gap-2 rounded-full border px-3 py-1">
+          <div
+            className={`flex items-center gap-2 rounded-full border px-3 py-1 ${
+              fieldDirty.featured ? 'border-amber-300 bg-amber-50/60 dark:border-amber-700 dark:bg-amber-900/20' : ''
+            }`}
+          >
             <Switch
-              id={`active-${card.id}`}
-              checked={isActive}
-              onCheckedChange={(checked) => onFieldChange('active', checked)}
+              id={`featured-${card.id}`}
+              checked={isFeatured}
+              onCheckedChange={(checked) => onFieldChange('featured', checked)}
             />
-            <Label htmlFor={`active-${card.id}`} className="text-sm">Active</Label>
+            <Label htmlFor={`featured-${card.id}`} className="text-sm">Featured</Label>
           </div>
         </div>
       </div>
@@ -324,7 +328,7 @@ export function CardSettingsEditor({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="exact">Exact amount (down to the penny)</SelectItem>
-                <SelectItem value="blocks">Fixed pound blocks</SelectItem>
+                <SelectItem value="blocks">Fixed dollar blocks</SelectItem>
               </SelectContent>
             </Select>
             {earningBlockSize && earningBlockSize > 0 && (
@@ -524,7 +528,7 @@ export function CardSettingsEditor({
             <div className="rounded-lg border border-dashed bg-muted/20 p-4">
               <p className="font-medium text-foreground">Batch editing tips</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                Select multiple cards on the Rules page to adjust status or earning rates in one go. A sticky bar will surface any unsaved updates at the bottom so you can commit changes quickly.
+                Select multiple cards on the Rules page to adjust featured state or earning rates in one go. A sticky bar will surface any unsaved updates at the bottom so you can commit changes quickly.
               </p>
             </div>
           </div>

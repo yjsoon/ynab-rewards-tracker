@@ -38,17 +38,17 @@ export async function computeCurrentPeriod(
   const client = new YnabClient(pat);
   const results: RewardCalculation[] = [];
 
-  const activeCards = cards.filter(c => c.active);
-  if (activeCards.length === 0) return results;
+  const trackedCards = cards.filter(c => !!c.ynabAccountId);
+  if (trackedCards.length === 0) return results;
 
   // Optimisation: single fetch for all transactions since the earliest period start
-  const periods = activeCards.map(c => RewardsCalculator.calculatePeriod(c));
+  const periods = trackedCards.map(c => RewardsCalculator.calculatePeriod(c));
   const earliest = periods.reduce((min, p) => p.startDate < min ? p.startDate : min, periods[0].startDate);
   const since = formatIsoDate(earliest);
   const allTxns = await client.getTransactions(budgetId, { since_date: since, signal });
 
-  for (let i = 0; i < activeCards.length; i++) {
-    const card = activeCards[i];
+  for (let i = 0; i < trackedCards.length; i++) {
+    const card = trackedCards[i];
     const period = periods[i];
 
     const forCard = TransactionMatcher.filterForCard(allTxns, card.ynabAccountId);
