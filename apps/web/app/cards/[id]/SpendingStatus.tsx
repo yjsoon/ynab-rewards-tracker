@@ -187,7 +187,7 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
               </div>
               <p className="text-2xl font-bold">
                 {!minimumSpendMet && minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0
-                  ? 'No rewards yet'
+                  ? 'No reward'
                   : card.type === 'cashback'
                   ? formatDollars(rewardEarned)
                   : `${Math.round(rewardEarned).toLocaleString()} miles`}

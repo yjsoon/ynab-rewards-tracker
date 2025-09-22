@@ -157,7 +157,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
   }[rewardTileState];
 
   const rewardValue = !minimumSpendMet && hasMinimum
-    ? 'No rewards yet'
+    ? 'No reward'
     : card.type === 'cashback'
     ? formatDollars(rewardEarned)
     : `${Math.round(rewardEarned).toLocaleString()}`;
