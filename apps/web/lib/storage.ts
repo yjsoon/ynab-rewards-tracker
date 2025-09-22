@@ -107,6 +107,8 @@ export interface StorageData {
 
 const STORAGE_KEY = 'ynab-rewards-tracker';
 const UI_SEEN_SETUP_KEY = 'ynab-rewards-tracker:hasSeenSetupPrompt';
+const STORAGE_VERSION_KEY = 'ynab-rewards-tracker:data-version';
+const STORAGE_VERSION = '2025-09-22-reset';
 
 type MutableCard = CreditCard & Record<string, unknown> & { active?: boolean };
 type MutableRule = RewardRule & Record<string, unknown>;
@@ -115,11 +117,30 @@ type MutableCategoryBreakdown = CategoryBreakdown & Record<string, unknown>;
 type MutableSettings = AppSettings & Record<string, unknown>;
 
 class StorageService {
+  private ensureVersion(): void {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    try {
+      const storedVersion = localStorage.getItem(STORAGE_VERSION_KEY);
+      if (storedVersion !== STORAGE_VERSION) {
+        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(UI_SEEN_SETUP_KEY);
+        localStorage.setItem(STORAGE_VERSION_KEY, STORAGE_VERSION);
+      }
+    } catch {
+      // Silently ignore storage availability issues
+    }
+  }
+
   private getStorage(): StorageData {
     if (typeof window === 'undefined') {
       return this.getDefaultStorage();
     }
     
+    this.ensureVersion();
+
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
@@ -329,6 +350,7 @@ class StorageService {
     
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      localStorage.setItem(STORAGE_VERSION_KEY, STORAGE_VERSION);
     } catch (error) {
       // Log error in development, but continue gracefully
       // Storage may be full, disabled, or in private browsing mode
@@ -600,6 +622,8 @@ class StorageService {
   clearAll(): void {
     if (typeof window === 'undefined') return;
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(UI_SEEN_SETUP_KEY);
+    localStorage.removeItem(STORAGE_VERSION_KEY);
   }
 }
 
