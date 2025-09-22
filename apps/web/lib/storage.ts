@@ -129,8 +129,11 @@ class StorageService {
         localStorage.removeItem(UI_SEEN_SETUP_KEY);
         localStorage.setItem(STORAGE_VERSION_KEY, STORAGE_VERSION);
       }
-    } catch {
-      // Silently ignore storage availability issues
+    } catch (error) {
+      // Log error in development, but silently ignore in production
+      if (process.env.NODE_ENV === 'development') {
+        console.error('StorageService.ensureVersion: Failed to access localStorage:', error);
+      }
     }
   }
 
@@ -183,7 +186,7 @@ class StorageService {
               const mutableCalc: MutableCalculation = { ...calc } as MutableCalculation;
 
               if ('rewardEarnedUSD' in mutableCalc && mutableCalc.rewardEarnedDollars == null) {
-                mutableCalc.rewardEarnedDollars = Number(mutableCalc.rewardEarnedUSD);
+                mutableCalc.rewardEarnedDollars = Number(mutableCalc.rewardEarnedUSD ?? 0);
                 Reflect.deleteProperty(mutableCalc, 'rewardEarnedUSD');
               }
               // Migration: collapse 'points' into 'miles'
@@ -195,7 +198,7 @@ class StorageService {
                 mutableCalc.categoryBreakdowns = mutableCalc.categoryBreakdowns.map((cb) => {
                   const mutableBreakdown: MutableCategoryBreakdown = { ...cb } as MutableCategoryBreakdown;
                   if ('rewardUSD' in mutableBreakdown && mutableBreakdown.rewardDollars == null) {
-                    mutableBreakdown.rewardDollars = Number(mutableBreakdown.rewardUSD);
+                    mutableBreakdown.rewardDollars = Number(mutableBreakdown.rewardUSD ?? 0);
                     Reflect.deleteProperty(mutableBreakdown, 'rewardUSD');
                   }
                   return mutableBreakdown as CategoryBreakdown;

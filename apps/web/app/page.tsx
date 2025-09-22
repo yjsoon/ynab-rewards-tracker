@@ -33,8 +33,10 @@ import type { Transaction } from '@/types/transaction';
 const TRANSACTION_LOOKBACK_DAYS = 30;
 const RECENT_TRANSACTIONS_LIMIT = 10;
 
-const arraysEqual = (a: string[], b: string[]) =>
-  a.length === b.length && a.every((value, index) => value === b[index]);
+const arraysEqual = (a: string[], b: string[]) => {
+  if (a.length !== b.length) return false;
+  return a.every((value, index) => value === b[index]);
+};
 
 // Helper functions
 const createSettingsClickHandler = (cardId: string) => (e: React.MouseEvent) => {
