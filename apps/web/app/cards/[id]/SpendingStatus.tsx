@@ -269,7 +269,7 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                No earning rate configured. Set your card's earning rate in Settings to track rewards.
+                No earning rate configured. Set your card&apos;s earning rate in Settings to track rewards.
               </AlertDescription>
             </Alert>
           )}
