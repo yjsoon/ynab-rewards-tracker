@@ -162,7 +162,7 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-2xl">Current Period Status</CardTitle>
+              <CardTitle className="text-2xl">This Period</CardTitle>
               <div className="flex items-center gap-2 mt-2 text-sm text-muted-foreground">
                 <Calendar className="h-4 w-4" />
                 {new Date(period.start).toLocaleDateString()} - {new Date(period.end).toLocaleDateString()}
@@ -175,7 +175,7 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
         </CardHeader>
         <CardContent className="space-y-6">
           {/* Spending Summary */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className={`grid grid-cols-1 ${card.type === 'cashback' ? 'md:grid-cols-2' : 'md:grid-cols-3'} gap-4`}>
             <div className="p-4 rounded-lg bg-muted/50">
               <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
                 <DollarSign className="h-4 w-4" />
@@ -201,25 +201,28 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
               )}
             </div>
 
-            <div className="p-4 rounded-lg bg-muted/50">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-                <DollarSign className="h-4 w-4" />
-                Reward Value
-              </div>
-              <p className="text-2xl font-bold">
-                {!minimumSpendMet && minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0
-                  ? formatCurrency(0)
-                  : formatCurrency(rewardEarnedDollars)}
-              </p>
-              {card.type === 'miles' && minimumSpendMet && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  @ ${settings?.milesValuation || 0.01}/mile
+            {/* Only show Reward Value for miles cards since it's different from miles earned */}
+            {card.type === 'miles' && (
+              <div className="p-4 rounded-lg bg-muted/50">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+                  <DollarSign className="h-4 w-4" />
+                  Dollar Value
+                </div>
+                <p className="text-2xl font-bold">
+                  {!minimumSpendMet && minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0
+                    ? formatCurrency(0)
+                    : formatCurrency(rewardEarnedDollars)}
                 </p>
-              )}
-              {!minimumSpendMet && minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0 && (
-                <p className="text-xs text-muted-foreground mt-1">Minimum not met</p>
-              )}
-            </div>
+                {minimumSpendMet && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    @ ${settings?.milesValuation || 0.01}/mile
+                  </p>
+                )}
+                {!minimumSpendMet && minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0 && (
+                  <p className="text-xs text-muted-foreground mt-1">Minimum not met</p>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Earning Block Info */}
