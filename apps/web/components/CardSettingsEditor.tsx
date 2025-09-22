@@ -221,7 +221,7 @@ export function CardSettingsEditor({
             <span className="block text-xl font-semibold text-primary">
               {cardType === 'cashback'
                 ? `${earningRate.toFixed(2)}%`
-                : `${earningRate.toFixed(2)} miles/£1`}
+                : `${earningRate.toFixed(2)} miles/$1`}
             </span>
           </div>
           <div className="flex items-center gap-2 rounded-full border px-3 py-1">
@@ -284,16 +284,16 @@ export function CardSettingsEditor({
 
         <SettingCapsule
           label={cardType === 'cashback' ? 'Cashback rate' : 'Miles rate'}
-          description={cardType === 'cashback' ? 'Percentage earned on spend' : 'Miles earned per pound'}
+          description={cardType === 'cashback' ? 'Percentage earned on spend' : 'Miles earned per dollar'}
           value={cardType === 'cashback'
             ? `${earningRate.toFixed(2)}%`
-            : `${earningRate.toFixed(2)} miles/£1`}
+            : `${earningRate.toFixed(2)} miles/$1`}
           icon={<Percent className="h-4 w-4 text-muted-foreground" />}
           isDirty={fieldDirty.earningRate}
         >
           <div className="space-y-2">
             <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-              {cardType === 'cashback' ? 'Cashback percentage' : 'Miles per pound'}
+              {cardType === 'cashback' ? 'Cashback percentage' : 'Miles per dollar'}
             </Label>
             <Input
               type="number"
@@ -309,8 +309,8 @@ export function CardSettingsEditor({
 
         <SettingCapsule
           label="Earning method"
-          description={earningBlockSize ? 'Earning in fixed blocks' : 'Earn on every pound'}
-          value={earningBlockSize ? `£${earningBlockSize} blocks` : 'Exact amount'}
+          description={earningBlockSize ? 'Earning in fixed blocks' : 'Earn on every dollar'}
+          value={earningBlockSize ? `$${earningBlockSize} blocks` : 'Exact amount'}
           icon={<Layers className="h-4 w-4 text-muted-foreground" />}
           isDirty={fieldDirty.earningBlockSize}
         >
