@@ -57,6 +57,98 @@ const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   lineOfCredit: 'Line of Credit',
 };
 
+function buildTrackedCard(accountId: string, accountName: string): CreditCard {
+  return {
+    id: `ynab-${accountId}`,
+    name: accountName,
+    issuer: 'Unknown',
+    type: 'cashback',
+    active: true,
+    ynabAccountId: accountId,
+    billingCycle: {
+      type: 'calendar',
+      dayOfMonth: 1,
+    },
+    earningRate: 1,
+    earningBlockSize: null,
+    minimumSpend: null,
+    maximumSpend: null,
+  };
+}
+
+interface TrackedAccountCardProps {
+  account: YnabAccount;
+  isTracked: boolean;
+  linkedCard?: CreditCard;
+  onToggle: () => void;
+}
+
+function TrackedAccountCard({ account, isTracked, linkedCard, onToggle }: TrackedAccountCardProps) {
+  const accountTypeLabel = ACCOUNT_TYPE_LABELS[account.type] || account.type;
+  const Icon = account.type === 'creditCard' ? CreditCardIcon :
+               account.type === 'checking' ? Wallet :
+               DollarSign;
+
+  return (
+    <div
+      className={cn(
+        'flex h-full flex-col justify-between rounded-xl border p-4 text-left transition-shadow',
+        isTracked ? 'border-primary/60 bg-primary/5 shadow-sm' : 'hover:border-primary/40'
+      )}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <Icon className="h-5 w-5 text-muted-foreground" />
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-medium">{account.name}</span>
+              {isTracked && (
+                <Badge variant="outline" className="bg-primary/10 text-primary">
+                  Tracking
+                </Badge>
+              )}
+            </div>
+            <div className="text-sm text-muted-foreground">{accountTypeLabel}</div>
+          </div>
+        </div>
+        <div className="flex flex-col items-end gap-1">
+          <Switch
+            id={`account-${account.id}`}
+            checked={isTracked}
+            onCheckedChange={onToggle}
+            aria-label={isTracked ? `Stop tracking ${account.name}` : `Track ${account.name}`}
+          />
+          <span className="text-xs text-muted-foreground">Track</span>
+        </div>
+      </div>
+
+      <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
+        <span>Balance</span>
+        <span>${(account.balance / 1000).toFixed(2)}</span>
+      </div>
+
+      {isTracked && linkedCard ? (
+        <Button
+          variant="outline"
+          size="sm"
+          className="mt-4 w-full justify-center"
+          asChild
+        >
+          <Link href={`/cards/${linkedCard.id}?tab=settings`} aria-label={`View ${linkedCard.name} details`}>
+            View card details
+          </Link>
+        </Button>
+      ) : (
+        <p className="mt-4 text-xs text-muted-foreground">
+          {isTracked
+            ? 'Card initialised, sync pending. Give it a moment.'
+            : 'Switch on tracking to create a linked rewards card.'}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const { pat, setPAT, isLoading: patLoading } = useYnabPAT();
   const { cards, saveCard, deleteCard, isLoading: cardsLoading } = useCreditCards();
@@ -85,6 +177,18 @@ export default function SettingsPage() {
   // Points removed; only miles valuation remains
   const [valuationMessage, setValuationMessage] = useState<string>("");
 
+  const cardsByAccountId = useMemo(() => {
+    const entries = cards
+      .filter((card): card is CreditCard & { ynabAccountId: string } => Boolean(card.ynabAccountId))
+      .map(card => [card.ynabAccountId, card] as const);
+    return new Map(entries);
+  }, [cards]);
+
+  useEffect(() => {
+    if (!valuationMessage) return;
+    const timeout = setTimeout(() => setValuationMessage(''), 2500);
+    return () => clearTimeout(timeout);
+  }, [valuationMessage]);
 
   // Load saved budget and tracked accounts on mount
   useEffect(() => {
@@ -147,30 +251,14 @@ export default function SettingsPage() {
   function syncCardsWithAccounts(ynabAccounts: YnabAccount[]) {
     const savedTrackedIds = storage.getTrackedAccountIds();
     
-    // Create cards for tracked accounts that don't exist yet
     ynabAccounts.forEach((account) => {
-      if (savedTrackedIds.includes(account.id)) {
-        const existingCard = cards.find(c => c.ynabAccountId === account.id);
-        if (!existingCard) {
-          // Create a new card for this YNAB account
-          const newCard: CreditCard = {
-            id: `ynab-${account.id}`,
-            name: account.name,
-            issuer: 'Unknown', // User can edit later
-            type: 'cashback', // Default, user can edit
-            active: true,
-            ynabAccountId: account.id,
-            billingCycle: {
-              type: 'calendar',
-              dayOfMonth: 1,
-            },
-            earningRate: 1, // Default 1% cashback
-            earningBlockSize: null, // Default to exact earning
-            minimumSpend: null,
-            maximumSpend: null,
-          };
-          saveCard(newCard);
-        }
+      if (!savedTrackedIds.includes(account.id)) {
+        return;
+      }
+
+      const existingCard = cardsByAccountId.get(account.id);
+      if (!existingCard) {
+        saveCard(buildTrackedCard(account.id, account.name));
       }
     });
   }
@@ -207,28 +295,10 @@ export default function SettingsPage() {
     setTrackedAccountIds(newTrackedIds);
     storage.setTrackedAccountIds(newTrackedIds);
     
-    // If adding an account, create a card for it
     if (!trackedAccountIds.includes(accountId)) {
-      const newCard: CreditCard = {
-        id: `ynab-${accountId}`,
-        name: accountName,
-        issuer: 'Unknown',
-        type: 'cashback',
-        active: true,
-        ynabAccountId: accountId,
-        billingCycle: {
-          type: 'calendar',
-          dayOfMonth: 1,
-        },
-        earningRate: 1, // Default 1% cashback
-        earningBlockSize: null, // Default to exact earning
-        minimumSpend: null,
-        maximumSpend: null,
-      };
-      saveCard(newCard);
+      saveCard(buildTrackedCard(accountId, accountName));
     } else {
-      // If removing, delete the associated card
-      const cardToDelete = cards.find(c => c.ynabAccountId === accountId);
+      const cardToDelete = cardsByAccountId.get(accountId);
       if (cardToDelete) {
         deleteCard(cardToDelete.id);
       }
@@ -287,8 +357,6 @@ export default function SettingsPage() {
     const mv = isFinite(milesValuation) && milesValuation >= 0 ? milesValuation : 0.01;
     storage.updateSettings({ milesValuation: mv });
     setValuationMessage('Saved valuations. Recommendations will use normalised dollars.');
-    // brief clear
-    setTimeout(() => setValuationMessage(''), 2500);
   }
 
   function handleClearAll() {
@@ -467,73 +535,17 @@ export default function SettingsPage() {
             ) : accounts.length > 0 ? (
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {accounts.map(account => {
-                  const accountTypeLabel = ACCOUNT_TYPE_LABELS[account.type] || account.type;
-                  const Icon = account.type === 'creditCard' ? CreditCardIcon : 
-                               account.type === 'checking' ? Wallet :
-                               DollarSign;
                   const isTracked = trackedAccountIds.includes(account.id);
-                  const linkedCard = cards.find(c => c.ynabAccountId === account.id);
+                  const linkedCard = cardsByAccountId.get(account.id);
 
                   return (
-                    <div
+                    <TrackedAccountCard
                       key={account.id} 
-                      className={cn(
-                        "flex h-full flex-col justify-between rounded-xl border p-4 text-left transition-shadow",
-                        isTracked
-                          ? "border-primary/60 bg-primary/5 shadow-sm"
-                          : "hover:border-primary/40"
-                      )}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-center gap-3">
-                          <Icon className="h-5 w-5 text-muted-foreground" />
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium">{account.name}</span>
-                              {isTracked && (
-                                <Badge variant="outline" className="bg-primary/10 text-primary">
-                                  Tracking
-                                </Badge>
-                              )}
-                            </div>
-                            <div className="text-sm text-muted-foreground">{accountTypeLabel}</div>
-                          </div>
-                        </div>
-                        <div className="flex flex-col items-end gap-1">
-                          <Switch
-                            id={`account-${account.id}`}
-                            checked={isTracked}
-                            onCheckedChange={() => handleAccountToggle(account.id, account.name)}
-                            aria-label={isTracked ? `Stop tracking ${account.name}` : `Track ${account.name}`}
-                          />
-                          <span className="text-xs text-muted-foreground">Track</span>
-                        </div>
-                      </div>
-
-                      <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
-                        <span>Balance</span>
-                        <span>${(account.balance / 1000).toFixed(2)}</span>
-                      </div>
-
-                      {isTracked && linkedCard ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="mt-4 w-full justify-center"
-                          asChild
-                        >
-<Link href={`/cards/${linkedCard.id}?tab=settings`} aria-label={`View ${linkedCard.name} details`}>
-                            View card details
-                          </Link>
-                        </Button>
-                      ) : (
-                        <p className="mt-4 text-xs text-muted-foreground">
-                          {isTracked
-                            ? 'Card initialised, sync pending. Give it a moment.'
-                            : 'Switch on tracking to create a linked rewards card.'}
-                        </p>
-                      )}
-                    </div>
+                      account={account}
+                      isTracked={isTracked}
+                      linkedCard={linkedCard}
+                      onToggle={() => handleAccountToggle(account.id, account.name)}
+                    />
                   );
                 })}
               </div>
