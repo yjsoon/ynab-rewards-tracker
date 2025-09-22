@@ -152,7 +152,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
 
   const rewardTileClasses = {
     success: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300',
-    warn: 'bg-amber-500/15 text-amber-600 dark:text-amber-300',
+    warn: 'bg-amber-300/20 text-amber-600 dark:text-amber-200',
     neutral: 'bg-muted/10 text-muted-foreground',
   }[rewardTileState];
 
@@ -224,8 +224,8 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
                 </>
               ) : (
                 <>
-                  <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-300" />
-                  <span className="text-amber-600 dark:text-amber-300">{formatDollars(remainingSpend)} to go</span>
+                  <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-200" />
+                  <span className="text-amber-600 dark:text-amber-200">{formatDollars(remainingSpend)} to go</span>
                 </>
               )}
             </div>
