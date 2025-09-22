@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
-import { useYnabPAT, useCreditCards } from '@/hooks/useLocalStorage';
+import { useYnabPAT, useCreditCards, useRewardRules } from '@/hooks/useLocalStorage';
 import { YnabClient } from '@/lib/ynab-client';
 import { storage } from '@/lib/storage';
 import { SimpleRewardsCalculator } from '@/lib/rewards-engine';
@@ -62,6 +62,7 @@ interface YnabAccountSummary {
 export default function DashboardPage() {
   const { pat } = useYnabPAT();
   const { cards } = useCreditCards();
+  const { rules } = useRewardRules();
 
   const [selectedBudget, setSelectedBudget] = useState<{ id?: string; name?: string }>({});
   const [trackedAccounts, setTrackedAccounts] = useState<string[]>([]);
@@ -349,6 +350,21 @@ export default function DashboardPage() {
                 </span>
               </div>
             </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {isFullyConfigured && cards.length > 0 && rules.length === 0 && (
+        <Alert className="mb-6 border-primary/20 bg-primary/5">
+          <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+            <span>
+              Nice one—your accounts are synced. Pop over to the Rules page to fine-tune earn rates and optimise your rewards.
+            </span>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/rules">
+                Go to Rules
+              </Link>
+            </Button>
           </AlertDescription>
         </Alert>
       )}

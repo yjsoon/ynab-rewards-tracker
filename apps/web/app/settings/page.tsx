@@ -10,7 +10,6 @@ import { validateYnabToken } from '@/lib/validation';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -102,11 +101,6 @@ function TrackedAccountCard({ account, isTracked, linkedCard, onToggle }: Tracke
           <div>
             <div className="flex items-center gap-2">
               <span className="font-medium">{account.name}</span>
-              {isTracked && (
-                <Badge variant="outline" className="bg-primary/10 text-primary">
-                  Tracking
-                </Badge>
-              )}
             </div>
             <div className="text-sm text-muted-foreground">{accountTypeLabel}</div>
           </div>

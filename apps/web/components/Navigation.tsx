@@ -13,8 +13,9 @@ export function Navigation() {
   const navLinks = [
     { href: '/', label: 'Dashboard', icon: Home },
     { href: '/rules', label: 'Rules', icon: SlidersHorizontal },
-    { href: '/settings', label: 'Settings', icon: Settings },
   ];
+
+  const isSettings = pathname.startsWith('/settings');
 
   return (
     <nav className="border-b bg-gradient-to-r from-primary/5 via-background to-primary/3 backdrop-blur-md sticky top-0 z-50 shadow-sm">
@@ -53,6 +54,20 @@ export function Navigation() {
 
           <div className="flex items-center gap-2">
             <ThemeToggle />
+            <Button
+              variant={isSettings ? 'secondary' : 'ghost'}
+              size="icon"
+              asChild
+              className={cn(isSettings && 'bg-secondary')}
+            >
+              <Link
+                href="/settings"
+                aria-label="Open settings"
+                aria-current={isSettings ? 'page' : undefined}
+              >
+                <Settings className="h-4 w-4" />
+              </Link>
+            </Button>
           </div>
 
           {/* Mobile navigation */}

@@ -319,6 +319,32 @@ export function CardSettingsEditor({
           </SettingCapsule>
         )}
 
+        {!showNameAndIssuer && showCardType && (
+          <SettingCapsule
+            label="Reward type"
+            description="Switch between cashback or miles"
+            value={cardType === 'cashback' ? 'Cashback' : 'Miles / Points'}
+            icon={<Settings2 className="h-4 w-4 text-muted-foreground" />}
+            isDirty={fieldDirty.type}
+          >
+            <div className="space-y-1.5">
+              <Label className="text-xs uppercase tracking-wide text-muted-foreground">Reward type</Label>
+              <Select
+                value={cardType}
+                onValueChange={(value) => onFieldChange('type', value as 'cashback' | 'miles')}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cashback">Cashback</SelectItem>
+                  <SelectItem value="miles">Miles / Points</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </SettingCapsule>
+        )}
+
         <SettingCapsule
           label={cardType === 'cashback' ? 'Cashback rate' : 'Miles rate'}
           description={cardType === 'cashback' ? 'Percentage earned on spend' : 'Miles earned per dollar'}

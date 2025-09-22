@@ -118,6 +118,33 @@ export default function RulesPage() {
     setSaveSuccess(false);
   };
 
+  const applyBatchType = (type: 'cashback' | 'miles') => {
+    if (selectedCards.size === 0) {
+      setBatchError('Select at least one card before switching reward type.');
+      return;
+    }
+
+    setEditState(prev => {
+      const next = { ...prev };
+      selectedCards.forEach(cardId => {
+        const current = next[cardId] ?? {};
+        next[cardId] = {
+          ...current,
+          type,
+        };
+      });
+      return next;
+    });
+
+    setChangedCards(prev => {
+      const next = new Set(prev);
+      selectedCards.forEach(id => next.add(id));
+      return next;
+    });
+    setBatchError('');
+    setSaveSuccess(false);
+  };
+
   const handleApplyBatchRate = () => {
     if (selectedCards.size === 0) {
       setBatchError('Select at least one card before applying a rate.');
@@ -283,6 +310,7 @@ export default function RulesPage() {
                       onFieldChange={(field, value) => handleFieldChange(card.id, field, value)}
                       isChanged={changedCards.has(card.id)}
                       isSelected={selectedCards.has(card.id)}
+                      showCardType
                       leadingAccessory={(
                         <div className="pt-1">
                           <input
@@ -328,6 +356,7 @@ export default function RulesPage() {
                       onFieldChange={(field, value) => handleFieldChange(card.id, field, value)}
                       isChanged={changedCards.has(card.id)}
                       isSelected={selectedCards.has(card.id)}
+                      showCardType
                       leadingAccessory={(
                         <div className="pt-1">
                           <input
@@ -397,6 +426,22 @@ export default function RulesPage() {
                       onClick={() => applyBatchFeatured(false)}
                     >
                       Hide from dashboard
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => applyBatchType('cashback')}
+                    >
+                      Set to cashback
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => applyBatchType('miles')}
+                    >
+                      Set to miles
                     </Button>
                   </div>
                   <div className="flex items-center gap-2">

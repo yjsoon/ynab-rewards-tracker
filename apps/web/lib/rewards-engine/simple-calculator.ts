@@ -15,7 +15,8 @@ export interface SimplifiedCalculation {
   cardId: string;
   period: string;
   totalSpend: number;
-  eligibleSpend: number; // Spend that actually earns rewards (after min/max limits)
+  eligibleSpend: number; // Spend that actually earns rewards after gating and block rounding
+  eligibleSpendBeforeBlocks?: number; // Spend eligible after min/max limits but before block rounding
   rewardEarned: number; // Raw reward units (dollars for cashback, miles for miles cards)
   rewardEarnedDollars: number; // Normalized dollar value for comparison
   rewardType: 'cashback' | 'miles';
@@ -151,15 +152,34 @@ export class SimpleRewardsCalculator {
     const maximumSpendProgress = calculateMaximumSpendProgress(totalSpend, maximumSpend);
 
     // Calculate eligible spend (spend that earns rewards)
-    let eligibleSpend = totalSpend;
-    
-    // If minimum spend not met, no spend is eligible
-    if (!minimumSpendMet) {
-      eligibleSpend = 0;
-    }
-    // If maximum spend exceeded, cap at the maximum
-    else if (maximumSpendExceeded) {
-      eligibleSpend = maximumSpend as number; // We know it's > 0 when exceeded
+    let eligibleSpend = 0;
+    let eligibleSpendBeforeBlocks = 0;
+
+    if (minimumSpendMet) {
+      const hasMaximumLimit = typeof maximumSpend === 'number' && maximumSpend !== null && maximumSpend > 0;
+      const spendCap = hasMaximumLimit ? (maximumSpend as number) : Number.POSITIVE_INFINITY;
+      let remainingCap = spendCap;
+
+      for (const txn of periodTransactions) {
+        if (remainingCap <= 0) {
+          break;
+        }
+        const txnSpend = Math.abs(txn.amount) / 1000;
+        if (txnSpend <= 0) {
+          continue;
+        }
+        const spendContribution = Math.min(txnSpend, remainingCap);
+        eligibleSpendBeforeBlocks += spendContribution;
+
+        let earnablePortion = spendContribution;
+        if (card.earningBlockSize && card.earningBlockSize > 0) {
+          const blocks = Math.floor(spendContribution / card.earningBlockSize);
+          earnablePortion = blocks * card.earningBlockSize;
+        }
+
+        eligibleSpend += earnablePortion;
+        remainingCap -= spendContribution;
+      }
     }
 
     // Calculate rewards based on eligible spend only
@@ -168,13 +188,7 @@ export class SimpleRewardsCalculator {
 
     // Only calculate rewards if we have eligible spend and an earning rate
     if (eligibleSpend > 0 && card.earningRate) {
-      let earnableSpend = eligibleSpend;
-
-      // If block-based earning is configured, round down to complete blocks
-      if (card.earningBlockSize && card.earningBlockSize > 0) {
-        const blocks = Math.floor(eligibleSpend / card.earningBlockSize);
-        earnableSpend = blocks * card.earningBlockSize;
-      }
+      const earnableSpend = eligibleSpend;
 
       // Calculate rewards based on earnable spend
       if (card.type === 'cashback') {
@@ -194,6 +208,7 @@ export class SimpleRewardsCalculator {
       period: period.label,
       totalSpend,
       eligibleSpend,
+      eligibleSpendBeforeBlocks,
       rewardEarned,
       rewardEarnedDollars,
       rewardType: card.type,
