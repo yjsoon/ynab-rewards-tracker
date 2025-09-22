@@ -32,7 +32,17 @@ export function formatDollars(
   } = {}
 ): string {
   const locale = options.locale ?? (typeof navigator !== 'undefined' ? navigator.language : 'en-US');
-  const settingsCurrency = storage.getSettings().currency;
+
+  // Safe storage access for SSR compatibility
+  let settingsCurrency: string | undefined;
+  if (typeof window !== 'undefined') {
+    try {
+      settingsCurrency = storage.getSettings().currency;
+    } catch (e) {
+      settingsCurrency = undefined;
+    }
+  }
+
   const currency = options.currency ?? settingsCurrency ?? 'USD';
   return new Intl.NumberFormat(locale, {
     style: 'currency',
