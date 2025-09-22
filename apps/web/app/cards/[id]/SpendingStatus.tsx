@@ -129,6 +129,7 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
     return {
       totalSpend: calculation.totalSpend,
       eligibleSpend: calculation.eligibleSpend,
+      eligibleSpendBeforeBlocks: calculation.eligibleSpendBeforeBlocks,
       rewardEarned: calculation.rewardEarned,
       rewardEarnedDollars: calculation.rewardEarnedDollars,
       minimumSpend: calculation.minimumSpend,
@@ -149,7 +150,7 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
     );
   }
 
-  const { totalSpend, rewardEarned, rewardEarnedDollars, minimumSpend, minimumSpendMet, minimumSpendProgress } = spendingAnalysis;
+  const { totalSpend, eligibleSpend, eligibleSpendBeforeBlocks, rewardEarned, rewardEarnedDollars, minimumSpend, minimumSpendMet, minimumSpendProgress } = spendingAnalysis;
 
   const currency = settings?.currency;
   const formatCurrency = (amount: number) =>
@@ -226,18 +227,20 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
           </div>
 
           {/* Earning Block Info */}
-          {card.earningBlockSize && card.earningBlockSize > 0 && spendingAnalysis.eligibleSpend !== undefined && (
+          {card.earningBlockSize && card.earningBlockSize > 0 && eligibleSpend !== undefined && eligibleSpend > 0 && (
             <Alert className="mt-4">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
                 <div className="space-y-1">
                   <p className="font-medium">Earning blocks: ${card.earningBlockSize} per block</p>
                   <p className="text-sm">
-                    {Math.floor(spendingAnalysis.eligibleSpend / card.earningBlockSize)} complete blocks earned from ${spendingAnalysis.eligibleSpend.toFixed(2)} eligible spend
+                    {Math.floor(eligibleSpend / card.earningBlockSize)} complete blocks earned from ${eligibleSpend.toFixed(2)} eligible spend
                   </p>
-                  <p className="text-sm text-muted-foreground">
-                    ${(spendingAnalysis.eligibleSpend % card.earningBlockSize).toFixed(2)} unearned remainder
-                  </p>
+                  {Math.max(0, (eligibleSpendBeforeBlocks ?? eligibleSpend) - eligibleSpend) > 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      ${Math.max(0, (eligibleSpendBeforeBlocks ?? eligibleSpend) - eligibleSpend).toFixed(2)} unearned remainder
+                    </p>
+                  )}
                 </div>
               </AlertDescription>
             </Alert>

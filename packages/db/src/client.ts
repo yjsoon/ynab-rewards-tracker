@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 
 declare global {
-  var __prisma: PrismaClient | undefined;
+  let __prisma: PrismaClient | undefined;
 }
 
 function resolveSqliteUrl(url: string | undefined): string | undefined {
@@ -12,19 +12,21 @@ function resolveSqliteUrl(url: string | undefined): string | undefined {
   const raw = url.slice(5);
   const absPath = path.isAbsolute(raw) ? raw : path.resolve(process.cwd(), raw);
   const dir = path.dirname(absPath);
-  try { fs.mkdirSync(dir, { recursive: true }); } catch {}
+  try { fs.mkdirSync(dir, { recursive: true }); } catch {
+    // Ignore errors if directory already exists
+  }
   return `file:${absPath}`;
 }
 
 const resolvedDbUrl = resolveSqliteUrl(process.env.DATABASE_URL);
 
-const prisma = (global as any).__prisma || new PrismaClient({
+const prisma = (global as { __prisma?: PrismaClient }).__prisma || new PrismaClient({
   log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
   datasources: resolvedDbUrl ? { db: { url: resolvedDbUrl } } : undefined,
 });
 
 if (process.env.NODE_ENV !== 'production') {
-  (global as any).__prisma = prisma;
+  (global as { __prisma?: PrismaClient }).__prisma = prisma;
 }
 
 // Enable WAL for SQLite deployments to improve concurrent reads/writes.

@@ -121,6 +121,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
     return {
       totalSpend: calculation.totalSpend,
       eligibleSpend: calculation.eligibleSpend,
+      eligibleSpendBeforeBlocks: calculation.eligibleSpendBeforeBlocks,
       rewardEarned: calculation.rewardEarned,
       rewardEarnedDollars: calculation.rewardEarnedDollars,
       daysRemaining: Math.max(0, daysRemaining),
@@ -143,7 +144,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
     );
   }
 
-  const { totalSpend, rewardEarned, rewardEarnedDollars, daysRemaining, minimumSpend, minimumSpendMet, minimumSpendProgress } = summary;
+  const { totalSpend, eligibleSpend, eligibleSpendBeforeBlocks, rewardEarned, rewardEarnedDollars, daysRemaining, minimumSpend, minimumSpendMet, minimumSpendProgress } = summary;
 
   const currency = settings?.currency;
   const formatCurrency = (amount: number) =>
@@ -273,16 +274,16 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
             Value: {formatCurrency(rewardEarnedDollars)} @ ${settings?.milesValuation || 0.01}/mile
           </p>
         )}
-        {card.earningBlockSize && card.earningBlockSize > 0 && summary.eligibleSpend !== undefined && summary.eligibleSpend > 0 && (
+        {card.earningBlockSize && card.earningBlockSize > 0 && eligibleSpend !== undefined && eligibleSpend > 0 && (
           <div className="rounded bg-muted/50 p-2 text-xs">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Earning blocks:</span>
-              <span className="font-medium">{Math.floor(summary.eligibleSpend / card.earningBlockSize)} × ${card.earningBlockSize}</span>
+              <span className="font-medium">{Math.floor(eligibleSpend / card.earningBlockSize)} × ${card.earningBlockSize}</span>
             </div>
-            {(summary.eligibleSpend % card.earningBlockSize) > 0 && (
+            {Math.max(0, (eligibleSpendBeforeBlocks ?? eligibleSpend) - eligibleSpend) > 0 && (
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Unearned:</span>
-                <span>${(summary.eligibleSpend % card.earningBlockSize).toFixed(2)}</span>
+                <span>${Math.max(0, (eligibleSpendBeforeBlocks ?? eligibleSpend) - eligibleSpend).toFixed(2)}</span>
               </div>
             )}
           </div>
