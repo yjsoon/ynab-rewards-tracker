@@ -76,7 +76,7 @@ export function computeCardFieldDiff(
 interface CardSettingsEditorProps {
   card: CreditCard;
   state: CardEditState;
-  onFieldChange: (field: keyof CardEditState, value: any) => void;
+  onFieldChange: (field: keyof CardEditState, value: unknown) => void;
   isChanged?: boolean;
   showNameAndIssuer?: boolean;
   showCardType?: boolean;

@@ -56,7 +56,7 @@ export default function RulesPage() {
     setSelectedCards(new Set());
   }, [cards]);
 
-  const handleFieldChange = (cardId: string, field: keyof SingleCardEditState, value: any) => {
+  const handleFieldChange = (cardId: string, field: keyof SingleCardEditState, value: unknown) => {
     setEditState(prev => ({
       ...prev,
       [cardId]: {

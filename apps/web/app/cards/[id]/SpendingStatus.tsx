@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
@@ -259,7 +259,7 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
             <Alert className="border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950/30">
               <AlertCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
               <AlertDescription className="text-green-700 dark:text-green-300">
-                <strong>Minimum spend requirement met!</strong> You've spent {formatCurrency(totalSpend)} out of the required {formatCurrency(minimumSpend ?? 0)} this period.
+                <strong>Minimum spend requirement met!</strong> You&apos;ve spent {formatCurrency(totalSpend)} out of the required {formatCurrency(minimumSpend ?? 0)} this period.
               </AlertDescription>
             </Alert>
           ) : null}

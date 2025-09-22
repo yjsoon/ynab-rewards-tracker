@@ -39,7 +39,7 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
   const fieldDiffs = useMemo(() => computeCardFieldDiff(card, formData), [card, formData]);
   const hasUnsavedChanges = useMemo(() => Object.values(fieldDiffs).some(Boolean), [fieldDiffs]);
 
-  const handleFieldChange = (field: keyof CardEditState, value: any) => {
+  const handleFieldChange = (field: keyof CardEditState, value: unknown) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     if (field === 'issuer') {
       setIssuerError('');
