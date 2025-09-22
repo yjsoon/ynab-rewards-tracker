@@ -47,6 +47,7 @@ export function formatDollars(
   return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency,
+    currencyDisplay: 'narrowSymbol', // Use $ instead of US$
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value);
