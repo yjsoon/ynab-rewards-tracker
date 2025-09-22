@@ -1,8 +1,6 @@
 'use client';
 
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
 import { SimpleRewardsCalculator } from '@/lib/rewards-engine';
 import { YnabClient } from '@/lib/ynab-client';
 import { storage } from '@/lib/storage';
@@ -149,91 +147,104 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
 
   const { totalSpend, rewardEarned, rewardEarnedDollars, daysRemaining, minimumSpend, minimumSpendMet, minimumSpendProgress } = summary;
 
+  const hasMinimum = hasMinimumSpendRequirement(minimumSpend);
+  const rewardTileState = !minimumSpendMet && hasMinimum ? 'warn' : minimumSpendMet ? 'success' : 'neutral';
+
+  const rewardTileClasses = {
+    success: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300',
+    warn: 'bg-amber-500/15 text-amber-600 dark:text-amber-300',
+    neutral: 'bg-muted/10 text-muted-foreground',
+  }[rewardTileState];
+
+  const rewardValue = !minimumSpendMet && hasMinimum
+    ? 'No rewards yet'
+    : card.type === 'cashback'
+    ? formatDollars(rewardEarned)
+    : `${Math.round(rewardEarned).toLocaleString()}`;
+
+  const rewardLabel = !minimumSpendMet && hasMinimum
+    ? 'Minimum not met'
+    : card.type === 'cashback'
+    ? 'Cashback'
+    : 'Miles';
+
+  const progressPercent = minimumSpendProgress || 0;
+  const progressColour = !isMinimumSpendConfigured(minimumSpend)
+    ? 'bg-muted'
+    : minimumSpend === 0 || minimumSpendMet
+    ? 'bg-emerald-500'
+    : 'bg-amber-500';
+
+  const remainingSpend = minimumSpend && minimumSpend > 0
+    ? Math.max(0, minimumSpend - totalSpend)
+    : 0;
+
   return (
-    <div className="space-y-3">
+    <div className="flex h-full flex-col space-y-4">
       {/* Spending and Rewards Summary */}
       <div className="grid grid-cols-2 gap-2">
-        <div className="bg-muted/5 rounded-lg p-2 text-center">
-          <p className="text-lg font-bold">{formatDollars(totalSpend)}</p>
-          <p className="text-xs text-muted-foreground">Spent</p>
+        <div className="rounded-lg bg-muted/10 p-3 text-left">
+          <p className="text-2xl font-semibold tracking-tight">{formatDollars(totalSpend)}</p>
+          <p className="text-xs text-muted-foreground uppercase">Spent this period</p>
         </div>
-        <div className="bg-green-500/10 rounded-lg p-2 text-center">
-          <p className="text-lg font-bold text-green-600 dark:text-green-400">
-            {!minimumSpendMet && hasMinimumSpendRequirement(minimumSpend)
-              ? 'No rewards yet'
-              : card.type === 'cashback'
-              ? formatDollars(rewardEarned)
-              : `${Math.round(rewardEarned).toLocaleString()}`
-            }
+        <div className={`flex min-h-[72px] flex-col justify-center rounded-lg p-3 text-left transition-colors ${rewardTileClasses}`}>
+          <p className={`text-2xl font-semibold tracking-tight leading-tight ${rewardTileState === 'neutral' ? 'text-foreground' : ''}`}>
+            {rewardValue}
           </p>
-          <p className="text-xs text-muted-foreground">
-            {!minimumSpendMet && hasMinimumSpendRequirement(minimumSpend)
-              ? 'Minimum not met'
-              : card.type === 'cashback' ? 'Cashback' : 'Miles'
-            }
-          </p>
+          <p className="text-xs uppercase opacity-90">{rewardLabel}</p>
         </div>
       </div>
 
       {/* Minimum Spend Status */}
-      {isMinimumSpendConfigured(minimumSpend) && (
-        <div className="space-y-2">
-          {minimumSpend === 0 ? (
-            <div className="flex items-center justify-center gap-2 text-green-600 dark:text-green-400">
-              <CheckCircle2 className="h-4 w-4" />
-              <p className="text-sm font-medium">No minimum spend required</p>
-            </div>
-          ) : minimumSpend > 0 ? (
-            <>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Minimum spend progress</span>
-                <span className={minimumSpendMet ? 'text-green-600 dark:text-green-400 font-medium' : 'text-muted-foreground'}>
-                  {formatDollars(totalSpend)} / {formatDollars(minimumSpend)}
-                </span>
-              </div>
-              <Progress
-                value={minimumSpendProgress || 0}
-                className="h-2"
-              />
-              <div className="flex items-center justify-center gap-2">
-                {minimumSpendMet ? (
-                  <>
-                    <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
-                    <p className="text-sm font-medium text-green-600 dark:text-green-400">
-                      Minimum spend met!
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                    <p className="text-sm font-medium text-amber-600 dark:text-amber-400">
-                      {formatDollars(minimumSpend - totalSpend)} to go
-                    </p>
-                  </>
-                )}
-              </div>
-            </>
-          ) : null}
-        </div>
-      )}
-
-      {/* Not Configured Warning */}
-      {!isMinimumSpendConfigured(minimumSpend) && (
-        <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-lg p-3">
-          <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300">
-            <AlertCircle className="h-4 w-4" />
-            <p className="text-sm font-medium">
-              Minimum spend not configured
-            </p>
+      {isMinimumSpendConfigured(minimumSpend) ? (
+        minimumSpend === 0 ? (
+          <div className="flex items-center justify-center gap-2 rounded-md bg-emerald-500/10 py-2 text-sm font-medium text-emerald-600 dark:text-emerald-300">
+            <CheckCircle2 className="h-4 w-4" />
+            No minimum spend required
           </div>
-          <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+        ) : (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <span>Minimum spend progress</span>
+              <span className={minimumSpendMet ? 'text-emerald-600 dark:text-emerald-300' : 'text-muted-foreground'}>
+                {formatDollars(totalSpend)} / {formatDollars(minimumSpend)}
+              </span>
+            </div>
+            <div className="relative h-2 w-full overflow-hidden rounded-full bg-muted/20">
+              <div
+                className={`absolute left-0 top-0 h-full rounded-full transition-all ${progressColour}`}
+                style={{ width: `${Math.min(100, progressPercent)}%` }}
+              />
+            </div>
+            <div className="flex items-center justify-center gap-2 text-sm font-medium">
+              {minimumSpendMet ? (
+                <>
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-300" />
+                  <span className="text-emerald-600 dark:text-emerald-300">Minimum spend met!</span>
+                </>
+              ) : (
+                <>
+                  <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-300" />
+                  <span className="text-amber-600 dark:text-amber-300">{formatDollars(remainingSpend)} to go</span>
+                </>
+              )}
+            </div>
+          </div>
+        )
+      ) : (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <AlertCircle className="h-4 w-4" />
+            Minimum spend not configured
+          </div>
+          <p className="mt-1 text-xs">
             Set this in card settings to track signup bonuses and minimum spend requirements
           </p>
         </div>
       )}
 
       {/* Earning Rate */}
-      <div className="text-center pt-2 space-y-1">
+      <div className="mt-auto space-y-1 text-center">
         <div className="flex items-center justify-center gap-2">
           {card.earningRate ? (
             <>
@@ -279,7 +290,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
       </div>
 
       {/* Period Info - dates left, days right */}
-      <div className="flex justify-between items-center text-xs text-muted-foreground px-1">
+      <div className="mt-3 flex items-center justify-between px-1 text-xs text-muted-foreground">
         <span>{new Date(period.start).toLocaleDateString()} - {new Date(period.end).toLocaleDateString()}</span>
         <span>{daysRemaining} {daysRemaining === 1 ? 'day' : 'days'} left</span>
       </div>
