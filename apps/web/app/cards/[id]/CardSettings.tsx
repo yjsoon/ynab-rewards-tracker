@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Save, AlertCircle } from 'lucide-react';
 import { useCreditCards } from '@/hooks/useLocalStorage';
-import { storage, type CreditCard } from '@/lib/storage';
+import { storage, type CreditCard, type CardSubcategory } from '@/lib/storage';
 import { validateIssuer, sanitizeInput } from '@/lib/validation';
 import { CardSettingsEditor, computeCardFieldDiff, type CardEditState } from '@/components/CardSettingsEditor';
 import { UNFLAGGED_FLAG, YNAB_FLAG_COLORS, type YnabFlagColor } from '@/lib/ynab-constants';
@@ -27,11 +27,11 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
   const [issuerError, setIssuerError] = useState('');
   const [flagNames, setFlagNames] = useState(() => storage.getFlagNames());
 
-  const createFormState = (nextCard: CreditCard): CardEditState => ({
-    name: nextCard.name,
-    issuer: nextCard.issuer || '',
-    type: nextCard.type,
-    featured: nextCard.featured ?? true,
+const createFormState = (nextCard: CreditCard): CardEditState => ({
+  name: nextCard.name,
+  issuer: nextCard.issuer || '',
+  type: nextCard.type,
+  featured: nextCard.featured ?? true,
     billingCycleType: nextCard.billingCycle?.type || 'calendar',
     billingCycleDay: nextCard.billingCycle?.dayOfMonth || 1,
     earningRate: nextCard.earningRate || (nextCard.type === 'cashback' ? 1 : 1),
@@ -39,8 +39,80 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
     minimumSpend: nextCard.minimumSpend,
     maximumSpend: nextCard.maximumSpend,
     subcategoriesEnabled: nextCard.subcategoriesEnabled ?? false,
-    subcategories: nextCard.subcategories ? nextCard.subcategories.map((sub) => ({ ...sub })) : [],
+  subcategories: nextCard.subcategories ? nextCard.subcategories.map((sub) => ({ ...sub })) : [],
+});
+
+const cloneAndDedupeSubcategories = (
+  subcategories: CardSubcategory[] | undefined,
+  flagNames: Partial<Record<YnabFlagColor, string>>,
+  rewardFallback: number,
+): CardSubcategory[] => {
+  const seen = new Set<YnabFlagColor>();
+  const clones = Array.isArray(subcategories)
+    ? subcategories.map((sub) => ({ ...sub }))
+    : [];
+
+  const deduped = clones.filter((sub) => {
+    const colour = sub.flagColor as YnabFlagColor;
+    if (seen.has(colour)) return false;
+    seen.add(colour);
+    return true;
   });
+
+  if (!seen.has(UNFLAGGED_FLAG.value)) {
+    deduped.push({
+      id: subcategories?.find((sub) => sub.flagColor === UNFLAGGED_FLAG.value)?.id ?? `subcat-${Math.random().toString(36).slice(2, 10)}`,
+      name:
+        flagNames[UNFLAGGED_FLAG.value] ??
+        subcategories?.find((sub) => sub.flagColor === UNFLAGGED_FLAG.value)?.name ??
+        UNFLAGGED_FLAG.label,
+      flagColor: UNFLAGGED_FLAG.value,
+      rewardValue: rewardFallback,
+      milesBlockSize: null,
+      minimumSpend: null,
+      maximumSpend: null,
+      priority: deduped.length,
+      active: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  return deduped.map((sub, index) => ({
+    ...sub,
+    priority: index,
+    name:
+      sub.name && sub.name.trim().length > 0
+        ? sub.name.trim()
+        : flagNames[sub.flagColor as YnabFlagColor] ??
+          (sub.flagColor === UNFLAGGED_FLAG.value
+            ? UNFLAGGED_FLAG.label
+            : YNAB_FLAG_COLORS.find((flag) => flag.value === sub.flagColor)?.label ?? sub.flagColor),
+    rewardValue:
+      typeof sub.rewardValue === 'number' && Number.isFinite(sub.rewardValue)
+        ? sub.rewardValue
+        : rewardFallback,
+    milesBlockSize:
+      typeof sub.milesBlockSize === 'number' && Number.isFinite(sub.milesBlockSize)
+        ? sub.milesBlockSize
+        : null,
+    minimumSpend:
+      typeof sub.minimumSpend === 'number' && Number.isFinite(sub.minimumSpend)
+        ? sub.minimumSpend
+        : sub.minimumSpend === 0
+        ? 0
+        : null,
+    maximumSpend:
+      typeof sub.maximumSpend === 'number' && Number.isFinite(sub.maximumSpend)
+        ? sub.maximumSpend
+        : sub.maximumSpend === 0
+        ? 0
+        : null,
+    active: sub.active !== false,
+    createdAt: sub.createdAt ?? new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  }));
+};
 
   const [formData, setFormData] = useState<CardEditState>(() => createFormState(card));
 
@@ -100,6 +172,15 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
     }
 
     try {
+      const toggledOn = Boolean(formData.subcategoriesEnabled);
+      const preparedSubcategories = toggledOn
+        ? cloneAndDedupeSubcategories(
+            formData.subcategories as CardSubcategory[] | undefined,
+            flagNames,
+            formData.earningRate ?? card.earningRate ?? 0,
+          )
+        : [];
+
       const updatedCard: CreditCard = {
         ...card,
         name: formData.name || card.name,
@@ -113,14 +194,8 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
         earningBlockSize: formData.earningBlockSize,
         minimumSpend: formData.minimumSpend,
         maximumSpend: formData.maximumSpend,
-        subcategoriesEnabled: formData.subcategoriesEnabled ?? false,
-        subcategories: Array.isArray(formData.subcategories)
-          ? formData.subcategories.map((sub) => ({
-              ...sub,
-              createdAt: sub.createdAt ?? new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            }))
-          : card.subcategories,
+        subcategoriesEnabled: toggledOn,
+        subcategories: preparedSubcategories,
       };
 
       updateCard(updatedCard);
