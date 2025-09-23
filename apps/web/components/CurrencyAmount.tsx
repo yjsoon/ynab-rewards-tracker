@@ -28,11 +28,11 @@ export function CurrencyAmount({
       ) : null}
       {parts.map((part, index) =>
         part.type === "currency" ? (
-          <span key={`${part.type}-${index}`} className={symbolClasses}>
+          <span key={`currency-${part.value}-${index}`} className={symbolClasses}>
             {part.value}
           </span>
         ) : (
-          <Fragment key={`${part.type}-${index}`}>{part.value}</Fragment>
+          <Fragment key={`${part.type}-${part.value}-${index}`}>{part.value}</Fragment>
         )
       )}
     </span>

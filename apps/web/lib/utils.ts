@@ -28,6 +28,8 @@ function resolveCurrencyFormattingOptions(options: CurrencyFormatOptions = {}) {
     try {
       settingsCurrency = storage.getSettings().currency;
     } catch (e) {
+      // Storage access may fail during SSR or if localStorage is unavailable
+      console.warn('Failed to access storage for currency settings:', e);
       settingsCurrency = undefined;
     }
   }
