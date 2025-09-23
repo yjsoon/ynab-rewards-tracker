@@ -6,7 +6,8 @@ import { YnabClient } from '@/lib/ynab-client';
 import { storage } from '@/lib/storage';
 import { cn } from '@/lib/utils';
 import { CurrencyAmount } from '@/components/CurrencyAmount';
-import { AlertCircle, TrendingUp, CheckCircle2, Percent } from 'lucide-react';
+import { SpendingProgressBar } from '@/components/SpendingProgressBar';
+import { AlertCircle, TrendingUp, CheckCircle2, Percent, XCircle } from 'lucide-react';
 import {
   isMinimumSpendConfigured,
   hasMinimumSpendRequirement
@@ -128,7 +129,10 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
       daysRemaining: Math.max(0, daysRemaining),
       minimumSpend: calculation.minimumSpend,
       minimumSpendMet: calculation.minimumSpendMet,
-      minimumSpendProgress: calculation.minimumSpendProgress
+      minimumSpendProgress: calculation.minimumSpendProgress,
+      maximumSpend: calculation.maximumSpend,
+      maximumSpendExceeded: calculation.maximumSpendExceeded,
+      maximumSpendProgress: calculation.maximumSpendProgress
     };
   }, [card, transactions, period, settings]);
 
@@ -145,26 +149,30 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
     );
   }
 
-  const { totalSpend, eligibleSpend, eligibleSpendBeforeBlocks, rewardEarned, rewardEarnedDollars, daysRemaining, minimumSpend, minimumSpendMet, minimumSpendProgress } = summary;
+  const { totalSpend, eligibleSpend, eligibleSpendBeforeBlocks, rewardEarned, rewardEarnedDollars, daysRemaining, minimumSpend, minimumSpendMet, minimumSpendProgress, maximumSpend, maximumSpendExceeded, maximumSpendProgress } = summary;
 
   const currency = settings?.currency;
   const milesValuation = settings?.milesValuation ?? 0.01;
   const hasMinimum = hasMinimumSpendRequirement(minimumSpend);
-  const rewardTileState = !minimumSpendMet && hasMinimum ? 'warn' : minimumSpendMet ? 'success' : 'neutral';
+  const hasMaximum = typeof maximumSpend === 'number' && maximumSpend > 0;
+  const rewardTileState = maximumSpendExceeded ? 'exceeded' : (!minimumSpendMet && hasMinimum ? 'warn' : (minimumSpendMet ? 'success' : 'neutral'));
 
   const rewardTileClasses = {
     success: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300',
     warn: 'bg-amber-300/20 text-amber-600 dark:text-amber-200',
+    exceeded: 'bg-red-500/15 text-red-600 dark:text-red-300',
     neutral: 'bg-muted/10 text-muted-foreground',
   }[rewardTileState];
 
-  const rewardValue = !minimumSpendMet && hasMinimum
+  const rewardValue = (!minimumSpendMet && hasMinimum)
     ? 'No reward'
     : card.type === 'cashback'
     ? <CurrencyAmount value={rewardEarned} currency={currency} />
     : `${Math.round(rewardEarned).toLocaleString()}`;
 
-  const rewardLabel = !minimumSpendMet && hasMinimum
+  const rewardLabel = maximumSpendExceeded
+    ? 'Capped at max'
+    : !minimumSpendMet && hasMinimum
     ? 'Minimum not met'
     : card.type === 'cashback'
     ? 'Cashback'
@@ -212,54 +220,34 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
         </div>
       </div>
 
-      {/* Minimum Spend Status */}
-      {isMinimumSpendConfigured(minimumSpend) ? (
-        minimumSpend === 0 ? (
-          <div className="flex items-center justify-center gap-2 rounded-md border border-muted bg-muted/10 py-2 text-sm font-medium text-muted-foreground">
-            <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
-            No minimum spend required
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              <span>Minimum spend progress</span>
-              <span className={minimumSpendMet ? 'text-emerald-600 dark:text-emerald-300' : 'text-muted-foreground'}>
-                <CurrencyAmount value={totalSpend} currency={currency} />
-                {" / "}
-                <CurrencyAmount value={minimumSpend ?? 0} currency={currency} />
-              </span>
+      {/* Spending Progress with new visualization */}
+      {(isMinimumSpendConfigured(minimumSpend) || hasMaximum) ? (
+        <div className="space-y-3">
+          <SpendingProgressBar
+            totalSpend={totalSpend}
+            minimumSpend={minimumSpend}
+            maximumSpend={maximumSpend}
+            currency={currency}
+            showLabels={true}
+            showWarnings={true}
+            className=""
+          />
+          {/* Compact status message for exceeded maximum */}
+          {maximumSpendExceeded && (
+            <div className="flex items-center justify-center gap-1.5 rounded-md border border-red-200 bg-red-50/50 py-1.5 text-xs font-medium text-red-600 dark:border-red-900 dark:bg-red-950/30 dark:text-red-400">
+              <XCircle className="h-3.5 w-3.5" />
+              <span>Stop using - max reached</span>
             </div>
-            <div className="relative h-2 w-full overflow-hidden rounded-full bg-muted/20">
-              <div
-                className={`absolute left-0 top-0 h-full rounded-full transition-all ${progressColour}`}
-                style={{ width: `${Math.min(100, progressPercent)}%` }}
-              />
-            </div>
-            <div className="flex min-h-[24px] items-center justify-center gap-2 text-sm font-medium">
-              {minimumSpendMet ? (
-                <>
-                  <CheckCircle2 className="h-4 w-4 text-emerald-500/80 dark:text-emerald-200/80" />
-                  <span className="text-emerald-600/80 dark:text-emerald-200/80">Minimum spend met!</span>
-                </>
-              ) : (
-                <>
-                  <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-200" />
-                  <span className="text-amber-600 dark:text-amber-200">
-                    <CurrencyAmount value={remainingSpend} currency={currency} /> to go
-                  </span>
-                </>
-              )}
-            </div>
-          </div>
-        )
+          )}
+        </div>
       ) : (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
           <div className="flex items-center gap-2 text-sm font-medium">
             <AlertCircle className="h-4 w-4" />
-            Minimum spend not configured
+            No spending limits configured
           </div>
           <p className="mt-1 text-xs">
-            Set this in card settings to track signup bonuses and minimum spend requirements
+            Set minimum/maximum spend in card settings to track limits and bonuses
           </p>
         </div>
       )}
