@@ -5,6 +5,7 @@
 
 import type { Transaction } from '@/types/transaction';
 import { storage } from './storage';
+import { UNFLAGGED_FLAG, YNAB_FLAG_COLORS, type YnabFlagColor } from './ynab-constants';
 
 // Simple in-memory de-dupe and cache for GETs within a short window.
 // Avoids hammering YNAB when multiple components request the same path.
@@ -133,6 +134,58 @@ export class YnabClient {
   async getAccounts<TAccount = YnabAccountSummary>(budgetId: string, init?: RequestInit) {
     const result = await this.request<YnabResponse<{ accounts: TAccount[] }>>(`budgets/${budgetId}/accounts`, init);
     return result.data.accounts;
+  }
+
+  async getBudgetSettings(budgetId: string, init?: RequestInit) {
+    const result = await this.request<YnabResponse<{ settings: Record<string, unknown> }>>(
+      `budgets/${budgetId}/settings`,
+      init
+    );
+    return result.data.settings;
+  }
+
+  async getFlagNames(budgetId: string): Promise<Partial<Record<YnabFlagColor, string>>> {
+    try {
+      const settings = await this.getBudgetSettings(budgetId);
+      if (!settings) {
+        return {};
+      }
+
+      const display = (settings as Record<string, unknown>)?.display ?? settings;
+      const candidates: Partial<Record<YnabFlagColor, string>> = {};
+      const flagValues: YnabFlagColor[] = [UNFLAGGED_FLAG.value, ...YNAB_FLAG_COLORS.map((flag) => flag.value)];
+
+      const assignIfMatch = (key: string, value: unknown) => {
+        if (typeof value !== 'string') return;
+        const lowerKey = key.toLowerCase();
+        for (const colour of flagValues) {
+          if (lowerKey.includes(colour)) {
+            candidates[colour] = value;
+          }
+        }
+      };
+
+      if (display && typeof display === 'object') {
+        Object.entries(display).forEach(([key, value]) => assignIfMatch(key, value));
+
+        const flagNamesAlias = (display as Record<string, unknown>).flag_names ??
+          (display as Record<string, unknown>).flagNames;
+        if (flagNamesAlias && typeof flagNamesAlias === 'object') {
+          Object.entries(flagNamesAlias as Record<string, unknown>).forEach(([key, value]) =>
+            assignIfMatch(key, value)
+          );
+        }
+      }
+
+      if (!candidates[UNFLAGGED_FLAG.value]) {
+        candidates[UNFLAGGED_FLAG.value] = UNFLAGGED_FLAG.label;
+      }
+
+      return candidates;
+    } catch (error) {
+      console.warn('Failed to fetch YNAB flag names', error);
+      return {};
+    }
   }
 
   // Categories

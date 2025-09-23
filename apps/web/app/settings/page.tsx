@@ -72,6 +72,8 @@ function buildTrackedCard(accountId: string, accountName: string): CreditCard {
     earningBlockSize: null,
     minimumSpend: null,
     maximumSpend: null,
+    subcategoriesEnabled: false,
+    subcategories: [],
   };
 }
 

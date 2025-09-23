@@ -1,14 +1,17 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Save, AlertCircle } from 'lucide-react';
 import { useCreditCards } from '@/hooks/useLocalStorage';
-import type { CreditCard } from '@/lib/storage';
+import { storage, type CreditCard } from '@/lib/storage';
 import { validateIssuer, sanitizeInput } from '@/lib/validation';
 import { CardSettingsEditor, computeCardFieldDiff, type CardEditState } from '@/components/CardSettingsEditor';
+import { UNFLAGGED_FLAG, YNAB_FLAG_COLORS, type YnabFlagColor } from '@/lib/ynab-constants';
+import { YnabClient } from '@/lib/ynab-client';
 
 interface CardSettingsProps {
   card: CreditCard;
@@ -22,19 +25,54 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [issuerError, setIssuerError] = useState('');
+  const [flagNames, setFlagNames] = useState(() => storage.getFlagNames());
 
-  const [formData, setFormData] = useState<CardEditState>({
-    name: card.name,
-    issuer: card.issuer || '',
-    type: card.type,
-    featured: card.featured ?? true,
-    billingCycleType: card.billingCycle?.type || 'calendar',
-    billingCycleDay: card.billingCycle?.dayOfMonth || 1,
-    earningRate: card.earningRate || (card.type === 'cashback' ? 1 : 1),
-    earningBlockSize: card.earningBlockSize,
-    minimumSpend: card.minimumSpend,
-    maximumSpend: card.maximumSpend,
+  const createFormState = (nextCard: CreditCard): CardEditState => ({
+    name: nextCard.name,
+    issuer: nextCard.issuer || '',
+    type: nextCard.type,
+    featured: nextCard.featured ?? true,
+    billingCycleType: nextCard.billingCycle?.type || 'calendar',
+    billingCycleDay: nextCard.billingCycle?.dayOfMonth || 1,
+    earningRate: nextCard.earningRate || (nextCard.type === 'cashback' ? 1 : 1),
+    earningBlockSize: nextCard.earningBlockSize,
+    minimumSpend: nextCard.minimumSpend,
+    maximumSpend: nextCard.maximumSpend,
+    subcategoriesEnabled: nextCard.subcategoriesEnabled ?? false,
+    subcategories: nextCard.subcategories ? nextCard.subcategories.map((sub) => ({ ...sub })) : [],
   });
+
+  const [formData, setFormData] = useState<CardEditState>(() => createFormState(card));
+
+  useEffect(() => {
+    setFormData(createFormState(card));
+  }, [card]);
+
+  useEffect(() => {
+    const budget = storage.getSelectedBudget();
+    const pat = storage.getPAT();
+    if (!pat || !budget?.id) return;
+    const missingFlag = YNAB_FLAG_COLORS.some((flag) => !flagNames[flag.value as YnabFlagColor]);
+    if (!missingFlag) return;
+
+    let cancelled = false;
+    const client = new YnabClient(pat);
+
+    client
+      .getFlagNames(budget.id)
+      .then((names) => {
+        if (cancelled || !names || Object.keys(names).length === 0) {
+          return;
+        }
+        storage.mergeFlagNames(names);
+        setFlagNames(storage.getFlagNames());
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [flagNames, card.id]);
 
   const fieldDiffs = useMemo(() => computeCardFieldDiff(card, formData), [card, formData]);
   const hasUnsavedChanges = useMemo(() => Object.values(fieldDiffs).some(Boolean), [fieldDiffs]);
@@ -75,10 +113,19 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
         earningBlockSize: formData.earningBlockSize,
         minimumSpend: formData.minimumSpend,
         maximumSpend: formData.maximumSpend,
+        subcategoriesEnabled: formData.subcategoriesEnabled ?? false,
+        subcategories: Array.isArray(formData.subcategories)
+          ? formData.subcategories.map((sub) => ({
+              ...sub,
+              createdAt: sub.createdAt ?? new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            }))
+          : card.subcategories,
       };
 
       updateCard(updatedCard);
       onUpdate(updatedCard);
+      setFormData(createFormState(updatedCard));
       setEditing(false);
     } catch (err) {
       setError('Failed to save changes');
@@ -88,18 +135,7 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
   };
 
   const handleCancel = () => {
-    setFormData({
-      name: card.name,
-      issuer: card.issuer || '',
-      type: card.type,
-      featured: card.featured ?? true,
-      billingCycleType: card.billingCycle?.type || 'calendar',
-      billingCycleDay: card.billingCycle?.dayOfMonth || 1,
-      earningRate: card.earningRate || (card.type === 'cashback' ? 1 : 1),
-      earningBlockSize: card.earningBlockSize,
-      minimumSpend: card.minimumSpend,
-      maximumSpend: card.maximumSpend,
-    });
+    setFormData(createFormState(card));
     setEditing(false);
     setError('');
     setIssuerError('');
@@ -190,6 +226,66 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
               </p>
             </div>
           </div>
+          <div className="mt-6">
+            <h3 className="text-sm font-medium text-muted-foreground">Subcategory rewards</h3>
+            {card.subcategoriesEnabled && card.subcategories && card.subcategories.length > 0 ? (
+              <div className="mt-2 space-y-2">
+                {card.subcategories
+                  .slice()
+                  .sort((a, b) => a.priority - b.priority)
+                  .map((subcategory) => {
+                    const rewardValue = typeof subcategory.rewardValue === 'number' ? subcategory.rewardValue : 0;
+                    const rateLabel = card.type === 'cashback'
+                      ? `${rewardValue.toFixed(2)}% cashback`
+                      : `${rewardValue.toFixed(2)} miles per dollar`;
+                    const minLabel = typeof subcategory.minimumSpend === 'number'
+                      ? subcategory.minimumSpend === 0
+                        ? 'No minimum'
+                        : `$${subcategory.minimumSpend.toLocaleString()}`
+                      : 'Not configured';
+                    const maxLabel = typeof subcategory.maximumSpend === 'number'
+                      ? subcategory.maximumSpend === 0
+                        ? 'No cap'
+                        : `$${subcategory.maximumSpend.toLocaleString()}`
+                      : 'Not configured';
+                    const flagLabel = flagNames[subcategory.flagColor as YnabFlagColor] ?? (
+                      subcategory.flagColor === UNFLAGGED_FLAG.value
+                        ? UNFLAGGED_FLAG.label
+                        : YNAB_FLAG_COLORS.find((flag) => flag.value === subcategory.flagColor)?.label ?? subcategory.flagColor
+                    );
+
+                    return (
+                      <div
+                        key={subcategory.id}
+                        className="flex items-center justify-between gap-4 rounded-lg border border-border/40 bg-muted/10 p-3"
+                      >
+                        <div className="flex flex-1 items-center gap-3">
+                          <Badge variant="secondary">{flagLabel}</Badge>
+                          <div>
+                            <p className="font-medium">{subcategory.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {rateLabel} • Min {minLabel} • Max {maxLabel}
+                              {card.type === 'miles' && subcategory.milesBlockSize
+                                ? ` • ${subcategory.milesBlockSize} mile block`
+                                : ''}
+                            </p>
+                          </div>
+                        </div>
+                        {!subcategory.active && (
+                          <Badge variant="outline" className="text-xs">
+                            Inactive
+                          </Badge>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+            ) : (
+              <p className="mt-2 text-sm text-muted-foreground">
+                Subcategory rewards disabled.
+              </p>
+            )}
+          </div>
         </CardContent>
       </Card>
     );
@@ -223,8 +319,8 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
           onFieldChange={handleFieldChange}
           showNameAndIssuer={true}
           showCardType={true}
-          defaultExpanded={true}
           isChanged={hasUnsavedChanges}
+          flagNames={flagNames}
         />
 
         {/* Actions */}

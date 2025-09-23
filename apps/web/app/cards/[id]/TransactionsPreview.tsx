@@ -95,7 +95,8 @@ export default function TransactionsPreview({ card, lookbackDays = LOOKBACK_DAYS
                 const { reward, blockInfo } = SimpleRewardsCalculator.calculateTransactionReward(
                   amount,
                   card,
-                  settings
+                  settings,
+                  { flagColor: txn.flag_color }
                 );
 
                 return (

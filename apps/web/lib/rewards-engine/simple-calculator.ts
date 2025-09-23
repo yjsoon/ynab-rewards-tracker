@@ -2,14 +2,39 @@
  * Simplified rewards calculation using card earning rates
  */
 
-import type { CreditCard, AppSettings } from '@/lib/storage';
+import type { AppSettings, CardSubcategory, CreditCard } from '@/lib/storage';
 import type { Transaction } from '@/types/transaction';
 import {
-  isMinimumSpendMet,
+  calculateMaximumSpendProgress,
   calculateMinimumSpendProgress,
   isMaximumSpendExceeded,
-  calculateMaximumSpendProgress
+  isMinimumSpendMet,
 } from '@/lib/minimum-spend-helpers';
+import { UNFLAGGED_FLAG, YNAB_FLAG_COLORS, type YnabFlagColor } from '@/lib/ynab-constants';
+
+const FLAG_COLOUR_SET: Set<YnabFlagColor> = new Set([
+  UNFLAGGED_FLAG.value,
+  ...YNAB_FLAG_COLORS.map((flag) => flag.value),
+]);
+
+export interface SubcategoryCalculation {
+  id: string;
+  name: string;
+  flagColor: YnabFlagColor;
+  totalSpend: number;
+  eligibleSpendBeforeBlocks: number;
+  eligibleSpend: number;
+  rewardRate: number;
+  rewardEarned: number;
+  rewardEarnedDollars: number;
+  minimumSpend?: number | null;
+  minimumSpendMet: boolean;
+  maximumSpend?: number | null;
+  maximumSpendExceeded: boolean;
+  blockSize?: number | null;
+  blocksEarned?: number;
+  active: boolean;
+}
 
 export interface SimplifiedCalculation {
   cardId: string;
@@ -18,7 +43,7 @@ export interface SimplifiedCalculation {
   eligibleSpend: number; // Spend that actually earns rewards after gating and block rounding
   eligibleSpendBeforeBlocks?: number; // Spend eligible after min/max limits but before block rounding
   rewardEarned: number; // Raw reward units (dollars for cashback, miles for miles cards)
-  rewardEarnedDollars: number; // Normalized dollar value for comparison
+  rewardEarnedDollars: number; // Normalised dollar value for comparison
   rewardType: 'cashback' | 'miles';
   // Minimum spend tracking
   minimumSpend?: number | null; // Required spending threshold (null = not configured, 0 = no minimum, >0 = has minimum)
@@ -28,6 +53,7 @@ export interface SimplifiedCalculation {
   maximumSpend?: number | null; // Spending cap (null = not configured, 0 = no limit, >0 = has limit)
   maximumSpendExceeded: boolean; // Whether maximum spend limit has been exceeded
   maximumSpendProgress?: number; // Progress toward maximum (0-100) if applicable
+  subcategoryBreakdowns?: SubcategoryCalculation[];
 }
 
 export interface CalculationPeriod {
@@ -36,46 +62,128 @@ export interface CalculationPeriod {
   label: string;
 }
 
+type SubcategoryContext = {
+  enabled: boolean;
+  activeSubcategories: CardSubcategory[];
+  map: Map<YnabFlagColor, CardSubcategory>;
+  fallback: CardSubcategory | undefined;
+};
+
+type TransactionRewardOptions = {
+  flagColor?: string | null;
+};
+
 export class SimpleRewardsCalculator {
+  private static normaliseFlagColor(flagColor?: string | null): YnabFlagColor {
+    if (!flagColor) {
+      return UNFLAGGED_FLAG.value;
+    }
+    const lowered = flagColor.toLowerCase() as YnabFlagColor;
+    return FLAG_COLOUR_SET.has(lowered) ? lowered : UNFLAGGED_FLAG.value;
+  }
+
+  private static getSubcategoryContext(card: CreditCard): SubcategoryContext {
+    const enabled = Boolean(card.subcategoriesEnabled);
+    const rawSubcategories = Array.isArray(card.subcategories) ? card.subcategories : [];
+    const activeSubcategories = enabled
+      ? rawSubcategories
+          .filter((sub) => sub && sub.active !== false)
+          .sort((a, b) => a.priority - b.priority)
+      : [];
+
+    const map = new Map<YnabFlagColor, CardSubcategory>();
+    for (const sub of activeSubcategories) {
+      map.set(sub.flagColor, sub);
+    }
+
+    const fallback = enabled ? map.get(UNFLAGGED_FLAG.value) : undefined;
+
+    return {
+      enabled,
+      activeSubcategories,
+      map,
+      fallback,
+    };
+  }
+
+  private static getBlockSize(card: CreditCard, subcategory?: CardSubcategory | undefined): number | null {
+    if (card.type === 'miles' && subcategory && subcategory.milesBlockSize && subcategory.milesBlockSize > 0) {
+      return subcategory.milesBlockSize;
+    }
+
+    if (card.earningBlockSize && card.earningBlockSize > 0) {
+      return card.earningBlockSize;
+    }
+
+    return null;
+  }
+
+  private static getRewardRate(card: CreditCard, subcategory?: CardSubcategory | undefined): number {
+    if (subcategory && typeof subcategory.rewardValue === 'number') {
+      return subcategory.rewardValue;
+    }
+    return typeof card.earningRate === 'number' ? card.earningRate : 0;
+  }
+
+  private static applyBlock(eligibleAmount: number, blockSize: number | null): { amount: number; blocks: number } {
+    if (!blockSize || blockSize <= 0) {
+      return { amount: eligibleAmount, blocks: 0 };
+    }
+    const blocks = Math.floor(eligibleAmount / blockSize);
+    return {
+      amount: blocks * blockSize,
+      blocks,
+    };
+  }
+
+  private static getSubcategoryForFlag(
+    context: SubcategoryContext,
+    flagColor: YnabFlagColor
+  ): CardSubcategory | undefined {
+    if (!context.enabled) {
+      return undefined;
+    }
+    return context.map.get(flagColor) ?? context.fallback;
+  }
+
   /**
    * Calculate reward for a single transaction based on card settings
    */
   static calculateTransactionReward(
     amount: number, // In dollars (positive)
     card: CreditCard,
-    settings?: AppSettings
-  ): { reward: number; rewardDollars: number; blockInfo?: string } {
+    settings?: AppSettings,
+    options?: TransactionRewardOptions
+  ): { reward: number; rewardDollars: number; blockInfo?: string; rewardRate: number } {
     const milesValuation = settings?.milesValuation || 0.01;
+    const context = this.getSubcategoryContext(card);
+    const flagColour = this.normaliseFlagColor(options?.flagColor);
+    const subcategory = this.getSubcategoryForFlag(context, flagColour);
+
+    const rewardRate = this.getRewardRate(card, subcategory);
+    if (!rewardRate || rewardRate === 0) {
+      return { reward: 0, rewardDollars: 0, rewardRate: 0 };
+    }
+
+    const blockSize = this.getBlockSize(card, subcategory);
+    const { amount: earnableAmount, blocks } = this.applyBlock(amount, blockSize);
+
     let reward = 0;
     let rewardDollars = 0;
-    let blockInfo: string | undefined;
 
-    if (!card.earningRate || card.earningRate === 0) {
-      return { reward: 0, rewardDollars: 0 };
-    }
-
-    let earnableAmount = amount;
-    
-    // If block-based earning is configured, round down to complete blocks
-    if (card.earningBlockSize && card.earningBlockSize > 0) {
-      const blocks = Math.floor(amount / card.earningBlockSize);
-      earnableAmount = blocks * card.earningBlockSize;
-      blockInfo = `${blocks} block${blocks !== 1 ? 's' : ''} × $${card.earningBlockSize}`;
-    }
-
-    // Calculate rewards based on earnable amount
     if (card.type === 'cashback') {
-      // For cashback cards, earningRate is a percentage
-      reward = earnableAmount * (card.earningRate / 100);
+      reward = earnableAmount * (rewardRate / 100);
       rewardDollars = reward;
     } else {
-      // For miles cards, earningRate is miles per dollar
-      reward = earnableAmount * card.earningRate;
+      reward = earnableAmount * rewardRate;
       rewardDollars = reward * milesValuation;
     }
 
-    return { reward, rewardDollars, blockInfo };
+    const blockInfo = blockSize && blocks > 0 ? `${blocks} block${blocks !== 1 ? 's' : ''} × $${blockSize}` : undefined;
+
+    return { reward, rewardDollars, blockInfo, rewardRate };
   }
+
   /**
    * Calculate the current period for a card based on billing cycle
    */
@@ -85,17 +193,14 @@ export class SimpleRewardsCalculator {
     const month = now.getMonth();
 
     if (card.billingCycle?.type === 'billing' && card.billingCycle.dayOfMonth) {
-      // Custom billing cycle
       const billingDay = card.billingCycle.dayOfMonth;
       let startDate: Date;
       let endDate: Date;
 
       if (now.getDate() >= billingDay) {
-        // Current period started this month
         startDate = new Date(year, month, billingDay);
         endDate = new Date(year, month + 1, billingDay - 1, 23, 59, 59, 999);
       } else {
-        // Current period started last month
         startDate = new Date(year, month - 1, billingDay);
         endDate = new Date(year, month, billingDay - 1, 23, 59, 59, 999);
       }
@@ -103,19 +208,18 @@ export class SimpleRewardsCalculator {
       return {
         start: startDate.toISOString().split('T')[0],
         end: endDate.toISOString().split('T')[0],
-        label: `${startDate.toISOString().split('T')[0]}`
-      };
-    } else {
-      // Calendar month
-      const startDate = new Date(year, month, 1);
-      const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
-
-      return {
-        start: startDate.toISOString().split('T')[0],
-        end: endDate.toISOString().split('T')[0],
-        label: `${year}-${String(month + 1).padStart(2, '0')}`
+        label: `${startDate.toISOString().split('T')[0]}`,
       };
     }
+
+    const startDate = new Date(year, month, 1);
+    const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
+
+    return {
+      start: startDate.toISOString().split('T')[0],
+      end: endDate.toISOString().split('T')[0],
+      label: `${year}-${String(month + 1).padStart(2, '0')}`,
+    };
   }
 
   /**
@@ -127,83 +231,161 @@ export class SimpleRewardsCalculator {
     period: CalculationPeriod,
     settings?: AppSettings
   ): SimplifiedCalculation {
-    // Get valuation rate from settings (default 1 cent per mile)
     const milesValuation = settings?.milesValuation || 0.01;
+    const context = this.getSubcategoryContext(card);
 
-    // Filter transactions to this period
-    const periodTransactions = transactions.filter(txn => {
+    const periodTransactions = transactions.filter((txn) => {
       const txnDate = txn.date;
       return txnDate >= period.start && txnDate <= period.end && txn.amount < 0;
     });
 
-    // Calculate total spend (convert from milliunits)
-    const totalSpend = Math.abs(
-      periodTransactions.reduce((sum, txn) => sum + txn.amount, 0)
-    ) / 1000;
+    const totalSpend = Math.abs(periodTransactions.reduce((sum, txn) => sum + txn.amount, 0)) / 1000;
 
-    // Calculate minimum spend progress and status
     const minimumSpend = card.minimumSpend;
     const minimumSpendMet = isMinimumSpendMet(totalSpend, minimumSpend);
     const minimumSpendProgress = calculateMinimumSpendProgress(totalSpend, minimumSpend);
 
-    // Calculate maximum spend progress and status
     const maximumSpend = card.maximumSpend;
-    const maximumSpendExceeded = isMaximumSpendExceeded(totalSpend, maximumSpend);
-    const maximumSpendProgress = calculateMaximumSpendProgress(totalSpend, maximumSpend);
 
-    // Calculate eligible spend (spend that earns rewards)
-    // eligibleSpendBeforeBlocks: raw eligible spend before applying block-based rounding
-    // eligibleSpend: final eligible spend after applying block-based rounding (if applicable)
     let eligibleSpend = 0;
     let eligibleSpendBeforeBlocks = 0;
-
-    if (minimumSpendMet) {
-      const hasMaximumLimit = typeof maximumSpend === 'number' && maximumSpend !== null && maximumSpend > 0;
-      const spendCap = hasMaximumLimit ? (maximumSpend as number) : Number.POSITIVE_INFINITY;
-      let remainingCap = spendCap;
-
-      for (const txn of periodTransactions) {
-        if (remainingCap <= 0) {
-          break;
-        }
-        const txnSpend = Math.abs(txn.amount) / 1000;
-        if (txnSpend <= 0) {
-          continue;
-        }
-        const spendContribution = Math.min(txnSpend, remainingCap);
-        eligibleSpendBeforeBlocks += spendContribution;
-
-        let earnablePortion = spendContribution;
-        if (card.earningBlockSize && card.earningBlockSize > 0) {
-          const blocks = Math.floor(spendContribution / card.earningBlockSize);
-          earnablePortion = blocks * card.earningBlockSize;
-        }
-
-        eligibleSpend += earnablePortion;
-        remainingCap -= spendContribution;
-      }
-    }
-
-    // Calculate rewards based on eligible spend only
     let rewardEarned = 0;
     let rewardEarnedDollars = 0;
+    let subcategoryBreakdowns: SubcategoryCalculation[] | undefined;
 
-    // Only calculate rewards if we have eligible spend and an earning rate
-    if (eligibleSpend > 0 && card.earningRate) {
-      const earnableSpend = eligibleSpend;
+    if (context.enabled && context.activeSubcategories.length > 0) {
+      const spendByFlag = new Map<YnabFlagColor, number>();
+      for (const txn of periodTransactions) {
+        const flagColour = this.normaliseFlagColor(txn.flag_color);
+        const subcategory = this.getSubcategoryForFlag(context, flagColour);
+        const effectiveFlag = subcategory?.flagColor ?? UNFLAGGED_FLAG.value;
+        const prev = spendByFlag.get(effectiveFlag) ?? 0;
+        spendByFlag.set(effectiveFlag, prev + Math.abs(txn.amount) / 1000);
+      }
 
-      // Calculate rewards based on earnable spend
-      if (card.type === 'cashback') {
-        // For cashback cards, earningRate is a percentage
-        rewardEarned = earnableSpend * (card.earningRate / 100);
-        rewardEarnedDollars = rewardEarned;
-      } else {
-        // For miles cards, earningRate is miles per dollar
-        rewardEarned = earnableSpend * card.earningRate;
-        // Convert miles to dollars using valuation
-        rewardEarnedDollars = rewardEarned * milesValuation;
+      const hasCardCap = typeof maximumSpend === 'number' && maximumSpend !== null && maximumSpend > 0;
+      let remainingCardCap = hasCardCap ? maximumSpend! : Number.POSITIVE_INFINITY;
+
+      subcategoryBreakdowns = [];
+
+      for (const subcategory of context.activeSubcategories) {
+        const totalForSubcategory = spendByFlag.get(subcategory.flagColor) ?? 0;
+        const rewardRate = this.getRewardRate(card, subcategory);
+        const blockSize = this.getBlockSize(card, subcategory);
+
+        let subEligibleBeforeBlocks = 0;
+        let subEligible = 0;
+        let blocksEarned = 0;
+        let subReward = 0;
+        let subRewardDollars = 0;
+
+        const minimumNeeded = typeof subcategory.minimumSpend === 'number' ? subcategory.minimumSpend : null;
+        const maximumAllowed = typeof subcategory.maximumSpend === 'number' && subcategory.maximumSpend > 0
+          ? subcategory.maximumSpend
+          : null;
+        const subMinimumMet = minimumSpendMet && (!minimumNeeded || totalForSubcategory >= minimumNeeded);
+
+        if (subMinimumMet && rewardRate > 0 && totalForSubcategory > 0) {
+          const cappedBySubcategory = maximumAllowed
+            ? Math.min(totalForSubcategory, maximumAllowed)
+            : totalForSubcategory;
+
+          const cappedByCard = Math.min(cappedBySubcategory, remainingCardCap);
+
+          subEligibleBeforeBlocks = cappedByCard;
+
+          const blockResult = this.applyBlock(subEligibleBeforeBlocks, blockSize);
+          subEligible = blockResult.amount;
+          blocksEarned = blockResult.blocks;
+
+          if (card.type === 'cashback') {
+            subReward = subEligible * (rewardRate / 100);
+            subRewardDollars = subReward;
+          } else {
+            subReward = subEligible * rewardRate;
+            subRewardDollars = subReward * milesValuation;
+          }
+
+          eligibleSpendBeforeBlocks += subEligibleBeforeBlocks;
+          eligibleSpend += subEligible;
+          rewardEarned += subReward;
+          rewardEarnedDollars += subRewardDollars;
+
+          if (hasCardCap) {
+            remainingCardCap = Math.max(0, remainingCardCap - subEligibleBeforeBlocks);
+          }
+        }
+
+        const cardCapHit = hasCardCap && remainingCardCap <= 0;
+        const subMaxExceeded = maximumAllowed ? totalForSubcategory >= maximumAllowed : false;
+
+        subcategoryBreakdowns.push({
+          id: subcategory.id,
+          name: subcategory.name,
+          flagColor: subcategory.flagColor,
+          totalSpend: totalForSubcategory,
+          eligibleSpendBeforeBlocks: subEligibleBeforeBlocks,
+          eligibleSpend: subEligible,
+          rewardRate,
+          rewardEarned: subReward,
+          rewardEarnedDollars: subRewardDollars,
+          minimumSpend: minimumNeeded,
+          minimumSpendMet: subMinimumMet,
+          maximumSpend: maximumAllowed,
+          maximumSpendExceeded: subMaxExceeded || cardCapHit,
+          blockSize,
+          blocksEarned: blocksEarned || undefined,
+          active: subcategory.active !== false,
+        });
+      }
+    } else {
+      if (minimumSpendMet && card.earningRate) {
+        const hasCardCap = typeof maximumSpend === 'number' && maximumSpend !== null && maximumSpend > 0;
+        const spendCap = hasCardCap ? maximumSpend! : Number.POSITIVE_INFINITY;
+        let remainingCap = spendCap;
+
+        for (const txn of periodTransactions) {
+          if (remainingCap <= 0) {
+            break;
+          }
+          const txnSpend = Math.abs(txn.amount) / 1000;
+          if (txnSpend <= 0) {
+            continue;
+          }
+          const spendContribution = Math.min(txnSpend, remainingCap);
+          eligibleSpendBeforeBlocks += spendContribution;
+
+          let earnablePortion = spendContribution;
+          if (card.earningBlockSize && card.earningBlockSize > 0) {
+            const blocks = Math.floor(spendContribution / card.earningBlockSize);
+            earnablePortion = blocks * card.earningBlockSize;
+          }
+
+          eligibleSpend += earnablePortion;
+          remainingCap -= spendContribution;
+        }
+
+        if (eligibleSpend > 0) {
+          if (card.type === 'cashback') {
+            rewardEarned = eligibleSpend * (card.earningRate / 100);
+            rewardEarnedDollars = rewardEarned;
+          } else {
+            rewardEarned = eligibleSpend * card.earningRate;
+            rewardEarnedDollars = rewardEarned * milesValuation;
+          }
+        }
       }
     }
+
+    const maximumSpendExceededRaw = isMaximumSpendExceeded(totalSpend, maximumSpend);
+    const maximumSpendExceededByEligible =
+      typeof maximumSpend === 'number' && maximumSpend !== null && maximumSpend > 0
+        ? (eligibleSpendBeforeBlocks ?? 0) >= maximumSpend
+        : false;
+    const maximumSpendExceeded = maximumSpendExceededRaw || maximumSpendExceededByEligible;
+
+    const baselineForMaxProgress = eligibleSpendBeforeBlocks ?? totalSpend;
+    const maximumSpendProgress = calculateMaximumSpendProgress(baselineForMaxProgress, maximumSpend);
 
     return {
       cardId: card.id,
@@ -219,7 +401,8 @@ export class SimpleRewardsCalculator {
       minimumSpendProgress,
       maximumSpend,
       maximumSpendExceeded,
-      maximumSpendProgress
+      maximumSpendProgress,
+      subcategoryBreakdowns,
     };
   }
 
@@ -240,7 +423,7 @@ export class SimpleRewardsCalculator {
     period: CalculationPeriod,
     settings?: AppSettings
   ): { card: CreditCard; calculation: SimplifiedCalculation } | null {
-    const eligibleCards = cards.filter(c => c.earningRate);
+    const eligibleCards = cards.filter((c) => c.earningRate);
 
     if (eligibleCards.length === 0) return null;
 

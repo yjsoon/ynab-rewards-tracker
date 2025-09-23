@@ -7,12 +7,14 @@ import { storage } from '@/lib/storage';
 import { cn } from '@/lib/utils';
 import { CurrencyAmount } from '@/components/CurrencyAmount';
 import { SpendingProgressBar } from '@/components/SpendingProgressBar';
+import { Badge } from '@/components/ui/badge';
 import { AlertCircle, TrendingUp, Percent, XCircle } from 'lucide-react';
 import {
   isMinimumSpendConfigured,
   hasMinimumSpendRequirement
 } from '@/lib/minimum-spend-helpers';
 import type { CreditCard, AppSettings } from '@/lib/storage';
+import { UNFLAGGED_FLAG, YNAB_FLAG_COLORS, type YnabFlagColor } from '@/lib/ynab-constants';
 import type { Transaction } from '@/types/transaction';
 
 interface CardSpendingSummaryProps {
@@ -28,6 +30,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
   const [loading, setLoading] = useState(true);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const flagNames = useMemo(() => storage.getFlagNames(), []);
 
   // Calculate current period
   const period = useMemo(() => SimpleRewardsCalculator.calculatePeriod(card), [card]);
@@ -132,7 +135,8 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
       minimumSpendProgress: calculation.minimumSpendProgress,
       maximumSpend: calculation.maximumSpend,
       maximumSpendExceeded: calculation.maximumSpendExceeded,
-      maximumSpendProgress: calculation.maximumSpendProgress
+      maximumSpendProgress: calculation.maximumSpendProgress,
+      subcategoryBreakdowns: calculation.subcategoryBreakdowns ?? [],
     };
   }, [card, transactions, period, settings]);
 
@@ -149,7 +153,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
     );
   }
 
-  const { totalSpend, eligibleSpend, eligibleSpendBeforeBlocks, rewardEarned, rewardEarnedDollars, daysRemaining, minimumSpend, minimumSpendMet, maximumSpend, maximumSpendExceeded } = summary;
+  const { totalSpend, eligibleSpend, eligibleSpendBeforeBlocks, rewardEarned, rewardEarnedDollars, daysRemaining, minimumSpend, minimumSpendMet, maximumSpend, maximumSpendExceeded, subcategoryBreakdowns } = summary;
 
   const currency = settings?.currency;
   const milesValuation = settings?.milesValuation ?? 0.01;
@@ -238,6 +242,64 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
           <p className="mt-1 text-xs">
             Set minimum/maximum spend in card settings to track limits and bonuses
           </p>
+        </div>
+      )}
+
+      {card.subcategoriesEnabled && subcategoryBreakdowns.length > 0 && (
+        <div className="space-y-2 rounded-md border border-border/60 p-3">
+          <p className="text-sm font-semibold text-muted-foreground">Subcategory breakdown</p>
+          <div className="space-y-2">
+            {subcategoryBreakdowns.map((entry) => {
+              const flagLabel = flagNames[entry.flagColor as YnabFlagColor] ?? (
+                entry.flagColor === UNFLAGGED_FLAG.value
+                  ? UNFLAGGED_FLAG.label
+                  : YNAB_FLAG_COLORS.find((flag) => flag.value === entry.flagColor)?.label ?? entry.flagColor
+              );
+
+              const rewardSummary = card.type === 'cashback'
+                ? <CurrencyAmount value={entry.rewardEarned} currency={currency} />
+                : (
+                    <span>
+                      {Math.round(entry.rewardEarned).toLocaleString()} miles
+                      {entry.rewardEarnedDollars ? (
+                        <span className="text-muted-foreground">
+                          {' '}(<CurrencyAmount value={entry.rewardEarnedDollars} currency={currency} />)
+                        </span>
+                      ) : null}
+                    </span>
+                  );
+
+              return (
+                <div
+                  key={entry.subcategoryId}
+                  className="flex flex-col gap-1 rounded-lg border border-border/40 bg-background/80 p-2 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="flex flex-1 items-center gap-3">
+                    <Badge variant="secondary">{flagLabel}</Badge>
+                    <div>
+                      <p className="text-sm font-medium">{entry.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Spend <CurrencyAmount value={entry.totalSpend} currency={currency} />
+                        {' • '}Reward {rewardSummary}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {!entry.minimumSpendMet && (
+                      <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">
+                        Below minimum
+                      </Badge>
+                    )}
+                    {entry.maximumSpendExceeded && (
+                      <Badge variant="outline" className="text-xs text-red-600 border-red-300">
+                        Capped
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
