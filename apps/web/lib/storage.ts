@@ -148,7 +148,6 @@ type MutableSubcategory = CardSubcategory & Record<string, unknown>;
 type MutableRule = RewardRule & Record<string, unknown>;
 type MutableCalculation = RewardCalculation & Record<string, unknown>;
 type MutableCategoryBreakdown = CategoryBreakdown & Record<string, unknown>;
-type MutableSubcategoryBreakdown = SubcategoryBreakdown & Record<string, unknown>;
 type MutableSettings = AppSettings & Record<string, unknown>;
 
 class StorageService {

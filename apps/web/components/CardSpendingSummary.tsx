@@ -8,14 +8,12 @@ import { cn } from '@/lib/utils';
 import { CurrencyAmount } from '@/components/CurrencyAmount';
 import { SpendingProgressBar } from '@/components/SpendingProgressBar';
 import { SubcategoryBreakdownCompact } from '@/components/SubcategoryBreakdownCompact';
-import { Badge } from '@/components/ui/badge';
 import { AlertCircle, TrendingUp, Percent, XCircle } from 'lucide-react';
 import {
   isMinimumSpendConfigured,
   hasMinimumSpendRequirement
 } from '@/lib/minimum-spend-helpers';
 import type { CreditCard, AppSettings } from '@/lib/storage';
-import { UNFLAGGED_FLAG, YNAB_FLAG_COLORS, type YnabFlagColor } from '@/lib/ynab-constants';
 import type { Transaction } from '@/types/transaction';
 
 interface CardSpendingSummaryProps {

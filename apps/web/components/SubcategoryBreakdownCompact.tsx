@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { UNFLAGGED_FLAG, YNAB_FLAG_COLORS, type YnabFlagColor } from '@/lib/ynab-constants';
 import { CurrencyAmount } from './CurrencyAmount';
 
 interface SubcategoryBreakdown {
@@ -51,7 +50,6 @@ export function SubcategoryBreakdownCompact({
   breakdowns,
   cardType,
   currency,
-  flagNames,
 }: SubcategoryBreakdownCompactProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -59,8 +57,6 @@ export function SubcategoryBreakdownCompact({
 
   // Sort breakdowns by reward earned (highest first)
   const sortedBreakdowns = [...breakdowns].sort((a, b) => b.rewardEarned - a.rewardEarned);
-  const topBreakdowns = sortedBreakdowns.slice(0, 3);
-  const hasMore = sortedBreakdowns.length > 3;
 
   // Calculate percentages for stacked bar
   const totalSpend = breakdowns.reduce((sum, b) => sum + b.totalSpend, 0);
