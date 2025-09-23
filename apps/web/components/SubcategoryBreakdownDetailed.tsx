@@ -2,7 +2,8 @@
 
 import { cn } from '@/lib/utils';
 import { CurrencyAmount } from './CurrencyAmount';
-import { TrendingUp, TrendingDown, Minus, AlertCircle } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { getFlagHex } from '@/lib/flag-colors';
 
 interface SubcategoryBreakdown {
   subcategoryId?: string;
@@ -25,7 +26,7 @@ interface SubcategoryBreakdownDetailedProps {
   totalCardReward: number;
 }
 
-// Map flag colors to actual colors for visual representation
+// Map flag colours to actual colours for visual representation
 const FLAG_COLOR_MAP: Record<string, { bg: string; border: string; text: string; dot: string }> = {
   red: {
     bg: 'bg-red-50 dark:bg-red-950/20',
@@ -71,16 +72,6 @@ const FLAG_COLOR_MAP: Record<string, { bg: string; border: string; text: string;
   },
 };
 
-const FLAG_COLOR_HEX: Record<string, string> = {
-  red: '#ef4444',
-  orange: '#f97316',
-  yellow: '#eab308',
-  green: '#22c55e',
-  blue: '#3b82f6',
-  purple: '#a855f7',
-  unflagged: '#6b7280',
-};
-
 export function SubcategoryBreakdownDetailed({
   breakdowns,
   cardType,
@@ -105,12 +96,9 @@ export function SubcategoryBreakdownDetailed({
       : 0,
   }));
 
-  // Find best and worst performing subcategories by effective rate
+  // Identify the best-performing subcategory by effective rate
   const bestPerformer = enrichedBreakdowns.reduce((best, current) =>
     current.effectiveRate > best.effectiveRate ? current : best
-  );
-  const worstPerformer = enrichedBreakdowns.reduce((worst, current) =>
-    current.effectiveRate < worst.effectiveRate ? current : worst
   );
 
   return (
@@ -118,9 +106,7 @@ export function SubcategoryBreakdownDetailed({
       {/* Visual Bar Chart */}
       <div className="flex h-8 w-full overflow-hidden rounded-lg bg-muted/30 border border-border/40">
           {enrichedBreakdowns.map((segment, index) => {
-            const color = segment.maximumSpendExceeded
-              ? '#ef4444'
-              : (FLAG_COLOR_HEX[segment.flagColor] || FLAG_COLOR_HEX.unflagged);
+            const color = segment.maximumSpendExceeded ? '#ef4444' : getFlagHex(segment.flagColor);
             const width = segment.spendPercentage;
 
             if (width < 0.5) return null; // Skip tiny segments
