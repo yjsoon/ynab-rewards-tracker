@@ -7,6 +7,7 @@ import { storage } from '@/lib/storage';
 import { cn } from '@/lib/utils';
 import { CurrencyAmount } from '@/components/CurrencyAmount';
 import { SpendingProgressBar } from '@/components/SpendingProgressBar';
+import { SubcategoryBreakdownCompact } from '@/components/SubcategoryBreakdownCompact';
 import { AlertCircle, TrendingUp, Percent, XCircle } from 'lucide-react';
 import {
   isMinimumSpendConfigured,
@@ -28,6 +29,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
   const [loading, setLoading] = useState(true);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const flagNames = useMemo(() => storage.getFlagNames(), []);
 
   // Calculate current period
   const period = useMemo(() => SimpleRewardsCalculator.calculatePeriod(card), [card]);
@@ -132,7 +134,8 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
       minimumSpendProgress: calculation.minimumSpendProgress,
       maximumSpend: calculation.maximumSpend,
       maximumSpendExceeded: calculation.maximumSpendExceeded,
-      maximumSpendProgress: calculation.maximumSpendProgress
+      maximumSpendProgress: calculation.maximumSpendProgress,
+      subcategoryBreakdowns: calculation.subcategoryBreakdowns ?? [],
     };
   }, [card, transactions, period, settings]);
 
@@ -149,7 +152,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
     );
   }
 
-  const { totalSpend, eligibleSpend, eligibleSpendBeforeBlocks, rewardEarned, rewardEarnedDollars, daysRemaining, minimumSpend, minimumSpendMet, maximumSpend, maximumSpendExceeded } = summary;
+  const { totalSpend, eligibleSpend, eligibleSpendBeforeBlocks, rewardEarned, rewardEarnedDollars, daysRemaining, minimumSpend, minimumSpendMet, maximumSpend, maximumSpendExceeded, subcategoryBreakdowns } = summary;
 
   const currency = settings?.currency;
   const milesValuation = settings?.milesValuation ?? 0.01;
@@ -239,6 +242,15 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
             Set minimum/maximum spend in card settings to track limits and bonuses
           </p>
         </div>
+      )}
+
+      {card.subcategoriesEnabled && subcategoryBreakdowns.length > 0 && (
+        <SubcategoryBreakdownCompact
+          breakdowns={subcategoryBreakdowns}
+          cardType={card.type}
+          currency={currency || '$'}
+          flagNames={flagNames}
+        />
       )}
 
       {/* Bottom meta info */}

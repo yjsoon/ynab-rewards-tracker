@@ -193,7 +193,12 @@ export default function CardTransactionsPage() {
               <div className="space-y-2">
                 {pagination.items.map((txn) => {
                   const amount = absFromMilli(txn.amount);
-                  const { reward, blockInfo } = SimpleRewardsCalculator.calculateTransactionReward(amount, card, settings);
+                  const { reward, blockInfo } = SimpleRewardsCalculator.calculateTransactionReward(
+                    amount,
+                    card,
+                    settings,
+                    { flagColor: txn.flag_color }
+                  );
 
                   return (
                     <div

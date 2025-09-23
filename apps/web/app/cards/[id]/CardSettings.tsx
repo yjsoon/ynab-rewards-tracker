@@ -1,14 +1,29 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Save, AlertCircle } from 'lucide-react';
 import { useCreditCards } from '@/hooks/useLocalStorage';
-import type { CreditCard } from '@/lib/storage';
+import { storage, type CardSubcategory, type CreditCard } from '@/lib/storage';
 import { validateIssuer, sanitizeInput } from '@/lib/validation';
 import { CardSettingsEditor, computeCardFieldDiff, type CardEditState } from '@/components/CardSettingsEditor';
+import { UNFLAGGED_FLAG, YNAB_FLAG_COLORS, type YnabFlagColor } from '@/lib/ynab-constants';
+
+// Map flag colors to actual colors for visual representation
+const FLAG_COLOR_MAP: Record<string, string> = {
+  red: '#ef4444',
+  orange: '#f97316',
+  yellow: '#eab308',
+  green: '#22c55e',
+  blue: '#3b82f6',
+  purple: '#a855f7',
+  unflagged: '#6b7280',
+};
+import { prepareSubcategoriesForSave } from '@/lib/subcategory-utils';
+import { YnabClient } from '@/lib/ynab-client';
 
 interface CardSettingsProps {
   card: CreditCard;
@@ -16,35 +31,74 @@ interface CardSettingsProps {
   initialEditing?: boolean;
 }
 
+// Move createFormState outside component to avoid recreating it
+const createFormState = (nextCard: CreditCard): CardEditState => ({
+  name: nextCard.name,
+  issuer: nextCard.issuer || '',
+  type: nextCard.type,
+  featured: nextCard.featured ?? true,
+  billingCycleType: nextCard.billingCycle?.type || 'calendar',
+  billingCycleDay: nextCard.billingCycle?.dayOfMonth || 1,
+  earningRate: nextCard.earningRate || (nextCard.type === 'cashback' ? 1 : 1),
+  earningBlockSize: nextCard.earningBlockSize,
+  minimumSpend: nextCard.minimumSpend,
+  maximumSpend: nextCard.maximumSpend,
+  subcategoriesEnabled: nextCard.subcategoriesEnabled ?? false,
+  subcategories: nextCard.subcategories || [],
+});
+
 export default function CardSettings({ card, onUpdate, initialEditing = false }: CardSettingsProps) {
   const { updateCard } = useCreditCards();
   const [editing, setEditing] = useState(initialEditing);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [issuerError, setIssuerError] = useState('');
+  const [flagNames, setFlagNames] = useState(() => storage.getFlagNames());
 
-  const [formData, setFormData] = useState<CardEditState>({
-    name: card.name,
-    issuer: card.issuer || '',
-    type: card.type,
-    featured: card.featured ?? true,
-    billingCycleType: card.billingCycle?.type || 'calendar',
-    billingCycleDay: card.billingCycle?.dayOfMonth || 1,
-    earningRate: card.earningRate || (card.type === 'cashback' ? 1 : 1),
-    earningBlockSize: card.earningBlockSize,
-    minimumSpend: card.minimumSpend,
-    maximumSpend: card.maximumSpend,
-  });
+
+  const [formData, setFormData] = useState<CardEditState>(() => createFormState(card));
+
+  useEffect(() => {
+    setFormData(createFormState(card));
+  }, [card]);
+
+  useEffect(() => {
+    const budget = storage.getSelectedBudget();
+    const pat = storage.getPAT();
+    if (!pat || !budget?.id) return;
+
+    // Only fetch if we don't have flag names yet
+    const hasFlagNames = Object.keys(flagNames).length > 0;
+    if (hasFlagNames) return;
+
+    let cancelled = false;
+    const client = new YnabClient(pat);
+
+    client
+      .getCustomFlagNames(budget.id)
+      .then((names) => {
+        if (cancelled || !names || Object.keys(names).length === 0) {
+          return;
+        }
+        storage.mergeFlagNames(names);
+        setFlagNames(storage.getFlagNames());
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, []); // Remove dependencies to avoid re-fetching
 
   const fieldDiffs = useMemo(() => computeCardFieldDiff(card, formData), [card, formData]);
   const hasUnsavedChanges = useMemo(() => Object.values(fieldDiffs).some(Boolean), [fieldDiffs]);
 
-  const handleFieldChange = (field: keyof CardEditState, value: unknown) => {
+  const handleFieldChange = useCallback((field: keyof CardEditState, value: unknown) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     if (field === 'issuer') {
       setIssuerError('');
     }
-  };
+  }, []);
 
   const handleSave = async () => {
     setSaving(true);
@@ -62,6 +116,14 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
     }
 
     try {
+      const toggledOn = Boolean(formData.subcategoriesEnabled);
+      const preparedSubcategories = toggledOn
+        ? prepareSubcategoriesForSave(
+            formData.subcategories as CardSubcategory[] | undefined,
+            formData.earningRate ?? card.earningRate ?? 0
+          )
+        : [];
+
       const updatedCard: CreditCard = {
         ...card,
         name: formData.name || card.name,
@@ -75,10 +137,20 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
         earningBlockSize: formData.earningBlockSize,
         minimumSpend: formData.minimumSpend,
         maximumSpend: formData.maximumSpend,
+        subcategoriesEnabled: toggledOn,
+        subcategories: preparedSubcategories,
       };
 
       updateCard(updatedCard);
-      onUpdate(updatedCard);
+
+      const storedCard = storage.getCards().find((c) => c.id === updatedCard.id);
+      if (storedCard) {
+        onUpdate(storedCard);
+        setFormData(createFormState(storedCard));
+      } else {
+        onUpdate(updatedCard);
+        setFormData(createFormState(updatedCard));
+      }
       setEditing(false);
     } catch (err) {
       setError('Failed to save changes');
@@ -88,18 +160,7 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
   };
 
   const handleCancel = () => {
-    setFormData({
-      name: card.name,
-      issuer: card.issuer || '',
-      type: card.type,
-      featured: card.featured ?? true,
-      billingCycleType: card.billingCycle?.type || 'calendar',
-      billingCycleDay: card.billingCycle?.dayOfMonth || 1,
-      earningRate: card.earningRate || (card.type === 'cashback' ? 1 : 1),
-      earningBlockSize: card.earningBlockSize,
-      minimumSpend: card.minimumSpend,
-      maximumSpend: card.maximumSpend,
-    });
+    setFormData(createFormState(card));
     setEditing(false);
     setError('');
     setIssuerError('');
@@ -190,6 +251,92 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
               </p>
             </div>
           </div>
+          <div className="mt-6">
+            <h3 className="text-sm font-medium text-muted-foreground">Subcategory rewards</h3>
+            {card.subcategoriesEnabled && card.subcategories && card.subcategories.length > 0 ? (
+              <div className="mt-2 space-y-2">
+                {card.subcategories
+                  .slice()
+                  .sort((a, b) => a.priority - b.priority)
+                  .map((subcategory) => {
+                    const rewardValue = typeof subcategory.rewardValue === 'number' ? subcategory.rewardValue : 0;
+                    const rateLabel = card.type === 'cashback'
+                      ? `${rewardValue.toFixed(2)}% cashback`
+                      : `${rewardValue.toFixed(2)} miles per dollar`;
+                    const minLabel = typeof subcategory.minimumSpend === 'number'
+                      ? subcategory.minimumSpend === 0
+                        ? 'No minimum'
+                        : `$${subcategory.minimumSpend.toLocaleString()}`
+                      : 'Not configured';
+                    const maxLabel = typeof subcategory.maximumSpend === 'number'
+                      ? subcategory.maximumSpend === 0
+                        ? 'No cap'
+                        : `$${subcategory.maximumSpend.toLocaleString()}`
+                      : 'Not configured';
+                    const flagLabel = flagNames[subcategory.flagColor as YnabFlagColor] ?? (
+                      subcategory.flagColor === UNFLAGGED_FLAG.value
+                        ? UNFLAGGED_FLAG.label
+                        : YNAB_FLAG_COLORS.find((flag) => flag.value === subcategory.flagColor)?.label ?? subcategory.flagColor
+                    );
+
+                    const isExcluded = subcategory.excludeFromRewards;
+                    const flagColor = FLAG_COLOR_MAP[subcategory.flagColor] || FLAG_COLOR_MAP.unflagged;
+
+                    return (
+                      <div
+                        key={subcategory.id}
+                        className="flex items-center justify-between gap-4 rounded-lg border border-border/40 bg-muted/10 p-3 overflow-hidden"
+                        style={{
+                          borderLeftWidth: '3px',
+                          borderLeftColor: isExcluded ? '#f97316' : flagColor,
+                        }}
+                      >
+                        <div className="flex flex-1 items-center gap-3">
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="h-2 w-2 rounded-full"
+                              style={{ backgroundColor: isExcluded ? '#f97316' : flagColor }}
+                            />
+                            <Badge variant="secondary" className="text-xs">{flagLabel}</Badge>
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium">{subcategory.name}</p>
+                              {isExcluded && (
+                                <Badge variant="outline" className="text-[10px] uppercase tracking-wider bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20">
+                                  Excluded
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {isExcluded ? (
+                                <span className="text-orange-600 dark:text-orange-400">Not counted toward rewards</span>
+                              ) : (
+                                <>
+                                  {rateLabel} • Min {minLabel} • Max {maxLabel}
+                                  {card.type === 'miles' && subcategory.milesBlockSize
+                                    ? ` • ${subcategory.milesBlockSize} mile block`
+                                    : ''}
+                                </>
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                        {!subcategory.active && (
+                          <Badge variant="outline" className="text-xs">
+                            Inactive
+                          </Badge>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+            ) : (
+              <p className="mt-2 text-sm text-muted-foreground">
+                Subcategory rewards disabled.
+              </p>
+            )}
+          </div>
         </CardContent>
       </Card>
     );
@@ -197,57 +344,51 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
 
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-xl">Edit Card Settings</CardTitle>
-        <CardDescription>Update your card configuration</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {error && (
-          <Alert variant="destructive" className="mb-6">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-        
-        {issuerError && (
-          <Alert variant="destructive" className="mb-6">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{issuerError}</AlertDescription>
-          </Alert>
-        )}
+    <>
+      {error && (
+        <Alert variant="destructive" className="mb-6">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
 
-        <CardSettingsEditor
-          card={card}
-          state={formData}
-          onFieldChange={handleFieldChange}
-          showNameAndIssuer={true}
-          showCardType={true}
-          defaultExpanded={true}
-          isChanged={hasUnsavedChanges}
-        />
+      {issuerError && (
+        <Alert variant="destructive" className="mb-6">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{issuerError}</AlertDescription>
+        </Alert>
+      )}
 
-        {/* Actions */}
-        <div className="flex gap-3 pt-4 mt-6 border-t">
-          <Button
-            onClick={handleSave}
-            disabled={saving || !formData.name}
-            className="flex-1"
-          >
-            {saving ? (
-              <>Saving...</>
-            ) : (
-              <>
-                <Save className="h-4 w-4 mr-2" />
-                Save Changes
-              </>
-            )}
-          </Button>
-          <Button variant="outline" onClick={handleCancel} className="flex-1">
-            Cancel
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+      <CardSettingsEditor
+        card={card}
+        state={formData}
+        onFieldChange={handleFieldChange}
+        showNameAndIssuer={true}
+        showCardType={true}
+        isChanged={hasUnsavedChanges}
+        flagNames={flagNames}
+      />
+
+      {/* Actions */}
+      <div className="flex gap-3 pt-4 mt-6 border-t">
+        <Button
+          onClick={handleSave}
+          disabled={saving || !formData.name}
+          className="flex-1"
+        >
+          {saving ? (
+            <>Saving...</>
+          ) : (
+            <>
+              <Save className="h-4 w-4 mr-2" />
+              Save Changes
+            </>
+          )}
+        </Button>
+        <Button variant="outline" onClick={handleCancel} className="flex-1">
+          Cancel
+        </Button>
+      </div>
+    </>
   );
 }

@@ -7,4 +7,10 @@ export const YNAB_FLAG_COLORS = [
   { value: 'purple', label: 'Purple', color: '#a855f7' },
 ] as const;
 
-export type YnabFlagColor = typeof YNAB_FLAG_COLORS[number]['value'];
+export const UNFLAGGED_FLAG = {
+  value: 'unflagged',
+  label: 'Unflagged',
+  color: '#6b7280',
+} as const;
+
+export type YnabFlagColor = typeof YNAB_FLAG_COLORS[number]['value'] | typeof UNFLAGGED_FLAG['value'];

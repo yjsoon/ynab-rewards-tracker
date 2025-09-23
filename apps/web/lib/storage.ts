@@ -3,6 +3,23 @@
  * All user data is stored in browser localStorage
  */
 
+import { UNFLAGGED_FLAG, YNAB_FLAG_COLORS, type YnabFlagColor } from './ynab-constants';
+
+export interface CardSubcategory {
+  id: string;
+  name: string;
+  flagColor: YnabFlagColor;
+  rewardValue: number;
+  milesBlockSize?: number | null;
+  minimumSpend?: number | null;
+  maximumSpend?: number | null;
+  priority: number;
+  active: boolean;
+  excludeFromRewards?: boolean; // When true, transactions don't count toward rewards or minimum spend
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface CreditCard {
   id: string;
   name: string;
@@ -22,6 +39,8 @@ export interface CreditCard {
   minimumSpend?: number | null; // Dollar amount required to earn rewards for this period
   // Maximum spend limit (three states: null = not configured, 0 = no limit, >0 = has limit)
   maximumSpend?: number | null; // Dollar amount cap for earning rewards this period
+  subcategoriesEnabled?: boolean;
+  subcategories?: CardSubcategory[];
 }
 
 export interface RewardRule {
@@ -59,6 +78,19 @@ export interface CategoryBreakdown {
   capReached: boolean;
 }
 
+export interface SubcategoryBreakdown {
+  subcategoryId: string;
+  name: string;
+  flagColor: YnabFlagColor;
+  totalSpend: number;
+  eligibleSpend: number;
+  eligibleSpendBeforeBlocks?: number;
+  rewardEarned: number;
+  rewardEarnedDollars?: number;
+  minimumSpendMet: boolean;
+  maximumSpendExceeded: boolean;
+}
+
 export interface RewardCalculation {
   cardId: string;
   ruleId: string;
@@ -69,6 +101,7 @@ export interface RewardCalculation {
   rewardEarnedDollars?: number; // Normalized dollar value for comparison
   rewardType: 'cashback' | 'miles'; // Track the type for clarity
   categoryBreakdowns?: CategoryBreakdown[];
+  subcategoryBreakdowns?: SubcategoryBreakdown[];
   minimumProgress?: number;
   maximumProgress?: number;
   minimumMet: boolean;
@@ -102,6 +135,7 @@ export interface StorageData {
     accounts?: unknown[];
     transactions?: unknown[];
     lastUpdated?: string; // also used as last computed timestamp for rewards
+    flagNames?: Partial<Record<YnabFlagColor, string>>;
   };
 }
 
@@ -110,12 +144,176 @@ const STORAGE_VERSION_KEY = 'ynab-rewards-tracker:data-version';
 const STORAGE_VERSION = '2025-09-22-reset';
 
 type MutableCard = CreditCard & Record<string, unknown> & { active?: boolean };
+type MutableSubcategory = CardSubcategory & Record<string, unknown>;
 type MutableRule = RewardRule & Record<string, unknown>;
 type MutableCalculation = RewardCalculation & Record<string, unknown>;
 type MutableCategoryBreakdown = CategoryBreakdown & Record<string, unknown>;
 type MutableSettings = AppSettings & Record<string, unknown>;
 
 class StorageService {
+  private createSubcategoryId(): string {
+    try {
+      if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        return crypto.randomUUID();
+      }
+    } catch (error) {
+      // Ignore and fall back to Math.random below
+    }
+    return `subcat-${Math.random().toString(36).slice(2, 10)}`;
+  }
+
+  private getFallbackFlagName(flagColor: YnabFlagColor, flagNames?: Partial<Record<YnabFlagColor, string>>): string {
+    if (flagNames && flagNames[flagColor]) {
+      return flagNames[flagColor] as string;
+    }
+
+    if (flagColor === UNFLAGGED_FLAG.value) {
+      return UNFLAGGED_FLAG.label;
+    }
+
+    const match = YNAB_FLAG_COLORS.find((flag) => flag.value === flagColor);
+    if (match) {
+      return match.label;
+    }
+
+    return flagColor.charAt(0).toUpperCase() + flagColor.slice(1);
+  }
+
+  private normaliseSubcategory(
+    subcategory: MutableSubcategory,
+    card: MutableCard,
+    index: number,
+    flagNames?: Partial<Record<YnabFlagColor, string>>
+  ): CardSubcategory {
+    const nowIso = new Date().toISOString();
+    const flagColor =
+      (subcategory.flagColor as YnabFlagColor | undefined) &&
+      typeof subcategory.flagColor === 'string'
+        ? (subcategory.flagColor as YnabFlagColor)
+        : UNFLAGGED_FLAG.value;
+
+    const createdAt = typeof subcategory.createdAt === 'string' ? subcategory.createdAt : nowIso;
+    const updatedAt = typeof subcategory.updatedAt === 'string' ? subcategory.updatedAt : nowIso;
+
+    const rewardValueFallback = typeof card.earningRate === 'number' ? card.earningRate : 0;
+
+    return {
+      id: typeof subcategory.id === 'string' && subcategory.id.length > 0
+        ? subcategory.id
+        : this.createSubcategoryId(),
+      name:
+        typeof subcategory.name === 'string' && subcategory.name.trim().length > 0
+          ? subcategory.name.trim()
+          : this.getFallbackFlagName(flagColor, flagNames),
+      flagColor,
+      rewardValue:
+        typeof subcategory.rewardValue === 'number' && Number.isFinite(subcategory.rewardValue)
+          ? subcategory.rewardValue
+          : rewardValueFallback,
+      milesBlockSize:
+        typeof subcategory.milesBlockSize === 'number' && Number.isFinite(subcategory.milesBlockSize)
+          ? subcategory.milesBlockSize
+          : null,
+      minimumSpend:
+        typeof subcategory.minimumSpend === 'number' && Number.isFinite(subcategory.minimumSpend)
+          ? subcategory.minimumSpend
+          : subcategory.minimumSpend === 0
+          ? 0
+          : null,
+      maximumSpend:
+        typeof subcategory.maximumSpend === 'number' && Number.isFinite(subcategory.maximumSpend)
+          ? subcategory.maximumSpend
+          : subcategory.maximumSpend === 0
+          ? 0
+          : null,
+      priority:
+        typeof subcategory.priority === 'number' && Number.isFinite(subcategory.priority)
+          ? subcategory.priority
+          : index,
+      active: typeof subcategory.active === 'boolean' ? subcategory.active : true,
+      excludeFromRewards:
+        typeof subcategory.excludeFromRewards === 'boolean' ? subcategory.excludeFromRewards : false,
+      createdAt,
+      updatedAt,
+    };
+  }
+
+  private normaliseCard(
+    card: MutableCard,
+    flagNames?: Partial<Record<YnabFlagColor, string>>
+  ): CreditCard {
+    if (!card.billingCycle) {
+      card.billingCycle = {
+        type: 'calendar',
+      };
+    }
+    if (typeof card.featured !== 'boolean') {
+      card.featured = typeof card.active === 'boolean' ? Boolean(card.active) : true;
+    }
+
+    const mutableCard = { ...card } as MutableCard;
+
+    if ('active' in mutableCard) {
+      Reflect.deleteProperty(mutableCard, 'active');
+    }
+
+    const subcategoriesEnabled = typeof mutableCard.subcategoriesEnabled === 'boolean'
+      ? mutableCard.subcategoriesEnabled
+      : false;
+
+    const rawSubcategories = Array.isArray(mutableCard.subcategories)
+      ? mutableCard.subcategories
+      : [];
+
+    const seenFlags = new Set<YnabFlagColor>();
+    const normalisedSubcategories: CardSubcategory[] = [];
+
+    rawSubcategories.forEach((subcategory, index) => {
+      const normalised = this.normaliseSubcategory(subcategory as MutableSubcategory, mutableCard, index, flagNames);
+      if (!seenFlags.has(normalised.flagColor)) {
+        normalisedSubcategories.push(normalised);
+        seenFlags.add(normalised.flagColor);
+      } else {
+        console.warn(
+          `Duplicate flag colour detected: "${normalised.flagColor}". ` +
+          `Subcategory "${normalised.name}" (index ${index}) was skipped. ` +
+          `Each subcategory must have a unique flag colour.`
+        );
+      }
+    });
+
+    if (subcategoriesEnabled && !seenFlags.has(UNFLAGGED_FLAG.value)) {
+      normalisedSubcategories.push({
+        id: this.createSubcategoryId(),
+        name: this.getFallbackFlagName(UNFLAGGED_FLAG.value, flagNames),
+        flagColor: UNFLAGGED_FLAG.value,
+        rewardValue: typeof mutableCard.earningRate === 'number' ? mutableCard.earningRate : 0,
+        milesBlockSize: null,
+        minimumSpend: null,
+        maximumSpend: null,
+        priority: normalisedSubcategories.length,
+        active: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+    }
+
+    normalisedSubcategories.sort((a, b) => a.priority - b.priority);
+
+    normalisedSubcategories.forEach((subcategory, index) => {
+      subcategory.priority = index;
+    });
+
+    mutableCard.subcategoriesEnabled = subcategoriesEnabled;
+    mutableCard.subcategories = normalisedSubcategories;
+
+    if (typeof mutableCard.issuer !== 'string') {
+      mutableCard.issuer = 'Unknown';
+    }
+
+    return mutableCard as CreditCard;
+  }
+
   private ensureVersion(): void {
     if (typeof window === 'undefined') {
       return;
@@ -146,39 +344,8 @@ class StorageService {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const data = JSON.parse(stored) as StorageData;
-        // Migrate existing cards without billingCycle
-        if (Array.isArray(data.cards)) {
-          data.cards = data.cards.map((card) => {
-            const nextCard: MutableCard = { ...card } as MutableCard;
-            if (!nextCard.billingCycle) {
-              nextCard.billingCycle = {
-                type: 'calendar' as const // dayOfMonth only applies to 'billing'
-              };
-            }
-            if (typeof nextCard.featured !== 'boolean') {
-              nextCard.featured = typeof nextCard.active === 'boolean' ? Boolean(nextCard.active) : true;
-            }
-            // Remove 'active' property cleanly using destructuring
-            if ('active' in nextCard) {
-              const { active, ...cleanCard } = nextCard;
-              return cleanCard as CreditCard;
-            }
-            return nextCard as CreditCard;
-          });
-        }
         // Migrations: field renames and defaults
         try {
-          // Ensure issuer defaults to a string
-          if (Array.isArray(data.cards)) {
-            data.cards = data.cards.map((card) => {
-              const mutableCard: MutableCard = { ...card } as MutableCard;
-              if (typeof mutableCard.issuer !== 'string') {
-                mutableCard.issuer = 'Unknown';
-              }
-              return mutableCard as CreditCard;
-            });
-          }
-
           if (Array.isArray(data.calculations)) {
             data.calculations = data.calculations.map((calc) => {
               const mutableCalc: MutableCalculation = { ...calc } as MutableCalculation;
@@ -320,6 +487,12 @@ class StorageService {
           }
         }
 
+        if (Array.isArray(data.cards)) {
+          data.cards = data.cards.map((card) =>
+            this.normaliseCard({ ...card } as MutableCard, data.cachedData?.flagNames)
+          );
+        }
+
         return data;
       }
     } catch (error) {
@@ -431,11 +604,12 @@ class StorageService {
 
   saveCard(card: CreditCard): void {
     const storage = this.getStorage();
+    const normalisedCard = this.normaliseCard({ ...card } as MutableCard, storage.cachedData?.flagNames);
     const index = storage.cards.findIndex(c => c.id === card.id);
     if (index >= 0) {
-      storage.cards[index] = card;
+      storage.cards[index] = normalisedCard;
     } else {
-      storage.cards.push(card);
+      storage.cards.push(normalisedCard);
     }
     this.setStorage(storage);
   }
@@ -567,6 +741,32 @@ class StorageService {
   setCachedData(data: StorageData['cachedData']): void {
     const storage = this.getStorage();
     storage.cachedData = data;
+    this.setStorage(storage);
+  }
+
+  getFlagNames(): Partial<Record<YnabFlagColor, string>> {
+    return this.getStorage().cachedData?.flagNames ?? {};
+  }
+
+  mergeFlagNames(flagNames: Partial<Record<YnabFlagColor, string>>): void {
+    if (!flagNames || Object.keys(flagNames).length === 0) {
+      return;
+    }
+
+    const storage = this.getStorage();
+    storage.cachedData = storage.cachedData || {};
+    storage.cachedData.flagNames = {
+      ...(storage.cachedData.flagNames ?? {}),
+      ...flagNames,
+    };
+
+    // Re-normalise cards so cached names flow through defaults
+    if (Array.isArray(storage.cards)) {
+      storage.cards = storage.cards.map((card) =>
+        this.normaliseCard({ ...card } as MutableCard, storage.cachedData?.flagNames)
+      );
+    }
+
     this.setStorage(storage);
   }
 

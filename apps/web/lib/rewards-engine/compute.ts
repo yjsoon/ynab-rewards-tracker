@@ -6,6 +6,7 @@
 
 import { YnabClient } from '@/lib/ynab-client';
 import { RewardsCalculator } from './calculator';
+import { SimpleRewardsCalculator } from './simple-calculator';
 import { TransactionMatcher } from './matcher';
 import type {
   AppSettings,
@@ -53,6 +54,43 @@ export async function computeCurrentPeriod(
 
     const forCard = TransactionMatcher.filterForCard(allTxns, card.ynabAccountId);
     const inRange = TransactionMatcher.filterByDateRange(forCard, period.startDate, period.endDate);
+
+    if (card.subcategoriesEnabled) {
+      const simplePeriod = {
+        start: period.startDate.toISOString().split('T')[0],
+        end: period.endDate.toISOString().split('T')[0],
+        label: period.name,
+      };
+      const simpleCalc = SimpleRewardsCalculator.calculateCardRewards(card, forCard, simplePeriod, settings);
+      results.push({
+        cardId: card.id,
+        ruleId: `card-${card.id}`,
+        period: period.name,
+        totalSpend: simpleCalc.totalSpend,
+        eligibleSpend: simpleCalc.eligibleSpend,
+        rewardEarned: simpleCalc.rewardEarned,
+        rewardEarnedDollars: simpleCalc.rewardEarnedDollars,
+        rewardType: simpleCalc.rewardType,
+        minimumProgress: simpleCalc.minimumSpendProgress,
+        maximumProgress: simpleCalc.maximumSpendProgress,
+        minimumMet: simpleCalc.minimumSpendMet,
+        maximumExceeded: simpleCalc.maximumSpendExceeded,
+        shouldStopUsing: simpleCalc.maximumSpendExceeded,
+        subcategoryBreakdowns: simpleCalc.subcategoryBreakdowns?.map((sub) => ({
+          subcategoryId: sub.id,
+          name: sub.name,
+          flagColor: sub.flagColor,
+          totalSpend: sub.totalSpend,
+          eligibleSpend: sub.eligibleSpend,
+          eligibleSpendBeforeBlocks: sub.eligibleSpendBeforeBlocks,
+          rewardEarned: sub.rewardEarned,
+          rewardEarnedDollars: sub.rewardEarnedDollars,
+          minimumSpendMet: sub.minimumSpendMet,
+          maximumSpendExceeded: sub.maximumSpendExceeded,
+        })),
+      });
+      continue;
+    }
 
     const rules = allRules.filter(r => r.cardId === card.id && r.active);
     for (const rule of rules) {

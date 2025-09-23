@@ -6,8 +6,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { CardSubcategoriesEditor, type CardSubcategoryDraft } from '@/components/CardSubcategoriesEditor';
 import {
   Percent,
   DollarSign,
@@ -16,10 +16,7 @@ import {
   Target,
   ShieldCheck,
   CalendarClock,
-  ChevronDown,
-  ChevronUp,
-  Settings2,
-  Tag
+  Settings2
 } from 'lucide-react';
 import type { CreditCard } from '@/lib/storage';
 import {
@@ -28,6 +25,7 @@ import {
   getMinimumSpendStatus,
   getMaximumSpendStatus
 } from '@/lib/minimum-spend-helpers';
+import { UNFLAGGED_FLAG, YNAB_FLAG_COLORS, type YnabFlagColor } from '@/lib/ynab-constants';
 
 export interface CardEditState {
   earningRate?: number;
@@ -40,6 +38,85 @@ export interface CardEditState {
   name?: string;
   issuer?: string;
   type?: 'cashback' | 'miles';
+  subcategoriesEnabled?: boolean;
+  subcategories?: CardSubcategoryDraft[];
+}
+
+function cloneSubcategories(subcategories?: CardSubcategoryDraft[] | CreditCard['subcategories']): CardSubcategoryDraft[] {
+  if (!Array.isArray(subcategories)) {
+    return [];
+  }
+  return subcategories.map((sub) => ({ ...sub }));
+}
+
+function serialiseSubcategories(subcategories: CardSubcategoryDraft[] | CreditCard['subcategories']): string {
+  if (!Array.isArray(subcategories)) {
+    return '[]';
+  }
+  const sorted = [...subcategories].sort((a, b) => a.priority - b.priority);
+  return JSON.stringify(
+    sorted.map((sub) => ({
+      id: sub.id,
+      flagColor: sub.flagColor,
+      rewardValue: sub.rewardValue,
+      minimumSpend: sub.minimumSpend ?? null,
+      maximumSpend: sub.maximumSpend ?? null,
+      milesBlockSize: sub.milesBlockSize ?? null,
+      active: sub.active !== false,
+      name: sub.name?.trim() ?? '',
+      priority: sub.priority,
+    }))
+  );
+}
+
+function generateSubcategoryId(): string {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+  } catch {
+    // ignore and fall back below
+  }
+  return `subcat-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function buildDefaultSubcategory(
+  flagColor: YnabFlagColor,
+  rewardValue: number,
+  flagNames?: Partial<Record<YnabFlagColor, string>>
+): CardSubcategoryDraft {
+  return {
+    id: generateSubcategoryId(),
+    name:
+      flagNames?.[flagColor] ??
+      (flagColor === UNFLAGGED_FLAG.value
+        ? UNFLAGGED_FLAG.label
+        : YNAB_FLAG_COLORS.find((flag) => flag.value === flagColor)?.label ?? flagColor),
+    flagColor,
+    rewardValue,
+    milesBlockSize: null,
+    minimumSpend: null,
+    maximumSpend: null,
+    priority: 0,
+    active: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function ensureUnflaggedSubcategory(
+  subcategories: CardSubcategoryDraft[],
+  rewardValue: number,
+  flagNames?: Partial<Record<YnabFlagColor, string>>
+): CardSubcategoryDraft[] {
+  const hasUnflagged = subcategories.some((sub) => sub.flagColor === UNFLAGGED_FLAG.value);
+  if (!hasUnflagged) {
+    subcategories = [...subcategories, buildDefaultSubcategory(UNFLAGGED_FLAG.value, rewardValue, flagNames)];
+  }
+  return subcategories
+    .slice()
+    .sort((a, b) => a.priority - b.priority)
+    .map((sub, index) => ({ ...sub, priority: index }));
 }
 
 export function computeCardFieldDiff(
@@ -56,6 +133,10 @@ export function computeCardFieldDiff(
   const maximumSpend = state.maximumSpend ?? card.maximumSpend ?? null;
   const billingCycleType = state.billingCycleType ?? card.billingCycle?.type ?? 'calendar';
   const billingCycleDay = state.billingCycleDay ?? card.billingCycle?.dayOfMonth ?? 1;
+  const subcategoriesEnabled = state.subcategoriesEnabled ?? card.subcategoriesEnabled ?? false;
+  const baselineSubcategories = cloneSubcategories(card.subcategories);
+  const stateSubcategories = cloneSubcategories(state.subcategories ?? card.subcategories);
+  const subcategoriesChanged = serialiseSubcategories(baselineSubcategories) !== serialiseSubcategories(stateSubcategories);
 
   return {
     name: cardName !== card.name,
@@ -70,6 +151,8 @@ export function computeCardFieldDiff(
     billingCycle:
       billingCycleType !== (card.billingCycle?.type ?? 'calendar') ||
       billingCycleDay !== (card.billingCycle?.dayOfMonth ?? 1),
+    subcategoriesEnabled: subcategoriesEnabled !== Boolean(card.subcategoriesEnabled),
+    subcategories: subcategoriesChanged,
   } as const;
 }
 
@@ -80,10 +163,10 @@ interface CardSettingsEditorProps {
   isChanged?: boolean;
   showNameAndIssuer?: boolean;
   showCardType?: boolean;
-  defaultExpanded?: boolean;
   leadingAccessory?: React.ReactNode;
   isSelected?: boolean;
   highlightUnsetMinimum?: boolean;
+  flagNames?: Partial<Record<YnabFlagColor, string>>;
 }
 
 const capsuleBaseClasses =
@@ -189,12 +272,12 @@ export function CardSettingsEditor({
   isChanged = false,
   showNameAndIssuer = false,
   showCardType = false,
-  defaultExpanded = false,
   leadingAccessory,
   isSelected = false,
   highlightUnsetMinimum = false,
+  flagNames,
 }: CardSettingsEditorProps) {
-  const [advancedOpen, setAdvancedOpen] = useState(defaultExpanded);
+  const resolvedFlagNames = flagNames ?? {};
 
   const cardType = state.type ?? card.type;
   const cardName = state.name ?? card.name;
@@ -206,6 +289,11 @@ export function CardSettingsEditor({
   const billingCycleType = state.billingCycleType ?? card.billingCycle?.type ?? 'calendar';
   const billingCycleDay = state.billingCycleDay ?? card.billingCycle?.dayOfMonth ?? 1;
   const isFeatured = state.featured ?? card.featured ?? true;
+  const subcategoriesEnabled = state.subcategoriesEnabled ?? card.subcategoriesEnabled ?? false;
+  const subcategoryDrafts = useMemo(
+    () => cloneSubcategories(state.subcategories ?? card.subcategories),
+    [state.subcategories, card.subcategories]
+  );
 
   const [blockSizeSnapshot, setBlockSizeSnapshot] = useState(() =>
     earningBlockSize && earningBlockSize > 0 ? earningBlockSize : 1
@@ -236,6 +324,24 @@ export function CardSettingsEditor({
   const shouldHighlightMinimum = highlightUnsetMinimum && minimumStatus === 'not-configured';
 
   const fieldDirty = useMemo(() => computeCardFieldDiff(card, state), [card, state]);
+  const subcategoriesDirty = fieldDirty.subcategories || fieldDirty.subcategoriesEnabled;
+  const subcategoryContainerClass = `mt-6 rounded-xl border p-4 ${
+    subcategoriesDirty
+      ? 'border-amber-300/80 bg-amber-50/40 dark:border-amber-700/60 dark:bg-amber-900/15'
+      : 'border-border/60'
+  }`;
+
+  const handleSubcategoryToggle = (enabled: boolean) => {
+    onFieldChange('subcategoriesEnabled', enabled);
+    if (enabled) {
+      const ensured = ensureUnflaggedSubcategory(cloneSubcategories(subcategoryDrafts), earningRate, resolvedFlagNames);
+      onFieldChange('subcategories', ensured);
+    }
+  };
+
+  const handleSubcategoriesChange = (next: CardSubcategoryDraft[]) => {
+    onFieldChange('subcategories', next);
+  };
 
   return (
     <div
@@ -635,43 +741,16 @@ export function CardSettingsEditor({
         </SettingCapsule>
       </div>
 
-      <div className="mt-6 border-t pt-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Tag className="h-4 w-4" />
-            <span>Category caps</span>
-            <Badge variant="outline" className="rounded-full border-dashed text-muted-foreground">
-              Coming soon
-            </Badge>
-          </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="gap-1"
-            onClick={() => setAdvancedOpen((open) => !open)}
-          >
-            {advancedOpen ? 'Hide advanced' : 'Show advanced'}
-            {advancedOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-          </Button>
-        </div>
-
-        {advancedOpen && (
-          <div className="mt-4 space-y-3 text-sm text-muted-foreground">
-            <div className="rounded-lg border border-dashed bg-muted/20 p-4">
-              <p className="font-medium text-foreground">Future planning</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                We are reserving space for per-category caps mapped from YNAB tags. Once available, you will be able to customise them here without cluttering the main view.
-              </p>
-            </div>
-            <div className="rounded-lg border border-dashed bg-muted/20 p-4">
-              <p className="font-medium text-foreground">Batch editing tips</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Select multiple cards on the Rules page to adjust featured state or earning rates in one go. A sticky bar will surface any unsaved updates at the bottom so you can commit changes quickly.
-              </p>
-            </div>
-          </div>
-        )}
+      <div className={subcategoryContainerClass}>
+        <CardSubcategoriesEditor
+          cardType={cardType}
+          enabled={subcategoriesEnabled}
+          value={subcategoryDrafts}
+          onToggleEnabled={handleSubcategoryToggle}
+          onChange={handleSubcategoriesChange}
+          baseRewardRate={earningRate}
+          flagNames={resolvedFlagNames}
+        />
       </div>
     </div>
   );
