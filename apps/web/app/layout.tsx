@@ -1,15 +1,20 @@
-import { Providers } from './providers';
-import { Navigation } from '@/components/Navigation';
-import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { ThemeProvider } from '@/components/theme-provider';
-import './globals.css';
+import { Providers } from "./providers";
+import { Navigation } from "@/components/Navigation";
+import { Footer } from "@/components/Footer";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { ThemeProvider } from "@/components/theme-provider";
+import "./globals.css";
 
 export const metadata = {
-  title: "YJAB – YJ's Awards Buddy",
-  description: 'Track credit card rewards using your YNAB data.'
+  title: "YJAB: YNAB Journal of Awards & Bonuses",
+  description: "Track credit card rewards using your YNAB data."
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body>
@@ -17,16 +22,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           attribute="class"
           defaultTheme="system"
           enableSystem
-          disableTransitionOnChange
-        >
+          disableTransitionOnChange>
           <ErrorBoundary>
             <Providers>
-              <Navigation />
-              <main className="min-h-screen bg-gradient-to-br from-background via-background to-muted/10">
-                <ErrorBoundary>
-                  {children}
-                </ErrorBoundary>
-              </main>
+              <div className="flex min-h-screen flex-col">
+                <Navigation />
+                <main className="flex-1 bg-gradient-to-br from-background via-background to-muted/10">
+                  <ErrorBoundary>{children}</ErrorBoundary>
+                </main>
+                <Footer />
+              </div>
             </Providers>
           </ErrorBoundary>
         </ThemeProvider>
