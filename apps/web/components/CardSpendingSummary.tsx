@@ -7,6 +7,7 @@ import { storage } from '@/lib/storage';
 import { cn } from '@/lib/utils';
 import { CurrencyAmount } from '@/components/CurrencyAmount';
 import { SpendingProgressBar } from '@/components/SpendingProgressBar';
+import { SubcategoryBreakdownCompact } from '@/components/SubcategoryBreakdownCompact';
 import { Badge } from '@/components/ui/badge';
 import { AlertCircle, TrendingUp, Percent, XCircle } from 'lucide-react';
 import {
@@ -246,62 +247,13 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
       )}
 
       {card.subcategoriesEnabled && subcategoryBreakdowns.length > 0 && (
-        <div className="space-y-2 rounded-md border border-border/60 p-3">
-          <p className="text-sm font-semibold text-muted-foreground">Subcategory breakdown</p>
-          <div className="space-y-2">
-            {subcategoryBreakdowns.map((entry) => {
-              const listKey = entry.subcategoryId || `${entry.flagColor}-${entry.name}`;
-              const flagLabel = flagNames[entry.flagColor as YnabFlagColor] ?? (
-                entry.flagColor === UNFLAGGED_FLAG.value
-                  ? UNFLAGGED_FLAG.label
-                  : YNAB_FLAG_COLORS.find((flag) => flag.value === entry.flagColor)?.label ?? entry.flagColor
-              );
-
-              const rewardSummary = card.type === 'cashback'
-                ? <CurrencyAmount value={entry.rewardEarned} currency={currency} />
-                : (
-                    <span>
-                      {Math.round(entry.rewardEarned).toLocaleString()} miles
-                      {entry.rewardEarnedDollars ? (
-                        <span className="text-muted-foreground">
-                          {' '}(<CurrencyAmount value={entry.rewardEarnedDollars} currency={currency} />)
-                        </span>
-                      ) : null}
-                    </span>
-                  );
-
-              return (
-                <div
-                  key={listKey}
-                  className="flex flex-col gap-1 rounded-lg border border-border/40 bg-background/80 p-2 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div className="flex flex-1 items-center gap-3">
-                    <Badge variant="secondary">{flagLabel}</Badge>
-                    <div>
-                      <p className="text-sm font-medium">{entry.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        Spend <CurrencyAmount value={entry.totalSpend} currency={currency} />
-                        {' • '}Reward {rewardSummary}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {!entry.minimumSpendMet && (
-                      <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">
-                        Below minimum
-                      </Badge>
-                    )}
-                    {entry.maximumSpendExceeded && (
-                      <Badge variant="outline" className="text-xs text-red-600 border-red-300">
-                        Capped
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        <SubcategoryBreakdownCompact
+          breakdowns={subcategoryBreakdowns}
+          cardType={card.type}
+          currency={currency || '$'}
+          flagNames={flagNames}
+          totalReward={rewardEarned}
+        />
       )}
 
       {/* Bottom meta info */}
