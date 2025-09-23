@@ -7,7 +7,7 @@ import { storage } from '@/lib/storage';
 import { cn } from '@/lib/utils';
 import { CurrencyAmount } from '@/components/CurrencyAmount';
 import { SpendingProgressBar } from '@/components/SpendingProgressBar';
-import { AlertCircle, TrendingUp, CheckCircle2, Percent, XCircle } from 'lucide-react';
+import { AlertCircle, TrendingUp, Percent, XCircle } from 'lucide-react';
 import {
   isMinimumSpendConfigured,
   hasMinimumSpendRequirement
@@ -149,7 +149,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
     );
   }
 
-  const { totalSpend, eligibleSpend, eligibleSpendBeforeBlocks, rewardEarned, rewardEarnedDollars, daysRemaining, minimumSpend, minimumSpendMet, minimumSpendProgress, maximumSpend, maximumSpendExceeded, maximumSpendProgress } = summary;
+  const { totalSpend, eligibleSpend, eligibleSpendBeforeBlocks, rewardEarned, rewardEarnedDollars, daysRemaining, minimumSpend, minimumSpendMet, maximumSpend, maximumSpendExceeded } = summary;
 
   const currency = settings?.currency;
   const milesValuation = settings?.milesValuation ?? 0.01;
@@ -177,17 +177,6 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
     : card.type === 'cashback'
     ? 'Cashback'
     : 'Miles';
-
-  const progressPercent = minimumSpendProgress || 0;
-  const progressColour = !isMinimumSpendConfigured(minimumSpend)
-    ? 'bg-muted'
-    : minimumSpend === 0 || minimumSpendMet
-    ? 'bg-emerald-500/70'
-    : 'bg-amber-500';
-
-  const remainingSpend = minimumSpend && minimumSpend > 0
-    ? Math.max(0, minimumSpend - totalSpend)
-    : 0;
 
   const unearnedAmount = Math.max(
     0,

@@ -90,7 +90,7 @@ export function isMaximumSpendExceeded(
   if (!hasMaximumSpendLimit(maximumSpend)) {
     return false; // No limit = never exceeded
   }
-  return totalSpend > maximumSpend;
+  return totalSpend >= maximumSpend;
 }
 
 /**

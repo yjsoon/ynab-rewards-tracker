@@ -50,7 +50,7 @@ export function SpendingProgressBar({
     if (!hasLimits) return 'neutral';
 
     const minimumMet = !hasMinimum || totalSpend >= minimumSpend;
-    const maximumExceeded = hasMaximum && totalSpend > maximumSpend;
+    const maximumExceeded = hasMaximum && totalSpend >= maximumSpend;
 
     if (maximumExceeded) return 'exceeded'; // Red zone - no rewards
     if (minimumMet) return 'earning'; // Green zone - earning rewards
@@ -145,7 +145,7 @@ export function SpendingProgressBar({
         </div>
 
         {/* Minimum spend marker */}
-        {hasMinimum && minimumPosition !== null && hasMaximum && (
+        {hasMinimum && minimumPosition !== null && (
           <div
             className="absolute top-0 h-3 w-0.5 bg-foreground/40"
             style={{ left: `${minimumPosition}%` }}

@@ -156,7 +156,7 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
     );
   }
 
-  const { totalSpend, eligibleSpend, eligibleSpendBeforeBlocks, rewardEarned, rewardEarnedDollars, minimumSpend, minimumSpendMet, minimumSpendProgress, maximumSpend, maximumSpendExceeded, maximumSpendProgress } = spendingAnalysis;
+  const { totalSpend, eligibleSpend, eligibleSpendBeforeBlocks, rewardEarned, rewardEarnedDollars, minimumSpend, minimumSpendMet, maximumSpend, maximumSpendExceeded } = spendingAnalysis;
 
   const currency = settings?.currency;
   const milesValuation = settings?.milesValuation ?? 0.01;
@@ -288,7 +288,7 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
                 <Alert className="border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/30">
                   <XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
                   <AlertDescription className="text-red-700 dark:text-red-300">
-                    <strong>Maximum spend limit exceeded!</strong> You've spent <CurrencyAmount value={totalSpend} currency={currency} /> which is over the <CurrencyAmount value={maximumSpend ?? 0} currency={currency} /> limit. No additional rewards will be earned on this card this period.
+                    <strong>Maximum spend limit exceeded!</strong> You&apos;ve spent <CurrencyAmount value={totalSpend} currency={currency} /> which is over the <CurrencyAmount value={maximumSpend ?? 0} currency={currency} /> limit. No additional rewards will be earned on this card this period.
                   </AlertDescription>
                 </Alert>
               ) : minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0 && !minimumSpendMet ? (
@@ -302,7 +302,7 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
                 <Alert className="border-emerald-200/60 bg-emerald-50/60 dark:border-emerald-900/40 dark:bg-emerald-950/20">
                   <CheckCircle2 className="h-4 w-4 text-emerald-500/80 dark:text-emerald-300/80" />
                   <AlertDescription className="text-emerald-700/80 dark:text-emerald-200/90">
-                    <strong className="font-semibold">You're earning rewards!</strong> {hasMaximum && !maximumSpendExceeded && `You have ${new Intl.NumberFormat('en-US', { style: 'currency', currency: currency || 'USD' }).format(maximumSpend - totalSpend)} left before reaching the maximum spend limit.`}
+                    <strong className="font-semibold">You&apos;re earning rewards!</strong> {hasMaximum && !maximumSpendExceeded && `You have ${new Intl.NumberFormat('en-US', { style: 'currency', currency: currency || 'USD' }).format((maximumSpend ?? 0) - totalSpend)} left before reaching the maximum spend limit.`}
                   </AlertDescription>
                 </Alert>
               ) : null}
