@@ -11,6 +11,7 @@ export function Footer() {
               <a
                 href="https://yjsoon.com"
                 target="_blank"
+                rel="noopener noreferrer"
                 className="font-medium underline underline-offset-4 hover:text-primary">
                 YJ Soon
               </a>{" "}
@@ -18,6 +19,7 @@ export function Footer() {
               <a
                 href="https://tinkercademy.com"
                 target="_blank"
+                rel="noopener noreferrer"
                 className="font-medium underline underline-offset-4 hover:text-primary">
                 Tinkercademy
               </a>{" "}
@@ -28,6 +30,7 @@ export function Footer() {
               <a
                 href="https://github.com/yjsoon/ynab-rewards-tracker"
                 target="_blank"
+                rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 font-medium underline underline-offset-4 hover:text-primary">
                 <Github className="h-4 w-4" />
                 <span>Open source</span>
