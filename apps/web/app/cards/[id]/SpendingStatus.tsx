@@ -13,7 +13,7 @@ import {
 import { SimpleRewardsCalculator } from '@/lib/rewards-engine';
 import { YnabClient } from '@/lib/ynab-client';
 import { storage } from '@/lib/storage';
-import { formatDollars } from '@/lib/utils';
+import { CurrencyAmount } from '@/components/CurrencyAmount';
 import type { CreditCard, AppSettings } from '@/lib/storage';
 import type { Transaction } from '@/types/transaction';
 
@@ -153,8 +153,12 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
   const { totalSpend, eligibleSpend, eligibleSpendBeforeBlocks, rewardEarned, rewardEarnedDollars, minimumSpend, minimumSpendMet, minimumSpendProgress } = spendingAnalysis;
 
   const currency = settings?.currency;
-  const formatCurrency = (amount: number) =>
-    formatDollars(amount, currency ? { currency } : {});
+  const milesValuation = settings?.milesValuation ?? 0.01;
+
+  const unearnedAmount = Math.max(
+    0,
+    (eligibleSpendBeforeBlocks ?? eligibleSpend ?? 0) - (eligibleSpend ?? 0)
+  );
 
   return (
     <div className="space-y-6">
@@ -182,7 +186,9 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
                 <DollarSign className="h-4 w-4" />
                 Total Spent
               </div>
-              <p className="text-2xl font-bold">{formatCurrency(totalSpend)}</p>
+              <p className="text-2xl font-bold">
+                <CurrencyAmount value={totalSpend} currency={currency} />
+              </p>
             </div>
 
             <div className="p-4 rounded-lg bg-muted/50">
@@ -194,7 +200,7 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
                 {!minimumSpendMet && minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0
                   ? 'No reward'
                   : card.type === 'cashback'
-                  ? formatCurrency(rewardEarned)
+                  ? <CurrencyAmount value={rewardEarned} currency={currency} />
                   : `${Math.round(rewardEarned).toLocaleString()} miles`}
               </p>
               {!minimumSpendMet && minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0 && (
@@ -211,12 +217,13 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
                 </div>
                 <p className="text-2xl font-bold">
                   {!minimumSpendMet && minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0
-                    ? formatCurrency(0)
-                    : formatCurrency(rewardEarnedDollars)}
+                    ? <CurrencyAmount value={0} currency={currency} />
+                    : <CurrencyAmount value={rewardEarnedDollars} currency={currency} />}
                 </p>
                 {minimumSpendMet && (
                   <p className="text-xs text-muted-foreground mt-1">
-                    @ ${settings?.milesValuation || 0.01}/mile
+                    @{' '}
+                    <CurrencyAmount value={milesValuation} currency={currency} />/mile
                   </p>
                 )}
                 {!minimumSpendMet && minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0 && (
@@ -232,13 +239,17 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
                 <div className="space-y-1">
-                  <p className="font-medium">Earning blocks: ${card.earningBlockSize} per block</p>
-                  <p className="text-sm">
-                    {Math.floor(eligibleSpend / card.earningBlockSize)} complete blocks earned from ${eligibleSpend.toFixed(2)} eligible spend
+                  <p className="font-medium">
+                    Earning blocks:{' '}
+                    <CurrencyAmount value={card.earningBlockSize} currency={currency} /> per block
                   </p>
-                  {Math.max(0, (eligibleSpendBeforeBlocks ?? eligibleSpend) - eligibleSpend) > 0 && (
+                  <p className="text-sm">
+                    {Math.floor(eligibleSpend / card.earningBlockSize)} complete blocks earned from{' '}
+                    <CurrencyAmount value={eligibleSpend} currency={currency} /> eligible spend
+                  </p>
+                  {unearnedAmount > 0 && (
                     <p className="text-sm text-muted-foreground">
-                      ${Math.max(0, (eligibleSpendBeforeBlocks ?? eligibleSpend) - eligibleSpend).toFixed(2)} unearned remainder
+                      <CurrencyAmount value={unearnedAmount} currency={currency} /> unearned remainder
                     </p>
                   )}
                 </div>
@@ -258,14 +269,14 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
             <Alert className="border-orange-200 bg-orange-50 dark:border-orange-900 dark:bg-orange-950/30">
               <AlertCircle className="h-4 w-4 text-orange-600 dark:text-orange-400" />
               <AlertDescription className="text-orange-700 dark:text-orange-300">
-                <strong>Minimum spend requirement not met.</strong> You need to spend {formatCurrency((minimumSpend || 0) - totalSpend)} more to earn rewards this period ({minimumSpendProgress?.toFixed(1)}% complete).
+                <strong>Minimum spend requirement not met.</strong> You need to spend <CurrencyAmount value={(minimumSpend || 0) - totalSpend} currency={currency} /> more to earn rewards this period ({minimumSpendProgress?.toFixed(1)}% complete).
               </AlertDescription>
             </Alert>
           ) : minimumSpend > 0 && minimumSpendMet ? (
-            <Alert className="border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950/30">
-              <AlertCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
-              <AlertDescription className="text-green-700 dark:text-green-300">
-                <strong>Minimum spend requirement met!</strong> You&apos;ve spent {formatCurrency(totalSpend)} out of the required {formatCurrency(minimumSpend)} this period.
+            <Alert className="border-emerald-200/60 bg-emerald-50/60 dark:border-emerald-900/40 dark:bg-emerald-950/20">
+              <AlertCircle className="h-4 w-4 text-emerald-500/80 dark:text-emerald-300/80" />
+              <AlertDescription className="text-emerald-700/80 dark:text-emerald-200/90">
+                <strong className="font-semibold">Minimum spend requirement met!</strong> You&apos;ve spent <CurrencyAmount value={totalSpend} currency={currency} /> out of the required <CurrencyAmount value={minimumSpend ?? 0} currency={currency} /> this period.
               </AlertDescription>
             </Alert>
           ) : null}

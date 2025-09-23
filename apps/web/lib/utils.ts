@@ -7,6 +7,51 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+export type CurrencyFormatOptions = {
+  locale?: string;
+  currency?: string;
+};
+
+function resolveCurrencyFormattingOptions(options: CurrencyFormatOptions = {}) {
+  const locale = options.locale ?? (typeof navigator !== 'undefined' ? navigator.language : 'en-US');
+
+  if (options.currency) {
+    return {
+      locale,
+      currency: options.currency
+    };
+  }
+
+  // Safe storage access for SSR compatibility
+  let settingsCurrency: string | undefined;
+  if (typeof window !== 'undefined') {
+    try {
+      settingsCurrency = storage.getSettings().currency;
+    } catch (e) {
+      // Storage access may fail during SSR or if localStorage is unavailable
+      console.warn('Failed to access storage for currency settings:', e);
+      settingsCurrency = undefined;
+    }
+  }
+
+  return {
+    locale,
+    currency: settingsCurrency ?? 'USD'
+  };
+}
+
+function createCurrencyFormatter(options: CurrencyFormatOptions = {}) {
+  const { locale, currency } = resolveCurrencyFormattingOptions(options);
+
+  return new Intl.NumberFormat(locale, {
+    style: 'currency',
+    currency,
+    currencyDisplay: 'narrowSymbol', // Use $ instead of US$
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
 /**
  * Convert YNAB milliunits to dollars as number
  */
@@ -26,31 +71,16 @@ export function absFromMilli(amount: number): number {
  */
 export function formatDollars(
   value: number,
-  options: {
-    locale?: string;
-    currency?: string;
-  } = {}
+  options: CurrencyFormatOptions = {}
 ): string {
-  const locale = options.locale ?? (typeof navigator !== 'undefined' ? navigator.language : 'en-US');
+  return createCurrencyFormatter(options).format(value);
+}
 
-  // Safe storage access for SSR compatibility
-  let settingsCurrency: string | undefined;
-  if (typeof window !== 'undefined') {
-    try {
-      settingsCurrency = storage.getSettings().currency;
-    } catch (e) {
-      settingsCurrency = undefined;
-    }
-  }
-
-  const currency = options.currency ?? settingsCurrency ?? 'USD';
-  return new Intl.NumberFormat(locale, {
-    style: 'currency',
-    currency,
-    currencyDisplay: 'narrowSymbol', // Use $ instead of US$
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
+export function formatCurrencyParts(
+  value: number,
+  options: CurrencyFormatOptions = {}
+): Intl.NumberFormatPart[] {
+  return createCurrencyFormatter(options).formatToParts(value);
 }
 
 /**
