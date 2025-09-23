@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useCallback, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
@@ -130,6 +130,15 @@ const SubcategoryItem = memo(function SubcategoryItem({
   const [localMin, setLocalMin] = useState(subcategory.minimumSpend);
   const [localMax, setLocalMax] = useState(subcategory.maximumSpend);
   const [localMilesBlock, setLocalMilesBlock] = useState(subcategory.milesBlockSize);
+
+  // Sync local state when subcategory prop changes (after save/re-render)
+  useEffect(() => {
+    setLocalName(subcategory.name);
+    setLocalReward(subcategory.rewardValue);
+    setLocalMin(subcategory.minimumSpend);
+    setLocalMax(subcategory.maximumSpend);
+    setLocalMilesBlock(subcategory.milesBlockSize);
+  }, [subcategory.name, subcategory.rewardValue, subcategory.minimumSpend, subcategory.maximumSpend, subcategory.milesBlockSize]);
 
   // Debounced update callbacks
   const debouncedUpdateName = useDebouncedCallback(
