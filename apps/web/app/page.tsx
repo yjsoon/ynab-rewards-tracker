@@ -308,7 +308,7 @@ export default function DashboardPage() {
             />
             <h1 className="text-4xl font-bold mb-2">
               <span>YJAB</span>
-              <span className="text-muted-foreground font-normal">: YNAB Journal of Awards &amp; Bonuses</span>
+              <span className="text-muted-foreground font-normal">: YNAB Journal of Awards & Bonuses</span>
             </h1>
             <p className="text-xl text-muted-foreground">
               Maximise your credit card rewards with intelligent tracking
