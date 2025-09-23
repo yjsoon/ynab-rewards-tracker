@@ -307,57 +307,51 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
 
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-xl">Edit Card Settings</CardTitle>
-        <CardDescription>Update your card configuration</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {error && (
-          <Alert variant="destructive" className="mb-6">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-        
-        {issuerError && (
-          <Alert variant="destructive" className="mb-6">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{issuerError}</AlertDescription>
-          </Alert>
-        )}
+    <>
+      {error && (
+        <Alert variant="destructive" className="mb-6">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
 
-        <CardSettingsEditor
-          card={card}
-          state={formData}
-          onFieldChange={handleFieldChange}
-          showNameAndIssuer={true}
-          showCardType={true}
-          isChanged={hasUnsavedChanges}
-          flagNames={flagNames}
-        />
+      {issuerError && (
+        <Alert variant="destructive" className="mb-6">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{issuerError}</AlertDescription>
+        </Alert>
+      )}
 
-        {/* Actions */}
-        <div className="flex gap-3 pt-4 mt-6 border-t">
-          <Button
-            onClick={handleSave}
-            disabled={saving || !formData.name}
-            className="flex-1"
-          >
-            {saving ? (
-              <>Saving...</>
-            ) : (
-              <>
-                <Save className="h-4 w-4 mr-2" />
-                Save Changes
-              </>
-            )}
-          </Button>
-          <Button variant="outline" onClick={handleCancel} className="flex-1">
-            Cancel
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+      <CardSettingsEditor
+        card={card}
+        state={formData}
+        onFieldChange={handleFieldChange}
+        showNameAndIssuer={true}
+        showCardType={true}
+        isChanged={hasUnsavedChanges}
+        flagNames={flagNames}
+      />
+
+      {/* Actions */}
+      <div className="flex gap-3 pt-4 mt-6 border-t">
+        <Button
+          onClick={handleSave}
+          disabled={saving || !formData.name}
+          className="flex-1"
+        >
+          {saving ? (
+            <>Saving...</>
+          ) : (
+            <>
+              <Save className="h-4 w-4 mr-2" />
+              Save Changes
+            </>
+          )}
+        </Button>
+        <Button variant="outline" onClick={handleCancel} className="flex-1">
+          Cancel
+        </Button>
+      </div>
+    </>
   );
 }
