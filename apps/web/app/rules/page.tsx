@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useCreditCards, useSettings } from '@/hooks/useLocalStorage';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -15,8 +15,9 @@ import {
   AlertCircle,
   CheckCircle
 } from 'lucide-react';
-import type { CreditCard } from '@/lib/storage';
+import { storage, type CardSubcategory, type CreditCard } from '@/lib/storage';
 import { CardSettingsEditor, type CardEditState as SingleCardEditState } from '@/components/CardSettingsEditor';
+import { prepareSubcategoriesForSave } from '@/lib/subcategory-utils';
 
 interface CardEditState {
   [cardId: string]: SingleCardEditState;
@@ -25,6 +26,7 @@ interface CardEditState {
 export default function RulesPage() {
   const { cards, updateCard } = useCreditCards();
   const { settings } = useSettings();
+  const flagNames = useMemo(() => storage.getFlagNames(), []);
   const [editState, setEditState] = useState<CardEditState>({});
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -49,6 +51,8 @@ export default function RulesPage() {
         billingCycleType: card.billingCycle?.type || 'calendar',
         billingCycleDay: card.billingCycle?.dayOfMonth || 1,
         featured: card.featured ?? true,
+        subcategoriesEnabled: card.subcategoriesEnabled ?? false,
+        subcategories: card.subcategories ? card.subcategories.map(sub => ({ ...sub })) : [],
       };
     });
     setEditState(initialState);
@@ -190,6 +194,15 @@ export default function RulesPage() {
         if (!card) continue;
 
         const changes = editState[cardId];
+        const nextSubEnabled = typeof changes.subcategoriesEnabled === 'boolean'
+          ? changes.subcategoriesEnabled
+          : card.subcategoriesEnabled ?? false;
+        const nextSubcategories = nextSubEnabled
+          ? prepareSubcategoriesForSave(
+              (changes.subcategories ?? card.subcategories) as CardSubcategory[] | undefined,
+              changes.earningRate ?? card.earningRate ?? 0
+            )
+          : [];
         const updatedCard: CreditCard = {
           ...card,
           name: changes.name ?? card.name,
@@ -203,6 +216,8 @@ export default function RulesPage() {
             ? { type: 'billing', dayOfMonth: changes.billingCycleDay }
             : { type: 'calendar' },
           featured: changes.featured !== undefined ? changes.featured : (card.featured ?? true),
+          subcategoriesEnabled: nextSubEnabled,
+          subcategories: nextSubcategories,
         };
 
         updateCard(updatedCard);
@@ -312,6 +327,7 @@ export default function RulesPage() {
                       isSelected={selectedCards.has(card.id)}
                       showCardType
                       highlightUnsetMinimum
+                      flagNames={flagNames}
                       leadingAccessory={(
                         <div className="pt-1">
                           <input
@@ -359,6 +375,7 @@ export default function RulesPage() {
                       isSelected={selectedCards.has(card.id)}
                       showCardType
                       highlightUnsetMinimum
+                      flagNames={flagNames}
                       leadingAccessory={(
                         <div className="pt-1">
                           <input

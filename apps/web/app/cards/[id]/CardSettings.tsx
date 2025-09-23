@@ -7,10 +7,11 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Save, AlertCircle } from 'lucide-react';
 import { useCreditCards } from '@/hooks/useLocalStorage';
-import { storage, type CreditCard } from '@/lib/storage';
+import { storage, type CardSubcategory, type CreditCard } from '@/lib/storage';
 import { validateIssuer, sanitizeInput } from '@/lib/validation';
 import { CardSettingsEditor, computeCardFieldDiff, type CardEditState } from '@/components/CardSettingsEditor';
 import { UNFLAGGED_FLAG, YNAB_FLAG_COLORS, type YnabFlagColor } from '@/lib/ynab-constants';
+import { prepareSubcategoriesForSave } from '@/lib/subcategory-utils';
 import { YnabClient } from '@/lib/ynab-client';
 
 interface CardSettingsProps {
@@ -103,34 +104,10 @@ const createFormState = (nextCard: CreditCard): CardEditState => ({
     try {
       const toggledOn = Boolean(formData.subcategoriesEnabled);
       const preparedSubcategories = toggledOn
-        ? (Array.isArray(formData.subcategories) ? formData.subcategories : []).map((sub, index) => ({
-            ...sub,
-            priority: index,
-            name: sub.name?.trim() ?? '',
-            rewardValue:
-              typeof sub.rewardValue === 'number' && Number.isFinite(sub.rewardValue)
-                ? sub.rewardValue
-                : formData.earningRate ?? card.earningRate ?? 0,
-            milesBlockSize:
-              typeof sub.milesBlockSize === 'number' && Number.isFinite(sub.milesBlockSize)
-                ? sub.milesBlockSize
-                : null,
-            minimumSpend:
-              typeof sub.minimumSpend === 'number' && Number.isFinite(sub.minimumSpend)
-                ? sub.minimumSpend
-                : sub.minimumSpend === 0
-                ? 0
-                : null,
-            maximumSpend:
-              typeof sub.maximumSpend === 'number' && Number.isFinite(sub.maximumSpend)
-                ? sub.maximumSpend
-                : sub.maximumSpend === 0
-                ? 0
-                : null,
-            active: sub.active !== false,
-            createdAt: sub.createdAt ?? new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          }))
+        ? prepareSubcategoriesForSave(
+            formData.subcategories as CardSubcategory[] | undefined,
+            formData.earningRate ?? card.earningRate ?? 0
+          )
         : [];
 
       const updatedCard: CreditCard = {
