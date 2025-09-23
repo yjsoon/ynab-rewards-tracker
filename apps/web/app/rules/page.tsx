@@ -309,14 +309,13 @@ export default function RulesPage() {
         <TabsContent value="cashback" className="space-y-4">
           {cashbackCards.length > 0 ? (
             <>
-              <Card>
-                <CardHeader>
-                  <CardTitle>Cashback Cards</CardTitle>
-                  <CardDescription>
-                    Configure cashback percentages and spending requirements
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
+              <div className="mb-4">
+                <h2 className="text-xl font-semibold">Cashback Cards</h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Configure cashback percentages and spending requirements
+                </p>
+              </div>
+              <div className="space-y-4">
                   {cashbackCards.map(card => (
                     <CardSettingsEditor
                       key={card.id}
@@ -341,8 +340,7 @@ export default function RulesPage() {
                       )}
                     />
                   ))}
-                </CardContent>
-              </Card>
+              </div>
             </>
           ) : (
             <Card>
@@ -357,14 +355,13 @@ export default function RulesPage() {
         <TabsContent value="miles" className="space-y-4">
           {milesCards.length > 0 ? (
             <>
-              <Card>
-                <CardHeader>
-                  <CardTitle>Miles & Points Cards</CardTitle>
-                  <CardDescription>
-                    Configure miles earning rates and spending requirements
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
+              <div className="mb-4">
+                <h2 className="text-xl font-semibold">Miles & Points Cards</h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Configure miles earning rates and spending requirements
+                </p>
+              </div>
+              <div className="space-y-4">
                   {milesCards.map(card => (
                     <CardSettingsEditor
                       key={card.id}
@@ -389,8 +386,7 @@ export default function RulesPage() {
                       )}
                     />
                   ))}
-                </CardContent>
-              </Card>
+              </div>
               
               {settings?.milesValuation && (
                 <Alert>
