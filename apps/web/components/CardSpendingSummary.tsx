@@ -4,7 +4,8 @@ import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { SimpleRewardsCalculator } from '@/lib/rewards-engine';
 import { YnabClient } from '@/lib/ynab-client';
 import { storage } from '@/lib/storage';
-import { formatDollars } from '@/lib/utils';
+import { cn } from '@/lib/utils';
+import { CurrencyAmount } from '@/components/CurrencyAmount';
 import { AlertCircle, TrendingUp, CheckCircle2, Percent } from 'lucide-react';
 import {
   isMinimumSpendConfigured,
@@ -147,9 +148,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
   const { totalSpend, eligibleSpend, eligibleSpendBeforeBlocks, rewardEarned, rewardEarnedDollars, daysRemaining, minimumSpend, minimumSpendMet, minimumSpendProgress } = summary;
 
   const currency = settings?.currency;
-  const formatCurrency = (amount: number) =>
-    formatDollars(amount, currency ? { currency } : {});
-
+  const milesValuation = settings?.milesValuation ?? 0.01;
   const hasMinimum = hasMinimumSpendRequirement(minimumSpend);
   const rewardTileState = !minimumSpendMet && hasMinimum ? 'warn' : minimumSpendMet ? 'success' : 'neutral';
 
@@ -162,7 +161,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
   const rewardValue = !minimumSpendMet && hasMinimum
     ? 'No reward'
     : card.type === 'cashback'
-    ? formatCurrency(rewardEarned)
+    ? <CurrencyAmount value={rewardEarned} currency={currency} />
     : `${Math.round(rewardEarned).toLocaleString()}`;
 
   const rewardLabel = !minimumSpendMet && hasMinimum
@@ -175,19 +174,34 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
   const progressColour = !isMinimumSpendConfigured(minimumSpend)
     ? 'bg-muted'
     : minimumSpend === 0 || minimumSpendMet
-    ? 'bg-emerald-500'
+    ? 'bg-emerald-500/70'
     : 'bg-amber-500';
 
   const remainingSpend = minimumSpend && minimumSpend > 0
     ? Math.max(0, minimumSpend - totalSpend)
     : 0;
 
+  const unearnedAmount = Math.max(
+    0,
+    (eligibleSpendBeforeBlocks ?? eligibleSpend ?? 0) - (eligibleSpend ?? 0)
+  );
+
+  const daysSeverityClass = daysRemaining <= 1
+    ? 'text-rose-500 dark:text-rose-300'
+    : daysRemaining <= 3
+    ? 'text-orange-500 dark:text-orange-300'
+    : daysRemaining <= 7
+    ? 'text-amber-500 dark:text-amber-300'
+    : 'text-muted-foreground';
+
   return (
     <div className="flex h-full flex-col gap-4">
       {/* Spending and Rewards Summary */}
       <div className="grid grid-cols-2 gap-2">
         <div className="rounded-lg bg-muted/10 p-3 text-left">
-          <p className="text-2xl font-semibold tracking-tight">{formatCurrency(totalSpend)}</p>
+          <p className="text-2xl font-semibold tracking-tight">
+            <CurrencyAmount value={totalSpend} currency={currency} />
+          </p>
           <p className="text-xs text-muted-foreground uppercase">Spent this period</p>
         </div>
         <div className={`flex min-h-[68px] flex-col justify-center rounded-lg p-3 text-left transition-colors ${rewardTileClasses}`}>
@@ -201,8 +215,8 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
       {/* Minimum Spend Status */}
       {isMinimumSpendConfigured(minimumSpend) ? (
         minimumSpend === 0 ? (
-          <div className="flex items-center justify-center gap-2 rounded-md bg-emerald-500/10 py-2 text-sm font-medium text-emerald-600 dark:text-emerald-300">
-            <CheckCircle2 className="h-4 w-4" />
+          <div className="flex items-center justify-center gap-2 rounded-md border border-muted bg-muted/10 py-2 text-sm font-medium text-muted-foreground">
+            <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
             No minimum spend required
           </div>
         ) : (
@@ -210,7 +224,9 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
             <div className="flex items-center justify-between text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               <span>Minimum spend progress</span>
               <span className={minimumSpendMet ? 'text-emerald-600 dark:text-emerald-300' : 'text-muted-foreground'}>
-                {formatCurrency(totalSpend)} / {formatCurrency(minimumSpend)}
+                <CurrencyAmount value={totalSpend} currency={currency} />
+                {" / "}
+                <CurrencyAmount value={minimumSpend ?? 0} currency={currency} />
               </span>
             </div>
             <div className="relative h-2 w-full overflow-hidden rounded-full bg-muted/20">
@@ -222,13 +238,15 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
             <div className="flex min-h-[24px] items-center justify-center gap-2 text-sm font-medium">
               {minimumSpendMet ? (
                 <>
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-300" />
-                  <span className="text-emerald-600 dark:text-emerald-300">Minimum spend met!</span>
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500/80 dark:text-emerald-200/80" />
+                  <span className="text-emerald-600/80 dark:text-emerald-200/80">Minimum spend met!</span>
                 </>
               ) : (
                 <>
                   <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-200" />
-                  <span className="text-amber-600 dark:text-amber-200">{formatCurrency(remainingSpend)} to go</span>
+                  <span className="text-amber-600 dark:text-amber-200">
+                    <CurrencyAmount value={remainingSpend} currency={currency} /> to go
+                  </span>
                 </>
               )}
             </div>
@@ -271,26 +289,36 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
         </div>
         {card.type === 'miles' && rewardEarnedDollars > 0 && (
           <p className="text-xs text-muted-foreground">
-            Value: {formatCurrency(rewardEarnedDollars)} @ ${settings?.milesValuation || 0.01}/mile
+            Value: <CurrencyAmount value={rewardEarnedDollars} currency={currency} /> @{' '}
+            <CurrencyAmount value={milesValuation} currency={currency} />/mile
           </p>
         )}
         {card.earningBlockSize && card.earningBlockSize > 0 && eligibleSpend !== undefined && eligibleSpend > 0 && (
           <div className="rounded bg-muted/50 p-2 text-xs">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Earning blocks:</span>
-              <span className="font-medium">{Math.floor(eligibleSpend / card.earningBlockSize)} × ${card.earningBlockSize}</span>
+              <span className="font-medium">
+                {Math.floor(eligibleSpend / card.earningBlockSize)} ×{' '}
+                <CurrencyAmount value={card.earningBlockSize} currency={currency} />
+              </span>
             </div>
-            {Math.max(0, (eligibleSpendBeforeBlocks ?? eligibleSpend) - eligibleSpend) > 0 && (
+            {unearnedAmount > 0 && (
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Unearned:</span>
-                <span>${Math.max(0, (eligibleSpendBeforeBlocks ?? eligibleSpend) - eligibleSpend).toFixed(2)}</span>
+                <span>
+                  <CurrencyAmount value={unearnedAmount} currency={currency} />
+                </span>
               </div>
             )}
           </div>
         )}
-        <div className="flex items-center justify-between px-1 text-xs text-muted-foreground">
-          <span>{new Date(period.start).toLocaleDateString()} - {new Date(period.end).toLocaleDateString()}</span>
-          <span>{daysRemaining} {daysRemaining === 1 ? 'day' : 'days'} left</span>
+        <div className="flex items-center justify-between px-1 text-xs">
+          <span className="text-muted-foreground">
+            {new Date(period.start).toLocaleDateString()} - {new Date(period.end).toLocaleDateString()}
+          </span>
+          <span className={cn('font-medium', daysSeverityClass)}>
+            {daysRemaining} {daysRemaining === 1 ? 'day' : 'days'} left
+          </span>
         </div>
       </div>
     </div>

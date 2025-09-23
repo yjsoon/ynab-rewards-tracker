@@ -11,7 +11,8 @@ import { YnabClient } from "@/lib/ynab-client";
 import { storage } from "@/lib/storage";
 import { SimpleRewardsCalculator } from "@/lib/rewards-engine";
 import { clampDaysLeft } from "@/lib/date";
-import { cn, absFromMilli, formatDollars } from "@/lib/utils";
+import { cn, absFromMilli } from "@/lib/utils";
+import { CurrencyAmount } from "@/components/CurrencyAmount";
 import { CardSpendingSummary } from "@/components/CardSpendingSummary";
 import { Button } from "@/components/ui/button";
 import {
@@ -319,7 +320,7 @@ export default function DashboardPage() {
 
           <div className="grid md:grid-cols-2 gap-8 max-w-6xl mx-auto">
             {/* Features Section */}
-            <Card className="p-8 bg-gradient-to-br from-primary/5 via-transparent to-primary/10 border-2">
+            <Card className="p-8">
               <CardHeader className="px-0 pt-0">
                 <CardTitle className="text-xl mb-4">Features</CardTitle>
               </CardHeader>
@@ -556,15 +557,7 @@ export default function DashboardPage() {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {cashbackCards.map((card) => {
-                  const period = SimpleRewardsCalculator.calculatePeriod(card);
-                  const now = new Date();
-                  const periodDate = {
-                    startDate: new Date(period.start),
-                    endDate: new Date(period.end)
-                  };
-                  const daysLeft = clampDaysLeft(periodDate, now);
-                  const isEndingSoon = daysLeft <= 7;
-                  // TODO: Get rules from storage when implementing progress tracking
+                  const accentClasses = "border border-border/70 dark:border-border/50 hover:border-primary/40";
 
                   return (
                     <Link
@@ -573,11 +566,9 @@ export default function DashboardPage() {
                       className="block group">
                       <Card
                         className={cn(
-                          "relative overflow-hidden border-2 transition-all flex flex-col h-full cursor-pointer hover:shadow-lg",
-                          isEndingSoon
-                            ? "border-orange-200 dark:border-orange-900"
-                            : "hover:border-primary/50",
-                          "bg-gradient-to-br from-green-500/5 via-transparent to-green-500/10"
+                          "relative overflow-hidden flex flex-col h-full cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-lg",
+                          "bg-card",
+                          accentClasses
                         )}>
                         {/* Settings Button */}
                         <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -625,15 +616,7 @@ export default function DashboardPage() {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {milesCards.map((card) => {
-                  const period = SimpleRewardsCalculator.calculatePeriod(card);
-                  const now = new Date();
-                  const periodDate = {
-                    startDate: new Date(period.start),
-                    endDate: new Date(period.end)
-                  };
-                  const daysLeft = clampDaysLeft(periodDate, now);
-                  const isEndingSoon = daysLeft <= 7;
-                  // TODO: Get rules from storage when implementing progress tracking
+                  const accentClasses = "border border-border/70 dark:border-border/50 hover:border-primary/40";
 
                   return (
                     <Link
@@ -642,11 +625,9 @@ export default function DashboardPage() {
                       className="block group">
                       <Card
                         className={cn(
-                          "relative overflow-hidden border-2 transition-all flex flex-col h-full cursor-pointer hover:shadow-lg",
-                          isEndingSoon
-                            ? "border-orange-200 dark:border-orange-900"
-                            : "hover:border-primary/50",
-                          "bg-gradient-to-br from-blue-500/5 via-transparent to-blue-500/10"
+                          "relative overflow-hidden flex flex-col h-full cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-lg",
+                          "bg-card",
+                          accentClasses
                         )}>
                         {/* Settings Button */}
                         <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -788,7 +769,7 @@ export default function DashboardPage() {
                           {txn.category_name || "Uncategorised"}
                         </td>
                         <td className="p-2 text-sm text-right font-mono">
-                          {formatDollars(absFromMilli(txn.amount))}
+                          <CurrencyAmount value={absFromMilli(txn.amount)} />
                         </td>
                       </tr>
                     ))}

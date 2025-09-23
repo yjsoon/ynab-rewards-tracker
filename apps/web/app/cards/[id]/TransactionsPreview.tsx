@@ -16,7 +16,8 @@ import type { CreditCard } from "@/lib/storage";
 import { storage } from "@/lib/storage";
 import { useCardTransactions } from "@/hooks/useCardTransactions";
 import { SimpleRewardsCalculator } from "@/lib/rewards-engine";
-import { absFromMilli, formatDollars } from "@/lib/utils";
+import { absFromMilli } from "@/lib/utils";
+import { CurrencyAmount } from "@/components/CurrencyAmount";
 
 interface Props {
   card: CreditCard;
@@ -119,14 +120,16 @@ export default function TransactionsPreview({ card, lookbackDays = LOOKBACK_DAYS
                     </div>
                     <div className="text-right">
                       <div className="font-mono">
-                        {formatDollars(amount)}
+                        <CurrencyAmount value={amount} currency={settings.currency} />
                       </div>
                       {card.earningRate && (
                         <div className="mt-1">
                           <Badge variant="secondary">
-                            {card.type === "cashback"
-                              ? `+${formatDollars(reward)}`
-                              : `+${Math.round(reward)} miles`}
+                            {card.type === "cashback" ? (
+                              <CurrencyAmount value={reward} currency={settings.currency} showPlus />
+                            ) : (
+                              `+${Math.round(reward)} miles`
+                            )}
                           </Badge>
                           {blockInfo && card.earningBlockSize && (
                             <p className="text-xs text-muted-foreground mt-1">

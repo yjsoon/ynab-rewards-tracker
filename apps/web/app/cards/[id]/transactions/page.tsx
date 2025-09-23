@@ -20,7 +20,8 @@ import {
   ChevronRight
 } from 'lucide-react';
 import type { CreditCard } from '@/lib/storage';
-import { absFromMilli, formatDollars } from '@/lib/utils';
+import { absFromMilli } from '@/lib/utils';
+import { CurrencyAmount } from '@/components/CurrencyAmount';
 
 const TRANSACTION_LOOKBACK_DAYS = 90;
 const ITEMS_PER_PAGE = 20;
@@ -219,14 +220,16 @@ export default function CardTransactionsPage() {
 
                       <div className="text-right ml-4">
                         <p className="font-mono font-medium">
-                          {formatDollars(amount)}
+                          <CurrencyAmount value={amount} currency={settings.currency} />
                         </p>
                         {card.earningRate && (
                           <div className="space-y-1 mt-1">
                             <Badge variant="secondary">
-                              {card.type === 'cashback'
-                                ? `+${formatDollars(reward)}`
-                                : `+${Math.round(reward)} miles`}
+                              {card.type === 'cashback' ? (
+                                <CurrencyAmount value={reward} currency={settings.currency} showPlus />
+                              ) : (
+                                `+${Math.round(reward)} miles`
+                              )}
                             </Badge>
                             {blockInfo && card.earningBlockSize && (
                               <p className="text-xs text-muted-foreground">{blockInfo}</p>
