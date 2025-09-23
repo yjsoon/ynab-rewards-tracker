@@ -308,7 +308,9 @@ export default function DashboardPage() {
             />
             <h1 className="text-4xl font-bold mb-2">
               <span>YJAB</span>
-              <span className="text-muted-foreground font-normal">: YNAB Journal of Awards & Bonuses</span>
+              <span className="text-muted-foreground font-normal">
+                : YNAB Journal of Awards & Bonuses
+              </span>
             </h1>
             <p className="text-xl text-muted-foreground">
               Maximise your credit card rewards with intelligent tracking
@@ -363,7 +365,7 @@ export default function DashboardPage() {
                   </li>
                 </ul>
                 <p className="text-sm text-muted-foreground mt-6">
-                  Free to use. You need your own paid YNAB subscription, though.
+                  Free to use, with your own paid YNAB subscription.
                 </p>
               </CardContent>
             </Card>
