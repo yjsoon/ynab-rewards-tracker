@@ -124,8 +124,15 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
       };
 
       updateCard(updatedCard);
-      onUpdate(updatedCard);
-      setFormData(createFormState(updatedCard));
+
+      const storedCard = storage.getCards().find((c) => c.id === updatedCard.id);
+      if (storedCard) {
+        onUpdate(storedCard);
+        setFormData(createFormState(storedCard));
+      } else {
+        onUpdate(updatedCard);
+        setFormData(createFormState(updatedCard));
+      }
       setEditing(false);
     } catch (err) {
       setError('Failed to save changes');

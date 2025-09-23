@@ -17,9 +17,9 @@ import { Badge } from '@/components/ui/badge';
 import {
   ArrowDown,
   ArrowUp,
-  MinusCircle,
   PlusCircle,
   ShieldAlert,
+  X,
 } from 'lucide-react';
 import type { CardSubcategory, CreditCard } from '@/lib/storage';
 import { UNFLAGGED_FLAG, YNAB_FLAG_COLORS, type YnabFlagColor } from '@/lib/ynab-constants';
@@ -175,186 +175,184 @@ export function CardSubcategoriesEditor({
     const showDuplicateWarning = duplicateFlags.has(subcategory.flagColor);
 
     return (
-      <Card key={subcategory.id} className={cn('border-border/70', !subcategory.active && 'opacity-75')}> 
-        <CardContent className="space-y-4 pt-6">
-          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-            <div className="flex flex-1 flex-col gap-4 md:flex-row md:items-center">
-              <div className="flex flex-col gap-2">
-                <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-                  Flag colour
-                </Label>
-                {isUnflagged ? (
-                  <div className="flex items-center gap-2 text-sm font-medium">
-                    <Badge variant="secondary">{flagDisplayName}</Badge>
-                    <span className="text-xs text-muted-foreground">Always available</span>
-                  </div>
-                ) : (
-                  <Select
-                    value={subcategory.flagColor}
-                    onValueChange={(nextColour: YnabFlagColor) => handleUpdate(subcategory.id, {
-                      flagColor: nextColour,
-                    })}
-                  >
-                    <SelectTrigger className="w-[160px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {FLAG_SELECT_OPTIONS.map((flag) => (
-                        <SelectItem
-                          key={flag.value}
-                          value={flag.value}
-                          disabled={flag.value !== subcategory.flagColor && usedFlagColours.has(flag.value)}
-                        >
-                          {flagNames?.[flag.value] ?? flag.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-                {showDuplicateWarning && !isUnflagged && (
-                  <div className="flex items-center gap-2 text-xs text-amber-600">
-                    <ShieldAlert className="h-3.5 w-3.5" />
-                    <span>Flag already assigned. Pick a different colour.</span>
-                  </div>
-                )}
+      <Card
+        key={subcategory.id}
+        className={cn('relative border-border/60 transition-colors', !subcategory.active && 'opacity-75')}
+      >
+        {!isUnflagged && (
+          <button
+            type="button"
+            onClick={() => handleDelete(subcategory.id)}
+            className="absolute right-3 top-3 text-destructive transition-colors hover:text-destructive/80"
+            aria-label={`Remove ${subcategory.name}`}
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
+        <CardContent className="flex flex-wrap items-end gap-3 pt-6 pb-4">
+          <div className="flex flex-col gap-1 w-[180px]">
+            <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Flag
+            </Label>
+            {isUnflagged ? (
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Badge variant="secondary">{flagDisplayName}</Badge>
+                <span className="text-xs text-muted-foreground">Default</span>
               </div>
-
-              <div className="flex flex-col gap-2">
-                <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-                  Name
-                </Label>
-                <Input
-                  value={subcategory.name}
-                  onChange={(event) => handleUpdate(subcategory.id, { name: event.target.value })}
-                  className="w-full md:w-[200px]"
-                  placeholder="Dining"
-                />
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-                  Reward rate
-                </Label>
-                <div className="flex items-center gap-2">
-                  <Input
-                    type="number"
-                    value={subcategory.rewardValue ?? 0}
-                    onChange={(event) => handleUpdate(subcategory.id, {
-                      rewardValue: Number(event.target.value) || 0,
-                    })}
-                    className="w-28"
-                    step="0.1"
-                    min={0}
-                  />
-                  <span className="text-xs text-muted-foreground">
-                    {cardType === 'cashback' ? '% cashback' : 'miles per dollar'}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 md:flex-col md:items-end md:gap-3">
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => handleReorder(subcategory.id, 'up')}
-                disabled={index === 0}
-                aria-label="Move subcategory up"
+            ) : (
+              <Select
+                value={subcategory.flagColor}
+                onValueChange={(nextColour: YnabFlagColor) => handleUpdate(subcategory.id, {
+                  flagColor: nextColour,
+                })}
               >
-                <ArrowUp className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => handleReorder(subcategory.id, 'down')}
-                disabled={index === orderedSubcategories.length - 1}
-                aria-label="Move subcategory down"
-              >
-                <ArrowDown className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="space-y-2">
-              <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-                Minimum spend
-              </Label>
-              <Input
-                type="number"
-                value={subcategory.minimumSpend ?? ''}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  handleUpdate(subcategory.id, {
-                    minimumSpend: value === '' ? null : Number(value),
-                  });
-                }}
-                min={0}
-                step="50"
-                placeholder="0"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-                Maximum spend
-              </Label>
-              <Input
-                type="number"
-                value={subcategory.maximumSpend ?? ''}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  handleUpdate(subcategory.id, {
-                    maximumSpend: value === '' ? null : Number(value),
-                  });
-                }}
-                min={0}
-                step="50"
-                placeholder="0"
-              />
-            </div>
-            {milesCard && (
-              <div className="space-y-2">
-                <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-                  Miles block size
-                </Label>
-                <Input
-                  type="number"
-                  value={subcategory.milesBlockSize ?? ''}
-                  onChange={(event) => {
-                    const value = event.target.value;
-                    handleUpdate(subcategory.id, {
-                      milesBlockSize: value === '' ? null : Number(value),
-                    });
-                  }}
-                  min={0}
-                  step="1"
-                  placeholder="Optional"
-                />
+                <SelectTrigger className="h-8 w-[160px] text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {FLAG_SELECT_OPTIONS.map((flag) => (
+                    <SelectItem
+                      key={flag.value}
+                      value={flag.value}
+                      disabled={flag.value !== subcategory.flagColor && usedFlagColours.has(flag.value)}
+                    >
+                      {flagNames?.[flag.value] ?? flag.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            {showDuplicateWarning && !isUnflagged && (
+              <div className="flex items-center gap-1 text-[11px] text-amber-600">
+                <ShieldAlert className="h-3 w-3" />
+                <span>Flag already used.</span>
               </div>
             )}
-            {!milesCard && <div />}
           </div>
 
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-1 w-[180px]">
+            <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Name
+            </Label>
+            <Input
+              value={subcategory.name}
+              onChange={(event) => handleUpdate(subcategory.id, { name: event.target.value })}
+              className="h-8 text-sm"
+              placeholder="Dining"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1 w-[92px]">
+            <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Reward
+            </Label>
+            <Input
+              type="number"
+              value={subcategory.rewardValue ?? 0}
+              onChange={(event) => handleUpdate(subcategory.id, {
+                rewardValue: Number(event.target.value) || 0,
+              })}
+              className="h-8 text-sm"
+              step="0.1"
+              min={0}
+              placeholder={cardType === 'cashback' ? '2' : '1.5'}
+            />
+            <span className="text-[11px] text-muted-foreground">
+              {cardType === 'cashback' ? '% back' : 'mi / $'}
+            </span>
+          </div>
+
+          <div className="flex flex-col gap-1 w-[92px]">
+            <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Minimum
+            </Label>
+            <Input
+              type="number"
+              value={subcategory.minimumSpend ?? ''}
+              onChange={(event) => {
+                const value = event.target.value;
+                handleUpdate(subcategory.id, {
+                  minimumSpend: value === '' ? null : Number(value),
+                });
+              }}
+              className="h-8 text-sm"
+              min={0}
+              step="50"
+              placeholder="0"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1 w-[92px]">
+            <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Maximum
+            </Label>
+            <Input
+              type="number"
+              value={subcategory.maximumSpend ?? ''}
+              onChange={(event) => {
+                const value = event.target.value;
+                handleUpdate(subcategory.id, {
+                  maximumSpend: value === '' ? null : Number(value),
+                });
+              }}
+              className="h-8 text-sm"
+              min={0}
+              step="50"
+              placeholder="0"
+            />
+          </div>
+
+          {milesCard && (
+            <div className="flex flex-col gap-1 w-[92px]">
+              <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                Miles block
+              </Label>
+              <Input
+                type="number"
+                value={subcategory.milesBlockSize ?? ''}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  handleUpdate(subcategory.id, {
+                    milesBlockSize: value === '' ? null : Number(value),
+                  });
+                }}
+                className="h-8 text-sm"
+                min={0}
+                step="1"
+                placeholder="Optional"
+              />
+            </div>
+          )}
+
+          <div className="ml-auto flex items-end gap-3">
             <div className="flex items-center gap-2">
               <Switch
                 id={`subcategory-active-${subcategory.id}`}
                 checked={subcategory.active}
                 onCheckedChange={(checked) => handleUpdate(subcategory.id, { active: checked })}
               />
-              <Label htmlFor={`subcategory-active-${subcategory.id}`} className="text-sm">
-                Active
-              </Label>
+              <span className="text-xs text-muted-foreground">Active</span>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => handleDelete(subcategory.id)}
-              disabled={isUnflagged}
-              className="gap-2 text-destructive hover:text-destructive"
-            >
-              <MinusCircle className="h-4 w-4" /> Remove
-            </Button>
+            <div className="flex flex-col gap-1">
+              <button
+                type="button"
+                className="flex h-7 w-7 items-center justify-center rounded border border-border/60 text-muted-foreground transition-colors hover:bg-muted"
+                onClick={() => handleReorder(subcategory.id, 'up')}
+                disabled={index === 0}
+                aria-label="Move subcategory up"
+              >
+                <ArrowUp className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                className="flex h-7 w-7 items-center justify-center rounded border border-border/60 text-muted-foreground transition-colors hover:bg-muted"
+                onClick={() => handleReorder(subcategory.id, 'down')}
+                disabled={index === orderedSubcategories.length - 1}
+                aria-label="Move subcategory down"
+              >
+                <ArrowDown className="h-3.5 w-3.5" />
+              </button>
+            </div>
           </div>
         </CardContent>
       </Card>
