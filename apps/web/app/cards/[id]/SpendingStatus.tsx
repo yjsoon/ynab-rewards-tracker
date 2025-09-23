@@ -4,11 +4,14 @@ import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { SpendingProgressBar } from '@/components/SpendingProgressBar';
 import {
   AlertCircle,
   TrendingUp,
   Calendar,
-  DollarSign
+  DollarSign,
+  XCircle,
+  CheckCircle2
 } from 'lucide-react';
 import { SimpleRewardsCalculator } from '@/lib/rewards-engine';
 import { YnabClient } from '@/lib/ynab-client';
@@ -134,7 +137,10 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
       rewardEarnedDollars: calculation.rewardEarnedDollars,
       minimumSpend: calculation.minimumSpend,
       minimumSpendMet: calculation.minimumSpendMet,
-      minimumSpendProgress: calculation.minimumSpendProgress
+      minimumSpendProgress: calculation.minimumSpendProgress,
+      maximumSpend: calculation.maximumSpend,
+      maximumSpendExceeded: calculation.maximumSpendExceeded,
+      maximumSpendProgress: calculation.maximumSpendProgress
     };
   }, [transactions, card, period, settings]);
 
@@ -150,10 +156,11 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
     );
   }
 
-  const { totalSpend, eligibleSpend, eligibleSpendBeforeBlocks, rewardEarned, rewardEarnedDollars, minimumSpend, minimumSpendMet, minimumSpendProgress } = spendingAnalysis;
+  const { totalSpend, eligibleSpend, eligibleSpendBeforeBlocks, rewardEarned, rewardEarnedDollars, minimumSpend, minimumSpendMet, maximumSpend, maximumSpendExceeded } = spendingAnalysis;
 
   const currency = settings?.currency;
   const milesValuation = settings?.milesValuation ?? 0.01;
+  const hasMaximum = typeof maximumSpend === 'number' && maximumSpend > 0;
 
   const unearnedAmount = Math.max(
     0,
@@ -197,15 +204,17 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
                 {card.type === 'cashback' ? 'Cashback Earned' : 'Miles Earned'}
               </div>
               <p className="text-2xl font-bold">
-                {!minimumSpendMet && minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0
+                {(!minimumSpendMet && minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0)
                   ? 'No reward'
                   : card.type === 'cashback'
                   ? <CurrencyAmount value={rewardEarned} currency={currency} />
                   : `${Math.round(rewardEarned).toLocaleString()} miles`}
               </p>
-              {!minimumSpendMet && minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0 && (
+              {maximumSpendExceeded ? (
+                <p className="text-xs text-muted-foreground mt-1">Capped at maximum</p>
+              ) : !minimumSpendMet && minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0 ? (
                 <p className="text-xs text-muted-foreground mt-1">Minimum not met</p>
-              )}
+              ) : null}
             </div>
 
             {/* Only show Reward Value for miles cards since it's different from miles earned */}
@@ -216,7 +225,7 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
                   Dollar Value
                 </div>
                 <p className="text-2xl font-bold">
-                  {!minimumSpendMet && minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0
+                  {(!minimumSpendMet && minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0)
                     ? <CurrencyAmount value={0} currency={currency} />
                     : <CurrencyAmount value={rewardEarnedDollars} currency={currency} />}
                 </p>
@@ -226,9 +235,11 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
                     <CurrencyAmount value={milesValuation} currency={currency} />/mile
                   </p>
                 )}
-                {!minimumSpendMet && minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0 && (
+                {maximumSpendExceeded ? (
+                  <p className="text-xs text-muted-foreground mt-1">Capped at maximum</p>
+                ) : !minimumSpendMet && minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0 ? (
                   <p className="text-xs text-muted-foreground mt-1">Minimum not met</p>
-                )}
+                ) : null}
               </div>
             )}
           </div>
@@ -257,29 +268,53 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
             </Alert>
           )}
 
-          {/* Minimum Spend Progress */}
-          {minimumSpend === null || minimumSpend === undefined ? (
+          {/* Spending Progress Bar */}
+          {(minimumSpend !== null && minimumSpend !== undefined) || hasMaximum ? (
+            <div className="space-y-4">
+              <div className="bg-muted/5 rounded-lg p-4">
+                <h3 className="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wide">Spending Progress</h3>
+                <SpendingProgressBar
+                  totalSpend={totalSpend}
+                  minimumSpend={minimumSpend}
+                  maximumSpend={maximumSpend}
+                  currency={currency}
+                  showLabels={true}
+                  showWarnings={true}
+                />
+              </div>
+
+              {/* Status Alerts */}
+              {maximumSpendExceeded ? (
+                <Alert className="border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/30">
+                  <XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                  <AlertDescription className="text-red-700 dark:text-red-300">
+                    <strong>Maximum spend limit exceeded!</strong> You&apos;ve spent <CurrencyAmount value={totalSpend} currency={currency} /> which is over the <CurrencyAmount value={maximumSpend ?? 0} currency={currency} /> limit. No additional rewards will be earned on this card this period.
+                  </AlertDescription>
+                </Alert>
+              ) : minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0 && !minimumSpendMet ? (
+                <Alert className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30">
+                  <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                  <AlertDescription className="text-amber-700 dark:text-amber-300">
+                    <strong>Minimum spend requirement not met.</strong> You need to spend <CurrencyAmount value={(minimumSpend || 0) - totalSpend} currency={currency} /> more to start earning rewards this period.
+                  </AlertDescription>
+                </Alert>
+              ) : minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0 && minimumSpendMet ? (
+                <Alert className="border-emerald-200/60 bg-emerald-50/60 dark:border-emerald-900/40 dark:bg-emerald-950/20">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500/80 dark:text-emerald-300/80" />
+                  <AlertDescription className="text-emerald-700/80 dark:text-emerald-200/90">
+                    <strong className="font-semibold">You&apos;re earning rewards!</strong> {hasMaximum && !maximumSpendExceeded && `You have ${new Intl.NumberFormat('en-US', { style: 'currency', currency: currency || 'USD' }).format((maximumSpend ?? 0) - totalSpend)} left before reaching the maximum spend limit.`}
+                  </AlertDescription>
+                </Alert>
+              ) : null}
+            </div>
+          ) : (
             <Alert className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30">
               <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
               <AlertDescription className="text-amber-700 dark:text-amber-300">
-                <strong>Minimum spend not configured.</strong> Set this in card settings to track signup bonuses and minimum spend requirements.
+                <strong>No spending limits configured.</strong> Set minimum and maximum spend amounts in card settings to track your progress and optimize rewards.
               </AlertDescription>
             </Alert>
-          ) : minimumSpend > 0 && !minimumSpendMet ? (
-            <Alert className="border-orange-200 bg-orange-50 dark:border-orange-900 dark:bg-orange-950/30">
-              <AlertCircle className="h-4 w-4 text-orange-600 dark:text-orange-400" />
-              <AlertDescription className="text-orange-700 dark:text-orange-300">
-                <strong>Minimum spend requirement not met.</strong> You need to spend <CurrencyAmount value={(minimumSpend || 0) - totalSpend} currency={currency} /> more to earn rewards this period ({minimumSpendProgress?.toFixed(1)}% complete).
-              </AlertDescription>
-            </Alert>
-          ) : minimumSpend > 0 && minimumSpendMet ? (
-            <Alert className="border-emerald-200/60 bg-emerald-50/60 dark:border-emerald-900/40 dark:bg-emerald-950/20">
-              <AlertCircle className="h-4 w-4 text-emerald-500/80 dark:text-emerald-300/80" />
-              <AlertDescription className="text-emerald-700/80 dark:text-emerald-200/90">
-                <strong className="font-semibold">Minimum spend requirement met!</strong> You&apos;ve spent <CurrencyAmount value={totalSpend} currency={currency} /> out of the required <CurrencyAmount value={minimumSpend ?? 0} currency={currency} /> this period.
-              </AlertDescription>
-            </Alert>
-          ) : null}
+          )}
 
           {/* No earning rate warning */}
           {!card.earningRate && (
