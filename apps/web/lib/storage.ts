@@ -1,5 +1,5 @@
 /**
- * Client-side storage utilities for YJAB – YJ's Awards Buddy
+ * Client-side storage utilities for YJAB – YNAB Journal of Awards & Bonuses
  * All user data is stored in browser localStorage
  */
 
@@ -106,7 +106,6 @@ export interface StorageData {
 }
 
 const STORAGE_KEY = 'ynab-rewards-tracker';
-const UI_SEEN_SETUP_KEY = 'ynab-rewards-tracker:hasSeenSetupPrompt';
 const STORAGE_VERSION_KEY = 'ynab-rewards-tracker:data-version';
 const STORAGE_VERSION = '2025-09-22-reset';
 
@@ -126,8 +125,7 @@ class StorageService {
       const storedVersion = localStorage.getItem(STORAGE_VERSION_KEY);
       if (storedVersion !== STORAGE_VERSION) {
         localStorage.removeItem(STORAGE_KEY);
-        localStorage.removeItem(UI_SEEN_SETUP_KEY);
-        localStorage.setItem(STORAGE_VERSION_KEY, STORAGE_VERSION);
+            localStorage.setItem(STORAGE_VERSION_KEY, STORAGE_VERSION);
       }
     } catch (error) {
       // Log error in development, but silently ignore in production
@@ -364,27 +362,7 @@ class StorageService {
   }
 
   // Lightweight UI flags (kept outside main blob)
-  getHasSeenSetupPrompt(): boolean {
-    if (typeof window === 'undefined') return false;
-    try {
-      return localStorage.getItem(UI_SEEN_SETUP_KEY) === 'true';
-    } catch {
-      return false;
-    }
-  }
-
-  setHasSeenSetupPrompt(seen: boolean): void {
-    if (typeof window === 'undefined') return;
-    try {
-      if (seen) {
-        localStorage.setItem(UI_SEEN_SETUP_KEY, 'true');
-      } else {
-        localStorage.removeItem(UI_SEEN_SETUP_KEY);
-      }
-    } catch {
-      // ignore – non-critical UI hint
-    }
-  }
+  // Note: SetupPrompt removed, keeping structure for future UI flags
 
   // Settings
   getSettings(): AppSettings {
@@ -625,7 +603,6 @@ class StorageService {
   clearAll(): void {
     if (typeof window === 'undefined') return;
     localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem(UI_SEEN_SETUP_KEY);
     localStorage.removeItem(STORAGE_VERSION_KEY);
   }
 }
