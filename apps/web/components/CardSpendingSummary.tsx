@@ -250,6 +250,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
           <p className="text-sm font-semibold text-muted-foreground">Subcategory breakdown</p>
           <div className="space-y-2">
             {subcategoryBreakdowns.map((entry) => {
+              const listKey = entry.subcategoryId || `${entry.flagColor}-${entry.name}`;
               const flagLabel = flagNames[entry.flagColor as YnabFlagColor] ?? (
                 entry.flagColor === UNFLAGGED_FLAG.value
                   ? UNFLAGGED_FLAG.label
@@ -271,7 +272,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
 
               return (
                 <div
-                  key={entry.subcategoryId}
+                  key={listKey}
                   className="flex flex-col gap-1 rounded-lg border border-border/40 bg-background/80 p-2 sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div className="flex flex-1 items-center gap-3">
