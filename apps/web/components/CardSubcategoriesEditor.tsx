@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
@@ -24,6 +24,7 @@ import {
 import type { CardSubcategory, CreditCard } from '@/lib/storage';
 import { UNFLAGGED_FLAG, YNAB_FLAG_COLORS, type YnabFlagColor } from '@/lib/ynab-constants';
 import { cn } from '@/lib/utils';
+import { useDebouncedCallback } from '@/hooks/useDebounce';
 
 export type CardSubcategoryDraft = CardSubcategory;
 
@@ -78,15 +79,271 @@ function createSubcategory(
 }
 
 function normalisePriorities(subcategories: CardSubcategoryDraft[]): CardSubcategoryDraft[] {
+  // Only update priority if it's different, avoiding unnecessary object creation
+  const needsUpdate = subcategories.some((subcat, index) => subcat.priority !== index);
+  if (!needsUpdate) return subcategories;
+
   return subcategories
-    .map((subcat, index) => ({
+    .map((subcat, index) => (subcat.priority === index ? subcat : {
       ...subcat,
       priority: index,
     }))
     .sort((a, b) => a.priority - b.priority);
 }
 
-export function CardSubcategoriesEditor({
+// Memoized subcategory item component
+const SubcategoryItem = memo(function SubcategoryItem({
+  subcategory,
+  index,
+  totalCount,
+  cardType,
+  flagNames,
+  usedFlagColours,
+  duplicateFlags,
+  onUpdate,
+  onDelete,
+  onReorder,
+}: {
+  subcategory: CardSubcategoryDraft;
+  index: number;
+  totalCount: number;
+  cardType: CreditCard['type'];
+  flagNames?: Partial<Record<YnabFlagColor, string>>;
+  usedFlagColours: Set<YnabFlagColor>;
+  duplicateFlags: Set<YnabFlagColor>;
+  onUpdate: (id: string, updates: Partial<CardSubcategoryDraft>) => void;
+  onDelete: (id: string) => void;
+  onReorder: (id: string, direction: 'up' | 'down') => void;
+}) {
+  const isUnflagged = subcategory.flagColor === UNFLAGGED_FLAG.value;
+  const flagDisplayName = flagNames?.[subcategory.flagColor] ?? (isUnflagged
+    ? UNFLAGGED_FLAG.label
+    : YNAB_FLAG_COLORS.find((flag) => flag.value === subcategory.flagColor)?.label ?? subcategory.flagColor
+  );
+
+  const showDuplicateWarning = duplicateFlags.has(subcategory.flagColor);
+  const milesCard = cardType === 'miles';
+
+  // Local state for input values with debouncing
+  const [localName, setLocalName] = useState(subcategory.name);
+  const [localReward, setLocalReward] = useState(subcategory.rewardValue);
+  const [localMin, setLocalMin] = useState(subcategory.minimumSpend);
+  const [localMax, setLocalMax] = useState(subcategory.maximumSpend);
+  const [localMilesBlock, setLocalMilesBlock] = useState(subcategory.milesBlockSize);
+
+  // Debounced update callbacks
+  const debouncedUpdateName = useDebouncedCallback(
+    (value: string) => onUpdate(subcategory.id, { name: value }),
+    300
+  );
+
+  const debouncedUpdateReward = useDebouncedCallback(
+    (value: number) => onUpdate(subcategory.id, { rewardValue: value }),
+    300
+  );
+
+  const debouncedUpdateMin = useDebouncedCallback(
+    (value: number | null) => onUpdate(subcategory.id, { minimumSpend: value }),
+    300
+  );
+
+  const debouncedUpdateMax = useDebouncedCallback(
+    (value: number | null) => onUpdate(subcategory.id, { maximumSpend: value }),
+    300
+  );
+
+  const debouncedUpdateMilesBlock = useDebouncedCallback(
+    (value: number | null) => onUpdate(subcategory.id, { milesBlockSize: value }),
+    300
+  );
+
+  return (
+    <Card
+      className={cn('relative border-border/60 transition-colors', !subcategory.active && 'opacity-75')}
+    >
+      {!isUnflagged && (
+        <button
+          type="button"
+          onClick={() => onDelete(subcategory.id)}
+          className="absolute right-3 top-3 text-destructive transition-colors hover:text-destructive/80"
+          aria-label={`Remove ${subcategory.name}`}
+        >
+          <X className="h-4 w-4" />
+        </button>
+      )}
+      <CardContent className="flex flex-wrap items-end gap-3 pt-6 pb-4">
+        <div className="flex flex-col gap-1 w-[180px]">
+          <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
+            Flag
+          </Label>
+          {isUnflagged ? (
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Badge variant="secondary">{flagDisplayName}</Badge>
+              <span className="text-xs text-muted-foreground">Default</span>
+            </div>
+          ) : (
+            <Select
+              value={subcategory.flagColor}
+              onValueChange={(nextColour: YnabFlagColor) => onUpdate(subcategory.id, {
+                flagColor: nextColour,
+              })}
+            >
+              <SelectTrigger className="h-8 w-[160px] text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {FLAG_SELECT_OPTIONS.map((flag) => (
+                  <SelectItem
+                    key={flag.value}
+                    value={flag.value}
+                    disabled={flag.value !== subcategory.flagColor && usedFlagColours.has(flag.value)}
+                  >
+                    {flagNames?.[flag.value] ?? flag.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          {showDuplicateWarning && !isUnflagged && (
+            <div className="flex items-center gap-1 text-[11px] text-amber-600">
+              <ShieldAlert className="h-3 w-3" />
+              <span>Flag already used.</span>
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-1 w-[180px]">
+          <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
+            Name
+          </Label>
+          <Input
+            value={localName}
+            onChange={(e) => {
+              setLocalName(e.target.value);
+              debouncedUpdateName(e.target.value);
+            }}
+            className="h-8 text-sm"
+            placeholder="Dining"
+          />
+        </div>
+
+        <div className="flex flex-col gap-1 w-[92px]">
+          <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
+            Reward
+          </Label>
+          <Input
+            type="number"
+            value={localReward ?? 0}
+            onChange={(e) => {
+              const val = Number(e.target.value) || 0;
+              setLocalReward(val);
+              debouncedUpdateReward(val);
+            }}
+            className="h-8 text-sm"
+            step="0.1"
+            min={0}
+            placeholder={cardType === 'cashback' ? '2' : '1.5'}
+          />
+          <span className="text-[11px] text-muted-foreground">
+            {cardType === 'cashback' ? '% back' : 'mi / $'}
+          </span>
+        </div>
+
+        <div className="flex flex-col gap-1 w-[92px]">
+          <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
+            Minimum
+          </Label>
+          <Input
+            type="number"
+            value={localMin ?? ''}
+            onChange={(e) => {
+              const val = e.target.value === '' ? null : Number(e.target.value);
+              setLocalMin(val);
+              debouncedUpdateMin(val);
+            }}
+            className="h-8 text-sm"
+            min={0}
+            step="50"
+            placeholder="0"
+          />
+        </div>
+
+        <div className="flex flex-col gap-1 w-[92px]">
+          <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
+            Maximum
+          </Label>
+          <Input
+            type="number"
+            value={localMax ?? ''}
+            onChange={(e) => {
+              const val = e.target.value === '' ? null : Number(e.target.value);
+              setLocalMax(val);
+              debouncedUpdateMax(val);
+            }}
+            className="h-8 text-sm"
+            min={0}
+            step="50"
+            placeholder="0"
+          />
+        </div>
+
+        {milesCard && (
+          <div className="flex flex-col gap-1 w-[92px]">
+            <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Miles block
+            </Label>
+            <Input
+              type="number"
+              value={localMilesBlock ?? ''}
+              onChange={(e) => {
+                const val = e.target.value === '' ? null : Number(e.target.value);
+                setLocalMilesBlock(val);
+                debouncedUpdateMilesBlock(val);
+              }}
+              className="h-8 text-sm"
+              min={0}
+              step="1"
+              placeholder="Optional"
+            />
+          </div>
+        )}
+
+        <div className="ml-auto flex items-end gap-3">
+          <div className="flex items-center gap-2">
+            <Switch
+              id={`subcategory-active-${subcategory.id}`}
+              checked={subcategory.active}
+              onCheckedChange={(checked) => onUpdate(subcategory.id, { active: checked })}
+            />
+            <span className="text-xs text-muted-foreground">Active</span>
+          </div>
+          <div className="flex flex-col gap-1">
+            <button
+              type="button"
+              className="flex h-7 w-7 items-center justify-center rounded border border-border/60 text-muted-foreground transition-colors hover:bg-muted"
+              onClick={() => onReorder(subcategory.id, 'up')}
+              disabled={index === 0}
+              aria-label="Move subcategory up"
+            >
+              <ArrowUp className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              className="flex h-7 w-7 items-center justify-center rounded border border-border/60 text-muted-foreground transition-colors hover:bg-muted"
+              onClick={() => onReorder(subcategory.id, 'down')}
+              disabled={index === totalCount - 1}
+              aria-label="Move subcategory down"
+            >
+              <ArrowDown className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+});
+
+function CardSubcategoriesEditorComponent({
   cardType,
   enabled,
   value,
@@ -95,7 +352,11 @@ export function CardSubcategoriesEditor({
   baseRewardRate,
   flagNames,
 }: CardSubcategoriesEditorProps) {
-  const orderedSubcategories = useMemo(() => normalisePriorities(value), [value]);
+  // Optimize sorting - only sort if needed
+  const orderedSubcategories = useMemo(() => {
+    const sorted = [...value].sort((a, b) => a.priority - b.priority);
+    return sorted;
+  }, [value]);
 
   const usedFlagColours = useMemo(
     () => new Set(orderedSubcategories.map((sub) => sub.flagColor)),
@@ -114,19 +375,18 @@ export function CardSubcategoriesEditor({
     return new Set(Array.from(occurrences.entries()).filter(([, count]) => count > 1).map(([flag]) => flag));
   }, [orderedSubcategories]);
 
-  const milesCard = cardType === 'miles';
-
-  const handleToggle = (nextEnabled: boolean) => {
+  // Memoized callbacks
+  const handleToggle = useCallback((nextEnabled: boolean) => {
     onToggleEnabled(nextEnabled);
-    if (nextEnabled && orderedSubcategories.length === 0) {
+    if (nextEnabled && value.length === 0) {
       const defaultSubcategories = [
         createSubcategory(UNFLAGGED_FLAG.value, baseRewardRate, flagNames),
       ];
       onChange(normalisePriorities(defaultSubcategories));
     }
-  };
+  }, [onToggleEnabled, onChange, value.length, baseRewardRate, flagNames]);
 
-  const handleUpdate = (id: string, updates: Partial<CardSubcategoryDraft>) => {
+  const handleUpdate = useCallback((id: string, updates: Partial<CardSubcategoryDraft>) => {
     const next = orderedSubcategories.map((sub) =>
       sub.id === id
         ? {
@@ -137,24 +397,24 @@ export function CardSubcategoriesEditor({
         : sub
     );
     onChange(normalisePriorities(next));
-  };
+  }, [orderedSubcategories, onChange]);
 
-  const handleAdd = () => {
+  const handleAdd = useCallback(() => {
     const nextFlag = unusedFlagColours[0]?.value;
     if (!nextFlag) return;
     const nextSubcategory = createSubcategory(nextFlag, baseRewardRate, flagNames);
     const next = normalisePriorities([...orderedSubcategories, nextSubcategory]);
     onChange(next);
-  };
+  }, [unusedFlagColours, orderedSubcategories, onChange, baseRewardRate, flagNames]);
 
-  const handleDelete = (id: string) => {
+  const handleDelete = useCallback((id: string) => {
     const sub = orderedSubcategories.find((entry) => entry.id === id);
     if (!sub || sub.flagColor === UNFLAGGED_FLAG.value) return;
     const next = orderedSubcategories.filter((entry) => entry.id !== id);
     onChange(normalisePriorities(next));
-  };
+  }, [orderedSubcategories, onChange]);
 
-  const handleReorder = (id: string, direction: 'up' | 'down') => {
+  const handleReorder = useCallback((id: string, direction: 'up' | 'down') => {
     const index = orderedSubcategories.findIndex((entry) => entry.id === id);
     if (index === -1) return;
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
@@ -163,201 +423,7 @@ export function CardSubcategoriesEditor({
     const [removed] = next.splice(index, 1);
     next.splice(targetIndex, 0, removed);
     onChange(normalisePriorities(next));
-  };
-
-  const renderSubcategory = (subcategory: CardSubcategoryDraft, index: number) => {
-    const isUnflagged = subcategory.flagColor === UNFLAGGED_FLAG.value;
-    const flagDisplayName = flagNames?.[subcategory.flagColor] ?? (isUnflagged
-      ? UNFLAGGED_FLAG.label
-      : YNAB_FLAG_COLORS.find((flag) => flag.value === subcategory.flagColor)?.label ?? subcategory.flagColor
-    );
-
-    const showDuplicateWarning = duplicateFlags.has(subcategory.flagColor);
-
-    return (
-      <Card
-        key={subcategory.id}
-        className={cn('relative border-border/60 transition-colors', !subcategory.active && 'opacity-75')}
-      >
-        {!isUnflagged && (
-          <button
-            type="button"
-            onClick={() => handleDelete(subcategory.id)}
-            className="absolute right-3 top-3 text-destructive transition-colors hover:text-destructive/80"
-            aria-label={`Remove ${subcategory.name}`}
-          >
-            <X className="h-4 w-4" />
-          </button>
-        )}
-        <CardContent className="flex flex-wrap items-end gap-3 pt-6 pb-4">
-          <div className="flex flex-col gap-1 w-[180px]">
-            <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              Flag
-            </Label>
-            {isUnflagged ? (
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <Badge variant="secondary">{flagDisplayName}</Badge>
-                <span className="text-xs text-muted-foreground">Default</span>
-              </div>
-            ) : (
-              <Select
-                value={subcategory.flagColor}
-                onValueChange={(nextColour: YnabFlagColor) => handleUpdate(subcategory.id, {
-                  flagColor: nextColour,
-                })}
-              >
-                <SelectTrigger className="h-8 w-[160px] text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {FLAG_SELECT_OPTIONS.map((flag) => (
-                    <SelectItem
-                      key={flag.value}
-                      value={flag.value}
-                      disabled={flag.value !== subcategory.flagColor && usedFlagColours.has(flag.value)}
-                    >
-                      {flagNames?.[flag.value] ?? flag.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-            {showDuplicateWarning && !isUnflagged && (
-              <div className="flex items-center gap-1 text-[11px] text-amber-600">
-                <ShieldAlert className="h-3 w-3" />
-                <span>Flag already used.</span>
-              </div>
-            )}
-          </div>
-
-          <div className="flex flex-col gap-1 w-[180px]">
-            <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              Name
-            </Label>
-            <Input
-              value={subcategory.name}
-              onChange={(event) => handleUpdate(subcategory.id, { name: event.target.value })}
-              className="h-8 text-sm"
-              placeholder="Dining"
-            />
-          </div>
-
-          <div className="flex flex-col gap-1 w-[92px]">
-            <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              Reward
-            </Label>
-            <Input
-              type="number"
-              value={subcategory.rewardValue ?? 0}
-              onChange={(event) => handleUpdate(subcategory.id, {
-                rewardValue: Number(event.target.value) || 0,
-              })}
-              className="h-8 text-sm"
-              step="0.1"
-              min={0}
-              placeholder={cardType === 'cashback' ? '2' : '1.5'}
-            />
-            <span className="text-[11px] text-muted-foreground">
-              {cardType === 'cashback' ? '% back' : 'mi / $'}
-            </span>
-          </div>
-
-          <div className="flex flex-col gap-1 w-[92px]">
-            <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              Minimum
-            </Label>
-            <Input
-              type="number"
-              value={subcategory.minimumSpend ?? ''}
-              onChange={(event) => {
-                const value = event.target.value;
-                handleUpdate(subcategory.id, {
-                  minimumSpend: value === '' ? null : Number(value),
-                });
-              }}
-              className="h-8 text-sm"
-              min={0}
-              step="50"
-              placeholder="0"
-            />
-          </div>
-
-          <div className="flex flex-col gap-1 w-[92px]">
-            <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              Maximum
-            </Label>
-            <Input
-              type="number"
-              value={subcategory.maximumSpend ?? ''}
-              onChange={(event) => {
-                const value = event.target.value;
-                handleUpdate(subcategory.id, {
-                  maximumSpend: value === '' ? null : Number(value),
-                });
-              }}
-              className="h-8 text-sm"
-              min={0}
-              step="50"
-              placeholder="0"
-            />
-          </div>
-
-          {milesCard && (
-            <div className="flex flex-col gap-1 w-[92px]">
-              <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                Miles block
-              </Label>
-              <Input
-                type="number"
-                value={subcategory.milesBlockSize ?? ''}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  handleUpdate(subcategory.id, {
-                    milesBlockSize: value === '' ? null : Number(value),
-                  });
-                }}
-                className="h-8 text-sm"
-                min={0}
-                step="1"
-                placeholder="Optional"
-              />
-            </div>
-          )}
-
-          <div className="ml-auto flex items-end gap-3">
-            <div className="flex items-center gap-2">
-              <Switch
-                id={`subcategory-active-${subcategory.id}`}
-                checked={subcategory.active}
-                onCheckedChange={(checked) => handleUpdate(subcategory.id, { active: checked })}
-              />
-              <span className="text-xs text-muted-foreground">Active</span>
-            </div>
-            <div className="flex flex-col gap-1">
-              <button
-                type="button"
-                className="flex h-7 w-7 items-center justify-center rounded border border-border/60 text-muted-foreground transition-colors hover:bg-muted"
-                onClick={() => handleReorder(subcategory.id, 'up')}
-                disabled={index === 0}
-                aria-label="Move subcategory up"
-              >
-                <ArrowUp className="h-3.5 w-3.5" />
-              </button>
-              <button
-                type="button"
-                className="flex h-7 w-7 items-center justify-center rounded border border-border/60 text-muted-foreground transition-colors hover:bg-muted"
-                onClick={() => handleReorder(subcategory.id, 'down')}
-                disabled={index === orderedSubcategories.length - 1}
-                aria-label="Move subcategory down"
-              >
-                <ArrowDown className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  };
+  }, [orderedSubcategories, onChange]);
 
   return (
     <div className="space-y-4">
@@ -378,7 +444,21 @@ export function CardSubcategoriesEditor({
 
       {enabled ? (
         <div className="space-y-4">
-          {orderedSubcategories.map(renderSubcategory)}
+          {orderedSubcategories.map((subcategory, index) => (
+            <SubcategoryItem
+              key={subcategory.id}
+              subcategory={subcategory}
+              index={index}
+              totalCount={orderedSubcategories.length}
+              cardType={cardType}
+              flagNames={flagNames}
+              usedFlagColours={usedFlagColours}
+              duplicateFlags={duplicateFlags}
+              onUpdate={handleUpdate}
+              onDelete={handleDelete}
+              onReorder={handleReorder}
+            />
+          ))}
 
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="text-xs text-muted-foreground">
@@ -407,3 +487,6 @@ export function CardSubcategoriesEditor({
     </div>
   );
 }
+
+// Export with React.memo for additional optimization
+export const CardSubcategoriesEditor = memo(CardSubcategoriesEditorComponent);

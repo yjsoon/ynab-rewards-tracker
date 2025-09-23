@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -20,6 +20,22 @@ interface CardSettingsProps {
   initialEditing?: boolean;
 }
 
+// Move createFormState outside component to avoid recreating it
+const createFormState = (nextCard: CreditCard): CardEditState => ({
+  name: nextCard.name,
+  issuer: nextCard.issuer || '',
+  type: nextCard.type,
+  featured: nextCard.featured ?? true,
+  billingCycleType: nextCard.billingCycle?.type || 'calendar',
+  billingCycleDay: nextCard.billingCycle?.dayOfMonth || 1,
+  earningRate: nextCard.earningRate || (nextCard.type === 'cashback' ? 1 : 1),
+  earningBlockSize: nextCard.earningBlockSize,
+  minimumSpend: nextCard.minimumSpend,
+  maximumSpend: nextCard.maximumSpend,
+  subcategoriesEnabled: nextCard.subcategoriesEnabled ?? false,
+  subcategories: nextCard.subcategories || [],
+});
+
 export default function CardSettings({ card, onUpdate, initialEditing = false }: CardSettingsProps) {
   const { updateCard } = useCreditCards();
   const [editing, setEditing] = useState(initialEditing);
@@ -27,21 +43,6 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
   const [error, setError] = useState('');
   const [issuerError, setIssuerError] = useState('');
   const [flagNames, setFlagNames] = useState(() => storage.getFlagNames());
-
-const createFormState = (nextCard: CreditCard): CardEditState => ({
-  name: nextCard.name,
-  issuer: nextCard.issuer || '',
-  type: nextCard.type,
-  featured: nextCard.featured ?? true,
-    billingCycleType: nextCard.billingCycle?.type || 'calendar',
-    billingCycleDay: nextCard.billingCycle?.dayOfMonth || 1,
-    earningRate: nextCard.earningRate || (nextCard.type === 'cashback' ? 1 : 1),
-    earningBlockSize: nextCard.earningBlockSize,
-    minimumSpend: nextCard.minimumSpend,
-    maximumSpend: nextCard.maximumSpend,
-    subcategoriesEnabled: nextCard.subcategoriesEnabled ?? false,
-  subcategories: nextCard.subcategories ? nextCard.subcategories.map((sub) => ({ ...sub })) : [],
-});
 
 
   const [formData, setFormData] = useState<CardEditState>(() => createFormState(card));
@@ -54,8 +55,10 @@ const createFormState = (nextCard: CreditCard): CardEditState => ({
     const budget = storage.getSelectedBudget();
     const pat = storage.getPAT();
     if (!pat || !budget?.id) return;
-    const missingFlag = YNAB_FLAG_COLORS.some((flag) => !flagNames[flag.value as YnabFlagColor]);
-    if (!missingFlag) return;
+
+    // Only fetch if we don't have flag names yet
+    const hasFlagNames = Object.keys(flagNames).length > 0;
+    if (hasFlagNames) return;
 
     let cancelled = false;
     const client = new YnabClient(pat);
@@ -74,17 +77,17 @@ const createFormState = (nextCard: CreditCard): CardEditState => ({
     return () => {
       cancelled = true;
     };
-  }, [flagNames, card.id]);
+  }, []); // Remove dependencies to avoid re-fetching
 
   const fieldDiffs = useMemo(() => computeCardFieldDiff(card, formData), [card, formData]);
   const hasUnsavedChanges = useMemo(() => Object.values(fieldDiffs).some(Boolean), [fieldDiffs]);
 
-  const handleFieldChange = (field: keyof CardEditState, value: unknown) => {
+  const handleFieldChange = useCallback((field: keyof CardEditState, value: unknown) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     if (field === 'issuer') {
       setIssuerError('');
     }
-  };
+  }, []);
 
   const handleSave = async () => {
     setSaving(true);
