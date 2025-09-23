@@ -92,7 +92,7 @@ export function SpendingProgressBar({
   // Calculate remaining amounts
   const remainingToMinimum = hasMinimum ? Math.max(0, minimumSpend - totalSpend) : 0;
   const remainingToMaximum = hasMaximum ? Math.max(0, maximumSpend - totalSpend) : 0;
-  const exceededAmount = hasMaximum && totalSpend > maximumSpend ? totalSpend - maximumSpend : 0;
+  const exceededAmount = hasMaximum && totalSpend >= maximumSpend ? totalSpend - maximumSpend : 0;
 
   return (
     <div className={cn("space-y-2", className)}>
