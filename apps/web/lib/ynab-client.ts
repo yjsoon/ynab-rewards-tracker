@@ -157,7 +157,6 @@ export class YnabClient {
 
       const assignIfMatch = (key: string, value: unknown) => {
         if (typeof value !== 'string') return;
-        const lowerKey = key.toLowerCase();
         for (const colour of flagValues) {
           // Use word boundary check to avoid false positives (e.g., 'colored_red' matching 'red')
           const colourRegex = new RegExp(`\\b${colour}\\b`, 'i');

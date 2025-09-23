@@ -88,7 +88,7 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
     return () => {
       cancelled = true;
     };
-  }, []); // Remove dependencies to avoid re-fetching
+  }, [flagNames]);
 
   const fieldDiffs = useMemo(() => computeCardFieldDiff(card, formData), [card, formData]);
   const hasUnsavedChanges = useMemo(() => Object.values(fieldDiffs).some(Boolean), [fieldDiffs]);
