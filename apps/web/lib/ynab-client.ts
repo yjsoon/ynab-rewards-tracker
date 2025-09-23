@@ -144,7 +144,7 @@ export class YnabClient {
     return result.data.settings;
   }
 
-  async getFlagNames(budgetId: string): Promise<Partial<Record<YnabFlagColor, string>>> {
+  async getCustomFlagNames(budgetId: string): Promise<Partial<Record<YnabFlagColor, string>>> {
     try {
       const settings = await this.getBudgetSettings(budgetId);
       if (!settings) {
@@ -159,7 +159,9 @@ export class YnabClient {
         if (typeof value !== 'string') return;
         const lowerKey = key.toLowerCase();
         for (const colour of flagValues) {
-          if (lowerKey.includes(colour)) {
+          // Use word boundary check to avoid false positives (e.g., 'colored_red' matching 'red')
+          const colourRegex = new RegExp(`\\b${colour}\\b`, 'i');
+          if (colourRegex.test(key)) {
             candidates[colour] = value;
           }
         }

@@ -273,6 +273,12 @@ class StorageService {
       if (!seenFlags.has(normalised.flagColor)) {
         normalisedSubcategories.push(normalised);
         seenFlags.add(normalised.flagColor);
+      } else {
+        console.warn(
+          `Duplicate flag colour detected: "${normalised.flagColor}". ` +
+          `Subcategory "${normalised.name}" (index ${index}) was skipped. ` +
+          `Each subcategory must have a unique flag colour.`
+        );
       }
     });
 

@@ -69,6 +69,29 @@ function generateId(): string {
   return `subcat-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function getFallbackFlagName(
+  flagColor: YnabFlagColor,
+  flagNames?: Partial<Record<YnabFlagColor, string>>
+): string {
+  if (flagNames?.[flagColor]) {
+    return flagNames[flagColor];
+  }
+  if (flagColor === UNFLAGGED_FLAG.value) {
+    return UNFLAGGED_FLAG.label;
+  }
+  const flag = YNAB_FLAG_COLORS.find(f => f.value === flagColor);
+  return flag?.label ?? flagColor;
+}
+
+function getRewardTypeDisplay(cardType: 'cashback' | 'miles'): {
+  unit: string;
+  placeholder: string;
+} {
+  return cardType === 'cashback'
+    ? { unit: '% back', placeholder: '2' }
+    : { unit: 'miles/$', placeholder: '1.5' };
+}
+
 function createSubcategory(
   flagColor: YnabFlagColor,
   rewardValue: number,
@@ -76,7 +99,7 @@ function createSubcategory(
 ): CardSubcategoryDraft {
   return {
     id: generateId(),
-    name: flagNames?.[flagColor] ?? (flagColor === UNFLAGGED_FLAG.value ? UNFLAGGED_FLAG.label : YNAB_FLAG_COLORS.find((flag) => flag.value === flagColor)?.label ?? flagColor),
+    name: getFallbackFlagName(flagColor, flagNames),
     flagColor,
     rewardValue,
     milesBlockSize: null,
@@ -276,14 +299,14 @@ const SubcategoryItem = memo(function SubcategoryItem({
               step="0.1"
               min={0}
               disabled={localExcluded}
-              placeholder={cardType === 'cashback' ? '2' : '1.5'}
+              placeholder={getRewardTypeDisplay(cardType).placeholder}
             />
           </div>
           <span className={cn(
             "text-sm font-medium text-muted-foreground",
             localExcluded && "opacity-50"
           )}>
-            {cardType === 'cashback' ? '% back' : 'miles/$'}
+            {getRewardTypeDisplay(cardType).unit}
           </span>
         </div>
 

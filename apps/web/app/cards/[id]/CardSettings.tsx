@@ -75,7 +75,7 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
     const client = new YnabClient(pat);
 
     client
-      .getFlagNames(budget.id)
+      .getCustomFlagNames(budget.id)
       .then((names) => {
         if (cancelled || !names || Object.keys(names).length === 0) {
           return;
