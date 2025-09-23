@@ -80,7 +80,11 @@ export function SubcategoryBreakdownCompact({
           variant="ghost"
           size="sm"
           className="h-6 px-2 text-xs"
-          onClick={() => setIsExpanded(!isExpanded)}
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            setIsExpanded(!isExpanded);
+          }}
         >
           {isExpanded ? (
             <>
