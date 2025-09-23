@@ -72,7 +72,7 @@ export function SubcategoryBreakdownCompact({
   }));
 
   return (
-    <div className="space-y-2 rounded-md border border-border/60 bg-muted/5 p-3">
+    <div className="space-y-1.5 rounded-md border border-border/60 bg-muted/5 p-2">
       {/* Header with toggle */}
       <div className="flex items-center justify-between">
         <p className="text-sm font-semibold text-muted-foreground">Subcategory rewards</p>
@@ -131,57 +131,8 @@ export function SubcategoryBreakdownCompact({
         </div>
       </div>
 
-      {/* Compact View - Top Contributors */}
-      {!isExpanded ? (
-        <div className="space-y-1.5">
-          {topBreakdowns.map((entry) => {
-            const flagLabel = flagNames[entry.flagColor as YnabFlagColor] ?? (
-              entry.flagColor === UNFLAGGED_FLAG.value
-                ? UNFLAGGED_FLAG.label
-                : YNAB_FLAG_COLORS.find((flag) => flag.value === entry.flagColor)?.label ?? entry.flagColor
-            );
-
-            const bgClass = FLAG_COLOR_BG_MAP[entry.flagColor] || FLAG_COLOR_BG_MAP.unflagged;
-
-            return (
-              <div
-                key={entry.subcategoryId || `${entry.flagColor}-${entry.name}`}
-                className={cn(
-                  "flex items-center justify-between gap-2 rounded-md px-2 py-1.5",
-                  bgClass
-                )}
-              >
-                <div className="flex items-center gap-2 flex-1 min-w-0">
-                  <div
-                    className="h-3 w-3 rounded-full flex-shrink-0"
-                    style={{ backgroundColor: FLAG_COLOR_MAP[entry.flagColor] || FLAG_COLOR_MAP.unflagged }}
-                  />
-                  <span className="text-xs font-medium truncate">{entry.name}</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  {entry.maximumSpendExceeded && (
-                    <span title="Capped">
-                      <AlertCircle className="h-3 w-3 text-amber-500 flex-shrink-0" />
-                    </span>
-                  )}
-                  <span className="text-xs font-semibold whitespace-nowrap">
-                    {cardType === 'cashback' ? (
-                      <CurrencyAmount value={entry.rewardEarned} currency={currency} />
-                    ) : (
-                      `${Math.round(entry.rewardEarned).toLocaleString()}mi`
-                    )}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-          {hasMore && (
-            <p className="text-xs text-center text-muted-foreground">
-              +{sortedBreakdowns.length - 3} more categories
-            </p>
-          )}
-        </div>
-      ) : (
+      {/* Expanded View - Show Details */}
+      {isExpanded && (
         /* Expanded View - All Details */
         <div className="space-y-2">
           {sortedBreakdowns.map((entry) => {
