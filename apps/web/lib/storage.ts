@@ -232,6 +232,8 @@ class StorageService {
           ? subcategory.priority
           : index,
       active: typeof subcategory.active === 'boolean' ? subcategory.active : true,
+      excludeFromRewards:
+        typeof subcategory.excludeFromRewards === 'boolean' ? subcategory.excludeFromRewards : false,
       createdAt,
       updatedAt,
     };
