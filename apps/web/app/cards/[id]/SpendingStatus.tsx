@@ -5,13 +5,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { SpendingProgressBar } from '@/components/SpendingProgressBar';
+import { SubcategoryBreakdownDetailed } from '@/components/SubcategoryBreakdownDetailed';
 import {
   AlertCircle,
   TrendingUp,
   Calendar,
   DollarSign,
   XCircle,
-  CheckCircle2
+  CheckCircle2,
+  Layers
 } from 'lucide-react';
 import { SimpleRewardsCalculator } from '@/lib/rewards-engine';
 import { YnabClient } from '@/lib/ynab-client';
@@ -140,7 +142,8 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
       minimumSpendProgress: calculation.minimumSpendProgress,
       maximumSpend: calculation.maximumSpend,
       maximumSpendExceeded: calculation.maximumSpendExceeded,
-      maximumSpendProgress: calculation.maximumSpendProgress
+      maximumSpendProgress: calculation.maximumSpendProgress,
+      subcategoryBreakdowns: calculation.subcategoryBreakdowns ?? []
     };
   }, [transactions, card, period, settings]);
 
@@ -156,7 +159,7 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
     );
   }
 
-  const { totalSpend, eligibleSpend, eligibleSpendBeforeBlocks, rewardEarned, rewardEarnedDollars, minimumSpend, minimumSpendMet, maximumSpend, maximumSpendExceeded } = spendingAnalysis;
+  const { totalSpend, eligibleSpend, eligibleSpendBeforeBlocks, rewardEarned, rewardEarnedDollars, minimumSpend, minimumSpendMet, maximumSpend, maximumSpendExceeded, subcategoryBreakdowns } = spendingAnalysis;
 
   const currency = settings?.currency;
   const milesValuation = settings?.milesValuation ?? 0.01;
@@ -244,30 +247,6 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
             )}
           </div>
 
-          {/* Earning Block Info */}
-          {card.earningBlockSize && card.earningBlockSize > 0 && eligibleSpend !== undefined && eligibleSpend > 0 && (
-            <Alert className="mt-4">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                <div className="space-y-1">
-                  <p className="font-medium">
-                    Earning blocks:{' '}
-                    <CurrencyAmount value={card.earningBlockSize} currency={currency} /> per block
-                  </p>
-                  <p className="text-sm">
-                    {Math.floor(eligibleSpend / card.earningBlockSize)} complete blocks earned from{' '}
-                    <CurrencyAmount value={eligibleSpend} currency={currency} /> eligible spend
-                  </p>
-                  {unearnedAmount > 0 && (
-                    <p className="text-sm text-muted-foreground">
-                      <CurrencyAmount value={unearnedAmount} currency={currency} /> unearned remainder
-                    </p>
-                  )}
-                </div>
-              </AlertDescription>
-            </Alert>
-          )}
-
           {/* Spending Progress Bar */}
           {(minimumSpend !== null && minimumSpend !== undefined) || hasMaximum ? (
             <div className="space-y-4">
@@ -312,6 +291,47 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
               <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
               <AlertDescription className="text-amber-700 dark:text-amber-300">
                 <strong>No spending limits configured.</strong> Set minimum and maximum spend amounts in card settings to track your progress and optimize rewards.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* Subcategory Breakdown - Show if enabled and has data */}
+          {card.subcategoriesEnabled && subcategoryBreakdowns.length > 0 && (
+            <div className="bg-muted/5 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Layers className="h-5 w-5 text-muted-foreground" />
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Subcategory Breakdown</h3>
+              </div>
+              <SubcategoryBreakdownDetailed
+                breakdowns={subcategoryBreakdowns}
+                cardType={card.type}
+                currency={currency || 'USD'}
+                totalCardSpend={totalSpend}
+                totalCardReward={rewardEarned}
+              />
+            </div>
+          )}
+
+          {/* Earning Block Info */}
+          {card.earningBlockSize && card.earningBlockSize > 0 && eligibleSpend !== undefined && eligibleSpend > 0 && (
+            <Alert className="mt-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                <div className="space-y-1">
+                  <p className="font-medium">
+                    Earning blocks:{' '}
+                    <CurrencyAmount value={card.earningBlockSize} currency={currency} /> per block
+                  </p>
+                  <p className="text-sm">
+                    {Math.floor(eligibleSpend / card.earningBlockSize)} complete blocks earned from{' '}
+                    <CurrencyAmount value={eligibleSpend} currency={currency} /> eligible spend
+                  </p>
+                  {unearnedAmount > 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      <CurrencyAmount value={unearnedAmount} currency={currency} /> unearned remainder
+                    </p>
+                  )}
+                </div>
               </AlertDescription>
             </Alert>
           )}

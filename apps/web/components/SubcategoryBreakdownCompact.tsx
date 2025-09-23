@@ -184,7 +184,7 @@ export function SubcategoryBreakdownCompact({
                         </>
                       )}
                       {entry.maximumSpendExceeded && (
-                        <span className="ml-1 text-red-600 font-medium">(reached)</span>
+                        <span className="ml-1 text-red-600 font-medium">(maxed)</span>
                       )}
                     </p>
                   </div>
