@@ -17,6 +17,7 @@ interface SubcategoryBreakdown {
   rewardEarnedDollars?: number;
   minimumSpendMet?: boolean;
   maximumSpendExceeded?: boolean;
+  maximumSpend?: number | null;
 }
 
 interface SubcategoryBreakdownCompactProps {
@@ -104,6 +105,7 @@ export function SubcategoryBreakdownCompact({
       <div className="space-y-1">
         <div className="flex h-6 w-full overflow-hidden rounded-md bg-muted/30 border border-border/40">
           {segments.map((segment, index) => {
+            const isCapped = segment.maximumSpendExceeded;
             const color = FLAG_COLOR_MAP[segment.flagColor] || FLAG_COLOR_MAP.unflagged;
             const width = segment.percentage;
 
@@ -118,12 +120,24 @@ export function SubcategoryBreakdownCompact({
                   backgroundColor: color,
                   opacity: segment.rewardEarned === 0 ? 0.3 : 0.8,
                 }}
-                title={`${segment.name}: ${currency}${segment.totalSpend.toFixed(2)}`}
+                title={`${segment.name}: ${currency}${segment.totalSpend.toFixed(2)}${isCapped ? ' (Capped)' : ''}`}
               >
                 {width > 15 && (
-                  <span className="text-[10px] font-medium text-white drop-shadow">
-                    {Math.round(width)}%
-                  </span>
+                  isCapped ? (
+                    segment.flagColor === 'red' ? (
+                      <span className="px-0.5 py-0 bg-white text-red-600 text-[9px] font-bold rounded">
+                        {Math.round(width)}%
+                      </span>
+                    ) : (
+                      <span className="px-0.5 py-0 bg-red-600 text-white text-[9px] font-bold rounded">
+                        {Math.round(width)}%
+                      </span>
+                    )
+                  ) : (
+                    <span className="text-[10px] font-medium text-white drop-shadow">
+                      {Math.round(width)}%
+                    </span>
+                  )
                 )}
               </div>
             );
@@ -168,27 +182,38 @@ export function SubcategoryBreakdownCompact({
                 <div className="flex flex-1 items-center gap-3">
                   <div
                     className="h-3 w-3 rounded-full flex-shrink-0"
-                    style={{ backgroundColor: FLAG_COLOR_MAP[entry.flagColor] || FLAG_COLOR_MAP.unflagged }}
+                    style={{
+                      backgroundColor: entry.maximumSpendExceeded
+                        ? '#ef4444'
+                        : (FLAG_COLOR_MAP[entry.flagColor] || FLAG_COLOR_MAP.unflagged)
+                    }}
                   />
                   <div className="flex-1">
-                    <p className="text-sm font-medium">{entry.name}</p>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-sm font-medium">{entry.name}</span>
+                      <span className="text-sm text-muted-foreground">•</span>
+                      <span className="text-sm font-semibold">
+                        {cardType === 'cashback' ? (
+                          <CurrencyAmount value={entry.rewardEarned} currency={currency} />
+                        ) : (
+                          `${Math.round(entry.rewardEarned).toLocaleString()} miles`
+                        )}
+                      </span>
+                    </div>
                     <p className="text-xs text-muted-foreground">
-                      Spend <CurrencyAmount value={entry.totalSpend} currency={currency} />
-                      {' • '}Reward {rewardSummary}
+                      Spent <CurrencyAmount value={entry.totalSpend} currency={currency} />
+                      {entry.maximumSpend && entry.maximumSpend > 0 && (
+                        <>
+                          {' / '}
+                          <CurrencyAmount value={entry.maximumSpend} currency={currency} />
+                          {' cap'}
+                        </>
+                      )}
+                      {entry.maximumSpendExceeded && (
+                        <span className="ml-1 text-red-600 font-medium">(reached)</span>
+                      )}
                     </p>
                   </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {!entry.minimumSpendMet && (
-                    <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">
-                      Below min
-                    </Badge>
-                  )}
-                  {entry.maximumSpendExceeded && (
-                    <Badge variant="outline" className="text-xs text-red-600 border-red-300">
-                      Capped
-                    </Badge>
-                  )}
                 </div>
               </div>
             );

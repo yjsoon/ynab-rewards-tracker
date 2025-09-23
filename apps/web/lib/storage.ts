@@ -15,6 +15,7 @@ export interface CardSubcategory {
   maximumSpend?: number | null;
   priority: number;
   active: boolean;
+  excludeFromRewards?: boolean; // When true, transactions don't count toward rewards or minimum spend
   createdAt: string;
   updatedAt: string;
 }

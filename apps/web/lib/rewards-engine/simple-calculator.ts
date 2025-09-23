@@ -239,7 +239,24 @@ export class SimpleRewardsCalculator {
       return txnDate >= period.start && txnDate <= period.end && txn.amount < 0;
     });
 
-    const totalSpend = Math.abs(periodTransactions.reduce((sum, txn) => sum + txn.amount, 0)) / 1000;
+    // Calculate total spend, excluding transactions with excluded subcategories if applicable
+    let totalSpend = 0;
+    if (context.enabled && context.activeSubcategories.length > 0) {
+      for (const txn of periodTransactions) {
+        const flagColour = this.normaliseFlagColor(txn.flag_color);
+        const subcategory = this.getSubcategoryForFlag(context, flagColour);
+
+        // Skip excluded subcategories from total spend
+        if (subcategory?.excludeFromRewards) {
+          continue;
+        }
+
+        totalSpend += Math.abs(txn.amount) / 1000;
+      }
+    } else {
+      // No subcategories, count all transactions
+      totalSpend = Math.abs(periodTransactions.reduce((sum, txn) => sum + txn.amount, 0)) / 1000;
+    }
 
     const minimumSpend = card.minimumSpend;
     const minimumSpendMet = isMinimumSpendMet(totalSpend, minimumSpend);
@@ -258,6 +275,12 @@ export class SimpleRewardsCalculator {
       for (const txn of periodTransactions) {
         const flagColour = this.normaliseFlagColor(txn.flag_color);
         const subcategory = this.getSubcategoryForFlag(context, flagColour);
+
+        // Skip excluded subcategories entirely - they don't count toward anything
+        if (subcategory?.excludeFromRewards) {
+          continue;
+        }
+
         const effectiveFlag = subcategory?.flagColor ?? UNFLAGGED_FLAG.value;
         const prev = spendByFlag.get(effectiveFlag) ?? 0;
         spendByFlag.set(effectiveFlag, prev + Math.abs(txn.amount) / 1000);
@@ -269,6 +292,28 @@ export class SimpleRewardsCalculator {
       subcategoryBreakdowns = [];
 
       for (const subcategory of context.activeSubcategories) {
+        // Skip excluded subcategories from rewards calculations
+        if (subcategory.excludeFromRewards) {
+          // Add to breakdown with 0 rewards for visibility
+          subcategoryBreakdowns.push({
+            id: subcategory.id,
+            name: subcategory.name,
+            flagColor: subcategory.flagColor,
+            totalSpend: spendByFlag.get(subcategory.flagColor) ?? 0,
+            eligibleSpendBeforeBlocks: 0,
+            eligibleSpend: 0,
+            rewardRate: 0,
+            rewardEarned: 0,
+            rewardEarnedDollars: 0,
+            minimumSpend: subcategory.minimumSpend,
+            minimumSpendMet: false,
+            maximumSpend: subcategory.maximumSpend,
+            maximumSpendExceeded: false,
+            blockSize: null,
+          });
+          continue;
+        }
+
         const totalForSubcategory = spendByFlag.get(subcategory.flagColor) ?? 0;
         const rewardRate = this.getRewardRate(card, subcategory);
         const blockSize = this.getBlockSize(card, subcategory);

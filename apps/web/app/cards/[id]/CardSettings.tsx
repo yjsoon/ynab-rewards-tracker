@@ -11,6 +11,17 @@ import { storage, type CardSubcategory, type CreditCard } from '@/lib/storage';
 import { validateIssuer, sanitizeInput } from '@/lib/validation';
 import { CardSettingsEditor, computeCardFieldDiff, type CardEditState } from '@/components/CardSettingsEditor';
 import { UNFLAGGED_FLAG, YNAB_FLAG_COLORS, type YnabFlagColor } from '@/lib/ynab-constants';
+
+// Map flag colors to actual colors for visual representation
+const FLAG_COLOR_MAP: Record<string, string> = {
+  red: '#ef4444',
+  orange: '#f97316',
+  yellow: '#eab308',
+  green: '#22c55e',
+  blue: '#3b82f6',
+  purple: '#a855f7',
+  unflagged: '#6b7280',
+};
 import { prepareSubcategoriesForSave } from '@/lib/subcategory-utils';
 import { YnabClient } from '@/lib/ynab-client';
 
@@ -268,20 +279,46 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
                         : YNAB_FLAG_COLORS.find((flag) => flag.value === subcategory.flagColor)?.label ?? subcategory.flagColor
                     );
 
+                    const isExcluded = subcategory.excludeFromRewards;
+                    const flagColor = FLAG_COLOR_MAP[subcategory.flagColor] || FLAG_COLOR_MAP.unflagged;
+
                     return (
                       <div
                         key={subcategory.id}
-                        className="flex items-center justify-between gap-4 rounded-lg border border-border/40 bg-muted/10 p-3"
+                        className="flex items-center justify-between gap-4 rounded-lg border border-border/40 bg-muted/10 p-3 overflow-hidden"
+                        style={{
+                          borderLeftWidth: '3px',
+                          borderLeftColor: isExcluded ? '#f97316' : flagColor,
+                        }}
                       >
                         <div className="flex flex-1 items-center gap-3">
-                          <Badge variant="secondary">{flagLabel}</Badge>
-                          <div>
-                            <p className="font-medium">{subcategory.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {rateLabel} • Min {minLabel} • Max {maxLabel}
-                              {card.type === 'miles' && subcategory.milesBlockSize
-                                ? ` • ${subcategory.milesBlockSize} mile block`
-                                : ''}
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="h-2 w-2 rounded-full"
+                              style={{ backgroundColor: isExcluded ? '#f97316' : flagColor }}
+                            />
+                            <Badge variant="secondary" className="text-xs">{flagLabel}</Badge>
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium">{subcategory.name}</p>
+                              {isExcluded && (
+                                <Badge variant="outline" className="text-[10px] uppercase tracking-wider bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20">
+                                  Excluded
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {isExcluded ? (
+                                <span className="text-orange-600 dark:text-orange-400">Not counted toward rewards</span>
+                              ) : (
+                                <>
+                                  {rateLabel} • Min {minLabel} • Max {maxLabel}
+                                  {card.type === 'miles' && subcategory.milesBlockSize
+                                    ? ` • ${subcategory.milesBlockSize} mile block`
+                                    : ''}
+                                </>
+                              )}
                             </p>
                           </div>
                         </div>

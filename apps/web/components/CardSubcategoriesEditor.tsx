@@ -43,6 +43,17 @@ const FLAG_SELECT_OPTIONS = YNAB_FLAG_COLORS.map((flag) => ({
   label: flag.label,
 }));
 
+// Map flag colors to actual colors for visual representation
+const FLAG_COLOR_MAP: Record<string, string> = {
+  red: '#ef4444',
+  orange: '#f97316',
+  yellow: '#eab308',
+  green: '#22c55e',
+  blue: '#3b82f6',
+  purple: '#a855f7',
+  unflagged: '#6b7280',
+};
+
 function getTimestamp(): string {
   return new Date().toISOString();
 }
@@ -130,6 +141,7 @@ const SubcategoryItem = memo(function SubcategoryItem({
   const [localMin, setLocalMin] = useState(subcategory.minimumSpend);
   const [localMax, setLocalMax] = useState(subcategory.maximumSpend);
   const [localMilesBlock, setLocalMilesBlock] = useState(subcategory.milesBlockSize);
+  const [localExcluded, setLocalExcluded] = useState(subcategory.excludeFromRewards || false);
 
   // Sync local state when subcategory prop changes (after save/re-render)
   useEffect(() => {
@@ -138,7 +150,8 @@ const SubcategoryItem = memo(function SubcategoryItem({
     setLocalMin(subcategory.minimumSpend);
     setLocalMax(subcategory.maximumSpend);
     setLocalMilesBlock(subcategory.milesBlockSize);
-  }, [subcategory.name, subcategory.rewardValue, subcategory.minimumSpend, subcategory.maximumSpend, subcategory.milesBlockSize]);
+    setLocalExcluded(subcategory.excludeFromRewards || false);
+  }, [subcategory.name, subcategory.rewardValue, subcategory.minimumSpend, subcategory.maximumSpend, subcategory.milesBlockSize, subcategory.excludeFromRewards]);
 
   // Debounced update callbacks
   const debouncedUpdateName = useDebouncedCallback(
@@ -168,27 +181,39 @@ const SubcategoryItem = memo(function SubcategoryItem({
 
   return (
     <Card
-      className={cn('relative border-border/60 transition-colors', !subcategory.active && 'opacity-75')}
+      className={cn(
+        'relative transition-all hover:shadow-sm overflow-hidden',
+        subcategory.active
+          ? 'border-border/60 bg-card'
+          : 'border-border/30 bg-muted/30 opacity-60',
+        localExcluded && 'ring-1 ring-orange-500/20'
+      )}
+      style={{
+        borderLeftWidth: '3px',
+        borderLeftColor: localExcluded
+          ? '#f97316'
+          : (FLAG_COLOR_MAP[subcategory.flagColor] || '#6b7280')
+      }}
     >
       {!isUnflagged && (
         <button
           type="button"
           onClick={() => onDelete(subcategory.id)}
-          className="absolute right-3 top-3 text-destructive transition-colors hover:text-destructive/80"
+          className="absolute right-1 top-1 rounded-full p-1 text-muted-foreground/60 transition-all hover:bg-destructive/10 hover:text-destructive"
           aria-label={`Remove ${subcategory.name}`}
         >
-          <X className="h-4 w-4" />
+          <X className="h-3.5 w-3.5" />
         </button>
       )}
-      <CardContent className="flex flex-wrap items-end gap-3 pt-6 pb-4">
-        <div className="flex flex-col gap-1 w-[180px]">
-          <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
-            Flag
-          </Label>
+      <CardContent className="flex items-center gap-3 py-4">
+        <div className="flex items-center gap-3">
           {isUnflagged ? (
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <Badge variant="secondary">{flagDisplayName}</Badge>
-              <span className="text-xs text-muted-foreground">Default</span>
+            <div className="flex items-center gap-2 w-[140px]">
+              <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-800 border border-border/40" />
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm font-medium">{flagDisplayName}</span>
+                <Badge variant="outline" className="text-[10px] uppercase">Default</Badge>
+              </div>
             </div>
           ) : (
             <Select
@@ -197,110 +222,117 @@ const SubcategoryItem = memo(function SubcategoryItem({
                 flagColor: nextColour,
               })}
             >
-              <SelectTrigger className="h-8 w-[160px] text-sm">
+              <SelectTrigger className="h-10 w-[140px] border-border/40 bg-background/50">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {FLAG_SELECT_OPTIONS.map((flag) => (
-                  <SelectItem
-                    key={flag.value}
-                    value={flag.value}
-                    disabled={flag.value !== subcategory.flagColor && usedFlagColours.has(flag.value)}
-                  >
-                    {flagNames?.[flag.value] ?? flag.label}
-                  </SelectItem>
-                ))}
+                {FLAG_SELECT_OPTIONS.map((flag) => {
+                  const isUsed = flag.value !== subcategory.flagColor && usedFlagColours.has(flag.value);
+                  return (
+                    <SelectItem
+                      key={flag.value}
+                      value={flag.value}
+                      disabled={isUsed}
+                      className={isUsed ? 'opacity-50' : ''}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="h-3 w-3 rounded-full border border-border/40"
+                          style={{ backgroundColor: FLAG_COLOR_MAP[flag.value] || '#6b7280' }}
+                        />
+                        <span>{flagNames?.[flag.value] ?? flag.label}</span>
+                      </div>
+                    </SelectItem>
+                  );
+                })}
               </SelectContent>
             </Select>
           )}
-          {showDuplicateWarning && !isUnflagged && (
-            <div className="flex items-center gap-1 text-[11px] text-amber-600">
-              <ShieldAlert className="h-3 w-3" />
-              <span>Flag already used.</span>
-            </div>
-          )}
         </div>
 
-        <div className="flex flex-col gap-1 w-[180px]">
-          <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
-            Name
-          </Label>
+        <div className="w-[200px]">
           <Input
             value={localName}
             onChange={(e) => {
               setLocalName(e.target.value);
               debouncedUpdateName(e.target.value);
             }}
-            className="h-8 text-sm"
-            placeholder="Dining"
+            className="h-10 border-border/40 bg-background/50 font-medium"
+            placeholder="Category name"
           />
         </div>
 
-        <div className="flex flex-col gap-1 w-[92px]">
-          <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
-            Reward
-          </Label>
-          <Input
-            type="number"
-            value={localReward ?? 0}
-            onChange={(e) => {
-              const val = Number(e.target.value) || 0;
-              setLocalReward(val);
-              debouncedUpdateReward(val);
-            }}
-            className="h-8 text-sm"
-            step="0.1"
-            min={0}
-            placeholder={cardType === 'cashback' ? '2' : '1.5'}
-          />
-          <span className="text-[11px] text-muted-foreground">
-            {cardType === 'cashback' ? '% back' : 'mi / $'}
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <Input
+              type="number"
+              value={localExcluded ? 0 : (localReward ?? 0)}
+              onChange={(e) => {
+                const val = Number(e.target.value) || 0;
+                setLocalReward(val);
+                debouncedUpdateReward(val);
+              }}
+              className={cn(
+                "h-10 w-20 border-border/40 bg-background/50 text-center font-semibold pr-2",
+                localExcluded && "opacity-50 cursor-not-allowed"
+              )}
+              step="0.1"
+              min={0}
+              disabled={localExcluded}
+              placeholder={cardType === 'cashback' ? '2' : '1.5'}
+            />
+          </div>
+          <span className={cn(
+            "text-sm font-medium text-muted-foreground",
+            localExcluded && "opacity-50"
+          )}>
+            {cardType === 'cashback' ? '% back' : 'miles/$'}
           </span>
         </div>
 
-        <div className="flex flex-col gap-1 w-[92px]">
-          <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
-            Minimum
-          </Label>
-          <Input
-            type="number"
-            value={localMin ?? ''}
-            onChange={(e) => {
-              const val = e.target.value === '' ? null : Number(e.target.value);
-              setLocalMin(val);
-              debouncedUpdateMin(val);
-            }}
-            className="h-8 text-sm"
-            min={0}
-            step="50"
-            placeholder="0"
-          />
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Min</span>
+          <div className="relative">
+            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+            <Input
+              type="number"
+              value={localMin ?? ''}
+              onChange={(e) => {
+                const val = e.target.value === '' ? null : Number(e.target.value);
+                setLocalMin(val);
+                debouncedUpdateMin(val);
+              }}
+              className="h-10 w-24 border-border/40 bg-background/50 pl-6"
+              min={0}
+              step="50"
+              placeholder="0"
+            />
+          </div>
         </div>
 
-        <div className="flex flex-col gap-1 w-[92px]">
-          <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
-            Maximum
-          </Label>
-          <Input
-            type="number"
-            value={localMax ?? ''}
-            onChange={(e) => {
-              const val = e.target.value === '' ? null : Number(e.target.value);
-              setLocalMax(val);
-              debouncedUpdateMax(val);
-            }}
-            className="h-8 text-sm"
-            min={0}
-            step="50"
-            placeholder="0"
-          />
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Max</span>
+          <div className="relative">
+            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+            <Input
+              type="number"
+              value={localMax ?? ''}
+              onChange={(e) => {
+                const val = e.target.value === '' ? null : Number(e.target.value);
+                setLocalMax(val);
+                debouncedUpdateMax(val);
+              }}
+              className="h-10 w-24 border-border/40 bg-background/50 pl-6"
+              min={0}
+              step="50"
+              placeholder="0"
+            />
+          </div>
         </div>
 
         {milesCard && (
-          <div className="flex flex-col gap-1 w-[92px]">
-            <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              Miles block
-            </Label>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Block</span>
             <Input
               type="number"
               value={localMilesBlock ?? ''}
@@ -309,43 +341,65 @@ const SubcategoryItem = memo(function SubcategoryItem({
                 setLocalMilesBlock(val);
                 debouncedUpdateMilesBlock(val);
               }}
-              className="h-8 text-sm"
+              className="h-10 w-16 border-border/40 bg-background/50 text-center"
               min={0}
               step="1"
-              placeholder="Optional"
+              placeholder="—"
             />
           </div>
         )}
 
-        <div className="ml-auto flex items-end gap-3">
-          <div className="flex items-center gap-2">
-            <Switch
-              id={`subcategory-active-${subcategory.id}`}
-              checked={subcategory.active}
-              onCheckedChange={(checked) => onUpdate(subcategory.id, { active: checked })}
-            />
-            <span className="text-xs text-muted-foreground">Active</span>
-          </div>
-          <div className="flex flex-col gap-1">
+        <div className="ml-auto flex items-center gap-3">
+          <div className="flex items-center gap-2 pr-3 border-r border-border/40">
+            {!isUnflagged ? (
+              <button
+                type="button"
+                onClick={() => {
+                  const newExclude = !localExcluded;
+                  setLocalExcluded(newExclude);
+                  onUpdate(subcategory.id, {
+                    excludeFromRewards: newExclude,
+                    rewardValue: newExclude ? 0 : subcategory.rewardValue
+                  });
+                }}
+                className={cn(
+                  "w-[72px] px-2 py-1 text-[10px] font-medium uppercase tracking-wider rounded-md transition-all",
+                  localExcluded
+                    ? "bg-orange-500/10 text-orange-600 dark:text-orange-400 hover:bg-orange-500/20"
+                    : "bg-muted hover:bg-muted/80 text-muted-foreground"
+                )}
+              >
+                {localExcluded ? 'Excluded' : 'Exclude'}
+              </button>
+            ) : (
+              <div className="w-[72px]" /> // Spacer to maintain alignment
+            )}</div>
+          <div className="flex gap-1">
             <button
               type="button"
-              className="flex h-7 w-7 items-center justify-center rounded border border-border/60 text-muted-foreground transition-colors hover:bg-muted"
+              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground/60 transition-all hover:bg-muted hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
               onClick={() => onReorder(subcategory.id, 'up')}
               disabled={index === 0}
-              aria-label="Move subcategory up"
+              aria-label="Move up"
             >
               <ArrowUp className="h-3.5 w-3.5" />
             </button>
             <button
               type="button"
-              className="flex h-7 w-7 items-center justify-center rounded border border-border/60 text-muted-foreground transition-colors hover:bg-muted"
+              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground/60 transition-all hover:bg-muted hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
               onClick={() => onReorder(subcategory.id, 'down')}
               disabled={index === totalCount - 1}
-              aria-label="Move subcategory down"
+              aria-label="Move down"
             >
               <ArrowDown className="h-3.5 w-3.5" />
             </button>
           </div>
+          <Switch
+            id={`subcategory-active-${subcategory.id}`}
+            checked={subcategory.active}
+            onCheckedChange={(checked) => onUpdate(subcategory.id, { active: checked })}
+            className="data-[state=checked]:bg-emerald-500"
+          />
         </div>
       </CardContent>
     </Card>

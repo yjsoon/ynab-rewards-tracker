@@ -38,6 +38,7 @@ export function prepareSubcategoriesForSave(
       maximumSpend:
         normaliseNumber(sub.maximumSpend, sub.maximumSpend === 0 ? 0 : null),
       active: sub.active !== false,
+      excludeFromRewards: sub.excludeFromRewards === true, // Preserve exclude flag
       priority: index,
       createdAt: sub.createdAt ?? new Date().toISOString(),
       updatedAt: new Date().toISOString(),
