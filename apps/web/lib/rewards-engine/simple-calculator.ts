@@ -310,6 +310,7 @@ export class SimpleRewardsCalculator {
             maximumSpend: subcategory.maximumSpend,
             maximumSpendExceeded: false,
             blockSize: null,
+            active: subcategory.active !== false,
           });
           continue;
         }

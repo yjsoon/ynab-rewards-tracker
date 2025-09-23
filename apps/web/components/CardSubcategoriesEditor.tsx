@@ -18,7 +18,6 @@ import {
   ArrowDown,
   ArrowUp,
   PlusCircle,
-  ShieldAlert,
   X,
 } from 'lucide-react';
 import type { CardSubcategory, CreditCard } from '@/lib/storage';
@@ -26,6 +25,7 @@ import { UNFLAGGED_FLAG, YNAB_FLAG_COLORS, type YnabFlagColor } from '@/lib/ynab
 import { cn } from '@/lib/utils';
 import { useDebouncedCallback } from '@/hooks/useDebounce';
 
+// Using CardSubcategory directly instead of alias for clarity
 export type CardSubcategoryDraft = CardSubcategory;
 
 interface CardSubcategoriesEditorProps {
@@ -94,15 +94,15 @@ function normalisePriorities(subcategories: CardSubcategoryDraft[]): CardSubcate
   const needsUpdate = subcategories.some((subcat, index) => subcat.priority !== index);
   if (!needsUpdate) return subcategories;
 
-  return subcategories
-    .map((subcat, index) => (subcat.priority === index ? subcat : {
+  return subcategories.map((subcat, index) =>
+    subcat.priority === index ? subcat : {
       ...subcat,
       priority: index,
-    }))
-    .sort((a, b) => a.priority - b.priority);
+    }
+  );
 }
 
-// Memoized subcategory item component
+// Memoised subcategory item component for performance optimisation
 const SubcategoryItem = memo(function SubcategoryItem({
   subcategory,
   index,
@@ -110,7 +110,6 @@ const SubcategoryItem = memo(function SubcategoryItem({
   cardType,
   flagNames,
   usedFlagColours,
-  duplicateFlags,
   onUpdate,
   onDelete,
   onReorder,
@@ -121,7 +120,6 @@ const SubcategoryItem = memo(function SubcategoryItem({
   cardType: CreditCard['type'];
   flagNames?: Partial<Record<YnabFlagColor, string>>;
   usedFlagColours: Set<YnabFlagColor>;
-  duplicateFlags: Set<YnabFlagColor>;
   onUpdate: (id: string, updates: Partial<CardSubcategoryDraft>) => void;
   onDelete: (id: string) => void;
   onReorder: (id: string, direction: 'up' | 'down') => void;
@@ -132,7 +130,6 @@ const SubcategoryItem = memo(function SubcategoryItem({
     : YNAB_FLAG_COLORS.find((flag) => flag.value === subcategory.flagColor)?.label ?? subcategory.flagColor
   );
 
-  const showDuplicateWarning = duplicateFlags.has(subcategory.flagColor);
   const milesCard = cardType === 'miles';
 
   // Local state for input values with debouncing
@@ -373,7 +370,8 @@ const SubcategoryItem = memo(function SubcategoryItem({
               </button>
             ) : (
               <div className="w-[72px]" /> // Spacer to maintain alignment
-            )}</div>
+            )}
+          </div>
           <div className="flex gap-1">
             <button
               type="button"
@@ -415,28 +413,22 @@ function CardSubcategoriesEditorComponent({
   baseRewardRate,
   flagNames,
 }: CardSubcategoriesEditorProps) {
-  // Optimize sorting - only sort if needed
-  const orderedSubcategories = useMemo(() => {
-    const sorted = [...value].sort((a, b) => a.priority - b.priority);
-    return sorted;
-  }, [value]);
+  // Sort by priority to maintain consistent order
+  const orderedSubcategories = useMemo(() =>
+    [...value].sort((a, b) => a.priority - b.priority),
+    [value]
+  );
 
   const usedFlagColours = useMemo(
     () => new Set(orderedSubcategories.map((sub) => sub.flagColor)),
     [orderedSubcategories]
   );
 
-  const unusedFlagColours = useMemo(() => {
-    return YNAB_FLAG_COLORS.filter((flag) => !usedFlagColours.has(flag.value));
-  }, [usedFlagColours]);
+  const unusedFlagColours = useMemo(() =>
+    YNAB_FLAG_COLORS.filter((flag) => !usedFlagColours.has(flag.value)),
+    [usedFlagColours]
+  );
 
-  const duplicateFlags = useMemo(() => {
-    const occurrences = new Map<YnabFlagColor, number>();
-    orderedSubcategories.forEach((sub) => {
-      occurrences.set(sub.flagColor, (occurrences.get(sub.flagColor) ?? 0) + 1);
-    });
-    return new Set(Array.from(occurrences.entries()).filter(([, count]) => count > 1).map(([flag]) => flag));
-  }, [orderedSubcategories]);
 
   // Memoized callbacks
   const handleToggle = useCallback((nextEnabled: boolean) => {
@@ -516,7 +508,6 @@ function CardSubcategoriesEditorComponent({
               cardType={cardType}
               flagNames={flagNames}
               usedFlagColours={usedFlagColours}
-              duplicateFlags={duplicateFlags}
               onUpdate={handleUpdate}
               onDelete={handleDelete}
               onReorder={handleReorder}

@@ -1,9 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { UNFLAGGED_FLAG, YNAB_FLAG_COLORS, type YnabFlagColor } from '@/lib/ynab-constants';
 import { CurrencyAmount } from './CurrencyAmount';
@@ -25,7 +24,6 @@ interface SubcategoryBreakdownCompactProps {
   cardType: 'cashback' | 'miles';
   currency: string;
   flagNames: Record<string, string>;
-  totalReward: number;
 }
 
 // Map flag colors to actual colors for visual representation
@@ -54,7 +52,6 @@ export function SubcategoryBreakdownCompact({
   cardType,
   currency,
   flagNames,
-  totalReward,
 }: SubcategoryBreakdownCompactProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -150,25 +147,6 @@ export function SubcategoryBreakdownCompact({
         /* Expanded View - All Details */
         <div className="space-y-2">
           {sortedBreakdowns.map((entry) => {
-            const flagLabel = flagNames[entry.flagColor as YnabFlagColor] ?? (
-              entry.flagColor === UNFLAGGED_FLAG.value
-                ? UNFLAGGED_FLAG.label
-                : YNAB_FLAG_COLORS.find((flag) => flag.value === entry.flagColor)?.label ?? entry.flagColor
-            );
-
-            const rewardSummary = cardType === 'cashback'
-              ? <CurrencyAmount value={entry.rewardEarned} currency={currency} />
-              : (
-                  <span>
-                    {Math.round(entry.rewardEarned).toLocaleString()} miles
-                    {entry.rewardEarnedDollars ? (
-                      <span className="text-muted-foreground">
-                        {' '}(<CurrencyAmount value={entry.rewardEarnedDollars} currency={currency} />)
-                      </span>
-                    ) : null}
-                  </span>
-                );
-
             const bgClass = FLAG_COLOR_BG_MAP[entry.flagColor] || FLAG_COLOR_BG_MAP.unflagged;
 
             return (

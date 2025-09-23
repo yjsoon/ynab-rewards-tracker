@@ -252,7 +252,6 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
           cardType={card.type}
           currency={currency || '$'}
           flagNames={flagNames}
-          totalReward={rewardEarned}
         />
       )}
 
