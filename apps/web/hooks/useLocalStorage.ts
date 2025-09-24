@@ -3,6 +3,13 @@ import type { CreditCard, RewardRule, RewardCalculation, AppSettings } from '@/l
 import { storage } from '@/lib/storage';
 import { useStorageContext } from '@/contexts/StorageContext';
 
+const EMPTY_STRING_ARRAY: string[] = [];
+const EMPTY_CARD_LIST: CreditCard[] = [];
+const EMPTY_RULE_LIST: RewardRule[] = [];
+const EMPTY_CALCULATION_LIST: RewardCalculation[] = [];
+const EMPTY_SELECTED_BUDGET: { id?: string; name?: string } = {};
+const DEFAULT_SETTINGS: AppSettings = { theme: 'light', currency: 'USD' };
+
 function useHasHydrated() {
   const [hasHydrated, setHasHydrated] = useState(false);
 
@@ -43,7 +50,7 @@ export function useCreditCards() {
 
   const cards = useMemo(() => {
     if (!hasHydrated || typeof window === 'undefined') {
-      return [] as CreditCard[];
+      return EMPTY_CARD_LIST;
     }
     void refreshTrigger;
     return storage.getCards();
@@ -67,13 +74,58 @@ export function useCreditCards() {
   return { cards, saveCard, updateCard, deleteCard, isLoading: !hasHydrated };
 }
 
+export function useSelectedBudget() {
+  const { refreshTrigger, triggerRefresh } = useStorageContext();
+  const hasHydrated = useHasHydrated();
+
+  const selectedBudget = useMemo(() => {
+    if (!hasHydrated || typeof window === 'undefined') {
+      return EMPTY_SELECTED_BUDGET;
+    }
+    void refreshTrigger;
+    return storage.getSelectedBudget();
+  }, [hasHydrated, refreshTrigger]);
+
+  const setSelectedBudget = useCallback((budgetId: string, budgetName: string) => {
+    storage.setSelectedBudget(budgetId, budgetName);
+    triggerRefresh();
+  }, [triggerRefresh]);
+
+  return { selectedBudget, setSelectedBudget, isLoading: !hasHydrated };
+}
+
+export function useTrackedAccountIds() {
+  const { refreshTrigger, triggerRefresh } = useStorageContext();
+  const hasHydrated = useHasHydrated();
+
+  const trackedAccountIds = useMemo(() => {
+    if (!hasHydrated || typeof window === 'undefined') {
+      return EMPTY_STRING_ARRAY;
+    }
+    void refreshTrigger;
+    return storage.getTrackedAccountIds();
+  }, [hasHydrated, refreshTrigger]);
+
+  const setTrackedAccountIds = useCallback((accountIds: string[]) => {
+    storage.setTrackedAccountIds(accountIds);
+    triggerRefresh();
+  }, [triggerRefresh]);
+
+  const isAccountTracked = useCallback(
+    (accountId: string) => trackedAccountIds.includes(accountId),
+    [trackedAccountIds]
+  );
+
+  return { trackedAccountIds, setTrackedAccountIds, isAccountTracked, isLoading: !hasHydrated };
+}
+
 export function useRewardRules(cardId?: string) {
   const { refreshTrigger, triggerRefresh } = useStorageContext();
   const hasHydrated = useHasHydrated();
 
   const rules = useMemo(() => {
     if (!hasHydrated || typeof window === 'undefined') {
-      return [] as RewardRule[];
+      return EMPTY_RULE_LIST;
     }
     void refreshTrigger;
     return cardId ? storage.getCardRules(cardId) : storage.getRules();
@@ -98,7 +150,7 @@ export function useRewardCalculations(cardId?: string) {
 
   const calculations = useMemo(() => {
     if (!hasHydrated || typeof window === 'undefined') {
-      return [] as RewardCalculation[];
+      return EMPTY_CALCULATION_LIST;
     }
     void refreshTrigger;
     return cardId ? storage.getCardCalculations(cardId) : storage.getCalculations();
@@ -128,7 +180,7 @@ export function useSettings() {
 
   const settings = useMemo(() => {
     if (!hasHydrated || typeof window === 'undefined') {
-      return { theme: 'light', currency: 'USD' } satisfies AppSettings;
+      return DEFAULT_SETTINGS;
     }
     void refreshTrigger;
     return storage.getSettings();

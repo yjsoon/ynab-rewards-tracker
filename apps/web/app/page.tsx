@@ -5,10 +5,11 @@ import Link from "next/link";
 import {
   useYnabPAT,
   useCreditCards,
-  useRewardRules
+  useRewardRules,
+  useSelectedBudget,
+  useTrackedAccountIds
 } from "@/hooks/useLocalStorage";
 import { YnabClient } from "@/lib/ynab-client";
-import { storage } from "@/lib/storage";
 import { SimpleRewardsCalculator } from "@/lib/rewards-engine";
 import { clampDaysLeft } from "@/lib/date";
 import { cn, absFromMilli } from "@/lib/utils";
@@ -43,10 +44,6 @@ import type { Transaction } from "@/types/transaction";
 const TRANSACTION_LOOKBACK_DAYS = 30;
 const RECENT_TRANSACTIONS_LIMIT = 10;
 
-const arraysEqual = (a: string[], b: string[]) => {
-  if (a.length !== b.length) return false;
-  return a.every((value, index) => value === b[index]);
-};
 
 // Helper functions
 const createSettingsClickHandler =
@@ -75,11 +72,8 @@ export default function DashboardPage() {
   const { cards } = useCreditCards();
   const { rules } = useRewardRules();
 
-  const [selectedBudget, setSelectedBudget] = useState<{
-    id?: string;
-    name?: string;
-  }>({});
-  const [trackedAccounts, setTrackedAccounts] = useState<string[]>([]);
+  const { selectedBudget } = useSelectedBudget();
+  const { trackedAccountIds } = useTrackedAccountIds();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [allBudgetTransactions, setAllBudgetTransactions] = useState<
     Transaction[]
@@ -90,7 +84,6 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const dashboardAbortRef = useRef<AbortController | null>(null);
-  const hasHydratedSettingsRef = useRef(false);
   const lastFetchKeyRef = useRef("");
 
   const featuredCards = useMemo(
@@ -180,40 +173,12 @@ export default function DashboardPage() {
   );
 
   useEffect(() => {
-    if (hasHydratedSettingsRef.current) {
-      return;
-    }
-    hasHydratedSettingsRef.current = true;
-
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    const storedBudget = (storage.getSelectedBudget() ?? {}) as {
-      id?: string;
-      name?: string;
-    };
-    setSelectedBudget((previous) => {
-      const sameId = (previous.id ?? "") === (storedBudget.id ?? "");
-      const sameName = (previous.name ?? "") === (storedBudget.name ?? "");
-      return sameId && sameName ? previous : storedBudget;
-    });
-
-    const storedTrackedAccounts = storage.getTrackedAccountIds() ?? [];
-    setTrackedAccounts((previous) =>
-      arraysEqual(previous, storedTrackedAccounts)
-        ? previous
-        : storedTrackedAccounts
-    );
-  }, []);
-
-  useEffect(() => {
     if (!pat || !selectedBudget.id) {
       lastFetchKeyRef.current = "";
       return;
     }
 
-    const sortedAccountsKey = [...trackedAccounts].sort().join("|");
+    const sortedAccountsKey = [...trackedAccountIds].sort().join("|");
     const fetchKey = [
       pat,
       selectedBudget.id,
@@ -226,11 +191,11 @@ export default function DashboardPage() {
     }
 
     lastFetchKeyRef.current = fetchKey;
-    loadRecentTransactions(selectedBudget.id, trackedAccounts);
+    loadRecentTransactions(selectedBudget.id, trackedAccountIds);
   }, [
     pat,
     selectedBudget.id,
-    trackedAccounts,
+    trackedAccountIds,
     earliestTrackedWindow,
     loadRecentTransactions
   ]);
@@ -246,10 +211,10 @@ export default function DashboardPage() {
     () => ({
       pat: !!pat,
       budget: !!selectedBudget.id,
-      accounts: trackedAccounts.length > 0,
+      accounts: trackedAccountIds.length > 0,
       cards: cards.length > 0
     }),
-    [pat, selectedBudget.id, trackedAccounts.length, cards.length]
+    [pat, selectedBudget.id, trackedAccountIds.length, cards.length]
   );
 
   const isFullyConfigured = useMemo(
@@ -689,7 +654,7 @@ export default function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold">{trackedAccounts.length}</p>
+            <p className="text-3xl font-bold">{trackedAccountIds.length}</p>
             <Button variant="link" size="sm" asChild className="px-0">
               <Link href="/settings#settings-accounts">Manage</Link>
             </Button>
