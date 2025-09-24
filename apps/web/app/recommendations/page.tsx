@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useMemo } from 'react';
-import { Sparkles, AlertTriangle, Layers, TrendingUp } from 'lucide-react';
+import { AlertTriangle, Layers, TrendingUp } from 'lucide-react';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -178,17 +178,16 @@ export default function RecommendationsPage() {
   return (
     <div className="container mx-auto max-w-6xl px-4 py-8">
       <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 text-sm font-medium text-primary">
-            <Sparkles className="h-5 w-5" />
-            Card Recommendations
-          </div>
-          <CardTitle className="text-3xl font-bold">Who to Swipe Next</CardTitle>
-          <CardDescription>
-            We take your grouped subcategories, tally the rewards ho say, and flag when you&apos;re close to the cap so you can optimise like a champ.
-          </CardDescription>
+        <div>
+          <h1 className="text-3xl font-bold">Recommendations</h1>
+          <p className="mt-1 text-muted-foreground">
+            Review the best cards for each spending category based on your latest calculations.
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/rules?tab=categories">Open rules</Link>
+          </Button>
           <Badge variant="outline" className="gap-1">
             <Layers className="h-3.5 w-3.5" />
             {recommendations.length} categor{recommendations.length === 1 ? 'y' : 'ies'}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useCategoryGroups, useCreditCards, useSettings } from '@/hooks/useLocalStorage';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -20,6 +20,7 @@ import { storage, type CardSubcategory, type CreditCard } from '@/lib/storage';
 import { CardSettingsEditor, type CardEditState as SingleCardEditState } from '@/components/CardSettingsEditor';
 import { CategoryGroupingManager } from '@/components/CategoryGroupingManager';
 import { prepareSubcategoriesForSave } from '@/lib/subcategory-utils';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 interface CardEditState {
   [cardId: string]: SingleCardEditState;
@@ -29,6 +30,8 @@ export default function RulesPage() {
   const { cards, updateCard } = useCreditCards();
   const { categoryGroups, saveCategoryGroup, deleteCategoryGroup } = useCategoryGroups();
   const { settings } = useSettings();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const flagNames = useMemo(() => storage.getFlagNames(), []);
   const [editState, setEditState] = useState<CardEditState>({});
   const [saving, setSaving] = useState(false);
@@ -37,7 +40,38 @@ export default function RulesPage() {
   const [selectedCards, setSelectedCards] = useState<Set<string>>(new Set());
   const [batchRate, setBatchRate] = useState('');
   const [batchError, setBatchError] = useState('');
-  const [activeTab, setActiveTab] = useState<'cashback' | 'miles' | 'categories'>('cashback');
+
+  const initialTab = useMemo<'cashback' | 'miles' | 'categories'>(() => {
+    const tabParam = searchParams?.get('tab');
+    if (tabParam === 'cashback' || tabParam === 'miles' || tabParam === 'categories') {
+      return tabParam;
+    }
+    return 'cashback';
+  }, [searchParams]);
+
+  const [activeTab, setActiveTab] = useState<'cashback' | 'miles' | 'categories'>(initialTab);
+
+  useEffect(() => {
+    setActiveTab((prev) => (prev === initialTab ? prev : initialTab));
+  }, [initialTab]);
+
+  const handleTabChange = useCallback((value: string) => {
+    if (value !== 'cashback' && value !== 'miles' && value !== 'categories') {
+      return;
+    }
+
+    const nextTab = value as 'cashback' | 'miles' | 'categories';
+    setActiveTab(nextTab);
+
+    const nextParams = new URLSearchParams(searchParams?.toString() ?? '');
+    if (nextTab === 'cashback') {
+      nextParams.delete('tab');
+    } else {
+      nextParams.set('tab', nextTab);
+    }
+    const queryString = nextParams.toString();
+    router.replace(`/rules${queryString ? `?${queryString}` : ''}`, { scroll: false });
+  }, [router, searchParams]);
 
   // Group cards by type
   const cashbackCards = cards.filter(card => card.type === 'cashback');
@@ -300,7 +334,7 @@ export default function RulesPage() {
 
       <Tabs
         value={activeTab}
-        onValueChange={(value) => setActiveTab(value as 'cashback' | 'miles' | 'categories')}
+        onValueChange={handleTabChange}
         className="space-y-6"
       >
         <TabsList className="grid w-full max-w-md grid-cols-3">
