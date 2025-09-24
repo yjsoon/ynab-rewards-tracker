@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { SimpleRewardsCalculator } from '@/lib/rewards-engine';
 import { YnabClient } from '@/lib/ynab-client';
 import { storage } from '@/lib/storage';
+import { useSettings } from '@/hooks/useLocalStorage';
 import { cn } from '@/lib/utils';
 import { CurrencyAmount } from '@/components/CurrencyAmount';
 import { SpendingProgressBar } from '@/components/SpendingProgressBar';
@@ -13,7 +14,7 @@ import {
   isMinimumSpendConfigured,
   hasMinimumSpendRequirement
 } from '@/lib/minimum-spend-helpers';
-import type { CreditCard, AppSettings } from '@/lib/storage';
+import type { CreditCard } from '@/lib/storage';
 import type { Transaction } from '@/types/transaction';
 
 interface CardSpendingSummaryProps {
@@ -27,18 +28,12 @@ interface CardSpendingSummaryProps {
 export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardSpendingSummaryProps) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
-  const [settings, setSettings] = useState<AppSettings | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const { settings } = useSettings();
   const flagNames = useMemo(() => storage.getFlagNames(), []);
 
   // Calculate current period
   const period = useMemo(() => SimpleRewardsCalculator.calculatePeriod(card), [card]);
-
-  // Load settings
-  useEffect(() => {
-    const appSettings = storage.getSettings();
-    setSettings(appSettings);
-  }, []);
 
   // Use prefetched budget-wide transactions if provided; otherwise fetch
   const loadTransactions = useCallback(async () => {
