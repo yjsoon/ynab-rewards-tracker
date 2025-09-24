@@ -28,7 +28,7 @@ export function useYnabPAT() {
     if (!hasHydrated || typeof window === 'undefined') {
       return '';
     }
-    void refreshTrigger;
+    // Force re-computation when refreshTrigger changes
     return storage.getPAT() || '';
   }, [hasHydrated, refreshTrigger]);
 
@@ -52,7 +52,7 @@ export function useCreditCards() {
     if (!hasHydrated || typeof window === 'undefined') {
       return EMPTY_CARD_LIST;
     }
-    void refreshTrigger;
+    // Force re-computation when refreshTrigger changes
     return storage.getCards();
   }, [hasHydrated, refreshTrigger]);
 
@@ -82,7 +82,7 @@ export function useSelectedBudget() {
     if (!hasHydrated || typeof window === 'undefined') {
       return EMPTY_SELECTED_BUDGET;
     }
-    void refreshTrigger;
+    // Force re-computation when refreshTrigger changes
     return storage.getSelectedBudget();
   }, [hasHydrated, refreshTrigger]);
 
@@ -102,7 +102,7 @@ export function useTrackedAccountIds() {
     if (!hasHydrated || typeof window === 'undefined') {
       return EMPTY_STRING_ARRAY;
     }
-    void refreshTrigger;
+    // Force re-computation when refreshTrigger changes
     return storage.getTrackedAccountIds();
   }, [hasHydrated, refreshTrigger]);
 
@@ -127,7 +127,7 @@ export function useRewardRules(cardId?: string) {
     if (!hasHydrated || typeof window === 'undefined') {
       return EMPTY_RULE_LIST;
     }
-    void refreshTrigger;
+    // Force re-computation when refreshTrigger changes
     return cardId ? storage.getCardRules(cardId) : storage.getRules();
   }, [cardId, hasHydrated, refreshTrigger]);
 
@@ -152,7 +152,7 @@ export function useRewardCalculations(cardId?: string) {
     if (!hasHydrated || typeof window === 'undefined') {
       return EMPTY_CALCULATION_LIST;
     }
-    void refreshTrigger;
+    // Force re-computation when refreshTrigger changes
     return cardId ? storage.getCardCalculations(cardId) : storage.getCalculations();
   }, [cardId, hasHydrated, refreshTrigger]);
 
@@ -182,7 +182,7 @@ export function useSettings() {
     if (!hasHydrated || typeof window === 'undefined') {
       return DEFAULT_SETTINGS;
     }
-    void refreshTrigger;
+    // Force re-computation when refreshTrigger changes
     return storage.getSettings();
   }, [hasHydrated, refreshTrigger]);
 
