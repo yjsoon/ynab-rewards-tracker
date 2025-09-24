@@ -16,6 +16,8 @@ interface SubcategoryBreakdown {
   minimumSpendMet?: boolean;
   maximumSpendExceeded?: boolean;
   maximumSpend?: number | null;
+  excluded?: boolean;
+  active?: boolean;
 }
 
 interface SubcategoryBreakdownDetailedProps {
@@ -52,11 +54,6 @@ export function SubcategoryBreakdownDetailed({
       : 0,
   }));
 
-  // Identify the best-performing subcategory by effective rate
-  const bestPerformer = enrichedBreakdowns.reduce((best, current) =>
-    current.effectiveRate > best.effectiveRate ? current : best
-  );
-
   return (
     <div className="space-y-4">
       {/* Visual Bar Chart */}
@@ -92,24 +89,37 @@ export function SubcategoryBreakdownDetailed({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {enrichedBreakdowns.map((entry, index) => {
           const colorScheme = getFlagClasses(entry.flagColor);
-          const isBest = entry === bestPerformer && enrichedBreakdowns.length > 1 && !entry.maximumSpendExceeded;
           const isCapped = entry.maximumSpendExceeded;
+          const isDisabled = entry.excluded === true;
+          const trendColour = isDisabled
+            ? "text-gray-400 dark:text-gray-500"
+            : entry.effectiveRate > (cardType === 'cashback' ? 2 : 1.5)
+            ? "text-green-600"
+            : entry.effectiveRate > (cardType === 'cashback' ? 1 : 0.75)
+            ? "text-blue-600"
+            : "text-gray-500";
 
           return (
             <div
               key={entry.subcategoryId || `${entry.flagColor}-${index}`}
               className={cn(
                 "relative rounded-lg border p-4 transition-all hover:shadow-sm",
-                isCapped ? "border-red-200 bg-red-50/50 dark:border-red-900 dark:bg-red-950/20" : `${colorScheme.border} ${colorScheme.bg}`
+                isCapped
+                  ? "border-red-200 bg-red-50/50 dark:border-red-900 dark:bg-red-950/20"
+                  : `${colorScheme.border} ${colorScheme.bg}`,
+                isDisabled && !isCapped && "border-gray-300 bg-muted/20 text-muted-foreground dark:border-gray-700 dark:bg-muted/10",
+                isDisabled && "opacity-90"
               )}
             >
-              {/* Badge for best performer or maxed out */}
-              {(isBest || isCapped) && (
-                <div className={cn(
-                  "absolute -top-2 right-3 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider",
-                  isCapped ? "bg-red-500 text-white" : "bg-green-500 text-white"
-                )}>
-                  {isCapped ? "Maxed" : "Best"}
+              {/* Status badge for maxed or disabled subcategories */}
+              {(isCapped || isDisabled) && (
+                <div
+                  className={cn(
+                    "absolute -top-2 right-3 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider",
+                    isCapped ? "bg-red-500 text-white" : "bg-gray-400 text-white dark:bg-gray-500"
+                  )}
+                >
+                  {isCapped ? "Maxed" : "Disabled"}
                 </div>
               )}
 
@@ -120,7 +130,7 @@ export function SubcategoryBreakdownDetailed({
                     <div
                       className={cn(
                         "h-4 w-4 rounded-full flex-shrink-0",
-                        isCapped ? "bg-red-500" : colorScheme.dot
+                        isCapped ? "bg-red-500" : isDisabled ? "bg-gray-400" : colorScheme.dot
                       )}
                     />
                     <div>
@@ -130,11 +140,11 @@ export function SubcategoryBreakdownDetailed({
                   {/* Trend indicator */}
                   <div className={cn(
                     "flex items-center gap-1 text-xs",
-                    entry.effectiveRate > (cardType === 'cashback' ? 2 : 1.5) ? "text-green-600" :
-                    entry.effectiveRate > (cardType === 'cashback' ? 1 : 0.75) ? "text-blue-600" :
-                    "text-gray-500"
+                    trendColour
                   )}>
-                    {entry.effectiveRate > (cardType === 'cashback' ? 2 : 1.5) ? (
+                    {isDisabled ? (
+                      <Minus className="h-3 w-3" />
+                    ) : entry.effectiveRate > (cardType === 'cashback' ? 2 : 1.5) ? (
                       <TrendingUp className="h-3 w-3" />
                     ) : entry.effectiveRate < (cardType === 'cashback' ? 1 : 0.75) ? (
                       <TrendingDown className="h-3 w-3" />
@@ -189,7 +199,7 @@ export function SubcategoryBreakdownDetailed({
                       <div
                         className={cn(
                           "h-full rounded-full transition-all",
-                          isCapped ? "bg-red-500" : "bg-blue-500"
+                          isCapped ? "bg-red-500" : isDisabled ? "bg-gray-400" : "bg-blue-500"
                         )}
                         style={{ width: `${Math.min(100, (entry.totalSpend / entry.maximumSpend) * 100)}%` }}
                       />

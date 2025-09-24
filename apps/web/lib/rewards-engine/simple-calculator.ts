@@ -34,6 +34,7 @@ export interface SubcategoryCalculation {
   blockSize?: number | null;
   blocksEarned?: number;
   active: boolean;
+  excluded: boolean;
 }
 
 export interface SimplifiedCalculation {
@@ -311,6 +312,7 @@ export class SimpleRewardsCalculator {
             maximumSpendExceeded: false,
             blockSize: null,
             active: subcategory.active !== false,
+            excluded: true,
           });
           continue;
         }
@@ -382,6 +384,7 @@ export class SimpleRewardsCalculator {
           blockSize,
           blocksEarned: blocksEarned || undefined,
           active: subcategory.active !== false,
+          excluded: false,
         });
       }
     } else {
