@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CurrencyAmount } from './CurrencyAmount';
+import { getFlagHex } from '@/lib/flag-colors';
 
 interface SubcategoryBreakdown {
   subcategoryId?: string;
@@ -25,17 +26,7 @@ interface SubcategoryBreakdownCompactProps {
   flagNames: Record<string, string>;
 }
 
-// Map flag colors to actual colors for visual representation
-const FLAG_COLOR_MAP: Record<string, string> = {
-  red: '#ef4444',
-  orange: '#f97316',
-  yellow: '#eab308',
-  green: '#22c55e',
-  blue: '#3b82f6',
-  purple: '#a855f7',
-  unflagged: '#6b7280',
-};
-
+// Map flag colours to actual colours for visual representation
 const FLAG_COLOR_BG_MAP: Record<string, string> = {
   red: 'bg-red-500/10',
   orange: 'bg-orange-500/10',
@@ -99,7 +90,7 @@ export function SubcategoryBreakdownCompact({
         <div className="flex h-6 w-full overflow-hidden rounded-md bg-muted/30 border border-border/40">
           {segments.map((segment, index) => {
             const isCapped = segment.maximumSpendExceeded;
-            const color = FLAG_COLOR_MAP[segment.flagColor] || FLAG_COLOR_MAP.unflagged;
+            const color = getFlagHex(segment.flagColor);
             const width = segment.percentage;
 
             if (width < 0.5) return null; // Skip tiny segments
@@ -159,7 +150,7 @@ export function SubcategoryBreakdownCompact({
                     style={{
                       backgroundColor: entry.maximumSpendExceeded
                         ? '#ef4444'
-                        : (FLAG_COLOR_MAP[entry.flagColor] || FLAG_COLOR_MAP.unflagged)
+                        : getFlagHex(entry.flagColor)
                     }}
                   />
                   <div className="flex-1">
@@ -184,7 +175,7 @@ export function SubcategoryBreakdownCompact({
                         </>
                       )}
                       {entry.maximumSpendExceeded && (
-                        <span className="ml-1 text-red-600 font-medium">(reached)</span>
+                        <span className="ml-1 text-red-600 font-medium">(maxed)</span>
                       )}
                     </p>
                   </div>
