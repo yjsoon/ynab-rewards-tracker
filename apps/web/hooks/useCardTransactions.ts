@@ -3,9 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CreditCard } from '@/lib/storage';
 import { YnabClient } from '@/lib/ynab-client';
-import { storage } from '@/lib/storage';
 import type { Transaction } from '@/types/transaction';
-import { useYnabPAT } from './useLocalStorage';
+import { useSelectedBudget, useYnabPAT } from './useLocalStorage';
 
 interface UseCardTransactionsOptions {
   lookbackDays?: number;
@@ -32,6 +31,7 @@ export function useCardTransactions(
 ): UseCardTransactionsResult {
   const { lookbackDays = DEFAULT_LOOKBACK_DAYS } = options;
   const { pat } = useYnabPAT();
+  const { selectedBudget, isLoading: budgetLoading } = useSelectedBudget();
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(false);
@@ -49,7 +49,9 @@ export function useCardTransactions(
       return;
     }
 
-    const selectedBudget = storage.getSelectedBudget();
+    if (budgetLoading) {
+      return;
+    }
 
     if (!pat) {
       setTransactions([]);
@@ -105,7 +107,7 @@ export function useCardTransactions(
     } finally {
       setLoading(false);
     }
-  }, [card, pat, lookbackDays]);
+  }, [card, pat, lookbackDays, selectedBudget.id, budgetLoading]);
 
   useEffect(() => {
     fetchTransactions();
@@ -119,10 +121,9 @@ export function useCardTransactions(
     await fetchTransactions();
   }, [fetchTransactions]);
 
-  const selectedBudgetId = storage.getSelectedBudget().id;
   const connection: ConnectionState = {
     hasPat: Boolean(pat),
-    hasBudget: Boolean(selectedBudgetId),
+    hasBudget: Boolean(selectedBudget.id),
   };
 
   return {

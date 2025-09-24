@@ -17,9 +17,9 @@ import {
 } from 'lucide-react';
 import { SimpleRewardsCalculator } from '@/lib/rewards-engine';
 import { YnabClient } from '@/lib/ynab-client';
-import { storage } from '@/lib/storage';
+import { useSelectedBudget, useSettings } from '@/hooks/useLocalStorage';
 import { CurrencyAmount } from '@/components/CurrencyAmount';
-import type { CreditCard, AppSettings } from '@/lib/storage';
+import type { CreditCard } from '@/lib/storage';
 import type { Transaction } from '@/types/transaction';
 
 interface SpendingStatusProps {
@@ -30,7 +30,8 @@ interface SpendingStatusProps {
 export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
-  const [settings, setSettings] = useState<AppSettings | null>(null);
+  const { settings } = useSettings();
+  const { selectedBudget } = useSelectedBudget();
   const abortRef = useRef<AbortController | null>(null);
 
   // Calculate current period
@@ -61,7 +62,6 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
     try {
       setLoading(true);
       const ynabClient = new YnabClient(pat);
-      const selectedBudget = storage.getSelectedBudget();
       const selectedBudgetId = selectedBudget.id;
 
       if (!selectedBudgetId) {
@@ -102,7 +102,7 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
         setLoading(false);
       }
     }
-  }, [pat, card.ynabAccountId, period]);
+  }, [pat, card.ynabAccountId, period, selectedBudget.id]);
 
   useEffect(() => {
     fetchTransactions();
@@ -115,11 +115,6 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
         abortRef.current = null;
       }
     };
-  }, []);
-
-  useEffect(() => {
-    const appSettings = storage.getSettings();
-    setSettings(appSettings);
   }, []);
 
   // Calculate spending and rewards using the simplified calculator

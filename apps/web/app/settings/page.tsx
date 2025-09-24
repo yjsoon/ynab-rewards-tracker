@@ -2,10 +2,9 @@
 
 import Link from 'next/link';
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { useYnabPAT, useCreditCards, useSettings } from '@/hooks/useLocalStorage';
+import { useYnabPAT, useCreditCards, useSettings, useSelectedBudget, useTrackedAccountIds } from '@/hooks/useLocalStorage';
 import { YnabClient } from '@/lib/ynab-client';
 import type { CreditCard } from '@/lib/storage';
-import { storage } from '@/lib/storage';
 import { validateYnabToken } from '@/lib/validation';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { Button } from '@/components/ui/button';
@@ -148,30 +147,36 @@ function TrackedAccountCard({ account, isTracked, linkedCard, onToggle }: Tracke
 export default function SettingsPage() {
   const { pat, setPAT, isLoading: patLoading } = useYnabPAT();
   const { cards, saveCard, deleteCard, isLoading: cardsLoading } = useCreditCards();
-  const { exportSettings, importSettings, clearAll } = useSettings();
+  const { settings, updateSettings, exportSettings, importSettings, clearAll } = useSettings();
   
   const [tokenInput, setTokenInput] = useState('');
   const [testingConnection, setTestingConnection] = useState(false);
   const [connectionMessage, setConnectionMessage] = useState('');
   const [showClearDialog, setShowClearDialog] = useState(false);
+  const hasRequestedBudgetsRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Budget and account selection state
   const [budgets, setBudgets] = useState<YnabBudget[]>([]);
-  const [selectedBudget, setSelectedBudget] = useState<{ id?: string; name?: string }>({});
+  const { selectedBudget, setSelectedBudget: persistSelectedBudget } = useSelectedBudget();
   const [accounts, setAccounts] = useState<YnabAccount[]>([]);
-  const [trackedAccountIds, setTrackedAccountIds] = useState<string[]>([]);
+  const { trackedAccountIds, setTrackedAccountIds: persistTrackedAccountIds, isAccountTracked } = useTrackedAccountIds();
   const [loadingBudgets, setLoadingBudgets] = useState(false);
   const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [showBudgetSelector, setShowBudgetSelector] = useState(false);
 
   // Valuation settings
-  const initialSettings = useMemo(() => storage.getSettings(), []);
   const [milesValuation, setMilesValuation] = useState<number>(
-    typeof initialSettings.milesValuation === 'number' ? initialSettings.milesValuation : 0.01
+    typeof settings.milesValuation === 'number' ? settings.milesValuation : 0.01
   );
   // Points removed; only miles valuation remains
   const [valuationMessage, setValuationMessage] = useState<string>("");
+
+  useEffect(() => {
+    if (typeof settings.milesValuation === 'number') {
+      setMilesValuation(settings.milesValuation);
+    }
+  }, [settings.milesValuation]);
 
   const cardsByAccountId = useMemo(() => {
     const entries = cards
@@ -181,10 +186,8 @@ export default function SettingsPage() {
   }, [cards]);
 
   const syncCardsWithAccounts = useCallback((ynabAccounts: YnabAccount[]) => {
-    const savedTrackedIds = storage.getTrackedAccountIds();
-
     ynabAccounts.forEach((account) => {
-      if (!savedTrackedIds.includes(account.id)) {
+      if (!trackedAccountIds.includes(account.id)) {
         return;
       }
 
@@ -193,7 +196,7 @@ export default function SettingsPage() {
         saveCard(buildTrackedCard(account.id, account.name));
       }
     });
-  }, [cardsByAccountId, saveCard]);
+  }, [trackedAccountIds, cardsByAccountId, saveCard]);
 
   const fetchAccounts = useCallback(async (budgetId: string) => {
     if (!pat) return;
@@ -213,11 +216,10 @@ export default function SettingsPage() {
   }, [pat, syncCardsWithAccounts]);
 
   const handleBudgetSelect = useCallback((budgetId: string, budgetName: string) => {
-    storage.setSelectedBudget(budgetId, budgetName);
-    setSelectedBudget({ id: budgetId, name: budgetName });
+    persistSelectedBudget(budgetId, budgetName);
     setShowBudgetSelector(false);
     fetchAccounts(budgetId);
-  }, [fetchAccounts]);
+  }, [fetchAccounts, persistSelectedBudget]);
 
   const fetchBudgets = useCallback(async () => {
     if (!pat) return;
@@ -244,18 +246,24 @@ export default function SettingsPage() {
     return () => clearTimeout(timeout);
   }, [valuationMessage]);
 
-  // Load saved budget and tracked accounts on mount
+  // Kick off initial account/budget fetch based on stored selection
   useEffect(() => {
-    const savedBudget = storage.getSelectedBudget();
-    setSelectedBudget(savedBudget);
-    setTrackedAccountIds(storage.getTrackedAccountIds());
-    
-    if (pat && savedBudget.id) {
-      fetchAccounts(savedBudget.id);
-    } else if (pat && !savedBudget.id) {
+    if (!pat) {
+      hasRequestedBudgetsRef.current = false;
+      return;
+    }
+
+    if (selectedBudget.id) {
+      hasRequestedBudgetsRef.current = false;
+      fetchAccounts(selectedBudget.id);
+      return;
+    }
+
+    if (!hasRequestedBudgetsRef.current) {
+      hasRequestedBudgetsRef.current = true;
       fetchBudgets();
     }
-  }, [pat, fetchAccounts, fetchBudgets]);
+  }, [pat, selectedBudget.id, fetchAccounts, fetchBudgets]);
 
 
   async function handleSaveToken(e: React.FormEvent) {
@@ -276,14 +284,14 @@ export default function SettingsPage() {
   }
 
   function handleAccountToggle(accountId: string, accountName: string) {
-    const newTrackedIds = trackedAccountIds.includes(accountId)
+    const currentlyTracked = isAccountTracked(accountId);
+    const newTrackedIds = currentlyTracked
       ? trackedAccountIds.filter(id => id !== accountId)
       : [...trackedAccountIds, accountId];
-    
-    setTrackedAccountIds(newTrackedIds);
-    storage.setTrackedAccountIds(newTrackedIds);
-    
-    if (!trackedAccountIds.includes(accountId)) {
+
+    persistTrackedAccountIds(newTrackedIds);
+
+    if (!currentlyTracked) {
       saveCard(buildTrackedCard(accountId, accountName));
     } else {
       const cardToDelete = cardsByAccountId.get(accountId);
@@ -343,7 +351,7 @@ export default function SettingsPage() {
   function handleSaveValuations(e: React.FormEvent) {
     e.preventDefault();
     const mv = isFinite(milesValuation) && milesValuation >= 0 ? milesValuation : 0.01;
-    storage.updateSettings({ milesValuation: mv });
+    updateSettings({ milesValuation: mv });
     setValuationMessage('Saved valuations. Recommendations will use normalised dollars.');
   }
 
@@ -351,9 +359,9 @@ export default function SettingsPage() {
     clearAll();
     setPAT('');
     setBudgets([]);
-    setSelectedBudget({});
+    persistSelectedBudget('', '');
     setAccounts([]);
-    setTrackedAccountIds([]);
+    persistTrackedAccountIds([]);
     setShowClearDialog(false);
   }
 
@@ -489,9 +497,9 @@ export default function SettingsPage() {
                   onClick={() => {
                     setPAT('');
                     setBudgets([]);
-                    setSelectedBudget({});
+                    persistSelectedBudget('', '');
                     setAccounts([]);
-                    setTrackedAccountIds([]);
+                    persistTrackedAccountIds([]);
                   }}
                 >
                   Clear Token
