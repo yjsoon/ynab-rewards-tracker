@@ -1,15 +1,29 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CreditCard, RewardRule, RewardCalculation, AppSettings } from '@/lib/storage';
 import { storage } from '@/lib/storage';
 import { useStorageContext } from '@/contexts/StorageContext';
 
+function useHasHydrated() {
+  const [hasHydrated, setHasHydrated] = useState(false);
+
+  useEffect(() => {
+    setHasHydrated(true);
+  }, []);
+
+  return hasHydrated;
+}
+
 export function useYnabPAT() {
   const { refreshTrigger, triggerRefresh } = useStorageContext();
+  const hasHydrated = useHasHydrated();
 
   const pat = useMemo(() => {
+    if (!hasHydrated || typeof window === 'undefined') {
+      return '';
+    }
     void refreshTrigger;
     return storage.getPAT() || '';
-  }, [refreshTrigger]);
+  }, [hasHydrated, refreshTrigger]);
 
   const setPAT = useCallback((newPAT: string) => {
     if (newPAT) {
@@ -20,16 +34,20 @@ export function useYnabPAT() {
     triggerRefresh();
   }, [triggerRefresh]);
 
-  return { pat, setPAT, isLoading: false };
+  return { pat, setPAT, isLoading: !hasHydrated };
 }
 
 export function useCreditCards() {
   const { refreshTrigger, triggerRefresh } = useStorageContext();
+  const hasHydrated = useHasHydrated();
 
   const cards = useMemo(() => {
+    if (!hasHydrated || typeof window === 'undefined') {
+      return [] as CreditCard[];
+    }
     void refreshTrigger;
     return storage.getCards();
-  }, [refreshTrigger]);
+  }, [hasHydrated, refreshTrigger]);
 
   const saveCard = useCallback((card: CreditCard) => {
     storage.saveCard(card);
@@ -46,16 +64,20 @@ export function useCreditCards() {
     triggerRefresh();
   }, [triggerRefresh]);
 
-  return { cards, saveCard, updateCard, deleteCard, isLoading: false };
+  return { cards, saveCard, updateCard, deleteCard, isLoading: !hasHydrated };
 }
 
 export function useRewardRules(cardId?: string) {
   const { refreshTrigger, triggerRefresh } = useStorageContext();
+  const hasHydrated = useHasHydrated();
 
   const rules = useMemo(() => {
+    if (!hasHydrated || typeof window === 'undefined') {
+      return [] as RewardRule[];
+    }
     void refreshTrigger;
     return cardId ? storage.getCardRules(cardId) : storage.getRules();
-  }, [cardId, refreshTrigger]);
+  }, [cardId, hasHydrated, refreshTrigger]);
 
   const saveRule = useCallback((rule: RewardRule) => {
     storage.saveRule(rule);
@@ -67,16 +89,20 @@ export function useRewardRules(cardId?: string) {
     triggerRefresh();
   }, [triggerRefresh]);
 
-  return { rules, saveRule, deleteRule, isLoading: false };
+  return { rules, saveRule, deleteRule, isLoading: !hasHydrated };
 }
 
 export function useRewardCalculations(cardId?: string) {
   const { refreshTrigger, triggerRefresh } = useStorageContext();
+  const hasHydrated = useHasHydrated();
 
   const calculations = useMemo(() => {
+    if (!hasHydrated || typeof window === 'undefined') {
+      return [] as RewardCalculation[];
+    }
     void refreshTrigger;
     return cardId ? storage.getCardCalculations(cardId) : storage.getCalculations();
-  }, [cardId, refreshTrigger]);
+  }, [cardId, hasHydrated, refreshTrigger]);
 
   const saveCalculation = useCallback((calculation: RewardCalculation) => {
     storage.saveCalculation(calculation);
@@ -93,16 +119,20 @@ export function useRewardCalculations(cardId?: string) {
     triggerRefresh();
   }, [triggerRefresh]);
 
-  return { calculations, saveCalculation, deleteCalculation, clearCalculations, isLoading: false };
+  return { calculations, saveCalculation, deleteCalculation, clearCalculations, isLoading: !hasHydrated };
 }
 
 export function useSettings() {
   const { refreshTrigger, triggerRefresh } = useStorageContext();
+  const hasHydrated = useHasHydrated();
 
   const settings = useMemo(() => {
+    if (!hasHydrated || typeof window === 'undefined') {
+      return { theme: 'light', currency: 'USD' } satisfies AppSettings;
+    }
     void refreshTrigger;
     return storage.getSettings();
-  }, [refreshTrigger]);
+  }, [hasHydrated, refreshTrigger]);
 
   const updateSettings = useCallback((newSettings: Partial<AppSettings>) => {
     storage.updateSettings(newSettings);
@@ -123,5 +153,5 @@ export function useSettings() {
     triggerRefresh();
   }, [triggerRefresh]);
 
-  return { settings, updateSettings, exportSettings, importSettings, clearAll, isLoading: false };
+  return { settings, updateSettings, exportSettings, importSettings, clearAll, isLoading: !hasHydrated };
 }
