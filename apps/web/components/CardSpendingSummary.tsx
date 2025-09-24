@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { SimpleRewardsCalculator } from '@/lib/rewards-engine';
 import { YnabClient } from '@/lib/ynab-client';
 import { storage } from '@/lib/storage';
-import { useSettings } from '@/hooks/useLocalStorage';
+import { useSelectedBudget, useSettings } from '@/hooks/useLocalStorage';
 import { cn } from '@/lib/utils';
 import { CurrencyAmount } from '@/components/CurrencyAmount';
 import { SpendingProgressBar } from '@/components/SpendingProgressBar';
@@ -30,6 +30,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
   const [loading, setLoading] = useState(true);
   const abortRef = useRef<AbortController | null>(null);
   const { settings } = useSettings();
+  const { selectedBudget } = useSelectedBudget();
   const flagNames = useMemo(() => storage.getFlagNames(), []);
 
   // Calculate current period
@@ -56,7 +57,6 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
       return;
     }
 
-    const selectedBudget = storage.getSelectedBudget();
     const budgetId = selectedBudget.id;
     if (!budgetId) {
       setLoading(false);
@@ -90,7 +90,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
         abortRef.current = null;
       }
     }
-  }, [prefetchedTransactions, pat, card.ynabAccountId, period]);
+  }, [prefetchedTransactions, pat, card.ynabAccountId, period, selectedBudget.id]);
 
   useEffect(() => {
     loadTransactions();

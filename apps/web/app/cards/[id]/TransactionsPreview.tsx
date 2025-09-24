@@ -13,8 +13,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Calendar } from "lucide-react";
 import type { CreditCard } from "@/lib/storage";
-import { storage } from "@/lib/storage";
 import { useCardTransactions } from "@/hooks/useCardTransactions";
+import { useSettings } from "@/hooks/useLocalStorage";
 import { SimpleRewardsCalculator } from "@/lib/rewards-engine";
 import { absFromMilli } from "@/lib/utils";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
@@ -45,7 +45,7 @@ export default function TransactionsPreview({ card, lookbackDays = LOOKBACK_DAYS
   );
 
   const totalSpendingCount = spendingTransactions.length;
-  const settings = storage.getSettings();
+  const { settings } = useSettings();
 
   return (
     <Card>

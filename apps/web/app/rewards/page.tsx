@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
-import { useCreditCards, useRewardRules, useRewardCalculations } from '@/hooks/useLocalStorage';
+import { useCreditCards, useRewardRules, useRewardCalculations, useSettings, useYnabPAT, useSelectedBudget } from '@/hooks/useLocalStorage';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -27,6 +27,9 @@ export default function RewardsDashboardPage() {
   const { cards } = useCreditCards();
   const { rules } = useRewardRules();
   const { calculations, saveCalculation } = useRewardCalculations();
+  const { pat } = useYnabPAT();
+  const { selectedBudget } = useSelectedBudget();
+  const { settings } = useSettings();
   const [computing, setComputing] = useState(false);
   const [computeMessage, setComputeMessage] = useState('');
   const computeAbortRef = useRef<AbortController | null>(null);
@@ -73,9 +76,7 @@ export default function RewardsDashboardPage() {
 
   const handleCompute = useCallback(async () => {
     setComputeMessage('');
-    const pat = storage.getPAT();
-    const budget = storage.getSelectedBudget();
-    if (!pat || !budget.id) {
+    if (!pat || !selectedBudget.id) {
       setComputeMessage('Please configure your YNAB token and select a budget before computing.');
       return;
     }
@@ -90,10 +91,9 @@ export default function RewardsDashboardPage() {
       // Optionally clear only current-period calcs; for now, clear all to avoid duplicates
       // A smarter approach would delete by (card, rule, period) as we recompute
       // but saveCalculation will overwrite existing entries for the same key tuple.
-      const settings = storage.getSettings();
       const calcs = await computeCurrentPeriod(
         pat,
-        budget.id,
+        selectedBudget.id,
         trackedCards,
         rules,
         settings,
@@ -118,7 +118,7 @@ export default function RewardsDashboardPage() {
     } finally {
       setComputing(false);
     }
-  }, [trackedCards, rules, saveCalculation]);
+  }, [trackedCards, rules, saveCalculation, pat, selectedBudget.id, settings]);
 
   useEffect(() => {
     return () => {

@@ -3,9 +3,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useCreditCards } from '@/hooks/useLocalStorage';
+import { useCreditCards, useSettings } from '@/hooks/useLocalStorage';
 import { useCardTransactions } from '@/hooks/useCardTransactions';
-import { storage } from '@/lib/storage';
 import { SimpleRewardsCalculator } from '@/lib/rewards-engine';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -32,6 +31,7 @@ export default function CardTransactionsPage() {
   const cardId = params.id as string;
 
   const { cards } = useCreditCards();
+  const { settings } = useSettings();
 
   const [card, setCard] = useState<CreditCard | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -88,8 +88,6 @@ export default function CardTransactionsPage() {
     const boundedPage = Math.min(Math.max(1, page), pagination.maxPage);
     setCurrentPage(boundedPage);
   };
-
-  const settings = storage.getSettings();
 
   if (!card) {
     return (

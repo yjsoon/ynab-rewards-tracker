@@ -17,8 +17,7 @@ import {
 } from 'lucide-react';
 import { SimpleRewardsCalculator } from '@/lib/rewards-engine';
 import { YnabClient } from '@/lib/ynab-client';
-import { storage } from '@/lib/storage';
-import { useSettings } from '@/hooks/useLocalStorage';
+import { useSelectedBudget, useSettings } from '@/hooks/useLocalStorage';
 import { CurrencyAmount } from '@/components/CurrencyAmount';
 import type { CreditCard } from '@/lib/storage';
 import type { Transaction } from '@/types/transaction';
@@ -32,6 +31,7 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const { settings } = useSettings();
+  const { selectedBudget } = useSelectedBudget();
   const abortRef = useRef<AbortController | null>(null);
 
   // Calculate current period
@@ -62,7 +62,6 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
     try {
       setLoading(true);
       const ynabClient = new YnabClient(pat);
-      const selectedBudget = storage.getSelectedBudget();
       const selectedBudgetId = selectedBudget.id;
 
       if (!selectedBudgetId) {
@@ -103,7 +102,7 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
         setLoading(false);
       }
     }
-  }, [pat, card.ynabAccountId, period]);
+  }, [pat, card.ynabAccountId, period, selectedBudget.id]);
 
   useEffect(() => {
     fetchTransactions();
