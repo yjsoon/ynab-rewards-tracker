@@ -3,7 +3,7 @@
 import { cn } from '@/lib/utils';
 import { CurrencyAmount } from './CurrencyAmount';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
-import { getFlagHex } from '@/lib/flag-colors';
+import { getFlagHex, getFlagClasses } from '@/lib/flag-colors';
 
 interface SubcategoryBreakdown {
   subcategoryId?: string;
@@ -26,51 +26,7 @@ interface SubcategoryBreakdownDetailedProps {
   totalCardReward: number;
 }
 
-// Map flag colours to actual colours for visual representation
-const FLAG_COLOR_MAP: Record<string, { bg: string; border: string; text: string; dot: string }> = {
-  red: {
-    bg: 'bg-red-50 dark:bg-red-950/20',
-    border: 'border-red-200 dark:border-red-900',
-    text: 'text-red-700 dark:text-red-300',
-    dot: 'bg-red-500'
-  },
-  orange: {
-    bg: 'bg-orange-50 dark:bg-orange-950/20',
-    border: 'border-orange-200 dark:border-orange-900',
-    text: 'text-orange-700 dark:text-orange-300',
-    dot: 'bg-orange-500'
-  },
-  yellow: {
-    bg: 'bg-yellow-50 dark:bg-yellow-950/20',
-    border: 'border-yellow-200 dark:border-yellow-900',
-    text: 'text-yellow-700 dark:text-yellow-300',
-    dot: 'bg-yellow-500'
-  },
-  green: {
-    bg: 'bg-green-50 dark:bg-green-950/20',
-    border: 'border-green-200 dark:border-green-900',
-    text: 'text-green-700 dark:text-green-300',
-    dot: 'bg-green-500'
-  },
-  blue: {
-    bg: 'bg-blue-50 dark:bg-blue-950/20',
-    border: 'border-blue-200 dark:border-blue-900',
-    text: 'text-blue-700 dark:text-blue-300',
-    dot: 'bg-blue-500'
-  },
-  purple: {
-    bg: 'bg-purple-50 dark:bg-purple-950/20',
-    border: 'border-purple-200 dark:border-purple-900',
-    text: 'text-purple-700 dark:text-purple-300',
-    dot: 'bg-purple-500'
-  },
-  unflagged: {
-    bg: 'bg-gray-50 dark:bg-gray-950/20',
-    border: 'border-gray-200 dark:border-gray-900',
-    text: 'text-gray-700 dark:text-gray-300',
-    dot: 'bg-gray-500'
-  },
-};
+// Use centralized flag color classes from flag-colors module
 
 export function SubcategoryBreakdownDetailed({
   breakdowns,
@@ -135,7 +91,7 @@ export function SubcategoryBreakdownDetailed({
       {/* Grid Layout for Subcategory Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {enrichedBreakdowns.map((entry, index) => {
-          const colorScheme = FLAG_COLOR_MAP[entry.flagColor] || FLAG_COLOR_MAP.unflagged;
+          const colorScheme = getFlagClasses(entry.flagColor);
           const isBest = entry === bestPerformer && enrichedBreakdowns.length > 1 && !entry.maximumSpendExceeded;
           const isCapped = entry.maximumSpendExceeded;
 

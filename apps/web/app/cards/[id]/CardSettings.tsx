@@ -88,7 +88,8 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
     return () => {
       cancelled = true;
     };
-  }, [flagNames]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const fieldDiffs = useMemo(() => computeCardFieldDiff(card, formData), [card, formData]);
   const hasUnsavedChanges = useMemo(() => Object.values(fieldDiffs).some(Boolean), [fieldDiffs]);
