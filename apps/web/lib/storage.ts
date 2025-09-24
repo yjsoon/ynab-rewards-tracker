@@ -96,7 +96,7 @@ export interface RewardCalculation {
   ruleId: string;
   period: string;
   totalSpend: number;
-  eligibleSpend: number;
+  eligibleSpend: number; // Raw reward units (dollars for cashback, miles for others)
   rewardEarned: number; // Raw reward units (dollars for cashback, miles for others)
   rewardEarnedDollars?: number; // Normalized dollar value for comparison
   rewardType: 'cashback' | 'miles'; // Track the type for clarity
@@ -107,6 +107,22 @@ export interface RewardCalculation {
   minimumMet: boolean;
   maximumExceeded: boolean;
   shouldStopUsing: boolean;
+}
+
+export interface SubcategoryReference {
+  cardId: string;
+  subcategoryId: string;
+}
+
+export interface SpendingCategoryGroup {
+  id: string;
+  name: string;
+  description?: string;
+  colour?: string;
+  priority: number;
+  subcategories: SubcategoryReference[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface YnabConnection {
@@ -129,6 +145,7 @@ export interface StorageData {
   rules: RewardRule[];
   tagMappings: TagMapping[];
   calculations: RewardCalculation[];
+  categoryGroups: SpendingCategoryGroup[];
   settings: AppSettings;
   cachedData?: {
     budgets?: unknown[];
@@ -149,6 +166,8 @@ type MutableRule = RewardRule & Record<string, unknown>;
 type MutableCalculation = RewardCalculation & Record<string, unknown>;
 type MutableCategoryBreakdown = CategoryBreakdown & Record<string, unknown>;
 type MutableSettings = AppSettings & Record<string, unknown>;
+type MutableSubcategoryReference = SubcategoryReference & Record<string, unknown>;
+type MutableCategoryGroup = SpendingCategoryGroup & Record<string, unknown>;
 
 class StorageService {
   private createSubcategoryId(): string {
@@ -160,6 +179,17 @@ class StorageService {
       // Ignore and fall back to Math.random below
     }
     return `subcat-${Math.random().toString(36).slice(2, 10)}`;
+  }
+
+  private createGroupId(): string {
+    try {
+      if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        return crypto.randomUUID();
+      }
+    } catch (error) {
+      // Ignore and fall back to Math.random below
+    }
+    return `group-${Math.random().toString(36).slice(2, 10)}`;
   }
 
   private getFallbackFlagName(flagColor: YnabFlagColor, flagNames?: Partial<Record<YnabFlagColor, string>>): string {
@@ -312,6 +342,95 @@ class StorageService {
     }
 
     return mutableCard as CreditCard;
+  }
+
+  private normaliseCategoryGroup(
+    group: MutableCategoryGroup,
+    storage: StorageData,
+    fallbackPriority = 0
+  ): SpendingCategoryGroup {
+    const nowIso = new Date().toISOString();
+    const id = typeof group.id === 'string' && group.id.length > 0 ? group.id : this.createGroupId();
+    const name = typeof group.name === 'string' && group.name.trim().length > 0 ? group.name.trim() : 'Untitled category';
+    const description = typeof group.description === 'string' && group.description.trim().length > 0
+      ? group.description.trim()
+      : undefined;
+    const colour = typeof group.colour === 'string' && group.colour.trim().length > 0
+      ? group.colour.trim()
+      : undefined;
+    const createdAt = typeof group.createdAt === 'string' ? group.createdAt : nowIso;
+    const updatedAt = typeof group.updatedAt === 'string' ? group.updatedAt : nowIso;
+    const priority = typeof group.priority === 'number' && Number.isFinite(group.priority)
+      ? group.priority
+      : fallbackPriority;
+
+    const cardSubcategoryMap = new Map<string, Set<string>>();
+    (storage.cards || []).forEach((card) => {
+      if (!card || typeof card.id !== 'string') {
+        return;
+      }
+      const subSet = new Set<string>();
+      if (Array.isArray(card.subcategories)) {
+        card.subcategories.forEach((sub) => {
+          if (sub && typeof sub.id === 'string') {
+            subSet.add(sub.id);
+          }
+        });
+      }
+      cardSubcategoryMap.set(card.id, subSet);
+    });
+
+    const rawSubcategories = Array.isArray(group.subcategories) ? group.subcategories : [];
+    const seen = new Set<string>();
+    const subcategories: SubcategoryReference[] = [];
+
+    rawSubcategories.forEach((entry) => {
+      const ref = entry as MutableSubcategoryReference;
+      const cardId = typeof ref.cardId === 'string' ? ref.cardId : '';
+      const subcategoryId = typeof ref.subcategoryId === 'string' ? ref.subcategoryId : '';
+      if (!cardId || !subcategoryId) {
+        return;
+      }
+      const validSubcategories = cardSubcategoryMap.get(cardId);
+      if (!validSubcategories || !validSubcategories.has(subcategoryId)) {
+        return;
+      }
+      const key = `${cardId}:${subcategoryId}`;
+      if (seen.has(key)) {
+        return;
+      }
+      seen.add(key);
+      subcategories.push({ cardId, subcategoryId });
+    });
+
+    return {
+      id,
+      name,
+      description,
+      colour,
+      priority,
+      subcategories,
+      createdAt,
+      updatedAt,
+    };
+  }
+
+  private pruneCategoryGroups(storage: StorageData): void {
+    if (!Array.isArray(storage.categoryGroups)) {
+      storage.categoryGroups = [];
+      return;
+    }
+
+    const normalised = storage.categoryGroups.map((group, index) =>
+      this.normaliseCategoryGroup({ ...group } as MutableCategoryGroup, storage, index)
+    );
+
+    normalised.sort((a, b) => a.priority - b.priority);
+    normalised.forEach((group, index) => {
+      group.priority = index;
+    });
+
+    storage.categoryGroups = normalised;
   }
 
   private ensureVersion(): void {
@@ -493,6 +612,11 @@ class StorageService {
           );
         }
 
+        if (!Array.isArray(data.categoryGroups)) {
+          data.categoryGroups = [];
+        }
+        this.pruneCategoryGroups(data);
+
         return data;
       }
     } catch (error) {
@@ -512,6 +636,7 @@ class StorageService {
       rules: [],
       tagMappings: [],
       calculations: [],
+      categoryGroups: [],
       settings: {
         theme: 'light',
         currency: 'USD',
@@ -611,6 +736,7 @@ class StorageService {
     } else {
       storage.cards.push(normalisedCard);
     }
+    this.pruneCategoryGroups(storage);
     this.setStorage(storage);
   }
 
@@ -621,6 +747,7 @@ class StorageService {
     storage.rules = storage.rules.filter(r => r.cardId !== cardId);
     // Also delete associated tag mappings
     storage.tagMappings = storage.tagMappings.filter(m => m.cardId !== cardId);
+    this.pruneCategoryGroups(storage);
     this.setStorage(storage);
   }
 
@@ -647,6 +774,50 @@ class StorageService {
   deleteRule(ruleId: string): void {
     const storage = this.getStorage();
     storage.rules = storage.rules.filter(r => r.id !== ruleId);
+    this.setStorage(storage);
+  }
+
+  // Spending category groups management
+  getCategoryGroups(): SpendingCategoryGroup[] {
+    return this.getStorage().categoryGroups || [];
+  }
+
+  saveCategoryGroup(group: SpendingCategoryGroup): void {
+    const storage = this.getStorage();
+    const nowIso = new Date().toISOString();
+    const candidate = { ...group, updatedAt: nowIso } as MutableCategoryGroup;
+    if (!candidate.createdAt) {
+      candidate.createdAt = nowIso;
+    }
+
+    const existingIndex = typeof candidate.id === 'string'
+      ? storage.categoryGroups.findIndex((g) => g.id === candidate.id)
+      : -1;
+
+    const fallbackPriority = existingIndex >= 0
+      ? storage.categoryGroups[existingIndex].priority
+      : storage.categoryGroups.length;
+
+    const normalised = this.normaliseCategoryGroup(candidate, storage, fallbackPriority);
+
+    if (existingIndex >= 0) {
+      const existing = storage.categoryGroups[existingIndex];
+      normalised.priority = existing.priority;
+      normalised.createdAt = existing.createdAt;
+      storage.categoryGroups[existingIndex] = normalised;
+    } else {
+      normalised.priority = fallbackPriority;
+      storage.categoryGroups.push(normalised);
+    }
+
+    this.pruneCategoryGroups(storage);
+    this.setStorage(storage);
+  }
+
+  deleteCategoryGroup(groupId: string): void {
+    const storage = this.getStorage();
+    storage.categoryGroups = storage.categoryGroups.filter((group) => group.id !== groupId);
+    this.pruneCategoryGroups(storage);
     this.setStorage(storage);
   }
 
@@ -767,6 +938,7 @@ class StorageService {
       );
     }
 
+    this.pruneCategoryGroups(storage);
     this.setStorage(storage);
   }
 
@@ -793,6 +965,7 @@ class StorageService {
         storage.ynab.pat = pat;
       }
       
+      this.pruneCategoryGroups(storage);
       this.setStorage(storage);
     } catch (error) {
       throw new Error('Invalid settings file');

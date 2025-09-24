@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { useCreditCards, useSettings } from '@/hooks/useLocalStorage';
+import { useCategoryGroups, useCreditCards, useSettings } from '@/hooks/useLocalStorage';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -13,10 +13,12 @@ import {
   CreditCard as CreditCardIcon,
   Percent,
   AlertCircle,
-  CheckCircle
+  CheckCircle,
+  Layers
 } from 'lucide-react';
 import { storage, type CardSubcategory, type CreditCard } from '@/lib/storage';
 import { CardSettingsEditor, type CardEditState as SingleCardEditState } from '@/components/CardSettingsEditor';
+import { CategoryGroupingManager } from '@/components/CategoryGroupingManager';
 import { prepareSubcategoriesForSave } from '@/lib/subcategory-utils';
 
 interface CardEditState {
@@ -25,6 +27,7 @@ interface CardEditState {
 
 export default function RulesPage() {
   const { cards, updateCard } = useCreditCards();
+  const { categoryGroups, saveCategoryGroup, deleteCategoryGroup } = useCategoryGroups();
   const { settings } = useSettings();
   const flagNames = useMemo(() => storage.getFlagNames(), []);
   const [editState, setEditState] = useState<CardEditState>({});
@@ -34,6 +37,7 @@ export default function RulesPage() {
   const [selectedCards, setSelectedCards] = useState<Set<string>>(new Set());
   const [batchRate, setBatchRate] = useState('');
   const [batchError, setBatchError] = useState('');
+  const [activeTab, setActiveTab] = useState<'cashback' | 'miles' | 'categories'>('cashback');
 
   // Group cards by type
   const cashbackCards = cards.filter(card => card.type === 'cashback');
@@ -235,7 +239,7 @@ export default function RulesPage() {
 
   const selectedCount = selectedCards.size;
   const changedCount = changedCards.size;
-  const showStickyBar = selectedCount > 0 || changedCount > 0;
+  const showStickyBar = (selectedCount > 0 || changedCount > 0) && activeTab !== 'categories';
 
   if (cards.length === 0) {
     return (
@@ -294,8 +298,12 @@ export default function RulesPage() {
         </Alert>
       )}
 
-      <Tabs defaultValue="cashback" className="space-y-6">
-        <TabsList className="grid w-full max-w-md grid-cols-2">
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => setActiveTab(value as 'cashback' | 'miles' | 'categories')}
+        className="space-y-6"
+      >
+        <TabsList className="grid w-full max-w-md grid-cols-3">
           <TabsTrigger value="cashback" className="gap-2">
             <Percent className="h-4 w-4" />
             Cashback ({cashbackCards.length})
@@ -303,6 +311,10 @@ export default function RulesPage() {
           <TabsTrigger value="miles" className="gap-2">
             <CreditCardIcon className="h-4 w-4" />
             Miles ({milesCards.length})
+          </TabsTrigger>
+          <TabsTrigger value="categories" className="gap-2">
+            <Layers className="h-4 w-4" />
+            Categories ({categoryGroups.length})
           </TabsTrigger>
         </TabsList>
 
@@ -406,6 +418,15 @@ export default function RulesPage() {
               </CardContent>
             </Card>
           )}
+        </TabsContent>
+
+        <TabsContent value="categories" className="space-y-4">
+          <CategoryGroupingManager
+            cards={cards}
+            categoryGroups={categoryGroups}
+            onSaveGroup={saveCategoryGroup}
+            onDeleteGroup={deleteCategoryGroup}
+          />
         </TabsContent>
       </Tabs>
 
