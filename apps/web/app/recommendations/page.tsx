@@ -8,10 +8,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Progress } from '@/components/ui/progress';
-import { SpendingProgressBar } from '@/components/SpendingProgressBar';
-import { CurrencyAmount } from '@/components/CurrencyAmount';
-import { RealTimeRecommendations, type ThemeRecommendation, type CardOption, type SubcategoryProgress } from '@/lib/real-time-recommendations';
+import { CardSpendingSummary } from '@/components/CardSpendingSummary';
+import { RealTimeRecommendations, type ThemeRecommendation, type CardOption } from '@/lib/real-time-recommendations';
 import { useCategoryGroups, useCreditCards, useSettings, useYnabPAT, useSelectedBudget } from '@/hooks/useLocalStorage';
 import { formatDollars } from '@/lib/utils';
 import type { Transaction } from '@/types/transaction';
@@ -54,12 +52,6 @@ export default function RecommendationsPage() {
     return `${(value * 100).toFixed(1)}%`;
   }, []);
 
-  const formatProgress = useCallback((value?: number | null) => {
-    if (value == null || Number.isNaN(value)) {
-      return '—';
-    }
-    return `${Math.round(value)}%`;
-  }, []);
 
   const fetchTransactions = useCallback(async () => {
     if (!pat || !selectedBudget?.id) {
@@ -123,13 +115,14 @@ export default function RecommendationsPage() {
   }, [pat, selectedBudget?.id]); // Don't include fetchTransactions to avoid loops
 
   const renderCardOption = (option: CardOption, isPrimary = false, isAlternative = false) => {
-    // Check if card is maxed (either by recommendation or by having subcategory limit in reasons)
-    const isMaxed = option.recommendation === 'avoid' ||
-                    option.reasons.some(r => r.includes('limit reached') ||
-                                        r.includes('Maximum spend reached') ||
-                                        r.includes('All subcategories maxed'));
+    // Find the actual card object
+    const card = cards.find(c => c.id === option.cardId);
+    if (!card) return null;
 
-    // Determine badge label
+    // Check if card is maxed
+    const isMaxed = option.recommendation === 'avoid';
+
+    // Determine badge label and styling
     let badgeLabel = 'Alternative';
     let badgeClass = 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/30';
 
@@ -144,16 +137,15 @@ export default function RecommendationsPage() {
       badgeClass = 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30';
     }
 
-    const cardClass = isMaxed && !isPrimary
-      ? 'opacity-60 relative'
-      : '';
+    const cardClass = isMaxed && !isPrimary ? 'opacity-60' : '';
 
     return (
       <div className={`${isPrimary ? 'rounded-xl border bg-card/60 p-4 md:p-6 shadow-sm' : 'rounded-lg border bg-background/80 p-3'} ${cardClass}`}>
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        {/* Badge and Card Name Header */}
+        <div className="flex items-start justify-between mb-4">
           <div>
             <h3 className={isPrimary ? 'text-xl font-semibold' : 'font-medium'}>
-              {option.cardName}
+              {card.name}
             </h3>
             <p className="text-sm text-muted-foreground">
               {option.cardType === 'cashback'
@@ -161,79 +153,19 @@ export default function RecommendationsPage() {
                 : `Miles • ${option.earningRate || 1} miles per dollar`}
             </p>
           </div>
-          <Badge
-            className={badgeClass}
-          >
+          <Badge className={badgeClass}>
             {badgeLabel}
           </Badge>
         </div>
 
-        {isPrimary && (
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <MetricPill
-              label="Current spend"
-              value={formatCurrency(option.currentSpend)}
-            />
-            <MetricPill
-              label="Min progress"
-              value={formatProgress(option.minimumProgress)}
-              helper={option.minimumSpend ? `Target: ${formatCurrency(option.minimumSpend)}` : 'No minimum'}
-            />
-            <MetricPill
-              label="Headroom"
-              value={option.headroom !== null ? formatCurrency(option.headroom) : 'Unlimited'}
-              helper={option.maximumSpend ? `Max: ${formatCurrency(option.maximumSpend)}` : 'No limit'}
-            />
-          </div>
-        )}
+        {/* CardSpendingSummary Component */}
+        <CardSpendingSummary
+          card={card}
+          pat={pat}
+          prefetchedTransactions={transactions}
+        />
 
-        {option.subcategoryProgress && option.subcategoryProgress.length > 0 && (
-          <div className={`${isPrimary ? 'mt-4' : 'mt-3'} space-y-2`}>
-            <p className="text-xs font-semibold uppercase text-muted-foreground">Subcategory Limits</p>
-            {option.subcategoryProgress.map((sub) => (
-              <div key={sub.subcategoryId} className="space-y-1">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium">{sub.subcategoryName}</span>
-                  <span className="text-muted-foreground">
-                    {formatCurrency(sub.currentSpend)} / {sub.maximumSpend ? formatCurrency(sub.maximumSpend) : 'No limit'}
-                  </span>
-                </div>
-                {sub.maximumSpend && (
-                  <Progress
-                    value={sub.progress}
-                    className={`h-2 ${sub.isMaxed ? 'opacity-50' : ''}`}
-                  />
-                )}
-                {sub.isMaxed && (
-                  <p className="text-xs text-destructive">Limit reached</p>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {!isPrimary && (option.minimumSpend || option.maximumSpend) && (
-          <div className="mt-3">
-            <SpendingProgressBar
-              totalSpend={option.currentSpend}
-              minimumSpend={option.minimumSpend}
-              maximumSpend={option.maximumSpend}
-              currency={currencyCode}
-              showLabels={false}
-              showWarnings={true}
-            />
-          </div>
-        )}
-
-        {!isPrimary && !option.minimumSpend && !option.maximumSpend && (
-          <div className="mt-3 flex items-center justify-between text-sm">
-            <span className="text-xs font-medium text-muted-foreground">Current spend</span>
-            <span className="text-xs text-muted-foreground">
-              {formatCurrency(option.currentSpend)}
-            </span>
-          </div>
-        )}
-
+        {/* Reasons (only for primary card) */}
         {option.reasons.length > 0 && isPrimary && (
           <div className="mt-4">
             <div className="flex flex-wrap gap-2">
@@ -419,18 +351,3 @@ export default function RecommendationsPage() {
   );
 }
 
-interface MetricPillProps {
-  label: string;
-  value: string;
-  helper?: string;
-}
-
-function MetricPill({ label, value, helper }: MetricPillProps) {
-  return (
-    <div className="rounded-lg border bg-background/60 p-3">
-      <p className="text-xs font-semibold uppercase text-muted-foreground">{label}</p>
-      <p className="text-lg font-semibold text-foreground">{value}</p>
-      {helper && <p className="text-xs text-muted-foreground">{helper}</p>}
-    </div>
-  );
-}
