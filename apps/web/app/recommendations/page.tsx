@@ -381,7 +381,7 @@ export default function RecommendationsPage() {
                         <h4 className="text-sm font-semibold uppercase text-muted-foreground">
                           Alternative options
                         </h4>
-                        <div className="space-y-3">
+                        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                           {rec.alternatives.map((alt) => (
                             <div key={alt.cardId}>
                               {renderCardOption(alt, false, true)}
@@ -408,7 +408,7 @@ export default function RecommendationsPage() {
                           Not Recommended ({rec.notRecommended.length})
                         </button>
                         {expandedNotRecommended[rec.themeId] && (
-                          <div className="space-y-3 opacity-60">
+                          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 opacity-60">
                             {rec.notRecommended.map((card) => (
                               <div key={card.cardId}>
                                 {renderCardOption(card, false, true)}
