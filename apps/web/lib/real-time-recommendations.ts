@@ -285,6 +285,7 @@ export class RealTimeRecommendations {
 
     // Check if this card is linked via specific subcategories to this theme
     const linkedSubs = theme.subcategories.filter(ref => ref?.cardId === card.id);
+    let hasMaxedSubcategory = false;
 
     // If linked via subcategory, check if those specific subcategories are maxed
     if (linkedSubs.length > 0 && card.subcategoriesEnabled && card.subcategories) {
@@ -306,8 +307,8 @@ export class RealTimeRecommendations {
           });
 
           if (isMaxed) {
-            // This linked subcategory is maxed - don't show this card
-            return null;
+            hasMaxedSubcategory = true;
+            reasons.push(`${sub.name} subcategory limit reached`);
           }
         }
       }
@@ -351,7 +352,7 @@ export class RealTimeRecommendations {
 
     // If no subcategories but the card is linked, use base rate as fallback
     // BUT not if subcategories are maxed!
-    const subcategoryMaxed = reasons.includes('Subcategory limit reached') || reasons.includes('All subcategories maxed');
+    const subcategoryMaxed = hasMaxedSubcategory;
     if (!subcategoryMaxed && effectiveRate === 0 && (wholeCardLinked || theme.subcategories.some(ref => ref?.cardId === card.id))) {
       if (card.type === 'cashback') {
         effectiveRate = (card.earningRate ?? 1) / 100;

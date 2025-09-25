@@ -9,6 +9,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
+import { SpendingProgressBar } from '@/components/SpendingProgressBar';
+import { CurrencyAmount } from '@/components/CurrencyAmount';
 import { RealTimeRecommendations, type ThemeRecommendation, type CardOption, type SubcategoryProgress } from '@/lib/real-time-recommendations';
 import { useCategoryGroups, useCreditCards, useSettings, useYnabPAT, useSelectedBudget } from '@/hooks/useLocalStorage';
 import { formatDollars } from '@/lib/utils';
@@ -227,43 +229,25 @@ export default function RecommendationsPage() {
           </div>
         )}
 
-        {!isPrimary && (
-          <div className="mt-3 space-y-2">
-            {/* Minimum spend progress */}
-            {option.minimumSpend && (
-              <div className="space-y-1">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-xs font-medium text-muted-foreground">Minimum spend</span>
-                  <span className="text-xs text-muted-foreground">
-                    {formatCurrency(option.currentSpend)} / {formatCurrency(option.minimumSpend)}
-                  </span>
-                </div>
-                <Progress value={option.minimumProgress} className="h-2" />
-              </div>
-            )}
+        {!isPrimary && (option.minimumSpend || option.maximumSpend) && (
+          <div className="mt-3">
+            <SpendingProgressBar
+              totalSpend={option.currentSpend}
+              minimumSpend={option.minimumSpend}
+              maximumSpend={option.maximumSpend}
+              currency={currencyCode}
+              showLabels={false}
+              showWarnings={true}
+            />
+          </div>
+        )}
 
-            {/* Maximum spend progress */}
-            {option.maximumSpend && (
-              <div className="space-y-1">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-xs font-medium text-muted-foreground">Maximum spend</span>
-                  <span className="text-xs text-muted-foreground">
-                    {formatCurrency(option.currentSpend)} / {formatCurrency(option.maximumSpend)}
-                  </span>
-                </div>
-                <Progress value={option.maximumProgress} className="h-2" />
-              </div>
-            )}
-
-            {/* Current spend if no limits */}
-            {!option.minimumSpend && !option.maximumSpend && (
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-xs font-medium text-muted-foreground">Current spend</span>
-                <span className="text-xs text-muted-foreground">
-                  {formatCurrency(option.currentSpend)}
-                </span>
-              </div>
-            )}
+        {!isPrimary && !option.minimumSpend && !option.maximumSpend && (
+          <div className="mt-3 flex items-center justify-between text-sm">
+            <span className="text-xs font-medium text-muted-foreground">Current spend</span>
+            <span className="text-xs text-muted-foreground">
+              {formatCurrency(option.currentSpend)}
+            </span>
           </div>
         )}
 
