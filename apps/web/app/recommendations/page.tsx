@@ -16,23 +16,6 @@ import { useCategoryGroups, useCreditCards, useSettings, useYnabPAT, useSelected
 import { formatDollars } from '@/lib/utils';
 import type { Transaction } from '@/types/transaction';
 
-const statusConfig = {
-  use: {
-    label: 'Use this',
-    variant: 'default' as const,
-    className: 'bg-green-500 hover:bg-green-600 text-white'
-  },
-  consider: {
-    label: 'Consider',
-    variant: 'secondary' as const,
-    className: ''
-  },
-  avoid: {
-    label: 'At limit',
-    variant: 'destructive' as const,
-    className: ''
-  },
-};
 
 export default function RecommendationsPage() {
   const { cards } = useCreditCards();
@@ -148,17 +131,17 @@ export default function RecommendationsPage() {
 
     // Determine badge label
     let badgeLabel = 'Alternative';
-    let badgeClass = 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400';
+    let badgeClass = 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/30';
 
     if (isPrimary) {
       badgeLabel = 'Best choice';
-      badgeClass = 'bg-green-500 hover:bg-green-600 text-white';
+      badgeClass = 'bg-green-500 text-white hover:bg-green-500';
     } else if (isMaxed) {
       badgeLabel = 'At limit';
-      badgeClass = 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400';
+      badgeClass = 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800';
     } else if (option.minimumProgress < 100) {
       badgeLabel = 'Needs minimum';
-      badgeClass = 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400';
+      badgeClass = 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30';
     }
 
     const cardClass = isMaxed && !isPrimary
@@ -394,7 +377,7 @@ export default function RecommendationsPage() {
                     {rec.notRecommended && rec.notRecommended.length > 0 && (
                       <div className="space-y-3">
                         <button
-                          className="flex items-center gap-2 text-sm font-semibold uppercase text-muted-foreground hover:text-foreground transition-colors"
+                          className="flex items-center gap-2 text-sm font-semibold uppercase text-muted-foreground"
                           onClick={() => setExpandedNotRecommended(prev => ({
                             ...prev,
                             [rec.themeId]: !prev[rec.themeId]
