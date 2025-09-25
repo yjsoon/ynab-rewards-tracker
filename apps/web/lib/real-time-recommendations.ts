@@ -25,6 +25,7 @@ export interface CardOption {
   cardName: string;
   cardType: 'cashback' | 'miles';
   effectiveRate: number; // Normalized to dollars
+  earningRate?: number; // Raw earning rate (% for cashback, miles per dollar for miles)
   currentSpend: number;
   minimumSpend?: number | null;
   maximumSpend?: number | null;
@@ -43,6 +44,7 @@ export interface ThemeRecommendation {
   themeDescription?: string;
   bestCard: CardOption | null;
   alternatives: CardOption[];
+  notRecommended: CardOption[];
   noDataReason?: string;
 }
 
@@ -234,15 +236,35 @@ export class RealTimeRecommendations {
       }
     });
 
-    // Sort by score
-    cardOptions.sort((a, b) => b.score - a.score);
+    // Sort by score, but prioritize minimum spend needs with higher rates
+    cardOptions.sort((a, b) => {
+      const aMinNeed = a.minimumSpend && a.minimumProgress < 100;
+      const bMinNeed = b.minimumSpend && b.minimumProgress < 100;
+
+      // Both need minimum - sort by rate
+      if (aMinNeed && bMinNeed) {
+        return b.effectiveRate - a.effectiveRate;
+      }
+
+      // One needs minimum - it goes first
+      if (aMinNeed && !bMinNeed) return -1;
+      if (!aMinNeed && bMinNeed) return 1;
+
+      // Neither needs minimum - sort by score
+      return b.score - a.score;
+    });
+
+    // Split into recommended and not recommended
+    const recommendedCards = cardOptions.filter(c => c.recommendation !== 'avoid');
+    const notRecommendedCards = cardOptions.filter(c => c.recommendation === 'avoid');
 
     return {
       themeId: theme.id,
       themeName: theme.name,
       themeDescription: theme.description,
-      bestCard: cardOptions[0] || null,
-      alternatives: cardOptions.slice(1),
+      bestCard: recommendedCards[0] || null,
+      alternatives: recommendedCards.slice(1),
+      notRecommended: notRecommendedCards,
       noDataReason: cardOptions.length === 0
         ? 'No active cards linked to this theme'
         : undefined,
@@ -405,6 +427,7 @@ export class RealTimeRecommendations {
       cardName: card.name,
       cardType: card.type,
       effectiveRate,
+      earningRate: card.earningRate,
       currentSpend,
       minimumSpend: card.minimumSpend,
       maximumSpend: card.maximumSpend,

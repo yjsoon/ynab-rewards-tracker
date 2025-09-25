@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { AlertTriangle, Layers, TrendingUp, RefreshCw, Info, CheckCircle, XCircle } from 'lucide-react';
+import { AlertTriangle, Layers, TrendingUp, RefreshCw, Info, CheckCircle, XCircle, ChevronDown, ChevronRight } from 'lucide-react';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -43,6 +43,7 @@ export default function RecommendationsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastFetchTime, setLastFetchTime] = useState<Date | null>(null);
+  const [expandedNotRecommended, setExpandedNotRecommended] = useState<Record<string, boolean>>({});
 
   const recommendations = useMemo(() => {
     const engine = new RealTimeRecommendations(settings);
@@ -170,8 +171,9 @@ export default function RecommendationsPage() {
               {option.cardName}
             </h3>
             <p className="text-sm text-muted-foreground">
-              {option.cardType === 'cashback' ? 'Cashback' : 'Miles'} •
-              {formatPercent(option.effectiveRate)} reward rate
+              {option.cardType === 'cashback'
+                ? `Cashback • ${formatPercent(option.effectiveRate)} reward rate`
+                : `Miles • ${option.earningRate || 1} miles per dollar`}
             </p>
           </div>
           <Badge
@@ -182,11 +184,7 @@ export default function RecommendationsPage() {
         </div>
 
         {isPrimary && (
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <MetricPill
-              label="Reward rate"
-              value={formatPercent(option.effectiveRate)}
-            />
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
             <MetricPill
               label="Current spend"
               value={formatCurrency(option.currentSpend)}
@@ -229,8 +227,48 @@ export default function RecommendationsPage() {
           </div>
         )}
 
-        {option.reasons.length > 0 && (
-          <div className={isPrimary ? 'mt-4' : 'mt-2'}>
+        {!isPrimary && (
+          <div className="mt-3 space-y-2">
+            {/* Minimum spend progress */}
+            {option.minimumSpend && (
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-xs font-medium text-muted-foreground">Minimum spend</span>
+                  <span className="text-xs text-muted-foreground">
+                    {formatCurrency(option.currentSpend)} / {formatCurrency(option.minimumSpend)}
+                  </span>
+                </div>
+                <Progress value={option.minimumProgress} className="h-2" />
+              </div>
+            )}
+
+            {/* Maximum spend progress */}
+            {option.maximumSpend && (
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-xs font-medium text-muted-foreground">Maximum spend</span>
+                  <span className="text-xs text-muted-foreground">
+                    {formatCurrency(option.currentSpend)} / {formatCurrency(option.maximumSpend)}
+                  </span>
+                </div>
+                <Progress value={option.maximumProgress} className="h-2" />
+              </div>
+            )}
+
+            {/* Current spend if no limits */}
+            {!option.minimumSpend && !option.maximumSpend && (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-xs font-medium text-muted-foreground">Current spend</span>
+                <span className="text-xs text-muted-foreground">
+                  {formatCurrency(option.currentSpend)}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {option.reasons.length > 0 && isPrimary && (
+          <div className="mt-4">
             <div className="flex flex-wrap gap-2">
               {option.reasons.map((reason, idx) => (
                 <Badge key={idx} variant="outline" className="text-xs">
@@ -366,6 +404,34 @@ export default function RecommendationsPage() {
                             </div>
                           ))}
                         </div>
+                      </div>
+                    )}
+
+                    {rec.notRecommended && rec.notRecommended.length > 0 && (
+                      <div className="space-y-3">
+                        <button
+                          className="flex items-center gap-2 text-sm font-semibold uppercase text-muted-foreground hover:text-foreground transition-colors"
+                          onClick={() => setExpandedNotRecommended(prev => ({
+                            ...prev,
+                            [rec.themeId]: !prev[rec.themeId]
+                          }))}
+                        >
+                          {expandedNotRecommended[rec.themeId] ? (
+                            <ChevronDown className="h-4 w-4" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4" />
+                          )}
+                          Not Recommended ({rec.notRecommended.length})
+                        </button>
+                        {expandedNotRecommended[rec.themeId] && (
+                          <div className="space-y-3 opacity-60">
+                            {rec.notRecommended.map((card) => (
+                              <div key={card.cardId}>
+                                {renderCardOption(card, false, true)}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
                   </>
