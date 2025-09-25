@@ -16,7 +16,8 @@ import {
   DollarSign,
   Zap,
   Calendar,
-  Settings
+  Settings,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { RecommendationEngine, type CardRecommendation } from '@/lib/rewards-engine';
 import { computeCurrentPeriod } from '@/lib/rewards-engine/compute';
@@ -66,7 +67,22 @@ export default function RewardsDashboardPage() {
     setAlerts(cardAlerts);
   }, [calculations, trackedCards, rules]);
 
-  const hasData = trackedCards.length > 0 && activeRules.length > 0;
+  const hasTrackedCards = trackedCards.length > 0;
+  const hasActiveRules = activeRules.length > 0;
+
+  const blockingReasons: string[] = [];
+  if (!hasTrackedCards) {
+    blockingReasons.push('Add at least one card in Settings and mark it for tracking.');
+  }
+  if (!hasActiveRules) {
+    blockingReasons.push('Create and activate at least one reward rule under Rules.');
+  }
+  if (!pat) {
+    blockingReasons.push('Enter your YNAB access token in Settings.');
+  }
+  if (!selectedBudget.id) {
+    blockingReasons.push('Select a budget to sync from YNAB.');
+  }
 
   // Load last computed timestamp on mount
   useEffect(() => {
@@ -127,47 +143,54 @@ export default function RewardsDashboardPage() {
     };
   }, []);
 
-  if (!hasData) {
-    return (
-      <div className="max-w-6xl mx-auto p-6">
-        <h1 className="text-3xl font-bold mb-8">Rewards Dashboard</h1>
-        
-        <Card className="text-center py-12">
-          <CardContent>
-            <TrendingUp className="h-16 w-16 text-muted-foreground mx-auto mb-6" />
-            <CardTitle className="text-2xl mb-4">Set Up Your Rewards Tracking</CardTitle>
-            <CardDescription className="text-lg mb-8 max-w-2xl mx-auto">
-              Configure your credit cards and reward rules to start tracking your earnings and optimise your spending.
-            </CardDescription>
-            
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button size="lg" asChild>
-                <Link href="/settings">
-                  <CreditCard className="mr-2 h-5 w-5" />
-                  Configure Cards
-                </Link>
-              </Button>
-              <Button variant="outline" size="lg" asChild>
-                <Link href="/">
-                  <Settings className="mr-2 h-5 w-5" />
-                  Back to Dashboard
-                </Link>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   return (
     <div className="max-w-6xl mx-auto p-6">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-3xl font-bold">Rewards Dashboard</h1>
-        <Button onClick={handleCompute} disabled={computing || !hasData} variant="outline">
-          {computing ? 'Computing…' : 'Compute Now'}
+        <Button onClick={handleCompute} disabled={computing || blockingReasons.length > 0} variant="outline">
+          {computing ? 'Computing…' : 'Compute now'}
         </Button>
       </div>
+      {blockingReasons.length > 0 && (
+        <>
+          <Alert variant="outline" className="mb-4">
+            <AlertDescription>
+              {blockingReasons.length === 1 ? 'Before computing rewards:' : 'Before computing rewards, complete these steps:'}
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
+                {blockingReasons.map((reason, index) => (
+                  <li key={index}>{reason}</li>
+                ))}
+              </ul>
+            </AlertDescription>
+          </Alert>
+
+          <Card className="mb-6">
+            <CardContent className="flex flex-col items-center gap-4 py-8">
+              <TrendingUp className="h-10 w-10 text-muted-foreground" />
+              <div className="text-center space-y-1">
+                <CardTitle className="text-xl">Finish your rewards setup</CardTitle>
+                <CardDescription>
+                  Configure the missing pieces above, then run “Compute now” to pull in live data from YNAB.
+                </CardDescription>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Button asChild>
+                  <Link href="/rules">
+                    <SlidersHorizontal className="mr-2 h-4 w-4" />
+                    Review Rules
+                  </Link>
+                </Button>
+                <Button variant="outline" asChild>
+                  <Link href="/settings">
+                    <CreditCard className="mr-2 h-4 w-4" />
+                    Open Settings
+                  </Link>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
       {computeMessage && (
         <Alert className="mb-6">
           <AlertDescription>{computeMessage}</AlertDescription>
