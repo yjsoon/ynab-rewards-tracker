@@ -10,6 +10,7 @@ import type {
   AppSettings,
 } from '@/lib/storage';
 import type { Transaction } from '@/types/transaction';
+import { SimpleRewardsCalculator } from '@/lib/rewards-engine';
 
 export interface SubcategoryProgress {
   subcategoryId: string;
@@ -109,7 +110,7 @@ export class RealTimeRecommendations {
       if (!card) return;
 
       const txnDate = new Date(txn.date);
-      if (!this.isInCurrentPeriod(txnDate, card, now)) {
+      if (!this.isInCurrentPeriod(txnDate, card)) {
         return;
       }
 
@@ -138,29 +139,17 @@ export class RealTimeRecommendations {
 
   /**
    * Check if transaction is in current billing period
+   * Uses the same period calculation as CardSpendingSummary for consistency
    */
   private isInCurrentPeriod(
     txnDate: Date,
-    card: CreditCard,
-    now: Date
+    card: CreditCard
   ): boolean {
-    if (card.billingCycle?.type === 'billing' && card.billingCycle.dayOfMonth) {
-      const billingDay = card.billingCycle.dayOfMonth;
-      const cycleStart = new Date(now.getFullYear(), now.getMonth(), billingDay);
+    const period = SimpleRewardsCalculator.calculatePeriod(card);
+    const periodStart = new Date(period.start);
+    const periodEnd = new Date(period.end + 'T23:59:59.999Z');
 
-      if (now.getDate() < billingDay) {
-        cycleStart.setMonth(cycleStart.getMonth() - 1);
-      }
-
-      const cycleEnd = new Date(cycleStart);
-      cycleEnd.setMonth(cycleEnd.getMonth() + 1);
-
-      return txnDate >= cycleStart && txnDate < cycleEnd;
-    } else {
-      // Calendar month
-      return txnDate.getMonth() === now.getMonth() &&
-             txnDate.getFullYear() === now.getFullYear();
-    }
+    return txnDate >= periodStart && txnDate <= periodEnd;
   }
 
   /**
