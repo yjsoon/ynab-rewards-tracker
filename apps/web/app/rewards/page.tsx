@@ -68,20 +68,16 @@ export default function RewardsDashboardPage() {
   }, [calculations, trackedCards, rules]);
 
   const hasTrackedCards = trackedCards.length > 0;
-  const hasActiveRules = activeRules.length > 0;
 
   const blockingReasons: string[] = [];
   if (!hasTrackedCards) {
-    blockingReasons.push('Add at least one card in Settings and mark it for tracking.');
-  }
-  if (!hasActiveRules) {
-    blockingReasons.push('Create and activate at least one reward rule under Rules.');
+    blockingReasons.push('Track at least one card under Settings so we know what to compute.');
   }
   if (!pat) {
     blockingReasons.push('Enter your YNAB access token in Settings.');
   }
   if (!selectedBudget.id) {
-    blockingReasons.push('Select a budget to sync from YNAB.');
+    blockingReasons.push('Select a YNAB budget to sync.');
   }
 
   // Load last computed timestamp on mount
@@ -175,9 +171,9 @@ export default function RewardsDashboardPage() {
               </div>
               <div className="flex flex-col sm:flex-row gap-3">
                 <Button asChild>
-                  <Link href="/rules">
+                  <Link href="/rules?tab=categories">
                     <SlidersHorizontal className="mr-2 h-4 w-4" />
-                    Review Rules
+                    Manage themes
                   </Link>
                 </Button>
                 <Button variant="outline" asChild>
