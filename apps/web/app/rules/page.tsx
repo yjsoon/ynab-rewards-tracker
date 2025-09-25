@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, Suspense } from 'react';
 import { useCategoryGroups, useCreditCards, useSettings } from '@/hooks/useLocalStorage';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -26,7 +26,7 @@ interface CardEditState {
   [cardId: string]: SingleCardEditState;
 }
 
-export default function RulesPage() {
+function RulesPageContent() {
   const { cards, updateCard } = useCreditCards();
   const { categoryGroups, saveCategoryGroup, deleteCategoryGroup } = useCategoryGroups();
   const { settings } = useSettings();
@@ -562,5 +562,18 @@ export default function RulesPage() {
         </div>
       )}
     </div>
+  );
+}
+
+// Wrap in Suspense for useSearchParams during static generation
+export default function RulesPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-[200px]">
+        <div className="text-muted-foreground">Loading...</div>
+      </div>
+    }>
+      <RulesPageContent />
+    </Suspense>
   );
 }
