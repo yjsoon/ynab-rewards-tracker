@@ -9,4 +9,8 @@ export { RecommendationEngine } from './recommendations';
 
 export type { CalculationPeriod } from './calculator';
 export type { CalculationPeriod as SimplePeriod, SimplifiedCalculation } from './simple-calculator';
-export type { CardRecommendation } from './recommendations';
+export type {
+  CardRecommendation,
+  CategoryCardInsight,
+  CategoryRecommendation,
+} from './recommendations';

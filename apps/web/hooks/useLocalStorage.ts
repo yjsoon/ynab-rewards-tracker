@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { CreditCard, RewardRule, RewardCalculation, AppSettings } from '@/lib/storage';
+import type {
+  CreditCard,
+  RewardRule,
+  RewardCalculation,
+  AppSettings,
+  SpendingCategoryGroup,
+} from '@/lib/storage';
 import { storage } from '@/lib/storage';
 import { useStorageContext } from '@/contexts/StorageContext';
 
@@ -8,6 +14,7 @@ const EMPTY_CARD_LIST: CreditCard[] = [];
 const EMPTY_RULE_LIST: RewardRule[] = [];
 const EMPTY_CALCULATION_LIST: RewardCalculation[] = [];
 const EMPTY_SELECTED_BUDGET: { id?: string; name?: string } = {};
+const EMPTY_CATEGORY_GROUP_LIST: SpendingCategoryGroup[] = [];
 const DEFAULT_SETTINGS: AppSettings = { theme: 'light', currency: 'USD' };
 
 function useHasHydrated() {
@@ -172,6 +179,35 @@ export function useRewardCalculations(cardId?: string) {
   }, [triggerRefresh]);
 
   return { calculations, saveCalculation, deleteCalculation, clearCalculations, isLoading: !hasHydrated };
+}
+
+export function useCategoryGroups() {
+  const { refreshTrigger, triggerRefresh } = useStorageContext();
+  const hasHydrated = useHasHydrated();
+
+  const categoryGroups = useMemo(() => {
+    if (!hasHydrated || typeof window === 'undefined') {
+      return EMPTY_CATEGORY_GROUP_LIST;
+    }
+    return storage.getCategoryGroups();
+  }, [hasHydrated, refreshTrigger]);
+
+  const saveCategoryGroup = useCallback((group: SpendingCategoryGroup) => {
+    storage.saveCategoryGroup(group);
+    triggerRefresh();
+  }, [triggerRefresh]);
+
+  const deleteCategoryGroup = useCallback((groupId: string) => {
+    storage.deleteCategoryGroup(groupId);
+    triggerRefresh();
+  }, [triggerRefresh]);
+
+  return {
+    categoryGroups,
+    saveCategoryGroup,
+    deleteCategoryGroup,
+    isLoading: !hasHydrated,
+  };
 }
 
 export function useSettings() {
