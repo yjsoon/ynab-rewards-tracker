@@ -2,16 +2,15 @@
 
 import Link from 'next/link';
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { AlertTriangle, Layers, TrendingUp, RefreshCw, Info, CheckCircle, XCircle, ChevronDown, ChevronRight } from 'lucide-react';
+import { AlertTriangle, Layers, RefreshCw, Info, CheckCircle, XCircle, ChevronDown, ChevronRight } from 'lucide-react';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { CardSpendingSummary } from '@/components/CardSpendingSummary';
-import { RealTimeRecommendations, type ThemeRecommendation, type CardOption } from '@/lib/real-time-recommendations';
+import { RealTimeRecommendations, type CardOption } from '@/lib/real-time-recommendations';
 import { useCategoryGroups, useCreditCards, useSettings, useYnabPAT, useSelectedBudget } from '@/hooks/useLocalStorage';
-import { formatDollars } from '@/lib/utils';
 import type { Transaction } from '@/types/transaction';
 
 
@@ -32,18 +31,6 @@ export default function RecommendationsPage() {
     const engine = new RealTimeRecommendations(settings);
     return engine.generateRecommendations(categoryGroups, cards, transactions);
   }, [categoryGroups, cards, transactions, settings]);
-
-  const currencyCode = settings?.currency;
-
-  const formatCurrency = useCallback((value?: number | null) => {
-    if (value == null || Number.isNaN(value)) {
-      return '—';
-    }
-    if (Math.abs(value) < 0.0005) {
-      return formatDollars(0, { currency: currencyCode });
-    }
-    return formatDollars(value, { currency: currencyCode });
-  }, [currencyCode]);
 
   const formatPercent = useCallback((value?: number | null) => {
     if (value == null || Number.isNaN(value)) {
@@ -112,9 +99,9 @@ export default function RecommendationsPage() {
     if (pat && selectedBudget?.id && cards.length > 0) {
       fetchTransactions();
     }
-  }, [pat, selectedBudget?.id]); // Don't include fetchTransactions to avoid loops
+  }, [cards.length, fetchTransactions, pat, selectedBudget?.id]);
 
-  const renderCardOption = (option: CardOption, isPrimary = false, isAlternative = false) => {
+  const renderCardOption = (option: CardOption, isPrimary = false) => {
     // Find the actual card object
     const card = cards.find(c => c.id === option.cardId);
     if (!card) return null;
@@ -196,7 +183,7 @@ export default function RecommendationsPage() {
           </CardHeader>
           <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-muted-foreground">
-              Visit Rules to create themes like "Transport" or "Dining", then link your cards.
+              Visit Rules to create themes like Transport or Dining, then link your cards.
             </p>
             <Button asChild>
               <Link href="/rules?tab=categories">Configure Themes</Link>
@@ -299,7 +286,7 @@ export default function RecommendationsPage() {
                         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                           {rec.alternatives.map((alt) => (
                             <div key={alt.cardId}>
-                              {renderCardOption(alt, false, true)}
+                              {renderCardOption(alt)}
                             </div>
                           ))}
                         </div>
@@ -326,7 +313,7 @@ export default function RecommendationsPage() {
                           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 opacity-60">
                             {rec.notRecommended.map((card) => (
                               <div key={card.cardId}>
-                                {renderCardOption(card, false, true)}
+                                {renderCardOption(card)}
                               </div>
                             ))}
                           </div>

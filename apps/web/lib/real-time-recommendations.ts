@@ -93,7 +93,7 @@ export class RealTimeRecommendations {
     const summaries = new Map<string, CardSpendingSummary>();
 
     // Initialize summaries for each card
-    cards.forEach(card => {
+    cards.forEach((card) => {
       summaries.set(card.id, {
         cardId: card.id,
         totalSpend: 0,
@@ -103,35 +103,33 @@ export class RealTimeRecommendations {
 
     // Process transactions for current period
     const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
 
-    transactions.forEach(txn => {
-      // Skip non-card transactions
-      const card = cards.find(c => c.ynabAccountId === txn.account_id);
+    transactions.forEach((txn) => {
+      const card = cards.find((c) => c.ynabAccountId === txn.account_id);
       if (!card) return;
 
       const txnDate = new Date(txn.date);
-
-      // Check if transaction is in current billing period
       if (!this.isInCurrentPeriod(txnDate, card, now)) {
         return;
       }
 
-      const amount = Math.abs(txn.amount / 1000); // Convert from milliunits
+      const amount = Math.abs(txn.amount / 1000);
       const summary = summaries.get(card.id);
       if (!summary) return;
 
+      let matchedSubcategory: CardSubcategory | null = null;
+      if (card.subcategoriesEnabled && card.subcategories) {
+        matchedSubcategory = this.findMatchingSubcategory(txn, card);
+        if (matchedSubcategory?.excludeFromRewards) {
+          return; // Skip excluded subcategory transactions entirely
+        }
+      }
+
       summary.totalSpend += amount;
 
-      // Track subcategory spending if enabled
-      if (card.subcategoriesEnabled && card.subcategories) {
-        const subcategory = this.findMatchingSubcategory(txn, card);
-        if (subcategory) {
-          const current = summary.subcategorySpends.get(subcategory.id) || 0;
-          summary.subcategorySpends.set(subcategory.id, current + amount);
-        }
-
+      if (matchedSubcategory) {
+        const current = summary.subcategorySpends.get(matchedSubcategory.id) || 0;
+        summary.subcategorySpends.set(matchedSubcategory.id, current + amount);
       }
     });
 
@@ -174,25 +172,26 @@ export class RealTimeRecommendations {
   ): CardSubcategory | null {
     if (!card.subcategories) return null;
 
-    // First try to match by flag color
-    const colorMatch = card.subcategories.find(sub => {
-      const subColor = sub.flagColor;
-      const txnColor = txn.flag_color;
+    const txnColor = txn.flag_color;
+    const isUnflaggedTxn = txnColor === null || txnColor === undefined;
 
-      // Handle unflagged transactions - YNAB uses 'unflagged' for subcategories but null for transactions
-      if (subColor === 'unflagged' && (txnColor === null || txnColor === undefined)) {
-        return sub.active !== false && !sub.excludeFromRewards;
+    let matched: CardSubcategory | undefined;
+
+    matched = card.subcategories.find((sub) => {
+      if (!sub || sub.active === false) {
+        return false;
       }
-
-      // Regular color matching
-      return subColor &&
-             subColor !== 'unflagged' &&
-             subColor === txnColor &&
-             sub.active !== false &&
-             !sub.excludeFromRewards;
+      if (sub.flagColor === 'unflagged') {
+        return isUnflaggedTxn;
+      }
+      return sub.flagColor === txnColor;
     });
 
-    return colorMatch || null;
+    if (!matched) {
+      matched = card.subcategories.find((sub) => sub?.active !== false && sub.flagColor === 'unflagged');
+    }
+
+    return matched ?? null;
   }
 
   /**
@@ -376,7 +375,7 @@ export class RealTimeRecommendations {
       : null;
 
     // Calculate score with heavy emphasis on minimum spend
-    let baseScore = effectiveRate * 1000; // Base score from rate (assuming max 10% rate)
+    const baseScore = effectiveRate * 1000; // Base score from rate (assuming max 10% rate)
     let score = baseScore;
 
     // PRIORITY 1: Cards that haven't met minimum spend get massive boost
