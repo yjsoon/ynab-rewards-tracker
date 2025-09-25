@@ -2,19 +2,20 @@
 
 import Link from 'next/link';
 import { useMemo } from 'react';
-import { AlertTriangle, Layers, TrendingUp } from 'lucide-react';
+import { AlertTriangle, Layers, TrendingUp, Info } from 'lucide-react';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { RecommendationEngine, type CategoryCardInsight } from '@/lib/rewards-engine';
 import { useCategoryGroups, useCreditCards, useRewardCalculations, useSettings } from '@/hooks/useLocalStorage';
 import { formatDollars } from '@/lib/utils';
 
 const statusConfig = {
-  use: { label: 'Use now – ho say!', variant: 'secondary' as const },
-  consider: { label: 'Consider – still warming up', variant: 'outline' as const },
-  avoid: { label: 'Avoid – cap kena already', variant: 'destructive' as const },
+  use: { label: 'Best pick', variant: 'secondary' as const },
+  consider: { label: 'Worth considering', variant: 'outline' as const },
+  avoid: { label: 'Avoid for now', variant: 'destructive' as const },
 };
 
 export default function RecommendationsPage() {
@@ -63,54 +64,67 @@ export default function RecommendationsPage() {
     return `${Math.round(value)}%`;
   };
 
-  const formatHeadroom = (insight: CategoryCardInsight) => {
+  const summariseHeadroom = (insight: CategoryCardInsight) => {
     if (insight.shouldAvoid) {
-      return 'Cap smashed';
+      return {
+        value: 'Cap reached',
+        helper: 'Further spend will not earn additional rewards.',
+      };
     }
     if (insight.headroomToMaximum != null) {
-      return `${formatCurrency(insight.headroomToMaximum)} left`;
+      return {
+        value: `${formatCurrency(insight.headroomToMaximum)} remaining`,
+        helper: 'Spend available before you hit the cap.',
+      };
     }
     if (insight.cardMaximumCap) {
-      return insight.cardMaximumProgress != null
-        ? `${formatProgress(insight.cardMaximumProgress)} of cap`
-        : `${formatCurrency(insight.cardMaximumCap)} cap`;
+      if (insight.cardMaximumProgress != null) {
+        return {
+          value: `${formatProgress(insight.cardMaximumProgress)} of cap used`,
+          helper: `${formatCurrency(insight.cardMaximumCap)} cap configured for this category.`,
+        };
+      }
+      return {
+        value: `${formatCurrency(insight.cardMaximumCap)} cap configured`,
+        helper: 'No spending recorded against the cap yet.',
+      };
     }
-    return 'No cap configured';
+    return {
+      value: 'No cap configured',
+      helper: 'This category has no maximum spend limit.',
+    };
   };
 
   const describeMinimum = (insight: CategoryCardInsight) => {
     if (insight.minimumRemaining != null) {
       if (insight.minimumRemaining <= 0.01) {
-        return 'Minimum cleared';
+        return 'Minimum met';
       }
-      return `${formatCurrency(insight.minimumRemaining)} shy`;
+      return `${formatCurrency(insight.minimumRemaining)} still required`;
     }
     if (insight.minimumTarget) {
-      return 'Minimum tracked';
+      return 'Tracking minimum spend';
     }
-    if (!insight.cardMinimumMet && settings?.currency) {
-      return `${settings.currency} minimum pending`;
+    if (!insight.cardMinimumMet) {
+      return 'Minimum pending';
     }
-    return 'No minimum';
+    return 'No minimum set';
   };
 
-  const buildInsightNotes = (insight: CategoryCardInsight) => {
+  const buildInsightNotes = (insight: CategoryCardInsight, period: string | undefined) => {
     const notes: string[] = [];
     if (!insight.hasData) {
-      notes.push('No spend tracked yet – go test with a kopi run lah.');
+      notes.push(period ? 'No eligible transactions recorded in this period.' : 'No spending data yet.');
     }
     if (insight.minimumRemaining != null && insight.minimumRemaining > 0.01) {
-      notes.push(`${formatCurrency(insight.minimumRemaining)} more to satisfy the minimum spend.`);
+      notes.push(`${formatCurrency(insight.minimumRemaining)} more spend needed to unlock rewards.`);
     }
     if (insight.headroomToMaximum != null) {
       if (insight.headroomToMaximum <= 0.01) {
-        notes.push('Cap already kena, time to swap card.');
+        notes.push('Spending cap reached for this category.');
       } else {
-        notes.push(`${formatCurrency(insight.headroomToMaximum)} headroom before the cap.`);
+        notes.push(`You can spend up to ${formatCurrency(insight.headroomToMaximum)} more before the cap.`);
       }
-    }
-    if (!notes.length && insight.status === 'use') {
-      notes.push('All green lights – whack this card for the category.');
     }
     return notes;
   };
@@ -133,12 +147,12 @@ export default function RecommendationsPage() {
               Set Up Spending Categories
             </CardTitle>
             <CardDescription>
-              Group your card subcategories under broader themes before we can recommend anything steady.
+              Group your card subcategories under broader themes before we can suggest the right cards.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-muted-foreground">
-              Head to the Rules page, bundle your subcategories, then pop back here for card suggestions ho say.
+              Visit the Rules page, bundle your subcategories, then return here for tailored recommendations.
             </p>
             <Button asChild>
               <Link href="/rules">Organise in Rules</Link>
@@ -159,12 +173,12 @@ export default function RecommendationsPage() {
               No Fresh Calculations Yet
             </CardTitle>
             <CardDescription>
-              Run the rewards compute on your dashboard so we can crunch the numbers for each category.
+              Run the rewards computation on your dashboard so we can crunch the numbers for each category.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-muted-foreground">
-              Once the latest period is computed, this page will light up with card picks and cap warnings.
+              Once the latest period is computed, this page will surface the best cards and any cap warnings.
             </p>
             <Button variant="outline" asChild>
               <Link href="/rewards">Compute rewards</Link>
@@ -203,7 +217,7 @@ export default function RecommendationsPage() {
         {recommendations.map((recommendation) => {
           const best = recommendation.insights[0];
           const runners = recommendation.insights.slice(1);
-          const notes = best ? buildInsightNotes(best) : [];
+          const notes = best ? buildInsightNotes(best, recommendation.latestPeriod) : [];
 
           return (
             <Card key={recommendation.groupId} className="border-muted/80">
@@ -221,7 +235,9 @@ export default function RecommendationsPage() {
                     <CardDescription>{recommendation.groupDescription}</CardDescription>
                   )}
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Period analysed: {recommendation.latestPeriod ?? 'No period yet'}
+                    {recommendation.latestPeriod
+                      ? `Latest period analysed: ${recommendation.latestPeriod}`
+                      : 'No reward calculations recorded yet.'}
                   </p>
                 </div>
               </CardHeader>
@@ -239,8 +255,21 @@ export default function RecommendationsPage() {
                     <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                       <MetricPill label="Reward rate" value={formatRate(best.rewardRate)} />
                       <MetricPill label="Spend tracked" value={formatCurrency(best.totalSpend)} />
-                      <MetricPill label="Minimum progress" value={formatProgress(best.minimumProgress ?? best.cardMinimumProgress)} helper={describeMinimum(best)} />
-                      <MetricPill label="Headroom" value={formatHeadroom(best)} />
+                      <MetricPill
+                        label="Minimum spend"
+                        value={formatProgress(best.minimumProgress ?? best.cardMinimumProgress)}
+                        helper={describeMinimum(best)}
+                      />
+                      {(() => {
+                        const headroom = summariseHeadroom(best);
+                        return (
+                          <MetricPill
+                            label="Spend before cap"
+                            value={headroom.value}
+                            helper={headroom.helper}
+                          />
+                        );
+                      })()}
                     </div>
                     {notes.length > 0 && (
                       <ul className="mt-4 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
@@ -249,19 +278,27 @@ export default function RecommendationsPage() {
                         ))}
                       </ul>
                     )}
+                    {!recommendation.latestPeriod && (
+                      <Alert className="mt-4">
+                        <Info className="h-4 w-4" />
+                        <AlertDescription>
+                          Run “Compute now” on the Rewards dashboard to pull in the latest transactions for these recommendations.
+                        </AlertDescription>
+                      </Alert>
+                    )}
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground">
-                    No cards mapped to this group yet. Add subcategories in Rules first, bro.
+                    No cards mapped to this group yet. Link your card subcategories under Rules to see recommendations here.
                   </p>
                 )}
 
                 {runners.length > 0 && (
                   <div className="space-y-3">
-                    <h4 className="text-sm font-semibold uppercase text-muted-foreground">Other cards to eye</h4>
+                    <h4 className="text-sm font-semibold uppercase text-muted-foreground">Other card options</h4>
                     <div className="grid gap-3 md:grid-cols-2">
                       {runners.map((insight) => {
-                        const runnerNotes = buildInsightNotes(insight);
+                        const runnerNotes = buildInsightNotes(insight, recommendation.latestPeriod);
                         return (
                           <div key={insight.cardId} className="rounded-lg border bg-background/80 p-3">
                             <div className="flex items-start justify-between gap-2">
@@ -276,7 +313,10 @@ export default function RecommendationsPage() {
                               </Badge>
                             </div>
                             <p className="mt-2 text-xs text-muted-foreground">
-                              Headroom: {formatHeadroom(insight)} • Minimum: {describeMinimum(insight)}
+                              {(() => {
+                                const headroom = summariseHeadroom(insight);
+                                return `Spend before cap: ${headroom.value} • Minimum: ${describeMinimum(insight)}`;
+                              })()}
                             </p>
                             {runnerNotes.length > 0 && (
                               <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-muted-foreground">

@@ -348,7 +348,7 @@ export default function RulesPage() {
           </TabsTrigger>
           <TabsTrigger value="categories" className="gap-2">
             <Layers className="h-4 w-4" />
-            Categories ({categoryGroups.length})
+            Themes ({categoryGroups.length})
           </TabsTrigger>
         </TabsList>
 

@@ -178,29 +178,130 @@ export class RecommendationEngine {
     return [...groups]
       .sort((a, b) => a.priority - b.priority)
       .map((group) => {
-        const referencesByCard = new Map<string, SubcategoryReference[]>();
+        const cardEntries = new Map<string, { refs: SubcategoryReference[]; includeWhole: boolean }>();
+
         group.subcategories.forEach((ref) => {
           if (!ref?.cardId || !ref?.subcategoryId) {
             return;
           }
-          const existing = referencesByCard.get(ref.cardId);
-          if (existing) {
-            existing.push(ref);
+          const entry = cardEntries.get(ref.cardId);
+          if (entry) {
+            entry.refs.push(ref);
           } else {
-            referencesByCard.set(ref.cardId, [ref]);
+            cardEntries.set(ref.cardId, { refs: [ref], includeWhole: false });
           }
         });
 
+        (group.cards ?? []).forEach((ref) => {
+          if (!ref?.cardId) {
+            return;
+          }
+          const entry = cardEntries.get(ref.cardId);
+          if (entry) {
+            if (entry.refs.length === 0) {
+              entry.includeWhole = true;
+            }
+          } else {
+            cardEntries.set(ref.cardId, { refs: [], includeWhole: true });
+          }
+        });
+
+        const buildCardInsight = (card: CreditCard, calculation: RewardCalculation | undefined): CategoryCardInsight => {
+          const totalSpend = calculation?.totalSpend ?? 0;
+          const eligibleSpend = calculation?.eligibleSpend ?? 0;
+          const eligibleSpendBeforeBlocks = calculation?.eligibleSpend ?? eligibleSpend;
+
+          let rewardEarnedDollars = calculation?.rewardEarnedDollars;
+          if (rewardEarnedDollars == null && calculation) {
+            rewardEarnedDollars = calculation.rewardType === 'cashback'
+              ? calculation.rewardEarned
+              : (calculation.rewardEarned ?? 0) * milesValuation;
+          }
+          rewardEarnedDollars = rewardEarnedDollars ?? 0;
+
+          const minimumTarget = typeof card.minimumSpend === 'number' && card.minimumSpend > 0
+            ? card.minimumSpend
+            : null;
+          const cardMinimumProgress = calculation?.minimumProgress ?? (minimumTarget
+            ? Math.min(100, (totalSpend / minimumTarget) * 100)
+            : null);
+          const minimumRemaining = minimumTarget ? Math.max(0, minimumTarget - totalSpend) : null;
+          const cardMinimumMet = calculation?.minimumMet ?? (minimumTarget ? totalSpend >= minimumTarget : true);
+
+          const maximumCap = typeof card.maximumSpend === 'number' && card.maximumSpend > 0
+            ? card.maximumSpend
+            : null;
+          const spentTowardsCap = calculation?.eligibleSpend ?? eligibleSpend;
+          const cardMaximumProgress = calculation?.maximumProgress ?? (maximumCap
+            ? Math.min(100, (spentTowardsCap / maximumCap) * 100)
+            : null);
+          const headroomToMaximum = maximumCap ? Math.max(0, maximumCap - spentTowardsCap) : null;
+          const cardMaximumExceeded = calculation?.maximumExceeded ?? Boolean(maximumCap && headroomToMaximum !== null && headroomToMaximum <= 0);
+
+          const hasData = totalSpend > 0 || eligibleSpend > 0;
+
+          const fallbackRate = card.type === 'cashback'
+            ? ((card.earningRate ?? 0) / 100)
+            : ((card.earningRate ?? 0) * milesValuation);
+
+          const rewardRate = totalSpend > 0
+            ? rewardEarnedDollars / totalSpend
+            : fallbackRate;
+
+          const shouldAvoid = Boolean(calculation?.shouldStopUsing) || cardMaximumExceeded;
+          const status: 'use' | 'consider' | 'avoid' = shouldAvoid
+            ? 'avoid'
+            : (!cardMinimumMet ? 'consider' : 'use');
+
+          return {
+            cardId: card.id,
+            cardName: card.name,
+            cardType: card.type,
+            rewardRate,
+            rewardEarnedDollars,
+            totalSpend,
+            eligibleSpend,
+            eligibleSpendBeforeBlocks,
+            hasData,
+            minimumMet: cardMinimumMet,
+            minimumProgress: cardMinimumProgress,
+            minimumTarget,
+            minimumRemaining,
+            cardMinimumMet,
+            cardMinimumProgress,
+            maximumCap,
+            maximumProgress: cardMaximumProgress,
+            headroomToMaximum,
+            cardMaximumProgress,
+            cardMaximumCap: maximumCap,
+            cardMaximumExceeded,
+            status,
+            shouldAvoid,
+          };
+        };
+
         const insights: CategoryCardInsight[] = [];
 
-        referencesByCard.forEach((refs, cardId) => {
+        cardEntries.forEach((entry, cardId) => {
           const card = cardMap.get(cardId);
           if (!card) {
             return;
           }
 
+          if (entry.refs.length === 0 && entry.includeWhole) {
+            insights.push(buildCardInsight(card, calcByCard.get(cardId)));
+            return;
+          }
+
+          if (entry.refs.length === 0) {
+            return;
+          }
+
           const cardSubcategories = Array.isArray(card.subcategories) ? card.subcategories : [];
           if (!card.subcategoriesEnabled || cardSubcategories.length === 0) {
+            if (entry.includeWhole) {
+              insights.push(buildCardInsight(card, calcByCard.get(cardId)));
+            }
             return;
           }
 
@@ -234,7 +335,7 @@ export class RecommendationEngine {
 
           let hasData = false;
 
-          refs.forEach((ref) => {
+          entry.refs.forEach((ref) => {
             const subDefinition = subcategoryMap.get(ref.subcategoryId);
             if (!subDefinition || subDefinition.active === false || subDefinition.excludeFromRewards) {
               return;

@@ -29,6 +29,7 @@ import {
   Plus,
   Search,
   Trash2,
+  CreditCard as CreditCardIcon,
 } from 'lucide-react';
 
 interface CategoryGroupingManagerProps {
@@ -72,7 +73,8 @@ export function CategoryGroupingManager({
   const [assignmentState, setAssignmentState] = useState<
     | {
         group: SpendingCategoryGroup;
-        selected: Set<string>;
+        selectedSubcategories: Set<string>;
+        selectedCards: Set<string>;
         search: string;
       }
     | null
@@ -112,11 +114,32 @@ export function CategoryGroupingManager({
     });
   }, [cards]);
 
+  const cardOptions = useMemo(() =>
+    cards.map((card) => ({
+      cardId: card.id,
+      cardName: card.name,
+      cardType: card.type,
+      hasSubcategories: Boolean(card.subcategoriesEnabled && card.subcategories && card.subcategories.length > 0),
+    })),
+  [cards]);
+
   const assignedLookup = useMemo(() => {
     const map = new Map<string, SpendingCategoryGroup>();
     categoryGroups.forEach((group) => {
       group.subcategories.forEach((ref) => {
         map.set(buildKey(ref.cardId, ref.subcategoryId), group);
+      });
+    });
+    return map;
+  }, [categoryGroups]);
+
+  const assignedCardLookup = useMemo(() => {
+    const map = new Map<string, SpendingCategoryGroup>();
+    categoryGroups.forEach((group) => {
+      (group.cards ?? []).forEach((ref) => {
+        if (ref?.cardId) {
+          map.set(ref.cardId, group);
+        }
       });
     });
     return map;
@@ -160,6 +183,7 @@ export function CategoryGroupingManager({
         colour: undefined,
         priority: categoryGroups.length,
         subcategories: [],
+        cards: [],
         createdAt: nowIso,
         updatedAt: nowIso,
       });
@@ -177,25 +201,46 @@ export function CategoryGroupingManager({
   };
 
   const openAssignmentDialog = (group: SpendingCategoryGroup) => {
-    const selected = new Set<string>();
+    const selectedSubcategories = new Set<string>();
     group.subcategories.forEach((ref) => {
-      selected.add(buildKey(ref.cardId, ref.subcategoryId));
+      selectedSubcategories.add(buildKey(ref.cardId, ref.subcategoryId));
     });
-    setAssignmentState({ group, selected, search: '' });
+    const selectedCards = new Set<string>();
+    (group.cards ?? []).forEach((ref) => {
+      if (ref?.cardId) {
+        selectedCards.add(ref.cardId);
+      }
+    });
+    setAssignmentState({ group, selectedSubcategories, selectedCards, search: '' });
   };
 
-  const toggleAssignment = (key: string) => {
+  const toggleSubcategoryAssignment = (key: string) => {
     setAssignmentState((prev) => {
       if (!prev) {
         return prev;
       }
-      const nextSelected = new Set(prev.selected);
+      const nextSelected = new Set(prev.selectedSubcategories);
       if (nextSelected.has(key)) {
         nextSelected.delete(key);
       } else {
         nextSelected.add(key);
       }
-      return { ...prev, selected: nextSelected };
+      return { ...prev, selectedSubcategories: nextSelected };
+    });
+  };
+
+  const toggleCardAssignment = (cardId: string) => {
+    setAssignmentState((prev) => {
+      if (!prev) {
+        return prev;
+      }
+      const nextSelected = new Set(prev.selectedCards);
+      if (nextSelected.has(cardId)) {
+        nextSelected.delete(cardId);
+      } else {
+        nextSelected.add(cardId);
+      }
+      return { ...prev, selectedCards: nextSelected };
     });
   };
 
@@ -203,24 +248,25 @@ export function CategoryGroupingManager({
     if (!assignmentState) {
       return;
     }
-    const { group, selected } = assignmentState;
-    const subcategories = Array.from(selected).map((key) => {
+    const { group, selectedSubcategories, selectedCards } = assignmentState;
+    const subcategories = Array.from(selectedSubcategories).map((key) => {
       const [cardId, subcategoryId] = key.split('::');
       return { cardId, subcategoryId };
     });
+    const cards = Array.from(selectedCards).map((cardId) => ({ cardId }));
     onSaveGroup({
       ...group,
       subcategories,
+      cards,
       updatedAt: new Date().toISOString(),
     });
     setAssignmentState(null);
   };
 
-  const filteredOptions = useMemo(() => {
+  const filteredSubcategoryOptions = useMemo(() => {
     if (!assignmentState) {
-      return [];
+      return subcategoryOptions;
     }
-
     const query = assignmentState.search.trim();
     if (!query) {
       return subcategoryOptions;
@@ -232,6 +278,18 @@ export function CategoryGroupingManager({
       return cardMatch || subMatch;
     });
   }, [assignmentState, subcategoryOptions]);
+
+  const filteredCardOptions = useMemo(() => {
+    if (!assignmentState) {
+      return cardOptions;
+    }
+    const query = assignmentState.search.trim();
+    if (!query) {
+      return cardOptions;
+    }
+    const normalised = normaliseText(query);
+    return cardOptions.filter((option) => normaliseText(option.cardName).includes(normalised));
+  }, [assignmentState, cardOptions]);
 
   const handleAssignmentSearchChange = (value: string) => {
     setAssignmentState((prev) => (prev ? { ...prev, search: value } : prev));
@@ -252,40 +310,41 @@ export function CategoryGroupingManager({
     <Card>
       <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <CardTitle>Spending categories</CardTitle>
+          <CardTitle>Spending themes</CardTitle>
           <CardDescription>
-            Group your bespoke subcategories into broader spending themes to make card recommendations ho say.
+            Bundle card reward segments or whole cards into broader themes so recommendations stay meaningful.
           </CardDescription>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="outline" className="bg-muted/40">
-            {categoryGroups.length} group{categoryGroups.length === 1 ? '' : 's'}
+            {categoryGroups.length} theme{categoryGroups.length === 1 ? '' : 's'}
           </Badge>
-          <Badge variant={ungroupedSubcategories.length > 0 ? 'destructive' : 'secondary'}>
-            {ungroupedSubcategories.length} ungrouped
+          <Badge variant={ungroupedSubcategories.length > 0 ? 'secondary' : 'outline'}>
+            {ungroupedSubcategories.length} unlinked subcategories
           </Badge>
           <Button size="sm" className="gap-2" onClick={openCreateDialog}>
             <Plus className="h-4 w-4" />
-            Create category
+            Create theme
           </Button>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {subcategoryOptions.length === 0 ? (
+        {categoryGroups.length === 0 ? (
           <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
-            Enable card subcategories to start organising your spending themes, bro.
-          </div>
-        ) : categoryGroups.length === 0 ? (
-          <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
-            No categories yet. Start by clicking <span className="font-medium">Create category</span> to lump related subcategories together, steady pom pi pi.
+            No themes yet. Click <span className="font-medium">Create theme</span> to start grouping subcategories or link entire cards.
           </div>
         ) : (
           <div className="space-y-4">
             {categoryGroups.map((group) => {
-              const assigned = group.subcategories.map((ref) => buildKey(ref.cardId, ref.subcategoryId));
-              const assignedOptions = assigned
+              const assignedSubcategoryKeys = group.subcategories.map((ref) => buildKey(ref.cardId, ref.subcategoryId));
+              const assignedSubcategories = assignedSubcategoryKeys
                 .map((key) => subcategoryOptions.find((option) => option.key === key))
                 .filter((value): value is SubcategoryOption => Boolean(value));
+
+              const assignedCards = (group.cards ?? []).map((ref) => {
+                const detail = cardOptions.find((option) => option.cardId === ref.cardId);
+                return detail ?? null;
+              }).filter((value): value is typeof cardOptions[number] => Boolean(value));
 
               return (
                 <Card key={group.id} className="border-muted">
@@ -301,7 +360,10 @@ export function CategoryGroupingManager({
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge variant="secondary">
-                          {assignedOptions.length} tagged
+                          {assignedSubcategories.length} subcategor{assignedSubcategories.length === 1 ? 'y' : 'ies'}
+                        </Badge>
+                        <Badge variant="outline">
+                          {assignedCards.length} linked card{assignedCards.length === 1 ? '' : 's'}
                         </Badge>
                         <Button
                           size="sm"
@@ -319,7 +381,7 @@ export function CategoryGroupingManager({
                           onClick={() => openAssignmentDialog(group)}
                         >
                           <ListPlus className="h-4 w-4" />
-                          Manage subcategories
+                          Manage links
                         </Button>
                         <Button
                           size="sm"
@@ -333,28 +395,57 @@ export function CategoryGroupingManager({
                       </div>
                     </div>
                   </CardHeader>
-                  <CardContent>
-                    {assignedOptions.length > 0 ? (
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        {assignedOptions.map((option) => (
-                          <div
-                            key={option.key}
-                            className="rounded-md border bg-card p-3 text-sm"
-                          >
-                            <div className="font-medium text-foreground">
-                              {option.subcategoryName}
+                  <CardContent className="space-y-4">
+                    <div>
+                      <h4 className="text-sm font-semibold text-muted-foreground">Card subcategories</h4>
+                      {assignedSubcategories.length > 0 ? (
+                        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                          {assignedSubcategories.map((option) => (
+                            <div
+                              key={option.key}
+                              className="rounded-md border bg-card p-3 text-sm"
+                            >
+                              <div className="font-medium text-foreground">
+                                {option.subcategoryName}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {option.cardName} • {option.cardType === 'cashback' ? 'Cashback' : 'Miles'}
+                              </div>
                             </div>
-                            <div className="text-xs text-muted-foreground">
-                              {option.cardName} • {option.cardType === 'cashback' ? 'Cashback' : 'Miles'}
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="mt-2 text-sm text-muted-foreground">
+                          No subcategories linked yet. Use <span className="font-medium">Manage links</span> to add them.
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <h4 className="text-sm font-semibold text-muted-foreground">Whole card links</h4>
+                      {assignedCards.length > 0 ? (
+                        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                          {assignedCards.map((card) => (
+                            <div
+                              key={card.cardId}
+                              className="flex items-center gap-3 rounded-md border bg-card p-3 text-sm"
+                            >
+                              <CreditCardIcon className="h-4 w-4 text-muted-foreground" />
+                              <div>
+                                <div className="font-medium text-foreground">{card.cardName}</div>
+                                <div className="text-xs text-muted-foreground">
+                                  {card.cardType === 'cashback' ? 'Cashback' : 'Miles'} card
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">
-                        No linked subcategories yet. Click <span className="font-medium">Manage subcategories</span> to add some, confirm steady steady.
-                      </p>
-                    )}
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="mt-2 text-sm text-muted-foreground">
+                          No whole-card links. Add cards here when you want the entire card considered for this theme.
+                        </p>
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
               );
@@ -367,10 +458,10 @@ export function CategoryGroupingManager({
         <DialogContent className="sm:max-w-[480px]">
           <DialogHeader>
             <DialogTitle>
-              {groupFormState?.mode === 'edit' ? 'Edit category details' : 'Create spending category'}
+              {groupFormState?.mode === 'edit' ? 'Edit theme details' : 'Create spending theme'}
             </DialogTitle>
             <DialogDescription>
-              Give the category a clear name so you remember which spending ho say.
+              Choose a clear name so you remember which purchases sit under this theme.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -405,7 +496,7 @@ export function CategoryGroupingManager({
                 placeholder="Optional helper text"
               />
               <p className="text-xs text-muted-foreground">
-                Keep it short and shiok – helps when comparing cards later.
+                Keep it concise – it appears alongside recommendations.
               </p>
             </div>
           </div>
@@ -414,20 +505,20 @@ export function CategoryGroupingManager({
               Cancel
             </Button>
             <Button onClick={handleGroupFormSubmit} disabled={!groupFormState?.name.trim()}>
-              {groupFormState?.mode === 'edit' ? 'Save changes' : 'Create category'}
+              {groupFormState?.mode === 'edit' ? 'Save changes' : 'Create theme'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={assignmentState !== null} onOpenChange={(open) => !open && closeAssignmentDialog()}>
-        <DialogContent className="sm:max-w-[600px]">
+        <DialogContent className="sm:max-w-[620px]">
           <DialogHeader>
             <DialogTitle>
-              {assignmentState?.group.name ?? 'Manage subcategories'}
+              {assignmentState?.group.name ?? 'Manage links'}
             </DialogTitle>
             <DialogDescription>
-              Choose the subcategories that should roll up under this spending theme. Once added, the recommendations will jialat jialat optimise for you.
+              Link card subcategories or entire cards to this theme so the recommendations stay accurate.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -435,55 +526,108 @@ export function CategoryGroupingManager({
               <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
               <Input
                 className="pl-9"
-                placeholder="Search by card or subcategory"
+                placeholder="Search cards or subcategories"
                 value={assignmentState?.search ?? ''}
                 onChange={(event) => handleAssignmentSearchChange(event.target.value)}
               />
             </div>
-            <div className="max-h-72 space-y-2 overflow-y-auto rounded-md border p-2">
-              {filteredOptions.length === 0 ? (
-                <p className="py-6 text-center text-sm text-muted-foreground">
-                  No matching subcategories. Try a different search term.
-                </p>
-              ) : (
-                filteredOptions.map((option) => {
-                  const assignedGroup = assignedLookup.get(option.key);
-                  const isSelected = assignmentState?.selected.has(option.key);
-                  const isDisabled = Boolean(
-                    assignedGroup && assignedGroup.id !== assignmentState?.group.id
-                  );
 
-                  return (
-                    <label
-                      key={option.key}
-                      className={cn(
-                        'flex cursor-pointer items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm transition hover:border-primary',
-                        isSelected && 'border-primary bg-primary/10',
-                        isDisabled && 'cursor-not-allowed opacity-60'
-                      )}
-                    >
-                      <div className="flex flex-col">
-                        <span className="font-medium">{option.subcategoryName}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {option.cardName} • {option.cardType === 'cashback' ? 'Cashback' : 'Miles'}
-                        </span>
-                        {isDisabled && assignedGroup && (
-                          <span className="text-xs text-destructive">
-                            Already grouped under {assignedGroup.name}
-                          </span>
+            <div className="space-y-3">
+              <h4 className="text-sm font-semibold text-muted-foreground">Card subcategories</h4>
+              <div className="max-h-48 space-y-2 overflow-y-auto rounded-md border p-2">
+                {filteredSubcategoryOptions.length === 0 ? (
+                  <p className="py-6 text-center text-sm text-muted-foreground">
+                    No matching subcategories. Try a different search term.
+                  </p>
+                ) : (
+                  filteredSubcategoryOptions.map((option) => {
+                    const assignedGroup = assignedLookup.get(option.key);
+                    const isSelected = assignmentState?.selectedSubcategories.has(option.key);
+                    const isDisabled = Boolean(
+                      assignedGroup && assignedGroup.id !== assignmentState?.group.id
+                    );
+
+                    return (
+                      <label
+                        key={option.key}
+                        className={cn(
+                          'flex cursor-pointer items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm transition hover:border-primary',
+                          isSelected && 'border-primary bg-primary/10',
+                          isDisabled && 'cursor-not-allowed opacity-60'
                         )}
-                      </div>
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 rounded border-border text-primary focus:ring-2 focus:ring-primary"
-                        checked={Boolean(isSelected)}
-                        onChange={() => toggleAssignment(option.key)}
-                        disabled={isDisabled}
-                      />
-                    </label>
-                  );
-                })
-              )}
+                      >
+                        <div className="flex flex-col">
+                          <span className="font-medium">{option.subcategoryName}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {option.cardName} • {option.cardType === 'cashback' ? 'Cashback' : 'Miles'}
+                          </span>
+                          {isDisabled && assignedGroup && (
+                            <span className="text-xs text-destructive">
+                              Already linked to {assignedGroup.name}
+                            </span>
+                          )}
+                        </div>
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-border text-primary focus:ring-2 focus:ring-primary"
+                          checked={Boolean(isSelected)}
+                          onChange={() => toggleSubcategoryAssignment(option.key)}
+                          disabled={isDisabled}
+                        />
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="text-sm font-semibold text-muted-foreground">Whole cards</h4>
+              <div className="max-h-48 space-y-2 overflow-y-auto rounded-md border p-2">
+                {filteredCardOptions.length === 0 ? (
+                  <p className="py-6 text-center text-sm text-muted-foreground">
+                    No cards match this search.
+                  </p>
+                ) : (
+                  filteredCardOptions.map((card) => {
+                    const assignedGroup = assignedCardLookup.get(card.cardId);
+                    const isSelected = assignmentState?.selectedCards.has(card.cardId);
+                    const isDisabled = Boolean(
+                      assignedGroup && assignedGroup.id !== assignmentState?.group.id
+                    );
+                    return (
+                      <label
+                        key={card.cardId}
+                        className={cn(
+                          'flex cursor-pointer items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm transition hover:border-primary',
+                          isSelected && 'border-primary bg-primary/10',
+                          isDisabled && 'cursor-not-allowed opacity-60'
+                        )}
+                      >
+                        <div className="flex flex-col">
+                          <span className="font-medium">{card.cardName}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {card.cardType === 'cashback' ? 'Cashback' : 'Miles'} card
+                            {card.hasSubcategories ? ' • subcategories enabled' : ' • no subcategories configured'}
+                          </span>
+                          {isDisabled && assignedGroup && (
+                            <span className="text-xs text-destructive">
+                              Already linked to {assignedGroup.name}
+                            </span>
+                          )}
+                        </div>
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-border text-primary focus:ring-2 focus:ring-primary"
+                          checked={Boolean(isSelected)}
+                          onChange={() => toggleCardAssignment(card.cardId)}
+                          disabled={isDisabled}
+                        />
+                      </label>
+                    );
+                  })
+                )}
+              </div>
             </div>
           </div>
           <DialogFooter>
@@ -499,8 +643,8 @@ export function CategoryGroupingManager({
 
       <ConfirmDialog
         isOpen={groupPendingDeletion !== null}
-        title="Delete category"
-        message="Confirm delete? The group will be removed but your underlying subcategories stay intact."
+        title="Delete theme"
+        message="Delete this theme? Linked cards and subcategories will simply become unassigned."
         onConfirm={handleDeleteGroup}
         onCancel={() => setGroupPendingDeletion(null)}
         confirmText="Delete"

@@ -114,6 +114,10 @@ export interface SubcategoryReference {
   subcategoryId: string;
 }
 
+export interface CardReference {
+  cardId: string;
+}
+
 export interface SpendingCategoryGroup {
   id: string;
   name: string;
@@ -121,6 +125,7 @@ export interface SpendingCategoryGroup {
   colour?: string;
   priority: number;
   subcategories: SubcategoryReference[];
+  cards: CardReference[];
   createdAt: string;
   updatedAt: string;
 }
@@ -167,6 +172,7 @@ type MutableCalculation = RewardCalculation & Record<string, unknown>;
 type MutableCategoryBreakdown = CategoryBreakdown & Record<string, unknown>;
 type MutableSettings = AppSettings & Record<string, unknown>;
 type MutableSubcategoryReference = SubcategoryReference & Record<string, unknown>;
+type MutableCardReference = CardReference & Record<string, unknown>;
 type MutableCategoryGroup = SpendingCategoryGroup & Record<string, unknown>;
 
 class StorageService {
@@ -381,8 +387,11 @@ class StorageService {
     });
 
     const rawSubcategories = Array.isArray(group.subcategories) ? group.subcategories : [];
-    const seen = new Set<string>();
+    const rawCards = Array.isArray(group.cards) ? group.cards : [];
+    const seenSubcategories = new Set<string>();
     const subcategories: SubcategoryReference[] = [];
+    const seenCards = new Set<string>();
+    const cards: CardReference[] = [];
 
     rawSubcategories.forEach((entry) => {
       const ref = entry as MutableSubcategoryReference;
@@ -396,11 +405,24 @@ class StorageService {
         return;
       }
       const key = `${cardId}:${subcategoryId}`;
-      if (seen.has(key)) {
+      if (seenSubcategories.has(key)) {
         return;
       }
-      seen.add(key);
+      seenSubcategories.add(key);
       subcategories.push({ cardId, subcategoryId });
+    });
+
+    rawCards.forEach((entry) => {
+      const ref = entry as MutableCardReference;
+      const cardId = typeof ref.cardId === 'string' ? ref.cardId : '';
+      if (!cardId || !cardSubcategoryMap.has(cardId)) {
+        return;
+      }
+      if (seenCards.has(cardId)) {
+        return;
+      }
+      seenCards.add(cardId);
+      cards.push({ cardId });
     });
 
     return {
@@ -410,6 +432,7 @@ class StorageService {
       colour,
       priority,
       subcategories,
+      cards,
       createdAt,
       updatedAt,
     };
