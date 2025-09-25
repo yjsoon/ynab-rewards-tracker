@@ -37,6 +37,7 @@ export function useYnabPAT() {
     }
     // Force re-computation when refreshTrigger changes
     return storage.getPAT() || '';
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasHydrated, refreshTrigger]);
 
   const setPAT = useCallback((newPAT: string) => {
@@ -61,6 +62,7 @@ export function useCreditCards() {
     }
     // Force re-computation when refreshTrigger changes
     return storage.getCards();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasHydrated, refreshTrigger]);
 
   const saveCard = useCallback((card: CreditCard) => {
@@ -91,6 +93,7 @@ export function useSelectedBudget() {
     }
     // Force re-computation when refreshTrigger changes
     return storage.getSelectedBudget();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasHydrated, refreshTrigger]);
 
   const setSelectedBudget = useCallback((budgetId: string, budgetName: string) => {
@@ -111,6 +114,7 @@ export function useTrackedAccountIds() {
     }
     // Force re-computation when refreshTrigger changes
     return storage.getTrackedAccountIds();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasHydrated, refreshTrigger]);
 
   const setTrackedAccountIds = useCallback((accountIds: string[]) => {
@@ -136,6 +140,7 @@ export function useRewardRules(cardId?: string) {
     }
     // Force re-computation when refreshTrigger changes
     return cardId ? storage.getCardRules(cardId) : storage.getRules();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cardId, hasHydrated, refreshTrigger]);
 
   const saveRule = useCallback((rule: RewardRule) => {
@@ -161,6 +166,7 @@ export function useRewardCalculations(cardId?: string) {
     }
     // Force re-computation when refreshTrigger changes
     return cardId ? storage.getCardCalculations(cardId) : storage.getCalculations();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cardId, hasHydrated, refreshTrigger]);
 
   const saveCalculation = useCallback((calculation: RewardCalculation) => {
@@ -190,6 +196,7 @@ export function useCategoryGroups() {
       return EMPTY_CATEGORY_GROUP_LIST;
     }
     return storage.getCategoryGroups();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasHydrated, refreshTrigger]);
 
   const saveCategoryGroup = useCallback((group: SpendingCategoryGroup) => {
@@ -220,6 +227,7 @@ export function useSettings() {
     }
     // Force re-computation when refreshTrigger changes
     return storage.getSettings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasHydrated, refreshTrigger]);
 
   const updateSettings = useCallback((newSettings: Partial<AppSettings>) => {

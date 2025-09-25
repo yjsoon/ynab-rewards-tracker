@@ -103,8 +103,6 @@ export class RealTimeRecommendations {
     });
 
     // Process transactions for current period
-    const now = new Date();
-
     transactions.forEach((txn) => {
       const card = cards.find((c) => c.ynabAccountId === txn.account_id);
       if (!card) return;
@@ -209,9 +207,6 @@ export class RealTimeRecommendations {
     linkedCardIds.forEach(cardId => {
       const card = cards.find(c => c.id === cardId);
       if (!card) return;
-
-      // Skip only if explicitly set to inactive (default to active if undefined)
-      if (card.active === false) return;
 
       const option = this.evaluateCard(
         card,
