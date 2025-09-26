@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import type { CardSubcategory, CreditCard, SpendingCategoryGroup } from '@/lib/storage';
+import type { CardSubcategory, CreditCard, ThemeGroup } from '@/lib/storage';
 import {
   Card,
   CardContent,
@@ -32,10 +32,10 @@ import {
   CreditCard as CreditCardIcon,
 } from 'lucide-react';
 
-interface CategoryGroupingManagerProps {
+interface ThemeGroupingManagerProps {
   cards: CreditCard[];
-  categoryGroups: SpendingCategoryGroup[];
-  onSaveGroup: (group: SpendingCategoryGroup) => void;
+  themeGroups: ThemeGroup[];
+  onSaveGroup: (group: ThemeGroup) => void;
   onDeleteGroup: (groupId: string) => void;
 }
 
@@ -55,16 +55,16 @@ function normaliseText(value: string) {
   return value.toLocaleLowerCase();
 }
 
-export function CategoryGroupingManager({
+export function ThemeGroupingManager({
   cards,
-  categoryGroups,
+  themeGroups,
   onSaveGroup,
   onDeleteGroup,
-}: CategoryGroupingManagerProps) {
+}: ThemeGroupingManagerProps) {
   const [groupFormState, setGroupFormState] = useState<
     | {
         mode: 'create' | 'edit';
-        group: SpendingCategoryGroup | null;
+        group: ThemeGroup | null;
         name: string;
         description: string;
       }
@@ -72,14 +72,14 @@ export function CategoryGroupingManager({
   >(null);
   const [assignmentState, setAssignmentState] = useState<
     | {
-        group: SpendingCategoryGroup;
+        group: ThemeGroup;
         selectedSubcategories: Set<string>;
         selectedCards: Set<string>;
         search: string;
       }
     | null
   >(null);
-  const [groupPendingDeletion, setGroupPendingDeletion] = useState<SpendingCategoryGroup | null>(null);
+  const [groupPendingDeletion, setGroupPendingDeletion] = useState<ThemeGroup | null>(null);
 
   const subcategoryOptions = useMemo<SubcategoryOption[]>(() => {
     const entries: SubcategoryOption[] = [];
@@ -124,8 +124,8 @@ export function CategoryGroupingManager({
   [cards]);
 
   const subcategoryAssignments = useMemo(() => {
-    const map = new Map<string, SpendingCategoryGroup[]>();
-    categoryGroups.forEach((group) => {
+    const map = new Map<string, ThemeGroup[]>();
+    themeGroups.forEach((group) => {
       group.subcategories.forEach((ref) => {
         // Defensive check for runtime safety, though types should ensure these exist
         if (ref?.cardId && ref?.subcategoryId) {
@@ -140,11 +140,11 @@ export function CategoryGroupingManager({
       });
     });
     return map;
-  }, [categoryGroups]);
+  }, [themeGroups]);
 
   const assignedCardLookup = useMemo(() => {
-    const map = new Map<string, SpendingCategoryGroup>();
-    categoryGroups.forEach((group) => {
+    const map = new Map<string, ThemeGroup>();
+    themeGroups.forEach((group) => {
       (group.cards ?? []).forEach((ref) => {
         if (ref?.cardId) {
           map.set(ref.cardId, group);
@@ -152,13 +152,13 @@ export function CategoryGroupingManager({
       });
     });
     return map;
-  }, [categoryGroups]);
+  }, [themeGroups]);
 
   const openCreateDialog = () => {
     setGroupFormState({ mode: 'create', group: null, name: '', description: '' });
   };
 
-  const openEditDialog = (group: SpendingCategoryGroup) => {
+  const openEditDialog = (group: ThemeGroup) => {
     setGroupFormState({
       mode: 'edit',
       group,
@@ -186,7 +186,7 @@ export function CategoryGroupingManager({
         name,
         description: description || undefined,
         colour: undefined,
-        priority: categoryGroups.length,
+        priority: themeGroups.length,
         subcategories: [],
         cards: [],
         createdAt: nowIso,
@@ -205,7 +205,7 @@ export function CategoryGroupingManager({
     setGroupFormState(null);
   };
 
-  const openAssignmentDialog = (group: SpendingCategoryGroup) => {
+  const openAssignmentDialog = (group: ThemeGroup) => {
     const selectedSubcategories = new Set<string>();
     group.subcategories.forEach((ref) => {
       selectedSubcategories.add(buildKey(ref.cardId, ref.subcategoryId));
@@ -328,13 +328,13 @@ export function CategoryGroupingManager({
         </div>
       </div>
 
-      {categoryGroups.length === 0 ? (
+      {themeGroups.length === 0 ? (
         <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
           No themes yet. Click <span className="font-medium">Create theme</span> to start grouping subcategories or link entire cards.
         </div>
       ) : (
         <div className="space-y-4">
-          {categoryGroups.map((group) => {
+          {themeGroups.map((group) => {
             const assignedSubcategoryKeys = group.subcategories.map((ref) =>
               buildKey(ref.cardId, ref.subcategoryId)
             );

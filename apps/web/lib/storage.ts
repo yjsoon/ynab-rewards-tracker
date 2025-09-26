@@ -118,7 +118,7 @@ export interface CardReference {
   cardId: string;
 }
 
-export interface SpendingCategoryGroup {
+export interface ThemeGroup {
   id: string;
   name: string;
   description?: string;
@@ -150,7 +150,7 @@ export interface StorageData {
   rules: RewardRule[];
   tagMappings: TagMapping[];
   calculations: RewardCalculation[];
-  categoryGroups: SpendingCategoryGroup[];
+  themeGroups: ThemeGroup[];
   settings: AppSettings;
   cachedData?: {
     budgets?: unknown[];
@@ -173,7 +173,7 @@ type MutableCategoryBreakdown = CategoryBreakdown & Record<string, unknown>;
 type MutableSettings = AppSettings & Record<string, unknown>;
 type MutableSubcategoryReference = SubcategoryReference & Record<string, unknown>;
 type MutableCardReference = CardReference & Record<string, unknown>;
-type MutableCategoryGroup = SpendingCategoryGroup & Record<string, unknown>;
+type MutableThemeGroup = ThemeGroup & Record<string, unknown>;
 
 class StorageService {
   private createSubcategoryId(): string {
@@ -350,14 +350,14 @@ class StorageService {
     return mutableCard as CreditCard;
   }
 
-  private normaliseCategoryGroup(
-    group: MutableCategoryGroup,
+  private normaliseThemeGroup(
+    group: MutableThemeGroup,
     storage: StorageData,
     fallbackPriority = 0
-  ): SpendingCategoryGroup {
+  ): ThemeGroup {
     const nowIso = new Date().toISOString();
     const id = typeof group.id === 'string' && group.id.length > 0 ? group.id : this.createGroupId();
-    const name = typeof group.name === 'string' && group.name.trim().length > 0 ? group.name.trim() : 'Untitled category';
+    const name = typeof group.name === 'string' && group.name.trim().length > 0 ? group.name.trim() : 'Untitled theme';
     const description = typeof group.description === 'string' && group.description.trim().length > 0
       ? group.description.trim()
       : undefined;
@@ -438,14 +438,14 @@ class StorageService {
     };
   }
 
-  private pruneCategoryGroups(storage: StorageData): void {
-    if (!Array.isArray(storage.categoryGroups)) {
-      storage.categoryGroups = [];
+  private pruneThemeGroups(storage: StorageData): void {
+    if (!Array.isArray(storage.themeGroups)) {
+      storage.themeGroups = [];
       return;
     }
 
-    const normalised = storage.categoryGroups.map((group, index) =>
-      this.normaliseCategoryGroup({ ...group } as MutableCategoryGroup, storage, index)
+    const normalised = storage.themeGroups.map((group, index) =>
+      this.normaliseThemeGroup({ ...group } as MutableThemeGroup, storage, index)
     );
 
     normalised.sort((a, b) => a.priority - b.priority);
@@ -453,7 +453,7 @@ class StorageService {
       group.priority = index;
     });
 
-    storage.categoryGroups = normalised;
+    storage.themeGroups = normalised;
   }
 
   private ensureVersion(): void {
@@ -635,10 +635,14 @@ class StorageService {
           );
         }
 
-        if (!Array.isArray(data.categoryGroups)) {
-          data.categoryGroups = [];
+        if (!Array.isArray(data.themeGroups)) {
+          const legacyGroups = (data as { categoryGroups?: unknown }).categoryGroups;
+          data.themeGroups = Array.isArray(legacyGroups) ? (legacyGroups as ThemeGroup[]) : [];
+          if (legacyGroups) {
+            Reflect.deleteProperty(data as Record<string, unknown>, 'categoryGroups');
+          }
         }
-        this.pruneCategoryGroups(data);
+        this.pruneThemeGroups(data);
 
         return data;
       }
@@ -659,7 +663,7 @@ class StorageService {
       rules: [],
       tagMappings: [],
       calculations: [],
-      categoryGroups: [],
+      themeGroups: [],
       settings: {
         theme: 'light',
         currency: 'USD',
@@ -759,7 +763,7 @@ class StorageService {
     } else {
       storage.cards.push(normalisedCard);
     }
-    this.pruneCategoryGroups(storage);
+    this.pruneThemeGroups(storage);
     this.setStorage(storage);
   }
 
@@ -770,7 +774,7 @@ class StorageService {
     storage.rules = storage.rules.filter(r => r.cardId !== cardId);
     // Also delete associated tag mappings
     storage.tagMappings = storage.tagMappings.filter(m => m.cardId !== cardId);
-    this.pruneCategoryGroups(storage);
+    this.pruneThemeGroups(storage);
     this.setStorage(storage);
   }
 
@@ -800,47 +804,47 @@ class StorageService {
     this.setStorage(storage);
   }
 
-  // Spending category groups management
-  getCategoryGroups(): SpendingCategoryGroup[] {
-    return this.getStorage().categoryGroups || [];
+  // Theme groups management
+  getThemeGroups(): ThemeGroup[] {
+    return this.getStorage().themeGroups || [];
   }
 
-  saveCategoryGroup(group: SpendingCategoryGroup): void {
+  saveThemeGroup(group: ThemeGroup): void {
     const storage = this.getStorage();
     const nowIso = new Date().toISOString();
-    const candidate = { ...group, updatedAt: nowIso } as MutableCategoryGroup;
+    const candidate = { ...group, updatedAt: nowIso } as MutableThemeGroup;
     if (!candidate.createdAt) {
       candidate.createdAt = nowIso;
     }
 
     const existingIndex = typeof candidate.id === 'string'
-      ? storage.categoryGroups.findIndex((g) => g.id === candidate.id)
+      ? storage.themeGroups.findIndex((g) => g.id === candidate.id)
       : -1;
 
     const fallbackPriority = existingIndex >= 0
-      ? storage.categoryGroups[existingIndex].priority
-      : storage.categoryGroups.length;
+      ? storage.themeGroups[existingIndex].priority
+      : storage.themeGroups.length;
 
-    const normalised = this.normaliseCategoryGroup(candidate, storage, fallbackPriority);
+    const normalised = this.normaliseThemeGroup(candidate, storage, fallbackPriority);
 
     if (existingIndex >= 0) {
-      const existing = storage.categoryGroups[existingIndex];
+      const existing = storage.themeGroups[existingIndex];
       normalised.priority = existing.priority;
       normalised.createdAt = existing.createdAt;
-      storage.categoryGroups[existingIndex] = normalised;
+      storage.themeGroups[existingIndex] = normalised;
     } else {
       normalised.priority = fallbackPriority;
-      storage.categoryGroups.push(normalised);
+      storage.themeGroups.push(normalised);
     }
 
-    this.pruneCategoryGroups(storage);
+    this.pruneThemeGroups(storage);
     this.setStorage(storage);
   }
 
-  deleteCategoryGroup(groupId: string): void {
+  deleteThemeGroup(groupId: string): void {
     const storage = this.getStorage();
-    storage.categoryGroups = storage.categoryGroups.filter((group) => group.id !== groupId);
-    this.pruneCategoryGroups(storage);
+    storage.themeGroups = storage.themeGroups.filter((group) => group.id !== groupId);
+    this.pruneThemeGroups(storage);
     this.setStorage(storage);
   }
 
@@ -961,7 +965,7 @@ class StorageService {
       );
     }
 
-    this.pruneCategoryGroups(storage);
+    this.pruneThemeGroups(storage);
     this.setStorage(storage);
   }
 
@@ -988,7 +992,7 @@ class StorageService {
         storage.ynab.pat = pat;
       }
       
-      this.pruneCategoryGroups(storage);
+      this.pruneThemeGroups(storage);
       this.setStorage(storage);
     } catch (error) {
       throw new Error('Invalid settings file');

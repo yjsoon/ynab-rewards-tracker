@@ -6,7 +6,7 @@ import type {
   RewardCalculation,
   CreditCard,
   AppSettings,
-  SpendingCategoryGroup,
+  ThemeGroup,
   SubcategoryBreakdown,
   CardSubcategory,
   SubcategoryReference,
@@ -138,7 +138,7 @@ export class RecommendationEngine {
   static generateCategoryRecommendations(
     cards: CreditCard[],
     calculations: RewardCalculation[],
-    groups: SpendingCategoryGroup[],
+    groups: ThemeGroup[],
     settings?: AppSettings
   ): CategoryRecommendation[] {
     if (!groups || groups.length === 0) {

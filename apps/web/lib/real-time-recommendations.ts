@@ -6,7 +6,7 @@
 import type {
   CreditCard,
   CardSubcategory,
-  SpendingCategoryGroup,
+  ThemeGroup,
   AppSettings,
 } from '@/lib/storage';
 import type { Transaction } from '@/types/transaction';
@@ -66,7 +66,7 @@ export class RealTimeRecommendations {
    * Generate recommendations for all themes
    */
   generateRecommendations(
-    themes: SpendingCategoryGroup[],
+    themes: ThemeGroup[],
     cards: CreditCard[],
     transactions: Transaction[]
   ): ThemeRecommendation[] {
@@ -185,7 +185,7 @@ export class RealTimeRecommendations {
    * Generate recommendation for a specific theme
    */
   private recommendForTheme(
-    theme: SpendingCategoryGroup,
+    theme: ThemeGroup,
     cards: CreditCard[],
     spendingSummaries: Map<string, CardSpendingSummary>
   ): ThemeRecommendation {
@@ -259,7 +259,7 @@ export class RealTimeRecommendations {
    */
   private evaluateCard(
     card: CreditCard,
-    theme: SpendingCategoryGroup,
+    theme: ThemeGroup,
     spending?: CardSpendingSummary
   ): CardOption | null {
     const currentSpend = spending?.totalSpend || 0;

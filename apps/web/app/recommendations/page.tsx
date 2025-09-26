@@ -10,13 +10,13 @@ import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { CardSpendingSummary } from '@/components/CardSpendingSummary';
 import { RealTimeRecommendations, type CardOption } from '@/lib/real-time-recommendations';
-import { useCategoryGroups, useCreditCards, useSettings, useYnabPAT, useSelectedBudget } from '@/hooks/useLocalStorage';
+import { useThemeGroups, useCreditCards, useSettings, useYnabPAT, useSelectedBudget } from '@/hooks/useLocalStorage';
 import type { Transaction } from '@/types/transaction';
 
 
 export default function RecommendationsPage() {
   const { cards } = useCreditCards();
-  const { categoryGroups } = useCategoryGroups();
+  const { themeGroups } = useThemeGroups();
   const { settings } = useSettings();
   const { pat } = useYnabPAT();
   const { selectedBudget } = useSelectedBudget();
@@ -29,8 +29,8 @@ export default function RecommendationsPage() {
 
   const recommendations = useMemo(() => {
     const engine = new RealTimeRecommendations(settings);
-    return engine.generateRecommendations(categoryGroups, cards, transactions);
-  }, [categoryGroups, cards, transactions, settings]);
+    return engine.generateRecommendations(themeGroups, cards, transactions);
+  }, [themeGroups, cards, transactions, settings]);
 
   const formatPercent = useCallback((value?: number | null) => {
     if (value == null || Number.isNaN(value)) {
@@ -168,7 +168,7 @@ export default function RecommendationsPage() {
     );
   };
 
-  if (categoryGroups.length === 0) {
+  if (themeGroups.length === 0) {
     return (
       <div className="container mx-auto max-w-6xl px-4 py-8">
         <Card>
