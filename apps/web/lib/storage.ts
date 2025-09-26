@@ -357,7 +357,7 @@ class StorageService {
   ): ThemeGroup {
     const nowIso = new Date().toISOString();
     const id = typeof group.id === 'string' && group.id.length > 0 ? group.id : this.createGroupId();
-    const name = typeof group.name === 'string' && group.name.trim().length > 0 ? group.name.trim() : 'Untitled theme';
+    const name = typeof group.name === 'string' && group.name.trim().length > 0 ? group.name.trim() : 'Untitled Theme';
     const description = typeof group.description === 'string' && group.description.trim().length > 0
       ? group.description.trim()
       : undefined;
@@ -639,7 +639,8 @@ class StorageService {
           const legacyGroups = (data as { categoryGroups?: unknown }).categoryGroups;
           data.themeGroups = Array.isArray(legacyGroups) ? (legacyGroups as ThemeGroup[]) : [];
           if (legacyGroups) {
-            Reflect.deleteProperty(data as Record<string, unknown>, 'categoryGroups');
+            // Safe deletion using type assertion through unknown
+            Reflect.deleteProperty(data as unknown as Record<string, unknown>, 'categoryGroups');
           }
         }
         this.pruneThemeGroups(data);
