@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback, Suspense } from 'react';
-import { useCategoryGroups, useCreditCards, useSettings } from '@/hooks/useLocalStorage';
+import { useThemeGroups, useCreditCards, useSettings } from '@/hooks/useLocalStorage';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { storage, type CardSubcategory, type CreditCard } from '@/lib/storage';
 import { CardSettingsEditor, type CardEditState as SingleCardEditState } from '@/components/CardSettingsEditor';
-import { CategoryGroupingManager } from '@/components/CategoryGroupingManager';
+import { ThemeGroupingManager } from '@/components/ThemeGroupingManager';
 import { prepareSubcategoriesForSave } from '@/lib/subcategory-utils';
 import { useRouter, useSearchParams } from 'next/navigation';
 
@@ -28,7 +28,7 @@ interface CardEditState {
 
 function RulesPageContent() {
   const { cards, updateCard } = useCreditCards();
-  const { categoryGroups, saveCategoryGroup, deleteCategoryGroup } = useCategoryGroups();
+  const { themeGroups, saveThemeGroup, deleteThemeGroup } = useThemeGroups();
   const { settings } = useSettings();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -348,7 +348,7 @@ function RulesPageContent() {
           </TabsTrigger>
           <TabsTrigger value="themes" className="gap-2">
             <Layers className="h-4 w-4" />
-            Themes ({categoryGroups.length})
+            Themes ({themeGroups.length})
           </TabsTrigger>
         </TabsList>
 
@@ -455,11 +455,11 @@ function RulesPageContent() {
         </TabsContent>
 
         <TabsContent value="themes" className="space-y-4">
-          <CategoryGroupingManager
+          <ThemeGroupingManager
             cards={cards}
-            categoryGroups={categoryGroups}
-            onSaveGroup={saveCategoryGroup}
-            onDeleteGroup={deleteCategoryGroup}
+            themeGroups={themeGroups}
+            onSaveGroup={saveThemeGroup}
+            onDeleteGroup={deleteThemeGroup}
           />
         </TabsContent>
       </Tabs>

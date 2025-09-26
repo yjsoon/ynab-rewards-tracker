@@ -4,7 +4,7 @@ import type {
   RewardRule,
   RewardCalculation,
   AppSettings,
-  SpendingCategoryGroup,
+  ThemeGroup,
 } from '@/lib/storage';
 import { storage } from '@/lib/storage';
 import { useStorageContext } from '@/contexts/StorageContext';
@@ -14,7 +14,7 @@ const EMPTY_CARD_LIST: CreditCard[] = [];
 const EMPTY_RULE_LIST: RewardRule[] = [];
 const EMPTY_CALCULATION_LIST: RewardCalculation[] = [];
 const EMPTY_SELECTED_BUDGET: { id?: string; name?: string } = {};
-const EMPTY_CATEGORY_GROUP_LIST: SpendingCategoryGroup[] = [];
+const EMPTY_THEME_GROUP_LIST: ThemeGroup[] = [];
 const DEFAULT_SETTINGS: AppSettings = { theme: 'light', currency: 'USD' };
 
 function useHasHydrated() {
@@ -187,32 +187,32 @@ export function useRewardCalculations(cardId?: string) {
   return { calculations, saveCalculation, deleteCalculation, clearCalculations, isLoading: !hasHydrated };
 }
 
-export function useCategoryGroups() {
+export function useThemeGroups() {
   const { refreshTrigger, triggerRefresh } = useStorageContext();
   const hasHydrated = useHasHydrated();
 
-  const categoryGroups = useMemo(() => {
+  const themeGroups = useMemo(() => {
     if (!hasHydrated || typeof window === 'undefined') {
-      return EMPTY_CATEGORY_GROUP_LIST;
+      return EMPTY_THEME_GROUP_LIST;
     }
-    return storage.getCategoryGroups();
+    return storage.getThemeGroups();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasHydrated, refreshTrigger]);
 
-  const saveCategoryGroup = useCallback((group: SpendingCategoryGroup) => {
-    storage.saveCategoryGroup(group);
+  const saveThemeGroup = useCallback((group: ThemeGroup) => {
+    storage.saveThemeGroup(group);
     triggerRefresh();
   }, [triggerRefresh]);
 
-  const deleteCategoryGroup = useCallback((groupId: string) => {
-    storage.deleteCategoryGroup(groupId);
+  const deleteThemeGroup = useCallback((groupId: string) => {
+    storage.deleteThemeGroup(groupId);
     triggerRefresh();
   }, [triggerRefresh]);
 
   return {
-    categoryGroups,
-    saveCategoryGroup,
-    deleteCategoryGroup,
+    themeGroups,
+    saveThemeGroup,
+    deleteThemeGroup,
     isLoading: !hasHydrated,
   };
 }
