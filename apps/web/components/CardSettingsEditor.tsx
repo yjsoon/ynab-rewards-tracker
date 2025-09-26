@@ -345,7 +345,7 @@ export function CardSettingsEditor({
 
   return (
     <div
-      className={`rounded-2xl border bg-card/40 p-4 shadow-sm transition-all hover:shadow-md ${
+      className={`rounded-2xl border bg-card p-4 shadow-sm transition-all hover:shadow-md ${
         isChanged
           ? 'border-amber-300 ring-1 ring-amber-300 dark:border-amber-700 dark:ring-amber-700'
           : 'border-border/60'

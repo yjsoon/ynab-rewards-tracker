@@ -41,26 +41,26 @@ function RulesPageContent() {
   const [batchRate, setBatchRate] = useState('');
   const [batchError, setBatchError] = useState('');
 
-  const initialTab = useMemo<'cashback' | 'miles' | 'categories'>(() => {
+  const initialTab = useMemo<'cashback' | 'miles' | 'themes'>(() => {
     const tabParam = searchParams?.get('tab');
-    if (tabParam === 'cashback' || tabParam === 'miles' || tabParam === 'categories') {
+    if (tabParam === 'cashback' || tabParam === 'miles' || tabParam === 'themes') {
       return tabParam;
     }
     return 'cashback';
   }, [searchParams]);
 
-  const [activeTab, setActiveTab] = useState<'cashback' | 'miles' | 'categories'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'cashback' | 'miles' | 'themes'>(initialTab);
 
   useEffect(() => {
     setActiveTab((prev) => (prev === initialTab ? prev : initialTab));
   }, [initialTab]);
 
   const handleTabChange = useCallback((value: string) => {
-    if (value !== 'cashback' && value !== 'miles' && value !== 'categories') {
+    if (value !== 'cashback' && value !== 'miles' && value !== 'themes') {
       return;
     }
 
-    const nextTab = value as 'cashback' | 'miles' | 'categories';
+    const nextTab = value as 'cashback' | 'miles' | 'themes';
     setActiveTab(nextTab);
 
     const nextParams = new URLSearchParams(searchParams?.toString() ?? '');
@@ -273,7 +273,7 @@ function RulesPageContent() {
 
   const selectedCount = selectedCards.size;
   const changedCount = changedCards.size;
-  const showStickyBar = (selectedCount > 0 || changedCount > 0) && activeTab !== 'categories';
+  const showStickyBar = (selectedCount > 0 || changedCount > 0) && activeTab !== 'themes';
 
   if (cards.length === 0) {
     return (
@@ -346,7 +346,7 @@ function RulesPageContent() {
             <CreditCardIcon className="h-4 w-4" />
             Miles ({milesCards.length})
           </TabsTrigger>
-          <TabsTrigger value="categories" className="gap-2">
+          <TabsTrigger value="themes" className="gap-2">
             <Layers className="h-4 w-4" />
             Themes ({categoryGroups.length})
           </TabsTrigger>
@@ -454,7 +454,7 @@ function RulesPageContent() {
           )}
         </TabsContent>
 
-        <TabsContent value="categories" className="space-y-4">
+        <TabsContent value="themes" className="space-y-4">
           <CategoryGroupingManager
             cards={cards}
             categoryGroups={categoryGroups}

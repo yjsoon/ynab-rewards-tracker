@@ -123,11 +123,19 @@ export function CategoryGroupingManager({
     })),
   [cards]);
 
-  const assignedLookup = useMemo(() => {
-    const map = new Map<string, SpendingCategoryGroup>();
+  const subcategoryAssignments = useMemo(() => {
+    const map = new Map<string, SpendingCategoryGroup[]>();
     categoryGroups.forEach((group) => {
       group.subcategories.forEach((ref) => {
-        map.set(buildKey(ref.cardId, ref.subcategoryId), group);
+        if (ref?.cardId && ref?.subcategoryId) {
+          const key = buildKey(ref.cardId, ref.subcategoryId);
+          const existing = map.get(key);
+          if (existing) {
+            existing.push(group);
+          } else {
+            map.set(key, [group]);
+          }
+        }
       });
     });
     return map;
@@ -144,10 +152,6 @@ export function CategoryGroupingManager({
     });
     return map;
   }, [categoryGroups]);
-
-  const ungroupedSubcategories = useMemo(() => {
-    return subcategoryOptions.filter((option) => !assignedLookup.has(option.key));
-  }, [assignedLookup, subcategoryOptions]);
 
   const openCreateDialog = () => {
     setGroupFormState({ mode: 'create', group: null, name: '', description: '' });
@@ -307,152 +311,141 @@ export function CategoryGroupingManager({
   const closeGroupForm = () => setGroupFormState(null);
 
   return (
-    <Card>
-      <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <CardTitle>Spending themes</CardTitle>
-          <CardDescription>
+          <h2 className="text-xl font-semibold">Spending themes</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
             Bundle card reward segments or whole cards into broader themes so recommendations stay meaningful.
-          </CardDescription>
+          </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline" className="bg-muted/40">
-            {categoryGroups.length} theme{categoryGroups.length === 1 ? '' : 's'}
-          </Badge>
-          <Badge variant={ungroupedSubcategories.length > 0 ? 'secondary' : 'outline'}>
-            {ungroupedSubcategories.length} unlinked subcategories
-          </Badge>
+        <div className="flex w-full justify-end sm:w-auto">
           <Button size="sm" className="gap-2" onClick={openCreateDialog}>
             <Plus className="h-4 w-4" />
             Create theme
           </Button>
         </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {categoryGroups.length === 0 ? (
-          <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
-            No themes yet. Click <span className="font-medium">Create theme</span> to start grouping subcategories or link entire cards.
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {categoryGroups.map((group) => {
-              const assignedSubcategoryKeys = group.subcategories.map((ref) => buildKey(ref.cardId, ref.subcategoryId));
-              const assignedSubcategories = assignedSubcategoryKeys
-                .map((key) => subcategoryOptions.find((option) => option.key === key))
-                .filter((value): value is SubcategoryOption => Boolean(value));
+      </div>
 
-              const assignedCards = (group.cards ?? []).map((ref) => {
+      {categoryGroups.length === 0 ? (
+        <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
+          No themes yet. Click <span className="font-medium">Create theme</span> to start grouping subcategories or link entire cards.
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {categoryGroups.map((group) => {
+            const assignedSubcategoryKeys = group.subcategories.map((ref) =>
+              buildKey(ref.cardId, ref.subcategoryId)
+            );
+            const assignedSubcategories = assignedSubcategoryKeys
+              .map((key) => subcategoryOptions.find((option) => option.key === key))
+              .filter((value): value is SubcategoryOption => Boolean(value));
+
+            const assignedCards = (group.cards ?? [])
+              .map((ref) => {
                 const detail = cardOptions.find((option) => option.cardId === ref.cardId);
                 return detail ?? null;
-              }).filter((value): value is typeof cardOptions[number] => Boolean(value));
+              })
+              .filter((value): value is typeof cardOptions[number] => Boolean(value));
 
-              return (
-                <Card key={group.id} className="border-muted">
-                  <CardHeader className="space-y-1">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <CardTitle className="text-lg">
-                          {group.name}
-                        </CardTitle>
-                        {group.description && (
-                          <CardDescription>{group.description}</CardDescription>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant="secondary">
-                          {assignedSubcategories.length} subcategor{assignedSubcategories.length === 1 ? 'y' : 'ies'}
-                        </Badge>
-                        <Badge variant="outline">
-                          {assignedCards.length} linked card{assignedCards.length === 1 ? '' : 's'}
-                        </Badge>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="gap-2"
-                          onClick={() => openEditDialog(group)}
-                        >
-                          <Pencil className="h-4 w-4" />
-                          Edit details
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="gap-2"
-                          onClick={() => openAssignmentDialog(group)}
-                        >
-                          <ListPlus className="h-4 w-4" />
-                          Manage links
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => setGroupPendingDeletion(group)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          Remove
-                        </Button>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
+            return (
+              <Card key={group.id} className="border-muted shadow-sm transition-shadow hover:shadow-md">
+                <CardHeader className="space-y-1">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <h4 className="text-sm font-semibold text-muted-foreground">Card subcategories</h4>
-                      {assignedSubcategories.length > 0 ? (
-                        <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                          {assignedSubcategories.map((option) => (
-                            <div
-                              key={option.key}
-                              className="rounded-md border bg-card p-3 text-sm"
-                            >
-                              <div className="font-medium text-foreground">
-                                {option.subcategoryName}
-                              </div>
+                      <CardTitle className="text-lg">{group.name}</CardTitle>
+                      {group.description && <CardDescription>{group.description}</CardDescription>}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="secondary">
+                        {assignedSubcategories.length} subcategor
+                        {assignedSubcategories.length === 1 ? 'y' : 'ies'}
+                      </Badge>
+                      <Badge variant="outline">
+                        {assignedCards.length} linked card{assignedCards.length === 1 ? '' : 's'}
+                      </Badge>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-2"
+                        onClick={() => openEditDialog(group)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                        Edit details
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-2"
+                        onClick={() => openAssignmentDialog(group)}
+                      >
+                        <ListPlus className="h-4 w-4" />
+                        Manage links
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => setGroupPendingDeletion(group)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Remove
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <h4 className="text-sm font-semibold text-muted-foreground">Card subcategories</h4>
+                    {assignedSubcategories.length > 0 ? (
+                      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                        {assignedSubcategories.map((option) => (
+                          <div key={option.key} className="rounded-md border bg-card p-3 text-sm">
+                            <div className="font-medium text-foreground">{option.subcategoryName}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {option.cardName} • {option.cardType === 'cashback' ? 'Cashback' : 'Miles'}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        No subcategories linked yet. Use <span className="font-medium">Manage links</span> to add them.
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <h4 className="text-sm font-semibold text-muted-foreground">Whole card links</h4>
+                    {assignedCards.length > 0 ? (
+                      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                        {assignedCards.map((card) => (
+                          <div
+                            key={card.cardId}
+                            className="flex items-center gap-3 rounded-md border bg-card p-3 text-sm"
+                          >
+                            <CreditCardIcon className="h-4 w-4 text-muted-foreground" />
+                            <div>
+                              <div className="font-medium text-foreground">{card.cardName}</div>
                               <div className="text-xs text-muted-foreground">
-                                {option.cardName} • {option.cardType === 'cashback' ? 'Cashback' : 'Miles'}
+                                {card.cardType === 'cashback' ? 'Cashback' : 'Miles'} card
                               </div>
                             </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="mt-2 text-sm text-muted-foreground">
-                          No subcategories linked yet. Use <span className="font-medium">Manage links</span> to add them.
-                        </p>
-                      )}
-                    </div>
-
-                    <div>
-                      <h4 className="text-sm font-semibold text-muted-foreground">Whole card links</h4>
-                      {assignedCards.length > 0 ? (
-                        <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                          {assignedCards.map((card) => (
-                            <div
-                              key={card.cardId}
-                              className="flex items-center gap-3 rounded-md border bg-card p-3 text-sm"
-                            >
-                              <CreditCardIcon className="h-4 w-4 text-muted-foreground" />
-                              <div>
-                                <div className="font-medium text-foreground">{card.cardName}</div>
-                                <div className="text-xs text-muted-foreground">
-                                  {card.cardType === 'cashback' ? 'Cashback' : 'Miles'} card
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="mt-2 text-sm text-muted-foreground">
-                          No whole-card links. Add cards here when you want the entire card considered for this theme.
-                        </p>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        )}
-      </CardContent>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        No whole-card links. Add cards here when you want the entire card considered for this theme.
+                      </p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
 
       <Dialog open={groupFormState !== null} onOpenChange={(open) => !open && closeGroupForm()}>
         <DialogContent className="sm:max-w-[480px]">
@@ -541,11 +534,15 @@ export function CategoryGroupingManager({
                   </p>
                 ) : (
                   filteredSubcategoryOptions.map((option) => {
-                    const assignedGroup = assignedLookup.get(option.key);
+                    const assignments = subcategoryAssignments.get(option.key) ?? [];
                     const isSelected = assignmentState?.selectedSubcategories.has(option.key);
-                    const isDisabled = Boolean(
-                      assignedGroup && assignedGroup.id !== assignmentState?.group.id
+                    const otherAssignments = assignments.filter(
+                      (group) => group.id !== assignmentState?.group.id
                     );
+                    const alsoInText =
+                      otherAssignments.length > 0
+                        ? `Also in: ${otherAssignments.map((group) => group.name).join(', ')}`
+                        : undefined;
 
                     return (
                       <label
@@ -553,7 +550,7 @@ export function CategoryGroupingManager({
                         className={cn(
                           'flex cursor-pointer items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm transition hover:border-primary',
                           isSelected && 'border-primary bg-primary/10',
-                          isDisabled && 'cursor-not-allowed opacity-60'
+                          alsoInText && !isSelected && 'border-primary/40'
                         )}
                       >
                         <div className="flex flex-col">
@@ -561,10 +558,8 @@ export function CategoryGroupingManager({
                           <span className="text-xs text-muted-foreground">
                             {option.cardName} • {option.cardType === 'cashback' ? 'Cashback' : 'Miles'}
                           </span>
-                          {isDisabled && assignedGroup && (
-                            <span className="text-xs text-destructive">
-                              Already linked to {assignedGroup.name}
-                            </span>
+                          {alsoInText && (
+                            <span className="text-xs text-muted-foreground">{alsoInText}</span>
                           )}
                         </div>
                         <input
@@ -572,7 +567,6 @@ export function CategoryGroupingManager({
                           className="h-4 w-4 rounded border-border text-primary focus:ring-2 focus:ring-primary"
                           checked={Boolean(isSelected)}
                           onChange={() => toggleSubcategoryAssignment(option.key)}
-                          disabled={isDisabled}
                         />
                       </label>
                     );
@@ -649,6 +643,6 @@ export function CategoryGroupingManager({
         onCancel={() => setGroupPendingDeletion(null)}
         confirmText="Delete"
       />
-    </Card>
+    </div>
   );
 }
