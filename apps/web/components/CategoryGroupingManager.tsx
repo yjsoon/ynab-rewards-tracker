@@ -127,6 +127,7 @@ export function CategoryGroupingManager({
     const map = new Map<string, SpendingCategoryGroup[]>();
     categoryGroups.forEach((group) => {
       group.subcategories.forEach((ref) => {
+        // Defensive check for runtime safety, though types should ensure these exist
         if (ref?.cardId && ref?.subcategoryId) {
           const key = buildKey(ref.cardId, ref.subcategoryId);
           const existing = map.get(key);
@@ -358,8 +359,7 @@ export function CategoryGroupingManager({
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge variant="secondary">
-                        {assignedSubcategories.length} subcategor
-                        {assignedSubcategories.length === 1 ? 'y' : 'ies'}
+                        {`${assignedSubcategories.length} subcategor${assignedSubcategories.length === 1 ? 'y' : 'ies'}`}
                       </Badge>
                       <Badge variant="outline">
                         {assignedCards.length} linked card{assignedCards.length === 1 ? '' : 's'}
