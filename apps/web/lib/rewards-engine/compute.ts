@@ -8,16 +8,13 @@ import { YnabClient } from '@/lib/ynab-client';
 import { RewardsCalculator } from './calculator';
 import { SimpleRewardsCalculator } from './simple-calculator';
 import { TransactionMatcher } from './matcher';
+import { formatLocalDate } from './date-utils';
 import type {
   AppSettings,
   CreditCard,
   RewardCalculation,
   RewardRule,
 } from '@/lib/storage';
-
-function formatIsoDate(d: Date): string {
-  return d.toISOString().split('T')[0];
-}
 
 function periodOverlapsWindow(periodStart: Date, periodEnd: Date, start?: string, end?: string): boolean {
   const windowStart = start ? new Date(start) : undefined;
@@ -45,7 +42,7 @@ export async function computeCurrentPeriod(
   // Optimisation: single fetch for all transactions since the earliest period start
   const periods = trackedCards.map(c => RewardsCalculator.calculatePeriod(c));
   const earliest = periods.reduce((min, p) => p.startDate < min ? p.startDate : min, periods[0].startDate);
-  const since = formatIsoDate(earliest);
+  const since = formatLocalDate(earliest);
   const allTxns = await client.getTransactions(budgetId, { since_date: since, signal });
 
   for (let i = 0; i < trackedCards.length; i++) {
@@ -57,8 +54,8 @@ export async function computeCurrentPeriod(
 
     if (card.subcategoriesEnabled) {
       const simplePeriod = {
-        start: period.startDate.toISOString().split('T')[0],
-        end: period.endDate.toISOString().split('T')[0],
+        start: formatLocalDate(period.startDate),
+        end: formatLocalDate(period.endDate),
         label: period.name,
       };
       const simpleCalc = SimpleRewardsCalculator.calculateCardRewards(card, forCard, simplePeriod, settings);

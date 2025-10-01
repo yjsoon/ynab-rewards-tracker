@@ -4,6 +4,7 @@
 
 import type { Transaction, TransactionWithRewards } from '@/types/transaction';
 import { absFromMilli } from '@/lib/utils';
+import { parseYnabDate } from './date-utils';
 
 export class TransactionMatcher {
   /**
@@ -28,7 +29,7 @@ export class TransactionMatcher {
     endDate: Date
   ): TransactionWithRewards[] {
     return transactions.filter(txn => {
-      const txnDate = new Date(txn.date);
+      const txnDate = parseYnabDate(txn.date);
       return txnDate >= startDate && txnDate <= endDate;
     });
   }
