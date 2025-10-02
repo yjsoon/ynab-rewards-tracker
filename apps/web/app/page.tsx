@@ -7,14 +7,18 @@ import {
   useCreditCards,
   useRewardRules,
   useSelectedBudget,
-  useTrackedAccountIds
+  useTrackedAccountIds,
+  useHiddenCards,
+  useDashboardViewMode
 } from "@/hooks/useLocalStorage";
 import { YnabClient } from "@/lib/ynab-client";
 import { SimpleRewardsCalculator } from "@/lib/rewards-engine";
 import { clampDaysLeft } from "@/lib/date";
 import { cn, absFromMilli } from "@/lib/utils";
+import type { DashboardViewMode } from "@/lib/storage";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
 import { CardSpendingSummary } from "@/components/CardSpendingSummary";
+import { CardSummaryCompact } from "@/components/CardSummaryCompact";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -25,6 +29,7 @@ import {
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   CheckCircle2,
@@ -86,9 +91,67 @@ export default function DashboardPage() {
   const dashboardAbortRef = useRef<AbortController | null>(null);
   const lastFetchKeyRef = useRef("");
 
+  const { hiddenCards, hideCard, unhideCard, isCardHidden } = useHiddenCards();
+  const {
+    viewMode: storedViewMode,
+    setViewMode: persistDashboardViewMode,
+    isLoading: isViewModeLoading
+  } = useDashboardViewMode();
+
+  const viewMode: DashboardViewMode = isViewModeLoading ? 'summary' : storedViewMode;
+
+  const handleViewModeChange = useCallback(
+    (mode: DashboardViewMode) => {
+      persistDashboardViewMode(mode);
+      if (typeof window === 'undefined') {
+        return;
+      }
+      const params = new URLSearchParams(window.location.search);
+      if (mode === 'summary') {
+        params.set('view', 'summary');
+      } else {
+        params.delete('view');
+      }
+      const query = params.toString();
+      const newUrl = query ? `${window.location.pathname}?${query}` : window.location.pathname;
+      window.history.replaceState({}, '', newUrl);
+    },
+    [persistDashboardViewMode]
+  );
+
+  const handleViewModeToggle = useCallback(
+    (checked: boolean) => {
+      handleViewModeChange(checked ? 'detailed' : 'summary');
+    },
+    [handleViewModeChange]
+  );
+
+  const handleHideCard = useCallback(
+    (cardId: string, hiddenUntil: string) => {
+      hideCard(cardId, hiddenUntil);
+    },
+    [hideCard]
+  );
+
+  const handleUnhideCard = useCallback(
+    (cardId: string) => {
+      unhideCard(cardId);
+    },
+    [unhideCard]
+  );
+
+  const handleUnhideAll = useCallback(() => {
+    hiddenCards.forEach((entry) => handleUnhideCard(entry.cardId));
+  }, [hiddenCards, handleUnhideCard]);
+
   const featuredCards = useMemo(
     () => cards.filter((card) => card.featured ?? true),
     [cards]
+  );
+
+  const visibleFeaturedCards = useMemo(
+    () => featuredCards.filter((card) => !isCardHidden(card.id)),
+    [featuredCards, isCardHidden]
   );
 
   const earliestTrackedWindow = useMemo(() => {
@@ -206,6 +269,15 @@ export default function DashboardPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const mode = params.get('view');
+    if (mode === 'summary' || mode === 'detailed') {
+      persistDashboardViewMode(mode);
+    }
+  }, [persistDashboardViewMode]);
+
   // Calculate some basic stats with memoization
   const setupStatus = useMemo<SetupStatus>(
     () => ({
@@ -253,14 +325,14 @@ export default function DashboardPage() {
       return clampDaysLeft(periodDate, now);
     };
 
-    const cashback = featuredCards.filter((c) => c.type === "cashback");
-    const miles = featuredCards.filter((c) => c.type === "miles");
+    const cashback = visibleFeaturedCards.filter((c) => c.type === "cashback");
+    const miles = visibleFeaturedCards.filter((c) => c.type === "miles");
 
     cashback.sort((a, b) => getDaysRemaining(a) - getDaysRemaining(b));
     miles.sort((a, b) => getDaysRemaining(a) - getDaysRemaining(b));
 
     return { cashbackCards: cashback, milesCards: miles };
-  }, [featuredCards]);
+  }, [visibleFeaturedCards]);
 
   // Empty state when nothing is configured
   if (!pat) {
@@ -509,122 +581,222 @@ export default function DashboardPage() {
         </Card>
       ) : (
         <div className="space-y-8 mb-8">
-          {/* Cashback Cards */}
-          {cashbackCards.length > 0 && (
-            <div>
-              <div className="flex items-center gap-2 mb-4">
-                <Percent
-                  className="h-5 w-5 text-green-600"
-                  aria-hidden="true"
-                />
-                <h2 className="text-xl font-semibold">Cashback Cards</h2>
-                <Badge variant="secondary">{cashbackCards.length}</Badge>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {cashbackCards.map((card) => {
-                  const accentClasses = "border border-border/70 dark:border-border/50 hover:border-primary/40";
-
-                  return (
-                    <Link
-                      key={card.id}
-                      href={`/cards/${card.id}`}
-                      className="block group">
-                      <Card
-                        className={cn(
-                          "relative overflow-hidden flex flex-col h-full cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-lg",
-                          "bg-card",
-                          accentClasses
-                        )}>
-                        {/* Settings Button */}
-                        <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={createSettingsClickHandler(card.id)}
-                            aria-label="Go to card settings">
-                            <Settings2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-
-                        <CardHeader className="pb-3">
-                          <CardTitle className="text-lg pr-12">
-                            {card.name}
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent className="flex-1 flex flex-col">
-                          {/* Spending Summary - Real Data */}
-                          <CardSpendingSummary
-                            card={card}
-                            pat={pat}
-                            prefetchedTransactions={allBudgetTransactions}
-                          />
-                        </CardContent>
-                      </Card>
-                    </Link>
-                  );
-                })}
-              </div>
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-center gap-3">
+              <h2 className="text-2xl font-bold">Your Cards</h2>
+              {hiddenCards.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary">{hiddenCards.length} hidden</Badge>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleUnhideAll}
+                  >
+                    Show all
+                  </Button>
+                </div>
+              )}
             </div>
-          )}
-
-          {/* Miles Cards */}
-          {milesCards.length > 0 && (
-            <div>
-              <div className="flex items-center gap-2 mb-4">
-                <TrendingUp
-                  className="h-5 w-5 text-blue-600"
-                  aria-hidden="true"
-                />
-                <h2 className="text-xl font-semibold">Miles Cards</h2>
-                <Badge variant="secondary">{milesCards.length}</Badge>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {milesCards.map((card) => {
-                  const accentClasses = "border border-border/70 dark:border-border/50 hover:border-primary/40";
-
-                  return (
-                    <Link
-                      key={card.id}
-                      href={`/cards/${card.id}`}
-                      className="block group">
-                      <Card
-                        className={cn(
-                          "relative overflow-hidden flex flex-col h-full cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-lg",
-                          "bg-card",
-                          accentClasses
-                        )}>
-                        {/* Settings Button */}
-                        <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={createSettingsClickHandler(card.id)}
-                            aria-label="Go to card settings">
-                            <Settings2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-
-                        <CardHeader className="pb-3">
-                          <CardTitle className="text-lg pr-12">
-                            {card.name}
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent className="flex-1 flex flex-col">
-                          {/* Spending Summary - Real Data */}
-                          <CardSpendingSummary
-                            card={card}
-                            pat={pat}
-                            prefetchedTransactions={allBudgetTransactions}
-                          />
-                        </CardContent>
-                      </Card>
-                    </Link>
-                  );
-                })}
-              </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">
+                {viewMode === 'summary' ? 'Summary view' : 'Detailed view'}
+              </span>
+              <Switch
+                checked={viewMode === 'detailed'}
+                onCheckedChange={handleViewModeToggle}
+                aria-label="Toggle between summary and detailed card view"
+              />
             </div>
+          </div>
+
+          {visibleFeaturedCards.length === 0 ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>All cards hidden</CardTitle>
+                <CardDescription>
+                  Hidden cards will return when their next billing cycle starts.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-3">
+                <p className="text-muted-foreground">
+                  {hiddenCards.length === 1
+                    ? '1 card is currently hidden.'
+                    : `${hiddenCards.length} cards are currently hidden.`}
+                </p>
+                <Button
+                  variant="outline"
+                  onClick={handleUnhideAll}
+                >
+                  Show hidden cards now
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              {/* Cashback Cards */}
+              {cashbackCards.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-4">
+                    <Percent className="h-5 w-5 text-green-600" aria-hidden="true" />
+                    <h2 className="text-xl font-semibold">Cashback Cards</h2>
+                    <Badge variant="secondary">{cashbackCards.length}</Badge>
+                  </div>
+                  <div
+                    className={cn(
+                      'grid gap-4',
+                      viewMode === 'detailed'
+                        ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
+                        : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
+                    )}
+                  >
+                    {cashbackCards.map((card) => {
+                      const accentClasses =
+                        'border border-border/70 dark:border-border/50 hover:border-primary/40';
+
+                      return (
+                        <Link
+                          key={card.id}
+                          href={`/cards/${card.id}`}
+                          className="block group"
+                        >
+                          <Card
+                            className={cn(
+                              'relative overflow-hidden flex flex-col h-full cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-lg',
+                              'bg-card',
+                              accentClasses
+                            )}
+                          >
+                            <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={createSettingsClickHandler(card.id)}
+                                aria-label="Go to card settings"
+                              >
+                                <Settings2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+
+                            <CardHeader className="pb-3">
+                              <CardTitle
+                                title={card.name}
+                                className={cn(
+                                  viewMode === 'detailed' ? 'text-lg' : 'text-[0.95rem] sm:text-base',
+                                  'pr-12 truncate'
+                                )}
+                              >
+                                {card.name}
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent className="flex-1 flex flex-col">
+                              {viewMode === 'detailed' ? (
+                                <CardSpendingSummary
+                                  card={card}
+                                  pat={pat}
+                                  prefetchedTransactions={allBudgetTransactions}
+                                  onHideCard={handleHideCard}
+                                  showHideOption
+                                />
+                              ) : (
+                                <CardSummaryCompact
+                                  card={card}
+                                  pat={pat}
+                                  prefetchedTransactions={allBudgetTransactions}
+                                  onHideCard={handleHideCard}
+                                />
+                              )}
+                            </CardContent>
+                          </Card>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Miles Cards */}
+              {milesCards.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-4">
+                    <TrendingUp className="h-5 w-5 text-blue-600" aria-hidden="true" />
+                    <h2 className="text-xl font-semibold">Miles Cards</h2>
+                    <Badge variant="secondary">{milesCards.length}</Badge>
+                  </div>
+                  <div
+                    className={cn(
+                      'grid gap-4',
+                      viewMode === 'detailed'
+                        ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
+                        : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
+                    )}
+                  >
+                    {milesCards.map((card) => {
+                      const accentClasses =
+                        'border border-border/70 dark:border-border/50 hover:border-primary/40';
+
+                      return (
+                        <Link
+                          key={card.id}
+                          href={`/cards/${card.id}`}
+                          className="block group"
+                        >
+                          <Card
+                            className={cn(
+                              'relative overflow-hidden flex flex-col h-full cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-lg',
+                              'bg-card',
+                              accentClasses
+                            )}
+                          >
+                            <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={createSettingsClickHandler(card.id)}
+                                aria-label="Go to card settings"
+                              >
+                                <Settings2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+
+                            <CardHeader className="pb-3">
+                              <CardTitle
+                                title={card.name}
+                                className={cn(
+                                  viewMode === 'detailed' ? 'text-lg' : 'text-[0.95rem] sm:text-base',
+                                  'pr-12 truncate'
+                                )}
+                              >
+                                {card.name}
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent className="flex-1 flex flex-col">
+                              {viewMode === 'detailed' ? (
+                                <CardSpendingSummary
+                                  card={card}
+                                  pat={pat}
+                                  prefetchedTransactions={allBudgetTransactions}
+                                  onHideCard={handleHideCard}
+                                  showHideOption
+                                />
+                              ) : (
+                                <CardSummaryCompact
+                                  card={card}
+                                  pat={pat}
+                                  prefetchedTransactions={allBudgetTransactions}
+                                  onHideCard={handleHideCard}
+                                />
+                              )}
+                            </CardContent>
+                          </Card>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

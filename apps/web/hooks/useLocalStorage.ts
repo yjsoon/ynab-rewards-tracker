@@ -5,6 +5,8 @@ import type {
   RewardCalculation,
   AppSettings,
   ThemeGroup,
+  HiddenCard,
+  DashboardViewMode,
 } from '@/lib/storage';
 import { storage } from '@/lib/storage';
 import { useStorageContext } from '@/contexts/StorageContext';
@@ -15,7 +17,8 @@ const EMPTY_RULE_LIST: RewardRule[] = [];
 const EMPTY_CALCULATION_LIST: RewardCalculation[] = [];
 const EMPTY_SELECTED_BUDGET: { id?: string; name?: string } = {};
 const EMPTY_THEME_GROUP_LIST: ThemeGroup[] = [];
-const DEFAULT_SETTINGS: AppSettings = { theme: 'light', currency: 'USD' };
+const EMPTY_HIDDEN_CARD_LIST: HiddenCard[] = [];
+const DEFAULT_SETTINGS: AppSettings = { theme: 'light', currency: 'USD', dashboardViewMode: 'summary' };
 
 function useHasHydrated() {
   const [hasHydrated, setHasHydrated] = useState(false);
@@ -215,6 +218,58 @@ export function useThemeGroups() {
     deleteThemeGroup,
     isLoading: !hasHydrated,
   };
+}
+
+export function useHiddenCards() {
+  const { refreshTrigger, triggerRefresh } = useStorageContext();
+  const hasHydrated = useHasHydrated();
+
+  const hiddenCards = useMemo(() => {
+    if (!hasHydrated || typeof window === 'undefined') {
+      return EMPTY_HIDDEN_CARD_LIST;
+    }
+    // Clean expired entries and return active ones
+    return storage.cleanExpiredHiddenCards();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasHydrated, refreshTrigger]);
+
+  const hideCard = useCallback((cardId: string, hiddenUntil: string) => {
+    storage.hideCard(cardId, hiddenUntil, 'maximum_spend_reached');
+    triggerRefresh();
+  }, [triggerRefresh]);
+
+  const unhideCard = useCallback((cardId: string) => {
+    storage.unhideCard(cardId);
+    triggerRefresh();
+  }, [triggerRefresh]);
+
+  const isCardHidden = useCallback(
+    (cardId: string) => hiddenCards.some((h) => h.cardId === cardId),
+    [hiddenCards]
+  );
+
+  return { hiddenCards, hideCard, unhideCard, isCardHidden, isLoading: !hasHydrated };
+}
+
+export function useDashboardViewMode() {
+  const { refreshTrigger, triggerRefresh } = useStorageContext();
+  const hasHydrated = useHasHydrated();
+
+  const viewMode = useMemo(() => {
+    if (!hasHydrated || typeof window === 'undefined') {
+      return 'summary' as DashboardViewMode;
+    }
+    // Force re-computation when refreshTrigger changes
+    return storage.getDashboardViewMode();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasHydrated, refreshTrigger]);
+
+  const setViewMode = useCallback((mode: DashboardViewMode) => {
+    storage.setDashboardViewMode(mode);
+    triggerRefresh();
+  }, [triggerRefresh]);
+
+  return { viewMode, setViewMode, isLoading: !hasHydrated };
 }
 
 export function useSettings() {

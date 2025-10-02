@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import { CurrencyAmount } from '@/components/CurrencyAmount';
 import { SpendingProgressBar } from '@/components/SpendingProgressBar';
 import { SubcategoryBreakdownCompact } from '@/components/SubcategoryBreakdownCompact';
+import { Button } from '@/components/ui/button';
 import { AlertCircle, TrendingUp, Percent, XCircle } from 'lucide-react';
 import {
   isMinimumSpendConfigured,
@@ -23,9 +24,11 @@ interface CardSpendingSummaryProps {
   // Optional: if provided, component will not fetch and will use these
   // budget-wide transactions (it will filter to this card + period).
   prefetchedTransactions?: Transaction[];
+  onHideCard?: (cardId: string, hiddenUntil: string) => void;
+  showHideOption?: boolean;
 }
 
-export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardSpendingSummaryProps) {
+export function CardSpendingSummary({ card, pat, prefetchedTransactions, onHideCard, showHideOption }: CardSpendingSummaryProps) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const abortRef = useRef<AbortController | null>(null);
@@ -225,6 +228,20 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions }: CardS
               <XCircle className="h-3.5 w-3.5" />
               <span>Stop using - max reached</span>
             </div>
+          )}
+          {maximumSpendExceeded && showHideOption && onHideCard && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onHideCard(card.id, period.end);
+              }}
+            >
+              Hide until next cycle
+            </Button>
           )}
         </div>
       ) : (

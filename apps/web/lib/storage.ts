@@ -63,6 +63,16 @@ export interface CategoryCap {
   capAmount: number;
 }
 
+export type DashboardViewMode = 'summary' | 'detailed';
+
+export type HiddenCardReason = 'maximum_spend_reached';
+
+export interface HiddenCard {
+  cardId: string;
+  hiddenUntil: string; // ISO date string – end of billing period
+  reason: HiddenCardReason;
+}
+
 export interface TagMapping {
   id: string;
   cardId: string;
@@ -142,6 +152,7 @@ export interface AppSettings {
   theme?: 'light' | 'dark' | 'auto';
   currency?: string;
   milesValuation?: number; // Dollar value per mile (default: 0.01)
+  dashboardViewMode?: DashboardViewMode;
 }
 
 export interface StorageData {
@@ -152,6 +163,7 @@ export interface StorageData {
   calculations: RewardCalculation[];
   themeGroups: ThemeGroup[];
   settings: AppSettings;
+  hiddenCards?: HiddenCard[];
   cachedData?: {
     budgets?: unknown[];
     accounts?: unknown[];
@@ -456,6 +468,69 @@ class StorageService {
     storage.themeGroups = normalised;
   }
 
+  private normaliseHiddenCards(hiddenCards: unknown[]): HiddenCard[] {
+    if (!Array.isArray(hiddenCards)) {
+      return [];
+    }
+
+    const now = Date.now();
+    const cardMap = new Map<string, { hiddenUntil: number; reason: HiddenCardReason }>();
+
+    for (const entry of hiddenCards) {
+      if (!entry || typeof entry !== 'object') {
+        continue;
+      }
+
+      const candidate = entry as Record<string, unknown>;
+      const cardId = typeof candidate.cardId === 'string' ? candidate.cardId.trim() : '';
+      const hiddenUntilValue = typeof candidate.hiddenUntil === 'string' ? candidate.hiddenUntil : '';
+      const reason = candidate.reason === 'maximum_spend_reached' ? 'maximum_spend_reached' : 'maximum_spend_reached';
+
+      if (!cardId || !hiddenUntilValue) {
+        continue;
+      }
+
+      const expiry = new Date(hiddenUntilValue);
+      if (Number.isNaN(expiry.getTime())) {
+        continue;
+      }
+
+      const expiryTime = expiry.getTime();
+      if (expiryTime <= now) {
+        continue;
+      }
+
+      const existing = cardMap.get(cardId);
+      if (!existing || expiryTime > existing.hiddenUntil) {
+        cardMap.set(cardId, { hiddenUntil: expiryTime, reason });
+      }
+    }
+
+    return Array.from(cardMap.entries())
+      .map(([cardId, { hiddenUntil, reason }]) => ({
+        cardId,
+        hiddenUntil: new Date(hiddenUntil).toISOString(),
+        reason,
+      }))
+      .sort((a, b) => new Date(a.hiddenUntil).getTime() - new Date(b.hiddenUntil).getTime());
+  }
+
+  private areHiddenCardListsEqual(left: HiddenCard[] | undefined, right: HiddenCard[]): boolean {
+    if (!Array.isArray(left) || left.length !== right.length) {
+      return false;
+    }
+
+    for (let index = 0; index < right.length; index += 1) {
+      const a = left[index];
+      const b = right[index];
+      if (!a || a.cardId !== b.cardId || a.hiddenUntil !== b.hiddenUntil || a.reason !== b.reason) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
   private ensureVersion(): void {
     if (typeof window === 'undefined') {
       return;
@@ -622,6 +697,10 @@ class StorageService {
             data.tagMappings = [];
           }
 
+          if (!Array.isArray(data.hiddenCards)) {
+            data.hiddenCards = [];
+          }
+
           // Note: billingCycle defaulting handled earlier when reading cards
         } catch (migrationError) {
           if (process.env.NODE_ENV === 'development') {
@@ -645,6 +724,8 @@ class StorageService {
         }
         this.pruneThemeGroups(data);
 
+        data.hiddenCards = this.normaliseHiddenCards(data.hiddenCards || []);
+
         return data;
       }
     } catch (error) {
@@ -665,9 +746,11 @@ class StorageService {
       tagMappings: [],
       calculations: [],
       themeGroups: [],
+      hiddenCards: [],
       settings: {
         theme: 'light',
         currency: 'USD',
+        dashboardViewMode: 'summary',
       },
     };
   }
@@ -702,6 +785,15 @@ class StorageService {
       ...settings,
     };
     this.setStorage(storage);
+  }
+
+  getDashboardViewMode(): 'summary' | 'detailed' {
+    const mode = this.getSettings().dashboardViewMode;
+    return mode === 'summary' || mode === 'detailed' ? mode : 'summary';
+  }
+
+  setDashboardViewMode(mode: 'summary' | 'detailed'): void {
+    this.updateSettings({ dashboardViewMode: mode });
   }
 
   // PAT management
@@ -968,6 +1060,58 @@ class StorageService {
 
     this.pruneThemeGroups(storage);
     this.setStorage(storage);
+  }
+
+  getHiddenCards(): HiddenCard[] {
+    const storage = this.getStorage();
+    const normalised = this.normaliseHiddenCards(storage.hiddenCards || []);
+
+    if (!this.areHiddenCardListsEqual(storage.hiddenCards, normalised)) {
+      storage.hiddenCards = normalised;
+      this.setStorage(storage);
+    }
+
+    return normalised;
+  }
+
+  hideCard(cardId: string, hiddenUntil: string, reason: HiddenCardReason = 'maximum_spend_reached'): void {
+    const storage = this.getStorage();
+    const existing = storage.hiddenCards || [];
+    const expiry = new Date(hiddenUntil);
+
+    if (Number.isNaN(expiry.getTime())) {
+      throw new Error('Invalid hiddenUntil date');
+    }
+
+    const next = existing.filter((entry) => entry.cardId !== cardId);
+    next.push({
+      cardId,
+      hiddenUntil: expiry.toISOString(),
+      reason,
+    });
+
+    storage.hiddenCards = this.normaliseHiddenCards(next);
+    this.setStorage(storage);
+  }
+
+  unhideCard(cardId: string): void {
+    const storage = this.getStorage();
+    const existing = storage.hiddenCards || [];
+
+    storage.hiddenCards = this.normaliseHiddenCards(existing.filter((entry) => entry.cardId !== cardId));
+    this.setStorage(storage);
+  }
+
+  cleanExpiredHiddenCards(): HiddenCard[] {
+    const storage = this.getStorage();
+    const cleaned = this.normaliseHiddenCards(storage.hiddenCards || []);
+
+    if (!this.areHiddenCardListsEqual(storage.hiddenCards, cleaned)) {
+      storage.hiddenCards = cleaned;
+      this.setStorage(storage);
+    }
+
+    return cleaned;
   }
 
   // Export/Import

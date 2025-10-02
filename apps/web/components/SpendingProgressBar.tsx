@@ -81,11 +81,15 @@ export function SpendingProgressBar({
       case 'pending':
         return 'bg-gradient-to-r from-amber-500 to-amber-600 dark:from-amber-600 dark:to-amber-700';
       default:
-        return 'bg-muted';
+        return 'bg-muted-foreground/30 dark:bg-white/30';
     }
   };
 
   const barColor = getBarColor();
+  const progressStyle = hasLimits
+    ? { width: progressPercent === 0 ? '3px' : `${progressPercent}%` }
+    : { width: `${progressPercent}%` };
+  const zeroProgress = hasLimits && progressPercent === 0;
   const minimumPosition = hasMinimum ? getMarkerPosition(minimumSpend) : null;
   const maximumPosition = hasMaximum ? getMarkerPosition(maximumSpend) : null;
 
@@ -133,14 +137,15 @@ export function SpendingProgressBar({
       {/* Progress bar container */}
       <div className="relative">
         {/* Background bar */}
-        <div className="h-3 w-full overflow-hidden rounded-full bg-muted/20">
+        <div className="h-3 w-full overflow-hidden rounded-full bg-muted-foreground/10 dark:bg-white/15 shadow-inner">
           {/* Progress fill */}
           <div
             className={cn(
               "h-full rounded-full transition-all duration-300",
-              barColor
+              barColor,
+              zeroProgress && "opacity-60"
             )}
-            style={{ width: `${progressPercent}%` }}
+            style={progressStyle}
           />
         </div>
 
