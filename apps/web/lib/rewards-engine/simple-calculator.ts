@@ -11,6 +11,7 @@ import {
   isMinimumSpendMet,
 } from '@/lib/minimum-spend-helpers';
 import { UNFLAGGED_FLAG, YNAB_FLAG_COLORS, type YnabFlagColor } from '@/lib/ynab-constants';
+import { formatLocalDate, getEffectiveBillingDay } from './date-utils';
 
 const FLAG_COLOUR_SET: Set<YnabFlagColor> = new Set([
   UNFLAGGED_FLAG.value,
@@ -194,22 +195,28 @@ export class SimpleRewardsCalculator {
     const month = now.getMonth();
 
     if (card.billingCycle?.type === 'billing' && card.billingCycle.dayOfMonth) {
-      const billingDay = card.billingCycle.dayOfMonth;
+      const requestedBillingDay = card.billingCycle.dayOfMonth;
+      const currentMonthEffectiveDay = getEffectiveBillingDay(year, month, requestedBillingDay);
+
       let startDate: Date;
       let endDate: Date;
 
-      if (now.getDate() >= billingDay) {
-        startDate = new Date(year, month, billingDay);
-        endDate = new Date(year, month + 1, billingDay - 1, 23, 59, 59, 999);
+      if (now.getDate() >= currentMonthEffectiveDay) {
+        // We're in current billing cycle
+        startDate = new Date(year, month, currentMonthEffectiveDay);
+        const nextMonthEffectiveDay = getEffectiveBillingDay(year, month + 1, requestedBillingDay);
+        endDate = new Date(year, month + 1, nextMonthEffectiveDay - 1, 23, 59, 59, 999);
       } else {
-        startDate = new Date(year, month - 1, billingDay);
-        endDate = new Date(year, month, billingDay - 1, 23, 59, 59, 999);
+        // We're in previous billing cycle
+        const prevMonthEffectiveDay = getEffectiveBillingDay(year, month - 1, requestedBillingDay);
+        startDate = new Date(year, month - 1, prevMonthEffectiveDay);
+        endDate = new Date(year, month, currentMonthEffectiveDay - 1, 23, 59, 59, 999);
       }
 
       return {
-        start: startDate.toISOString().split('T')[0],
-        end: endDate.toISOString().split('T')[0],
-        label: `${startDate.toISOString().split('T')[0]}`,
+        start: formatLocalDate(startDate),
+        end: formatLocalDate(endDate),
+        label: formatLocalDate(startDate),
       };
     }
 
@@ -217,8 +224,8 @@ export class SimpleRewardsCalculator {
     const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
 
     return {
-      start: startDate.toISOString().split('T')[0],
-      end: endDate.toISOString().split('T')[0],
+      start: formatLocalDate(startDate),
+      end: formatLocalDate(endDate),
       label: `${year}-${String(month + 1).padStart(2, '0')}`,
     };
   }

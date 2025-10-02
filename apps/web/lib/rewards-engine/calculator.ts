@@ -9,6 +9,7 @@ import type {
   AppSettings
 } from '@/lib/storage';
 import type { TransactionWithRewards } from '@/types/transaction';
+import { getEffectiveBillingDay, parseYnabDate } from './date-utils';
 export interface CalculationPeriod {
   startDate: Date;
   endDate: Date;
@@ -16,8 +17,6 @@ export interface CalculationPeriod {
 }
 
 export class RewardsCalculator {
-  private static readonly DEFAULT_BILLING_DAY = 1;
-
   /**
    * Calculate rewards for a single rule in a given period
    */
@@ -32,7 +31,7 @@ export class RewardsCalculator {
 
     // Filter transactions to this period
     const eligibleTransactions = transactions.filter(txn => {
-      const txnDate = new Date(txn.date);
+      const txnDate = parseYnabDate(txn.date);
       return txnDate >= period.startDate && txnDate <= period.endDate;
     });
 
@@ -104,20 +103,24 @@ export class RewardsCalculator {
 
     if (card.billingCycle?.type === 'billing' && card.billingCycle.dayOfMonth) {
       // Custom billing cycle
-      const billingDay = card.billingCycle.dayOfMonth;
       const year = targetDate.getFullYear();
       const month = targetDate.getMonth();
 
+      const requestedBillingDay = card.billingCycle.dayOfMonth;
+      const currentMonthEffectiveDay = getEffectiveBillingDay(year, month, requestedBillingDay);
+
       // Determine if we're in current or previous billing cycle
-      const currentCycleStart = new Date(year, month, billingDay);
+      const currentCycleStart = new Date(year, month, currentMonthEffectiveDay);
       if (targetDate < currentCycleStart) {
         // We're in the previous billing cycle
-        startDate = new Date(year, month - 1, billingDay);
-        endDate = new Date(year, month, billingDay - 1, 23, 59, 59, 999);
+        const prevMonthEffectiveDay = getEffectiveBillingDay(year, month - 1, requestedBillingDay);
+        startDate = new Date(year, month - 1, prevMonthEffectiveDay);
+        endDate = new Date(year, month, currentMonthEffectiveDay - 1, 23, 59, 59, 999);
       } else {
         // We're in the current billing cycle
         startDate = currentCycleStart;
-        endDate = new Date(year, month + 1, billingDay - 1, 23, 59, 59, 999);
+        const nextMonthEffectiveDay = getEffectiveBillingDay(year, month + 1, requestedBillingDay);
+        endDate = new Date(year, month + 1, nextMonthEffectiveDay - 1, 23, 59, 59, 999);
       }
     } else {
       // Calendar month (default)
