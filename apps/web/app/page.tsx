@@ -591,16 +591,16 @@ export default function DashboardPage() {
             </div>
             <div className="flex items-center gap-3">
               <span className="text-sm text-muted-foreground">View</span>
-              <div className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/40 p-1">
+              <div className="inline-flex items-center gap-1 rounded-full border border-border/50 bg-background/80 p-1 shadow-inner dark:border-border/40 dark:bg-muted/40">
                 <Button
                   type="button"
                   size="sm"
                   variant={viewMode === 'summary' ? 'default' : 'ghost'}
                   className={cn(
-                    'rounded-full px-3',
+                    'rounded-full px-3 transition-colors',
                     viewMode === 'summary'
                       ? 'shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground'
+                      : 'text-muted-foreground hover:text-primary-foreground hover:bg-primary/80'
                   )}
                   onClick={() => handleViewModeChange('summary')}
                 >
@@ -611,10 +611,10 @@ export default function DashboardPage() {
                   size="sm"
                   variant={viewMode === 'detailed' ? 'default' : 'ghost'}
                   className={cn(
-                    'rounded-full px-3',
+                    'rounded-full px-3 transition-colors',
                     viewMode === 'detailed'
                       ? 'shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground'
+                      : 'text-muted-foreground hover:text-primary-foreground hover:bg-primary/80'
                   )}
                   onClick={() => handleViewModeChange('detailed')}
                 >
