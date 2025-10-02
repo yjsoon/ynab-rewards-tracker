@@ -29,7 +29,6 @@ import {
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   CheckCircle2,
@@ -117,13 +116,6 @@ export default function DashboardPage() {
       window.history.replaceState({}, '', newUrl);
     },
     [persistDashboardViewMode]
-  );
-
-  const handleViewModeToggle = useCallback(
-    (checked: boolean) => {
-      handleViewModeChange(checked ? 'detailed' : 'summary');
-    },
-    [handleViewModeChange]
   );
 
   const handleHideCard = useCallback(
@@ -597,15 +589,38 @@ export default function DashboardPage() {
                 </div>
               )}
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">
-                {viewMode === 'summary' ? 'Summary view' : 'Detailed view'}
-              </span>
-              <Switch
-                checked={viewMode === 'detailed'}
-                onCheckedChange={handleViewModeToggle}
-                aria-label="Toggle between summary and detailed card view"
-              />
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-muted-foreground">View</span>
+              <div className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/40 p-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={viewMode === 'summary' ? 'default' : 'ghost'}
+                  className={cn(
+                    'rounded-full px-3',
+                    viewMode === 'summary'
+                      ? 'shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                  onClick={() => handleViewModeChange('summary')}
+                >
+                  Summary
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={viewMode === 'detailed' ? 'default' : 'ghost'}
+                  className={cn(
+                    'rounded-full px-3',
+                    viewMode === 'detailed'
+                      ? 'shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                  onClick={() => handleViewModeChange('detailed')}
+                >
+                  Detailed
+                </Button>
+              </div>
             </div>
           </div>
 
