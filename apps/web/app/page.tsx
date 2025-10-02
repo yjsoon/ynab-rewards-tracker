@@ -106,8 +106,8 @@ export default function DashboardPage() {
         return;
       }
       const params = new URLSearchParams(window.location.search);
-      if (mode === 'summary') {
-        params.set('view', 'summary');
+      if (mode === 'detailed') {
+        params.set('view', 'detailed');
       } else {
         params.delete('view');
       }
