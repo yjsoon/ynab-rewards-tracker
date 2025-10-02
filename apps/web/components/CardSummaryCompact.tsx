@@ -30,7 +30,7 @@ export function CardSummaryCompact({ card, pat, prefetchedTransactions, onHideCa
   const period = useMemo(() => SimpleRewardsCalculator.calculatePeriod(card), [card]);
 
   const loadTransactions = useCallback(async () => {
-    if (prefetchedTransactions && prefetchedTransactions.length >= 0) {
+    if (prefetchedTransactions) {
       const cardTxns = prefetchedTransactions.filter((txn) =>
         txn.account_id === card.ynabAccountId && txn.date >= period.start && txn.date <= period.end
       );
@@ -128,14 +128,9 @@ export function CardSummaryCompact({ card, pat, prefetchedTransactions, onHideCa
     ? Math.min(1, Math.max(0, totalSpend / minimumTarget))
     : 0;
   const progressPercent = Math.round(clampedProgress * 100);
-  const remainingToMinimum = hasMinimum && minimumTarget > 0
-    ? Math.max(0, minimumTarget - totalSpend)
-    : 0;
 
   const hasMaximum = typeof maximumSpend === "number" && maximumSpend > 0;
   const maximumTarget = hasMaximum ? maximumSpend : 0;
-  const maximumProgress = hasMaximum && maximumTarget > 0 ? totalSpend / maximumTarget : 0;
-  const maximumPercent = Math.round(Math.min(maximumProgress, 1) * 100);
   const remainingToMaximum = hasMaximum ? Math.max(0, maximumTarget - totalSpend) : 0;
   const exceededAmount = hasMaximum ? Math.max(0, totalSpend - maximumTarget) : 0;
 
