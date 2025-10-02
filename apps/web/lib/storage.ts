@@ -484,7 +484,10 @@ class StorageService {
       const candidate = entry as Record<string, unknown>;
       const cardId = typeof candidate.cardId === 'string' ? candidate.cardId.trim() : '';
       const hiddenUntilValue = typeof candidate.hiddenUntil === 'string' ? candidate.hiddenUntil : '';
-      const reason = candidate.reason === 'maximum_spend_reached' ? 'maximum_spend_reached' : 'maximum_spend_reached';
+      const allowedReasons: HiddenCardReason[] = ['maximum_spend_reached'];
+      const reason = typeof candidate.reason === 'string' && allowedReasons.includes(candidate.reason as HiddenCardReason)
+        ? (candidate.reason as HiddenCardReason)
+        : 'maximum_spend_reached';
 
       if (!cardId || !hiddenUntilValue) {
         continue;
