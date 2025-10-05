@@ -46,6 +46,7 @@ import {
   CloudOff,
   KeyRound,
 } from 'lucide-react';
+import { DashboardQuickStats } from '@/components/dashboard/DashboardQuickStats';
 
 interface YnabBudget {
   id: string;
@@ -556,6 +557,11 @@ export default function SettingsPage() {
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
       <h1 className="text-3xl font-bold">Settings</h1>
+
+      <DashboardQuickStats
+        selectedBudget={selectedBudget}
+        trackedAccountCount={trackedAccountIds.length}
+      />
 
       {/* YNAB Connection */}
       <Card id="settings-budget">

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Home, Settings, CreditCard, SlidersHorizontal, Sparkles } from 'lucide-react';
+import { Home, Settings, CreditCard, SlidersHorizontal, Sparkles, ReceiptText } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { cn } from '@/lib/utils';
 
@@ -14,6 +14,7 @@ export function Navigation() {
     { href: '/', label: 'Dashboard', icon: Home },
     { href: '/recommendations', label: 'Recommendations', icon: Sparkles },
     { href: '/rules', label: 'Rules', icon: SlidersHorizontal },
+    { href: '/transactions', label: 'Transactions', icon: ReceiptText },
   ];
 
   const isSettings = pathname.startsWith('/settings');

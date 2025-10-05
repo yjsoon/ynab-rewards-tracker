@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useEffect, useCallback, useMemo } from "react";
 import {
   useYnabPAT,
   useCreditCards,
@@ -11,24 +11,14 @@ import {
   useDashboardViewMode,
   useSettings
 } from "@/hooks/useLocalStorage";
-import { YnabClient } from "@/lib/ynab-client";
 import { SimpleRewardsCalculator } from "@/lib/rewards-engine";
 import { clampDaysLeft } from "@/lib/date";
 import type { CreditCard, DashboardViewMode } from "@/lib/storage";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle
-} from "@/components/ui/card";
 import { DashboardLanding } from "@/components/dashboard/DashboardLanding";
 import { SetupProgressAlert } from "@/components/dashboard/SetupProgressAlert";
 import { RulesReminderAlert } from "@/components/dashboard/RulesReminderAlert";
 import { DashboardCardOverview } from "@/components/dashboard/DashboardCardOverview";
-import { DashboardQuickStats } from "@/components/dashboard/DashboardQuickStats";
-import { RecentTransactionsTable } from "@/components/dashboard/RecentTransactionsTable";
-import type { Transaction } from "@/types/transaction";
+import { useTrackedTransactions } from "@/hooks/useTrackedTransactions";
 
 // Constants
 const TRANSACTION_LOOKBACK_DAYS = 30;
@@ -43,11 +33,6 @@ interface SetupStatus {
   cards: boolean;
 }
 
-interface YnabAccountSummary {
-  id: string;
-  name: string;
-}
-
 export default function DashboardPage() {
   const { pat } = useYnabPAT();
   const { cards } = useCreditCards();
@@ -55,17 +40,6 @@ export default function DashboardPage() {
 
   const { selectedBudget } = useSelectedBudget();
   const { trackedAccountIds } = useTrackedAccountIds();
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [allBudgetTransactions, setAllBudgetTransactions] = useState<
-    Transaction[]
-  >([]);
-  const [accountsMap, setAccountsMap] = useState<Map<string, string>>(
-    new Map()
-  );
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const dashboardAbortRef = useRef<AbortController | null>(null);
-  const lastFetchKeyRef = useRef("");
 
   const { hiddenCards, hideCard, unhideCard, isCardHidden } = useHiddenCards();
   const {
@@ -154,120 +128,14 @@ export default function DashboardPage() {
     [settings.cardOrdering]
   );
 
-  const earliestTrackedWindow = useMemo(() => {
-    if (featuredCards.length === 0) {
-      const fallback = new Date();
-      fallback.setDate(fallback.getDate() - TRANSACTION_LOOKBACK_DAYS);
-      return fallback.toISOString().split("T")[0];
-    }
-
-    const earliestMillis = featuredCards
-      .map((card) => SimpleRewardsCalculator.calculatePeriod(card))
-      .map((period) => new Date(period.start).getTime())
-      .reduce(
-        (min, current) => Math.min(min, current),
-        Number.POSITIVE_INFINITY
-      );
-
-    return new Date(earliestMillis).toISOString().split("T")[0];
-  }, [featuredCards]);
-
-  const loadRecentTransactions = useCallback(
-    async (budgetId: string, accountFilter: string[]) => {
-      if (!pat) return;
-
-      setLoading(true);
-      setError("");
-
-      if (dashboardAbortRef.current) {
-        dashboardAbortRef.current.abort();
-      }
-      const controller = new AbortController();
-      dashboardAbortRef.current = controller;
-
-      try {
-        const client = new YnabClient(pat);
-
-        const accounts = await client.getAccounts<YnabAccountSummary>(
-          budgetId,
-          { signal: controller.signal }
-        );
-        const accMap = new Map<string, string>();
-        accounts.forEach((acc) => {
-          accMap.set(acc.id, acc.name);
-        });
-        setAccountsMap(accMap);
-
-        const txns = await client.getTransactions(budgetId, {
-          since_date: earliestTrackedWindow,
-          signal: controller.signal
-        });
-
-        setAllBudgetTransactions(txns);
-
-        const cutoff = new Date();
-        cutoff.setDate(cutoff.getDate() - TRANSACTION_LOOKBACK_DAYS);
-        const recent = txns
-          .filter(
-            (t: Transaction) =>
-              accountFilter.length === 0 || accountFilter.includes(t.account_id)
-          )
-          .filter((t: Transaction) => new Date(t.date) >= cutoff)
-          .sort(
-            (a: Transaction, b: Transaction) =>
-              new Date(b.date).getTime() - new Date(a.date).getTime()
-          )
-          .slice(0, RECENT_TRANSACTIONS_LIMIT);
-        setTransactions(recent);
-      } catch (err) {
-        if (!(err instanceof Error) || err.name !== "AbortError") {
-          const errorMessage = err instanceof Error ? err.message : String(err);
-          setError(`Failed to load transactions: ${errorMessage}`);
-          lastFetchKeyRef.current = "";
-        }
-      } finally {
-        if (dashboardAbortRef.current === controller) {
-          setLoading(false);
-          dashboardAbortRef.current = null;
-        }
-      }
-    },
-    [pat, earliestTrackedWindow]
-  );
-
-  useEffect(() => {
-    if (!pat || !selectedBudget.id) {
-      lastFetchKeyRef.current = "";
-      return;
-    }
-
-    const sortedAccountsKey = [...trackedAccountIds].sort().join("|");
-    const fetchKey = [
-      pat,
-      selectedBudget.id,
-      sortedAccountsKey,
-      earliestTrackedWindow
-    ].join("::");
-
-    if (lastFetchKeyRef.current === fetchKey) {
-      return;
-    }
-
-    lastFetchKeyRef.current = fetchKey;
-    loadRecentTransactions(selectedBudget.id, trackedAccountIds);
-  }, [
+  const { allTransactions } = useTrackedTransactions({
     pat,
-    selectedBudget.id,
+    selectedBudgetId: selectedBudget.id,
     trackedAccountIds,
-    earliestTrackedWindow,
-    loadRecentTransactions
-  ]);
-
-  useEffect(() => {
-    return () => {
-      dashboardAbortRef.current?.abort();
-    };
-  }, []);
+    featuredCards,
+    lookbackDays: TRANSACTION_LOOKBACK_DAYS,
+    recentLimit: RECENT_TRANSACTIONS_LIMIT,
+  });
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -406,39 +274,12 @@ export default function DashboardPage() {
         onHideCard={handleHideCard}
         onUnhideAll={handleUnhideAll}
         pat={pat}
-        prefetchedTransactions={allBudgetTransactions}
+        prefetchedTransactions={allTransactions}
         cashbackCollapsed={cashbackCollapsed}
         milesCollapsed={milesCollapsed}
         onToggleGroup={handleToggleGroup}
         onReorderCards={handleCardReorder}
       />
-
-      <DashboardQuickStats
-        selectedBudget={selectedBudget}
-        trackedAccountCount={trackedAccountIds.length}
-      />
-
-      {isFullyConfigured && (
-        <Card className="mb-8">
-          <CardHeader>
-            <CardTitle>
-              Recent Transactions (Last {TRANSACTION_LOOKBACK_DAYS} Days)
-            </CardTitle>
-            <CardDescription>
-              Your most recent transactions from tracked accounts
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <RecentTransactionsTable
-              loading={loading}
-              error={error}
-              transactions={transactions}
-              accountsMap={accountsMap}
-              lookbackDays={TRANSACTION_LOOKBACK_DAYS}
-            />
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }
