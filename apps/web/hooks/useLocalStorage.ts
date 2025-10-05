@@ -24,6 +24,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   dashboardViewMode: 'summary',
   cloudSyncKeyId: undefined,
   cloudSyncLastSyncedAt: undefined,
+  cardOrdering: {},
+  collapsedCardGroups: {},
 };
 
 function useHasHydrated() {

@@ -8,12 +8,13 @@ import {
   useSelectedBudget,
   useTrackedAccountIds,
   useHiddenCards,
-  useDashboardViewMode
+  useDashboardViewMode,
+  useSettings
 } from "@/hooks/useLocalStorage";
 import { YnabClient } from "@/lib/ynab-client";
 import { SimpleRewardsCalculator } from "@/lib/rewards-engine";
 import { clampDaysLeft } from "@/lib/date";
-import type { DashboardViewMode } from "@/lib/storage";
+import type { CreditCard, DashboardViewMode } from "@/lib/storage";
 import {
   Card,
   CardContent,
@@ -72,6 +73,7 @@ export default function DashboardPage() {
     setViewMode: persistDashboardViewMode,
     isLoading: isViewModeLoading
   } = useDashboardViewMode();
+  const { settings, updateSettings } = useSettings();
 
   const viewMode: DashboardViewMode = isViewModeLoading ? 'summary' : storedViewMode;
 
@@ -120,6 +122,36 @@ export default function DashboardPage() {
   const visibleFeaturedCards = useMemo(
     () => featuredCards.filter((card) => !isCardHidden(card.id)),
     [featuredCards, isCardHidden]
+  );
+
+  const applyStoredOrdering = useCallback(
+    (list: CreditCard[], category: 'cashback' | 'miles') => {
+      const stored = settings.cardOrdering?.[category];
+      if (!stored || stored.length === 0) {
+        return list;
+      }
+
+      const map = new Map(list.map((card) => [card.id, card]));
+      const used = new Set<string>();
+      const ordered: CreditCard[] = [];
+
+      stored.forEach((id) => {
+        const card = map.get(id);
+        if (card && !used.has(id)) {
+          ordered.push(card);
+          used.add(id);
+        }
+      });
+
+      list.forEach((card) => {
+        if (!used.has(card.id)) {
+          ordered.push(card);
+        }
+      });
+
+      return ordered;
+    },
+    [settings.cardOrdering]
   );
 
   const earliestTrackedWindow = useMemo(() => {
@@ -299,8 +331,50 @@ export default function DashboardPage() {
     cashback.sort((a, b) => getDaysRemaining(a) - getDaysRemaining(b));
     miles.sort((a, b) => getDaysRemaining(a) - getDaysRemaining(b));
 
-    return { cashbackCards: cashback, milesCards: miles };
-  }, [visibleFeaturedCards]);
+    const orderedCashback = applyStoredOrdering(cashback, 'cashback');
+    const orderedMiles = applyStoredOrdering(miles, 'miles');
+
+    return { cashbackCards: orderedCashback, milesCards: orderedMiles };
+  }, [visibleFeaturedCards, applyStoredOrdering]);
+
+  const cashbackCollapsed = settings.collapsedCardGroups?.cashback ?? false;
+  const milesCollapsed = settings.collapsedCardGroups?.miles ?? false;
+
+  const handleToggleGroup = useCallback(
+    (category: 'cashback' | 'miles') => {
+      const collapsed = settings.collapsedCardGroups ?? {};
+      updateSettings({
+        collapsedCardGroups: {
+          ...collapsed,
+          [category]: !(collapsed[category] ?? false),
+        },
+      });
+    },
+    [settings.collapsedCardGroups, updateSettings]
+  );
+
+  const handleCardReorder = useCallback(
+    (category: 'cashback' | 'miles', orderedIds: string[]) => {
+      const allCategoryIds = cards.filter((card) => card.type === category).map((card) => card.id);
+      const seen = new Set<string>();
+      const dedupedOrdered = orderedIds.filter((id) => {
+        if (seen.has(id) || !allCategoryIds.includes(id)) {
+          return false;
+        }
+        seen.add(id);
+        return true;
+      });
+      const remaining = allCategoryIds.filter((id) => !seen.has(id));
+
+      updateSettings({
+        cardOrdering: {
+          ...(settings.cardOrdering ?? {}),
+          [category]: [...dedupedOrdered, ...remaining],
+        },
+      });
+    },
+    [cards, settings.cardOrdering, updateSettings]
+  );
 
   // Empty state when nothing is configured
   if (!pat) {
@@ -333,6 +407,10 @@ export default function DashboardPage() {
         onUnhideAll={handleUnhideAll}
         pat={pat}
         prefetchedTransactions={allBudgetTransactions}
+        cashbackCollapsed={cashbackCollapsed}
+        milesCollapsed={milesCollapsed}
+        onToggleGroup={handleToggleGroup}
+        onReorderCards={handleCardReorder}
       />
 
       <DashboardQuickStats
