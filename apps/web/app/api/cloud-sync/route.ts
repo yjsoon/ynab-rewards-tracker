@@ -63,8 +63,16 @@ async function storeValue(key: string, value: string): Promise<void> {
   });
 
   if (!response.ok) {
-    const error = (await response.json().catch(() => null)) as CloudflareError | null;
-    const message = error?.errors?.[0]?.message || (await response.text().catch(() => '')) || 'Failed to store cloud sync data';
+    const bodyText = await response.text().catch(() => '');
+    let message = 'Failed to store cloud sync data';
+    if (bodyText) {
+      try {
+        const parsed = JSON.parse(bodyText) as CloudflareError;
+        message = parsed?.errors?.[0]?.message || bodyText || message;
+      } catch {
+        message = bodyText;
+      }
+    }
     throw new CloudflareKVError(`Cloudflare (${response.status}): ${message}`, response.status || 502);
   }
 }

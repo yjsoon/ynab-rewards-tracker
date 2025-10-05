@@ -23,16 +23,17 @@ function ensureCrypto(): Crypto {
 }
 
 function getNodeBuffer(): BufferConstructorLike | undefined {
-  const candidate = (globalThis as Record<string, unknown>).Buffer as BufferConstructorLike | undefined;
-  return typeof candidate === 'function' ? candidate : undefined;
+  if (!('Buffer' in globalThis)) {
+    return undefined;
+  }
+
+  const candidate = (globalThis as typeof globalThis & { Buffer?: unknown }).Buffer;
+  return typeof candidate === 'function' ? (candidate as BufferConstructorLike) : undefined;
 }
 
 function toBase64Url(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
-  let binary = '';
-  bytes.forEach((byte) => {
-    binary += String.fromCharCode(byte);
-  });
+  const binary = Array.from(bytes, (byte) => String.fromCharCode(byte)).join('');
 
   if (typeof globalThis.btoa === 'function') {
     const base64 = globalThis.btoa(binary);

@@ -411,7 +411,9 @@ export default function SettingsPage() {
     try {
       return JSON.parse(exportSettings());
     } catch (error) {
-      throw new Error('Failed to prepare settings for cloud sync');
+      const baseMessage = 'Failed to prepare settings for cloud sync';
+      const details = error instanceof Error ? error.message : 'Unknown error';
+      throw new Error(`${baseMessage}: ${details}`);
     }
   }
 
