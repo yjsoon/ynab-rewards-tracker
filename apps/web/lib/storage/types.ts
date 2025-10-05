@@ -144,6 +144,8 @@ export interface AppSettings {
   currency?: string;
   milesValuation?: number;
   dashboardViewMode?: DashboardViewMode;
+  cloudSyncKeyId?: string;
+  cloudSyncLastSyncedAt?: string;
 }
 
 export interface StorageData {
