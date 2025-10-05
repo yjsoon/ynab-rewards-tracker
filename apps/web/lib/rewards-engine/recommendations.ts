@@ -7,6 +7,7 @@ import type { RewardCalculation, CreditCard, AppSettings, ThemeGroup } from '@/l
 import type { CardRecommendation, CategoryCardInsight, CategoryRecommendation } from './types';
 import { buildCardEntries, createSubcategoryInsight, createWholeCardInsight } from './utils/category-insights';
 import { getAlertRecommendations, getCardRecommendations } from './utils/card-recommendations';
+import { mapLatestSubcategoryCalculations, sortCategoryInsights } from './utils/recommendation-helpers';
 
 export class RecommendationEngine {
   /**
@@ -34,30 +35,8 @@ export class RecommendationEngine {
       cardMap.set(card.id, card);
     });
 
-    const latestPeriod = calculations.reduce<string | undefined>((latest, calc) => {
-      if (!latest) {
-        return calc.period;
-      }
-      return calc.period > latest ? calc.period : latest;
-    }, undefined);
-
-    const relevantCalcs = latestPeriod
-      ? calculations.filter((calc) => calc.period === latestPeriod)
-      : calculations;
-
-    const calcByCard = new Map<string, RewardCalculation>();
-    relevantCalcs.forEach((calc) => {
-      if (!calc.subcategoryBreakdowns || calc.subcategoryBreakdowns.length === 0) {
-        return;
-      }
-      const existing = calcByCard.get(calc.cardId);
-      if (!existing || calc.period >= existing.period) {
-        calcByCard.set(calc.cardId, calc);
-      }
-    });
-
+    const { latestPeriod, byCard: calcByCard } = mapLatestSubcategoryCalculations(calculations);
     const milesValuation = settings?.milesValuation ?? 0.01;
-    const statusPriority = { use: 3, consider: 2, avoid: 1 } as const;
 
     return [...groups]
       .sort((a, b) => a.priority - b.priority)
@@ -92,19 +71,12 @@ export class RecommendationEngine {
           }
         });
 
-        insights.sort((a, b) => {
-          const statusDiff = statusPriority[b.status] - statusPriority[a.status];
-          if (statusDiff !== 0) return statusDiff;
-          if (b.rewardRate !== a.rewardRate) return b.rewardRate - a.rewardRate;
-          return b.rewardEarnedDollars - a.rewardEarnedDollars;
-        });
-
         return {
           groupId: group.id,
           groupName: group.name,
           groupDescription: group.description,
           latestPeriod,
-          insights,
+          insights: sortCategoryInsights(insights),
         };
       })
       .filter((rec) => rec.insights.length > 0);
