@@ -383,6 +383,8 @@ export function createDefaultStorage(): StorageData {
       theme: 'light',
       currency: 'USD',
       dashboardViewMode: 'summary',
+      cardOrdering: {},
+      collapsedCardGroups: {},
     },
   };
 }
