@@ -19,6 +19,10 @@ import type {
   MutableThemeGroup,
 } from './internal-types';
 
+function shouldLogDevelopmentWarnings(): boolean {
+  return process.env.NODE_ENV !== 'production';
+}
+
 function createRandomId(prefix: string): string {
   try {
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -152,7 +156,7 @@ export function normaliseCard(
     if (!seenFlags.has(normalised.flagColor)) {
       normalisedSubcategories.push(normalised);
       seenFlags.add(normalised.flagColor);
-    } else if (process.env.NODE_ENV === 'development') {
+    } else if (shouldLogDevelopmentWarnings()) {
       console.warn(
         `Duplicate flag colour detected: "${normalised.flagColor}". ` +
           `Subcategory "${normalised.name}" (index ${index}) was skipped. ` +
