@@ -3,6 +3,17 @@
 import Link from 'next/link';
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useYnabPAT, useCreditCards, useSettings, useSelectedBudget, useTrackedAccountIds } from '@/hooks/useLocalStorage';
+import {
+  createMnemonic,
+  encryptJson,
+  decryptJson,
+  computeKeyId,
+  fetchEncryptedSettings,
+  uploadEncryptedSettings,
+  deleteEncryptedSettings,
+  isValidMnemonic,
+  normaliseMnemonic,
+} from '@/lib/cloud-sync';
 import { YnabClient } from '@/lib/ynab-client';
 import type { CreditCard } from '@/lib/storage';
 import { validateYnabToken } from '@/lib/validation';
@@ -19,16 +30,21 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { getErrorMessage, cn } from '@/lib/utils';
-import { 
-  CheckCircle2, 
-  CreditCard as CreditCardIcon, 
-  Trash2, 
-  Download, 
-  Upload, 
+import {
+  CheckCircle2,
+  CreditCard as CreditCardIcon,
+  Trash2,
+  Download,
+  Upload,
   AlertCircle,
   RefreshCw,
   Wallet,
-  DollarSign
+  DollarSign,
+  CloudUpload,
+  CloudDownload,
+  Copy,
+  CloudOff,
+  KeyRound,
 } from 'lucide-react';
 
 interface YnabBudget {
@@ -156,6 +172,12 @@ export default function SettingsPage() {
   const hasRequestedBudgetsRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [cloudSyncPhrase, setCloudSyncPhrase] = useState('');
+  const [generatedCloudPhrase, setGeneratedCloudPhrase] = useState<string | null>(null);
+  const [cloudSyncMessage, setCloudSyncMessage] = useState('');
+  const [cloudSyncError, setCloudSyncError] = useState('');
+  const [cloudSyncAction, setCloudSyncAction] = useState<'idle' | 'generate' | 'upload' | 'download' | 'delete'>('idle');
+
   // Budget and account selection state
   const [budgets, setBudgets] = useState<YnabBudget[]>([]);
   const { selectedBudget, setSelectedBudget: persistSelectedBudget } = useSelectedBudget();
@@ -171,6 +193,15 @@ export default function SettingsPage() {
   );
   // Points removed; only miles valuation remains
   const [valuationMessage, setValuationMessage] = useState<string>("");
+
+  const isCloudSyncBusy = cloudSyncAction !== 'idle';
+  const cloudSyncLastSynced = settings.cloudSyncLastSyncedAt
+    ? new Date(settings.cloudSyncLastSyncedAt).toLocaleString()
+    : null;
+  const isGeneratingCloudSync = cloudSyncAction === 'generate';
+  const isUploadingCloudSync = cloudSyncAction === 'upload';
+  const isDownloadingCloudSync = cloudSyncAction === 'download';
+  const isDeletingCloudSync = cloudSyncAction === 'delete';
 
   useEffect(() => {
     if (typeof settings.milesValuation === 'number') {
@@ -245,6 +276,17 @@ export default function SettingsPage() {
     const timeout = setTimeout(() => setValuationMessage(''), 2500);
     return () => clearTimeout(timeout);
   }, [valuationMessage]);
+
+  useEffect(() => {
+    if (!cloudSyncMessage && !cloudSyncError) {
+      return;
+    }
+    const timeout = setTimeout(() => {
+      setCloudSyncMessage('');
+      setCloudSyncError('');
+    }, 5000);
+    return () => clearTimeout(timeout);
+  }, [cloudSyncMessage, cloudSyncError]);
 
   // Kick off initial account/budget fetch based on stored selection
   useEffect(() => {
@@ -363,6 +405,146 @@ export default function SettingsPage() {
     setAccounts([]);
     persistTrackedAccountIds([]);
     setShowClearDialog(false);
+  }
+
+  function parseExportedSettings(): unknown {
+    try {
+      return JSON.parse(exportSettings());
+    } catch (error) {
+      throw new Error('Failed to prepare settings for cloud sync');
+    }
+  }
+
+  async function uploadWithPhrase(phrase: string, options: { generated?: boolean } = {}) {
+    const normalised = normaliseMnemonic(phrase);
+    if (!isValidMnemonic(normalised)) {
+      throw new Error('Invalid sync code. Check the words and try again.');
+    }
+
+    const payload = parseExportedSettings();
+    const keyId = await computeKeyId(normalised);
+    const { ciphertext, iv } = await encryptJson(normalised, payload);
+    const { updatedAt } = await uploadEncryptedSettings({ keyId, ciphertext, iv });
+
+    updateSettings({ cloudSyncKeyId: keyId, cloudSyncLastSyncedAt: updatedAt });
+    setCloudSyncPhrase(normalised);
+    setGeneratedCloudPhrase(options.generated ? normalised : null);
+    setCloudSyncMessage('Settings uploaded to Cloudflare KV. Copy your sync code to keep it safe.');
+  }
+
+  async function handleGenerateCloudSync() {
+    setCloudSyncError('');
+    setCloudSyncMessage('');
+    const phrase = createMnemonic();
+    setCloudSyncAction('generate');
+    try {
+      await uploadWithPhrase(phrase, { generated: true });
+    } catch (error) {
+      setGeneratedCloudPhrase(null);
+      setCloudSyncError(getErrorMessage(error));
+    } finally {
+      setCloudSyncAction('idle');
+    }
+  }
+
+  async function handleCloudUpload() {
+    if (!cloudSyncPhrase.trim()) {
+      setCloudSyncError('Enter your sync code before uploading.');
+      return;
+    }
+
+    setCloudSyncError('');
+    setCloudSyncMessage('');
+    setCloudSyncAction('upload');
+    try {
+      await uploadWithPhrase(cloudSyncPhrase);
+    } catch (error) {
+      setCloudSyncError(getErrorMessage(error));
+    } finally {
+      setCloudSyncAction('idle');
+    }
+  }
+
+  async function handleCloudDownload() {
+    if (!cloudSyncPhrase.trim()) {
+      setCloudSyncError('Enter your sync code before downloading.');
+      return;
+    }
+
+    setCloudSyncError('');
+    setCloudSyncMessage('');
+    setCloudSyncAction('download');
+    try {
+      const normalised = normaliseMnemonic(cloudSyncPhrase);
+      if (!isValidMnemonic(normalised)) {
+        throw new Error('Invalid sync code.');
+      }
+
+      const keyId = await computeKeyId(normalised);
+      const stored = await fetchEncryptedSettings(keyId);
+
+      if (!stored) {
+        throw new Error('No cloud backup found for this sync code.');
+      }
+
+      const decrypted = await decryptJson<unknown>(normalised, stored.ciphertext, stored.iv);
+      importSettings(JSON.stringify(decrypted, null, 2));
+      updateSettings({ cloudSyncKeyId: keyId, cloudSyncLastSyncedAt: stored.updatedAt });
+      setCloudSyncPhrase(normalised);
+      setGeneratedCloudPhrase(null);
+      setCloudSyncMessage('Settings downloaded and applied.');
+    } catch (error) {
+      setCloudSyncError(getErrorMessage(error));
+    } finally {
+      setCloudSyncAction('idle');
+    }
+  }
+
+  async function handleCloudDelete() {
+    const trimmedInput = cloudSyncPhrase.trim();
+    let keyId = settings.cloudSyncKeyId;
+
+    if (!keyId && trimmedInput) {
+      const normalised = normaliseMnemonic(trimmedInput);
+      if (!isValidMnemonic(normalised)) {
+        setCloudSyncError('Enter a valid sync code before deleting.');
+        return;
+      }
+      keyId = await computeKeyId(normalised);
+    }
+
+    if (!keyId) {
+      setCloudSyncError('Nothing to delete. Upload once before removing the backup.');
+      return;
+    }
+
+    setCloudSyncError('');
+    setCloudSyncMessage('');
+    setCloudSyncAction('delete');
+    try {
+      await deleteEncryptedSettings(keyId);
+      updateSettings({ cloudSyncKeyId: undefined, cloudSyncLastSyncedAt: undefined });
+      setGeneratedCloudPhrase(null);
+      setCloudSyncPhrase('');
+      setCloudSyncMessage('Cloud backup deleted.');
+    } catch (error) {
+      setCloudSyncError(getErrorMessage(error));
+    } finally {
+      setCloudSyncAction('idle');
+    }
+  }
+
+  async function handleCopyGeneratedPhrase() {
+    if (!generatedCloudPhrase) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(generatedCloudPhrase);
+      setCloudSyncMessage('Sync code copied to clipboard.');
+    } catch (error) {
+      setCloudSyncError(`Copy failed: ${getErrorMessage(error)}`);
+    }
   }
 
   if (patLoading || cardsLoading) {
@@ -583,6 +765,116 @@ export default function SettingsPage() {
               )}
             </div>
           </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Cloud Sync (optional)</CardTitle>
+          <CardDescription>
+            Encrypt your settings with a 12-word sync code and store them in Cloudflare KV via Netlify functions. No sign-in required.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {generatedCloudPhrase && (
+              <div className="rounded-md border bg-muted/30 p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <KeyRound className="h-4 w-4 text-primary" aria-hidden="true" />
+                    <span className="text-sm font-medium">New sync code</span>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleCopyGeneratedPhrase}
+                  >
+                    <Copy className="mr-2 h-4 w-4" aria-hidden="true" />
+                    Copy
+                  </Button>
+                </div>
+                <p className="mt-3 whitespace-pre-wrap break-words font-mono text-sm">
+                  {generatedCloudPhrase}
+                </p>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="cloud-sync-phrase">
+                Sync code
+              </label>
+              <textarea
+                id="cloud-sync-phrase"
+                className="w-full rounded-md border px-3 py-2 font-mono text-sm"
+                rows={2}
+                value={cloudSyncPhrase}
+                onChange={(event) => setCloudSyncPhrase(event.target.value)}
+                placeholder="twelve lowercase words separated by spaces"
+              />
+              <p className="text-xs text-muted-foreground">
+                Paste your existing code or generate a new one. Keep it private — anyone with the code can import your settings.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                onClick={handleGenerateCloudSync}
+                disabled={isCloudSyncBusy}
+              >
+                <KeyRound className="mr-2 h-4 w-4" aria-hidden="true" />
+                {isGeneratingCloudSync ? 'Generating…' : 'Generate & upload'}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleCloudUpload}
+                disabled={isCloudSyncBusy}
+              >
+                <CloudUpload className="mr-2 h-4 w-4" aria-hidden="true" />
+                {isUploadingCloudSync ? 'Uploading…' : 'Upload with code'}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleCloudDownload}
+                disabled={isCloudSyncBusy}
+              >
+                <CloudDownload className="mr-2 h-4 w-4" aria-hidden="true" />
+                {isDownloadingCloudSync ? 'Downloading…' : 'Download & apply'}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={handleCloudDelete}
+                disabled={isCloudSyncBusy}
+              >
+                <CloudOff className="mr-2 h-4 w-4" aria-hidden="true" />
+                {isDeletingCloudSync ? 'Deleting…' : 'Delete cloud backup'}
+              </Button>
+            </div>
+
+            {cloudSyncLastSynced && (
+              <p className="text-xs text-muted-foreground">
+                Last synced: {cloudSyncLastSynced}
+              </p>
+            )}
+
+            {cloudSyncMessage && (
+              <Alert>
+                <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                <AlertDescription>{cloudSyncMessage}</AlertDescription>
+              </Alert>
+            )}
+
+            {cloudSyncError && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" aria-hidden="true" />
+                <AlertDescription>{cloudSyncError}</AlertDescription>
+              </Alert>
+            )}
+          </div>
         </CardContent>
       </Card>
 
