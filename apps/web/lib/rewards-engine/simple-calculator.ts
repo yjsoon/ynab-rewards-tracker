@@ -2,7 +2,7 @@
  * Simplified rewards calculation using card earning rates
  */
 
-import type { AppSettings, CardSubcategory, CreditCard } from '@/lib/storage';
+import type { AppSettings, CreditCard } from '@/lib/storage';
 import type { Transaction } from '@/types/transaction';
 import {
   calculateMaximumSpendProgress,
@@ -10,13 +10,14 @@ import {
   isMaximumSpendExceeded,
   isMinimumSpendMet,
 } from '@/lib/minimum-spend-helpers';
-import { UNFLAGGED_FLAG, YNAB_FLAG_COLORS, type YnabFlagColor } from '@/lib/ynab-constants';
+import { UNFLAGGED_FLAG, type YnabFlagColor } from '@/lib/ynab-constants';
 import { calculateCardPeriod, toSimplePeriod } from './utils/periods';
-
-const FLAG_COLOUR_SET: Set<YnabFlagColor> = new Set([
-  UNFLAGGED_FLAG.value,
-  ...YNAB_FLAG_COLORS.map((flag) => flag.value),
-]);
+import {
+  createSubcategoryContext,
+  normaliseFlagColor,
+  resolveSubcategory,
+} from './utils/subcategories';
+import { applyBlock, getBlockSize, getRewardRate } from './utils/reward-math';
 
 export interface SubcategoryCalculation {
   id: string;
@@ -64,90 +65,11 @@ export interface CalculationPeriod {
   label: string;
 }
 
-type SubcategoryContext = {
-  enabled: boolean;
-  activeSubcategories: CardSubcategory[];
-  map: Map<YnabFlagColor, CardSubcategory>;
-  fallback: CardSubcategory | undefined;
-};
-
 type TransactionRewardOptions = {
   flagColor?: string | null;
 };
 
 export class SimpleRewardsCalculator {
-  private static normaliseFlagColor(flagColor?: string | null): YnabFlagColor {
-    if (!flagColor) {
-      return UNFLAGGED_FLAG.value;
-    }
-    const lowered = flagColor.toLowerCase() as YnabFlagColor;
-    return FLAG_COLOUR_SET.has(lowered) ? lowered : UNFLAGGED_FLAG.value;
-  }
-
-  private static getSubcategoryContext(card: CreditCard): SubcategoryContext {
-    const enabled = Boolean(card.subcategoriesEnabled);
-    const rawSubcategories = Array.isArray(card.subcategories) ? card.subcategories : [];
-    const activeSubcategories = enabled
-      ? rawSubcategories
-          .filter((sub) => sub && sub.active !== false)
-          .sort((a, b) => a.priority - b.priority)
-      : [];
-
-    const map = new Map<YnabFlagColor, CardSubcategory>();
-    for (const sub of activeSubcategories) {
-      map.set(sub.flagColor, sub);
-    }
-
-    const fallback = enabled ? map.get(UNFLAGGED_FLAG.value) : undefined;
-
-    return {
-      enabled,
-      activeSubcategories,
-      map,
-      fallback,
-    };
-  }
-
-  private static getBlockSize(card: CreditCard, subcategory?: CardSubcategory | undefined): number | null {
-    if (card.type === 'miles' && subcategory && subcategory.milesBlockSize && subcategory.milesBlockSize > 0) {
-      return subcategory.milesBlockSize;
-    }
-
-    if (card.earningBlockSize && card.earningBlockSize > 0) {
-      return card.earningBlockSize;
-    }
-
-    return null;
-  }
-
-  private static getRewardRate(card: CreditCard, subcategory?: CardSubcategory | undefined): number {
-    if (subcategory && typeof subcategory.rewardValue === 'number') {
-      return subcategory.rewardValue;
-    }
-    return typeof card.earningRate === 'number' ? card.earningRate : 0;
-  }
-
-  private static applyBlock(eligibleAmount: number, blockSize: number | null): { amount: number; blocks: number } {
-    if (!blockSize || blockSize <= 0) {
-      return { amount: eligibleAmount, blocks: 0 };
-    }
-    const blocks = Math.floor(eligibleAmount / blockSize);
-    return {
-      amount: blocks * blockSize,
-      blocks,
-    };
-  }
-
-  private static getSubcategoryForFlag(
-    context: SubcategoryContext,
-    flagColor: YnabFlagColor
-  ): CardSubcategory | undefined {
-    if (!context.enabled) {
-      return undefined;
-    }
-    return context.map.get(flagColor) ?? context.fallback;
-  }
-
   /**
    * Calculate reward for a single transaction based on card settings
    */
@@ -158,17 +80,17 @@ export class SimpleRewardsCalculator {
     options?: TransactionRewardOptions
   ): { reward: number; rewardDollars: number; blockInfo?: string; rewardRate: number } {
     const milesValuation = settings?.milesValuation || 0.01;
-    const context = this.getSubcategoryContext(card);
-    const flagColour = this.normaliseFlagColor(options?.flagColor);
-    const subcategory = this.getSubcategoryForFlag(context, flagColour);
+    const context = createSubcategoryContext(card);
+    const flagColour = normaliseFlagColor(options?.flagColor);
+    const subcategory = resolveSubcategory(context, flagColour);
 
-    const rewardRate = this.getRewardRate(card, subcategory);
+    const rewardRate = getRewardRate(card, subcategory);
     if (!rewardRate || rewardRate === 0) {
       return { reward: 0, rewardDollars: 0, rewardRate: 0 };
     }
 
-    const blockSize = this.getBlockSize(card, subcategory);
-    const { amount: earnableAmount, blocks } = this.applyBlock(amount, blockSize);
+    const blockSize = getBlockSize(card, subcategory);
+    const { amount: earnableAmount, blocks } = applyBlock(amount, blockSize);
 
     let reward = 0;
     let rewardDollars = 0;
@@ -206,7 +128,7 @@ export class SimpleRewardsCalculator {
     settings?: AppSettings
   ): SimplifiedCalculation {
     const milesValuation = settings?.milesValuation || 0.01;
-    const context = this.getSubcategoryContext(card);
+    const context = createSubcategoryContext(card);
 
     const periodTransactions = transactions.filter((txn) => {
       const txnDate = txn.date;
@@ -217,8 +139,8 @@ export class SimpleRewardsCalculator {
     let totalSpend = 0;
     if (context.enabled && context.activeSubcategories.length > 0) {
       for (const txn of periodTransactions) {
-        const flagColour = this.normaliseFlagColor(txn.flag_color);
-        const subcategory = this.getSubcategoryForFlag(context, flagColour);
+        const flagColour = normaliseFlagColor(txn.flag_color);
+        const subcategory = resolveSubcategory(context, flagColour);
 
         // Skip excluded subcategories from total spend
         if (subcategory?.excludeFromRewards) {
@@ -247,8 +169,8 @@ export class SimpleRewardsCalculator {
     if (context.enabled && context.activeSubcategories.length > 0) {
       const spendByFlag = new Map<YnabFlagColor, number>();
       for (const txn of periodTransactions) {
-        const flagColour = this.normaliseFlagColor(txn.flag_color);
-        const subcategory = this.getSubcategoryForFlag(context, flagColour);
+        const flagColour = normaliseFlagColor(txn.flag_color);
+        const subcategory = resolveSubcategory(context, flagColour);
 
         // Skip excluded subcategories entirely - they don't count toward anything
         if (subcategory?.excludeFromRewards) {
@@ -291,8 +213,8 @@ export class SimpleRewardsCalculator {
         }
 
         const totalForSubcategory = spendByFlag.get(subcategory.flagColor) ?? 0;
-        const rewardRate = this.getRewardRate(card, subcategory);
-        const blockSize = this.getBlockSize(card, subcategory);
+        const rewardRate = getRewardRate(card, subcategory);
+        const blockSize = getBlockSize(card, subcategory);
 
         let subEligibleBeforeBlocks = 0;
         let subEligible = 0;
@@ -315,7 +237,7 @@ export class SimpleRewardsCalculator {
 
           subEligibleBeforeBlocks = cappedByCard;
 
-          const blockResult = this.applyBlock(subEligibleBeforeBlocks, blockSize);
+          const blockResult = applyBlock(subEligibleBeforeBlocks, blockSize);
           subEligible = blockResult.amount;
           blocksEarned = blockResult.blocks;
 
