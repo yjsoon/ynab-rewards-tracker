@@ -9,7 +9,8 @@ import type {
   AppSettings
 } from '@/lib/storage';
 import type { TransactionWithRewards } from '@/types/transaction';
-import { getEffectiveBillingDay, parseYnabDate } from './date-utils';
+import { parseYnabDate } from './date-utils';
+import { calculateCardPeriod, getRecentCardPeriods } from './utils/periods';
 export interface CalculationPeriod {
   startDate: Date;
   endDate: Date;
@@ -98,44 +99,12 @@ export class RewardsCalculator {
    * Calculate the current period for a given card
    */
   static calculatePeriod(card: CreditCard, targetDate: Date = new Date()): CalculationPeriod {
-    let startDate: Date;
-    let endDate: Date;
-
-    if (card.billingCycle?.type === 'billing' && card.billingCycle.dayOfMonth) {
-      // Custom billing cycle
-      const year = targetDate.getFullYear();
-      const month = targetDate.getMonth();
-
-      const requestedBillingDay = card.billingCycle.dayOfMonth;
-      const currentMonthEffectiveDay = getEffectiveBillingDay(year, month, requestedBillingDay);
-
-      // Determine if we're in current or previous billing cycle
-      const currentCycleStart = new Date(year, month, currentMonthEffectiveDay);
-      if (targetDate < currentCycleStart) {
-        // We're in the previous billing cycle
-        const prevMonthEffectiveDay = getEffectiveBillingDay(year, month - 1, requestedBillingDay);
-        startDate = new Date(year, month - 1, prevMonthEffectiveDay);
-        endDate = new Date(year, month, currentMonthEffectiveDay - 1, 23, 59, 59, 999);
-      } else {
-        // We're in the current billing cycle
-        startDate = currentCycleStart;
-        const nextMonthEffectiveDay = getEffectiveBillingDay(year, month + 1, requestedBillingDay);
-        endDate = new Date(year, month + 1, nextMonthEffectiveDay - 1, 23, 59, 59, 999);
-      }
-    } else {
-      // Calendar month (default)
-      const year = targetDate.getFullYear();
-      const month = targetDate.getMonth();
-      startDate = new Date(year, month, 1);
-      endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
-    }
-
-    const periodName = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}`;
+    const period = calculateCardPeriod(card, targetDate);
 
     return {
-      startDate,
-      endDate,
-      name: periodName,
+      startDate: period.startDate,
+      endDate: period.endDate,
+      name: period.label,
     };
   }
 
@@ -143,14 +112,10 @@ export class RewardsCalculator {
    * Get recent periods for a card
    */
   static getRecentPeriods(card: CreditCard, count: number = 3): CalculationPeriod[] {
-    const periods: CalculationPeriod[] = [];
-    const now = new Date();
-
-    for (let i = 0; i < count; i++) {
-      const targetDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      periods.push(this.calculatePeriod(card, targetDate));
-    }
-
-    return periods;
+    return getRecentCardPeriods(card, count).map((period) => ({
+      startDate: period.startDate,
+      endDate: period.endDate,
+      name: period.label,
+    }));
   }
 }

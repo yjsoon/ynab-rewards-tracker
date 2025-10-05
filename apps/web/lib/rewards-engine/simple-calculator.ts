@@ -11,7 +11,7 @@ import {
   isMinimumSpendMet,
 } from '@/lib/minimum-spend-helpers';
 import { UNFLAGGED_FLAG, YNAB_FLAG_COLORS, type YnabFlagColor } from '@/lib/ynab-constants';
-import { formatLocalDate, getEffectiveBillingDay } from './date-utils';
+import { calculateCardPeriod, toSimplePeriod } from './utils/periods';
 
 const FLAG_COLOUR_SET: Set<YnabFlagColor> = new Set([
   UNFLAGGED_FLAG.value,
@@ -190,44 +190,10 @@ export class SimpleRewardsCalculator {
    * Calculate the current period for a card based on billing cycle
    */
   static calculatePeriod(card: CreditCard): CalculationPeriod {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth();
+    const period = calculateCardPeriod(card);
+    const useStartLabel = Boolean(card.billingCycle?.type === 'billing' && card.billingCycle.dayOfMonth);
 
-    if (card.billingCycle?.type === 'billing' && card.billingCycle.dayOfMonth) {
-      const requestedBillingDay = card.billingCycle.dayOfMonth;
-      const currentMonthEffectiveDay = getEffectiveBillingDay(year, month, requestedBillingDay);
-
-      let startDate: Date;
-      let endDate: Date;
-
-      if (now.getDate() >= currentMonthEffectiveDay) {
-        // We're in current billing cycle
-        startDate = new Date(year, month, currentMonthEffectiveDay);
-        const nextMonthEffectiveDay = getEffectiveBillingDay(year, month + 1, requestedBillingDay);
-        endDate = new Date(year, month + 1, nextMonthEffectiveDay - 1, 23, 59, 59, 999);
-      } else {
-        // We're in previous billing cycle
-        const prevMonthEffectiveDay = getEffectiveBillingDay(year, month - 1, requestedBillingDay);
-        startDate = new Date(year, month - 1, prevMonthEffectiveDay);
-        endDate = new Date(year, month, currentMonthEffectiveDay - 1, 23, 59, 59, 999);
-      }
-
-      return {
-        start: formatLocalDate(startDate),
-        end: formatLocalDate(endDate),
-        label: formatLocalDate(startDate),
-      };
-    }
-
-    const startDate = new Date(year, month, 1);
-    const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
-
-    return {
-      start: formatLocalDate(startDate),
-      end: formatLocalDate(endDate),
-      label: `${year}-${String(month + 1).padStart(2, '0')}`,
-    };
+    return toSimplePeriod(period, useStartLabel);
   }
 
   /**
