@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { CreditCard } from '@/lib/storage';
 
-import { calculateCardPeriod, getRecentCardPeriods, toSimplePeriod } from './periods';
+import { calculateCardPeriod, getRecentCardPeriods, periodOverlapsWindow, toSimplePeriod } from './periods';
 
 const baseCard: CreditCard = {
   id: 'card-1',
@@ -80,5 +80,25 @@ describe('getRecentCardPeriods', () => {
     const periods = getRecentCardPeriods(baseCard, 4);
     expect(periods).toHaveLength(4);
     expect(periods[0].label >= periods[1].label).toBe(true);
+  });
+});
+
+describe('periodOverlapsWindow', () => {
+  it('returns false when period ends before window start', () => {
+    const start = new Date('2025-01-01');
+    const end = new Date('2025-01-31');
+    expect(periodOverlapsWindow(start, end, '2025-02-01')).toBe(false);
+  });
+
+  it('returns false when period starts after window end', () => {
+    const start = new Date('2025-03-01');
+    const end = new Date('2025-03-31');
+    expect(periodOverlapsWindow(start, end, undefined, '2025-02-28')).toBe(false);
+  });
+
+  it('returns true when period overlaps the window bounds', () => {
+    const start = new Date('2025-04-01');
+    const end = new Date('2025-04-30');
+    expect(periodOverlapsWindow(start, end, '2025-04-15', '2025-05-15')).toBe(true);
   });
 });

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   CreditCard,
   RewardRule,
@@ -30,19 +30,31 @@ function useHasHydrated() {
   return hasHydrated;
 }
 
-export function useYnabPAT() {
+function useStorageResource<T>(selector: () => T, fallback: T, dependency?: unknown) {
   const { refreshTrigger, triggerRefresh } = useStorageContext();
   const hasHydrated = useHasHydrated();
+  const selectorRef = useRef(selector);
+  const fallbackRef = useRef(fallback);
+  const [value, setValue] = useState(fallback);
 
-  const pat = useMemo(() => {
+  selectorRef.current = selector;
+  fallbackRef.current = fallback;
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
     if (!hasHydrated || typeof window === 'undefined') {
-      return '';
+      setValue(fallbackRef.current);
+      return;
     }
-    // Force re-computation when refreshTrigger changes
-    return storage.getPAT() || '';
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasHydrated, refreshTrigger]);
 
+    setValue(selectorRef.current());
+  }, [hasHydrated, refreshTrigger, dependency]);
+
+  return { value, triggerRefresh, isLoading: !hasHydrated };
+}
+
+export function useYnabPAT() {
+  const { value: pat, triggerRefresh, isLoading } = useStorageResource(() => storage.getPAT() || '', '');
   const setPAT = useCallback((newPAT: string) => {
     if (newPAT) {
       storage.setPAT(newPAT);
@@ -52,22 +64,11 @@ export function useYnabPAT() {
     triggerRefresh();
   }, [triggerRefresh]);
 
-  return { pat, setPAT, isLoading: !hasHydrated };
+  return { pat, setPAT, isLoading };
 }
 
 export function useCreditCards() {
-  const { refreshTrigger, triggerRefresh } = useStorageContext();
-  const hasHydrated = useHasHydrated();
-
-  const cards = useMemo(() => {
-    if (!hasHydrated || typeof window === 'undefined') {
-      return EMPTY_CARD_LIST;
-    }
-    // Force re-computation when refreshTrigger changes
-    return storage.getCards();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasHydrated, refreshTrigger]);
-
+  const { value: cards, triggerRefresh, isLoading } = useStorageResource(() => storage.getCards(), EMPTY_CARD_LIST);
   const saveCard = useCallback((card: CreditCard) => {
     storage.saveCard(card);
     triggerRefresh();
@@ -83,43 +84,29 @@ export function useCreditCards() {
     triggerRefresh();
   }, [triggerRefresh]);
 
-  return { cards, saveCard, updateCard, deleteCard, isLoading: !hasHydrated };
+  return { cards, saveCard, updateCard, deleteCard, isLoading };
 }
 
 export function useSelectedBudget() {
-  const { refreshTrigger, triggerRefresh } = useStorageContext();
-  const hasHydrated = useHasHydrated();
-
-  const selectedBudget = useMemo(() => {
-    if (!hasHydrated || typeof window === 'undefined') {
-      return EMPTY_SELECTED_BUDGET;
-    }
-    // Force re-computation when refreshTrigger changes
-    return storage.getSelectedBudget();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasHydrated, refreshTrigger]);
-
+  const {
+    value: selectedBudget,
+    triggerRefresh,
+    isLoading,
+  } = useStorageResource(() => storage.getSelectedBudget(), EMPTY_SELECTED_BUDGET);
   const setSelectedBudget = useCallback((budgetId: string, budgetName: string) => {
     storage.setSelectedBudget(budgetId, budgetName);
     triggerRefresh();
   }, [triggerRefresh]);
 
-  return { selectedBudget, setSelectedBudget, isLoading: !hasHydrated };
+  return { selectedBudget, setSelectedBudget, isLoading };
 }
 
 export function useTrackedAccountIds() {
-  const { refreshTrigger, triggerRefresh } = useStorageContext();
-  const hasHydrated = useHasHydrated();
-
-  const trackedAccountIds = useMemo(() => {
-    if (!hasHydrated || typeof window === 'undefined') {
-      return EMPTY_STRING_ARRAY;
-    }
-    // Force re-computation when refreshTrigger changes
-    return storage.getTrackedAccountIds();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasHydrated, refreshTrigger]);
-
+  const {
+    value: trackedAccountIds,
+    triggerRefresh,
+    isLoading,
+  } = useStorageResource(() => storage.getTrackedAccountIds(), EMPTY_STRING_ARRAY);
   const setTrackedAccountIds = useCallback((accountIds: string[]) => {
     storage.setTrackedAccountIds(accountIds);
     triggerRefresh();
@@ -130,22 +117,15 @@ export function useTrackedAccountIds() {
     [trackedAccountIds]
   );
 
-  return { trackedAccountIds, setTrackedAccountIds, isAccountTracked, isLoading: !hasHydrated };
+  return { trackedAccountIds, setTrackedAccountIds, isAccountTracked, isLoading };
 }
 
 export function useRewardRules(cardId?: string) {
-  const { refreshTrigger, triggerRefresh } = useStorageContext();
-  const hasHydrated = useHasHydrated();
-
-  const rules = useMemo(() => {
-    if (!hasHydrated || typeof window === 'undefined') {
-      return EMPTY_RULE_LIST;
-    }
-    // Force re-computation when refreshTrigger changes
-    return cardId ? storage.getCardRules(cardId) : storage.getRules();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cardId, hasHydrated, refreshTrigger]);
-
+  const { value: rules, triggerRefresh, isLoading } = useStorageResource(
+    () => (cardId ? storage.getCardRules(cardId) : storage.getRules()),
+    EMPTY_RULE_LIST,
+    cardId
+  );
   const saveRule = useCallback((rule: RewardRule) => {
     storage.saveRule(rule);
     triggerRefresh();
@@ -156,22 +136,15 @@ export function useRewardRules(cardId?: string) {
     triggerRefresh();
   }, [triggerRefresh]);
 
-  return { rules, saveRule, deleteRule, isLoading: !hasHydrated };
+  return { rules, saveRule, deleteRule, isLoading };
 }
 
 export function useRewardCalculations(cardId?: string) {
-  const { refreshTrigger, triggerRefresh } = useStorageContext();
-  const hasHydrated = useHasHydrated();
-
-  const calculations = useMemo(() => {
-    if (!hasHydrated || typeof window === 'undefined') {
-      return EMPTY_CALCULATION_LIST;
-    }
-    // Force re-computation when refreshTrigger changes
-    return cardId ? storage.getCardCalculations(cardId) : storage.getCalculations();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cardId, hasHydrated, refreshTrigger]);
-
+  const { value: calculations, triggerRefresh, isLoading } = useStorageResource(
+    () => (cardId ? storage.getCardCalculations(cardId) : storage.getCalculations()),
+    EMPTY_CALCULATION_LIST,
+    cardId
+  );
   const saveCalculation = useCallback((calculation: RewardCalculation) => {
     storage.saveCalculation(calculation);
     triggerRefresh();
@@ -187,21 +160,14 @@ export function useRewardCalculations(cardId?: string) {
     triggerRefresh();
   }, [triggerRefresh]);
 
-  return { calculations, saveCalculation, deleteCalculation, clearCalculations, isLoading: !hasHydrated };
+  return { calculations, saveCalculation, deleteCalculation, clearCalculations, isLoading };
 }
 
 export function useThemeGroups() {
-  const { refreshTrigger, triggerRefresh } = useStorageContext();
-  const hasHydrated = useHasHydrated();
-
-  const themeGroups = useMemo(() => {
-    if (!hasHydrated || typeof window === 'undefined') {
-      return EMPTY_THEME_GROUP_LIST;
-    }
-    return storage.getThemeGroups();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasHydrated, refreshTrigger]);
-
+  const { value: themeGroups, triggerRefresh, isLoading } = useStorageResource(
+    () => storage.getThemeGroups(),
+    EMPTY_THEME_GROUP_LIST
+  );
   const saveThemeGroup = useCallback((group: ThemeGroup) => {
     storage.saveThemeGroup(group);
     triggerRefresh();
@@ -216,23 +182,15 @@ export function useThemeGroups() {
     themeGroups,
     saveThemeGroup,
     deleteThemeGroup,
-    isLoading: !hasHydrated,
+    isLoading,
   };
 }
 
 export function useHiddenCards() {
-  const { refreshTrigger, triggerRefresh } = useStorageContext();
-  const hasHydrated = useHasHydrated();
-
-  const hiddenCards = useMemo(() => {
-    if (!hasHydrated || typeof window === 'undefined') {
-      return EMPTY_HIDDEN_CARD_LIST;
-    }
-    // Clean expired entries and return active ones
-    return storage.cleanExpiredHiddenCards();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasHydrated, refreshTrigger]);
-
+  const { value: hiddenCards, triggerRefresh, isLoading } = useStorageResource(
+    () => storage.cleanExpiredHiddenCards(),
+    EMPTY_HIDDEN_CARD_LIST
+  );
   const hideCard = useCallback((cardId: string, hiddenUntil: string) => {
     storage.hideCard(cardId, hiddenUntil, 'maximum_spend_reached');
     triggerRefresh();
@@ -248,43 +206,28 @@ export function useHiddenCards() {
     [hiddenCards]
   );
 
-  return { hiddenCards, hideCard, unhideCard, isCardHidden, isLoading: !hasHydrated };
+  return { hiddenCards, hideCard, unhideCard, isCardHidden, isLoading };
 }
 
 export function useDashboardViewMode() {
-  const { refreshTrigger, triggerRefresh } = useStorageContext();
-  const hasHydrated = useHasHydrated();
-
-  const viewMode = useMemo(() => {
-    if (!hasHydrated || typeof window === 'undefined') {
-      return 'summary' as DashboardViewMode;
-    }
-    // Force re-computation when refreshTrigger changes
-    return storage.getDashboardViewMode();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasHydrated, refreshTrigger]);
-
+  const {
+    value: viewMode,
+    triggerRefresh,
+    isLoading,
+  } = useStorageResource(() => storage.getDashboardViewMode(), 'summary' as DashboardViewMode);
   const setViewMode = useCallback((mode: DashboardViewMode) => {
     storage.setDashboardViewMode(mode);
     triggerRefresh();
   }, [triggerRefresh]);
 
-  return { viewMode, setViewMode, isLoading: !hasHydrated };
+  return { viewMode, setViewMode, isLoading };
 }
 
 export function useSettings() {
-  const { refreshTrigger, triggerRefresh } = useStorageContext();
-  const hasHydrated = useHasHydrated();
-
-  const settings = useMemo(() => {
-    if (!hasHydrated || typeof window === 'undefined') {
-      return DEFAULT_SETTINGS;
-    }
-    // Force re-computation when refreshTrigger changes
-    return storage.getSettings();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasHydrated, refreshTrigger]);
-
+  const { value: settings, triggerRefresh, isLoading } = useStorageResource(
+    () => storage.getSettings(),
+    DEFAULT_SETTINGS
+  );
   const updateSettings = useCallback((newSettings: Partial<AppSettings>) => {
     storage.updateSettings(newSettings);
     triggerRefresh();
@@ -304,5 +247,5 @@ export function useSettings() {
     triggerRefresh();
   }, [triggerRefresh]);
 
-  return { settings, updateSettings, exportSettings, importSettings, clearAll, isLoading: !hasHydrated };
+  return { settings, updateSettings, exportSettings, importSettings, clearAll, isLoading };
 }
