@@ -88,3 +88,23 @@ export function toSimplePeriod(period: CardPeriod, useStartDateLabel: boolean = 
     label: useStartDateLabel ? formatLocalDate(period.startDate) : period.label,
   };
 }
+
+export function periodOverlapsWindow(
+  periodStart: Date,
+  periodEnd: Date,
+  windowStart?: string,
+  windowEnd?: string
+): boolean {
+  const startBoundary = windowStart ? new Date(windowStart) : undefined;
+  const endBoundary = windowEnd ? new Date(windowEnd) : undefined;
+
+  if (startBoundary && periodEnd < startBoundary) {
+    return false;
+  }
+
+  if (endBoundary && periodStart > endBoundary) {
+    return false;
+  }
+
+  return true;
+}

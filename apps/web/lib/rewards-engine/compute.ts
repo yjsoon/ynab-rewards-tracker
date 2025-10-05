@@ -9,21 +9,14 @@ import { RewardsCalculator } from './calculator';
 import { SimpleRewardsCalculator } from './simple-calculator';
 import { TransactionMatcher } from './matcher';
 import { formatLocalDate } from './date-utils';
+import { periodOverlapsWindow } from './utils/periods';
+import { createRewardCalculationFromSimple } from './utils/reward-calculation';
 import type {
   AppSettings,
   CreditCard,
   RewardCalculation,
   RewardRule,
 } from '@/lib/storage';
-
-function periodOverlapsWindow(periodStart: Date, periodEnd: Date, start?: string, end?: string): boolean {
-  const windowStart = start ? new Date(start) : undefined;
-  const windowEnd = end ? new Date(end) : undefined;
-
-  if (windowStart && periodEnd < windowStart) return false;
-  if (windowEnd && periodStart > windowEnd) return false;
-  return true;
-}
 
 export async function computeCurrentPeriod(
   pat: string,
@@ -59,33 +52,7 @@ export async function computeCurrentPeriod(
         label: period.name,
       };
       const simpleCalc = SimpleRewardsCalculator.calculateCardRewards(card, forCard, simplePeriod, settings);
-      results.push({
-        cardId: card.id,
-        ruleId: `card-${card.id}`,
-        period: period.name,
-        totalSpend: simpleCalc.totalSpend,
-        eligibleSpend: simpleCalc.eligibleSpend,
-        rewardEarned: simpleCalc.rewardEarned,
-        rewardEarnedDollars: simpleCalc.rewardEarnedDollars,
-        rewardType: simpleCalc.rewardType,
-        minimumProgress: simpleCalc.minimumSpendProgress,
-        maximumProgress: simpleCalc.maximumSpendProgress,
-        minimumMet: simpleCalc.minimumSpendMet,
-        maximumExceeded: simpleCalc.maximumSpendExceeded,
-        shouldStopUsing: simpleCalc.maximumSpendExceeded,
-        subcategoryBreakdowns: simpleCalc.subcategoryBreakdowns?.map((sub) => ({
-          subcategoryId: sub.id,
-          name: sub.name,
-          flagColor: sub.flagColor,
-          totalSpend: sub.totalSpend,
-          eligibleSpend: sub.eligibleSpend,
-          eligibleSpendBeforeBlocks: sub.eligibleSpendBeforeBlocks,
-          rewardEarned: sub.rewardEarned,
-          rewardEarnedDollars: sub.rewardEarnedDollars,
-          minimumSpendMet: sub.minimumSpendMet,
-          maximumSpendExceeded: sub.maximumSpendExceeded,
-        })),
-      });
+      results.push(createRewardCalculationFromSimple(card, simpleCalc));
       continue;
     }
 
