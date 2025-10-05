@@ -13,4 +13,4 @@ export type {
   CardRecommendation,
   CategoryCardInsight,
   CategoryRecommendation,
-} from './recommendations';
+} from './types';
