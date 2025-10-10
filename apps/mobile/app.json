@@ -10,13 +10,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.yingjie.ynabcounter",
-      "deploymentTarget": "15.1"
+      "bundleIdentifier": "com.yingjie.ynabcounter"
     },
     "android": {
-      "package": "com.yingjie.ynabcounter",
-      "compileSdkVersion": 35,
-      "targetSdkVersion": 35
+      "package": "com.yingjie.ynabcounter"
     },
     "plugins": [
       "expo-router",
