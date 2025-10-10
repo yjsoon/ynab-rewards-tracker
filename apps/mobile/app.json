@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "YNAB Counter Mobile",
+    "slug": "ynab-counter-mobile",
+    "version": "0.1.0",
+    "scheme": "ynabcounter",
+    "orientation": "portrait",
+    "experiments": {
+      "typedRoutes": true
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.yingjie.ynabcounter",
+      "deploymentTarget": "15.1"
+    },
+    "android": {
+      "package": "com.yingjie.ynabcounter",
+      "compileSdkVersion": 35,
+      "targetSdkVersion": 35
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store"
+    ]
+  }
+}

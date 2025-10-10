@@ -1,7 +1,7 @@
-import type { YnabFlagColor } from '@/lib/ynab-constants';
+import type { YnabFlagColor } from '@ynab-counter/app-core/ynab';
 
-import { STORAGE_KEY, STORAGE_VERSION, STORAGE_VERSION_KEY } from './constants';
-import { applyStorageMigrations } from './migrations';
+import { STORAGE_KEY, STORAGE_VERSION, STORAGE_VERSION_KEY } from '@ynab-counter/app-core/storage';
+import { applyStorageMigrations } from '@ynab-counter/app-core/storage';
 import {
   areHiddenCardListsEqual,
   createDefaultStorage,
@@ -9,7 +9,7 @@ import {
   normaliseHiddenCards,
   normaliseThemeGroup,
   pruneThemeGroups,
-} from './normalisers';
+} from '@ynab-counter/app-core/storage';
 import type {
   AppSettings,
   CreditCard,
@@ -21,12 +21,12 @@ import type {
   TagMapping,
   ThemeGroup,
   YnabConnection,
-} from './types';
+} from '@ynab-counter/app-core/storage';
 import type {
   MutableCard,
   MutableStorageData,
   MutableThemeGroup,
-} from './internal-types';
+} from '@ynab-counter/app-core/storage';
 
 export class StorageService {
   private ensureVersion(): void {

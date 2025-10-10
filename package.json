@@ -16,7 +16,11 @@
     "db:migrate": "pnpm env:sync && pnpm -C packages/db migrate:dev",
     "db:migrate:init": "pnpm env:sync && pnpm -C packages/db exec prisma migrate dev --name init",
     "db:push": "pnpm env:sync && pnpm -C packages/db exec prisma db push",
-    "db:reset": "pnpm env:sync && rm -f packages/db/dev.db packages/db/dev.db-shm packages/db/dev.db-wal"
+    "db:reset": "pnpm env:sync && rm -f packages/db/dev.db packages/db/dev.db-shm packages/db/dev.db-wal",
+    "mobile:start": "pnpm --filter ./apps/mobile start",
+    "mobile:ios": "pnpm --filter ./apps/mobile ios",
+    "mobile:android": "pnpm --filter ./apps/mobile android",
+    "mobile:typecheck": "pnpm --filter ./apps/mobile typecheck"
   },
   "workspaces": [
     "apps/*",

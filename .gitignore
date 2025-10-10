@@ -22,6 +22,7 @@ pnpm-debug.log*
 dist/
 build/
 .turbo/
+.expo/
 
 # Misc
 .DS_Store

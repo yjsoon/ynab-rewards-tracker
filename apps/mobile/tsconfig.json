@@ -1,0 +1,23 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@ynab-counter/app-core": ["../../packages/app-core/src"],
+      "@ynab-counter/app-core/*": ["../../packages/app-core/src/*"]
+    },
+    "jsx": "react-native",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts",
+    "../../packages/app-core/src/**/*.ts"
+  ],
+  "exclude": ["node_modules"]
+}
