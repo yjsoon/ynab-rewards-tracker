@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import React, { useMemo } from 'react';
 import {
   Button,
   Card,
@@ -16,12 +16,12 @@ import { CircleDollarSign, CreditCard as CreditCardIcon, TrendingUp } from '@tam
 import type {
   AppSettings,
   CreditCard,
-  Transaction,
-  TransactionWithRewards,
 } from '@ynab-counter/app-core/storage/types';
 import {
   SimpleRewardsCalculator,
   type SimplifiedCalculation,
+  type Transaction,
+  type TransactionWithRewards,
 } from '@ynab-counter/app-core/rewards-engine';
 
 const currencyFormatter = new Intl.NumberFormat('en-US', {
@@ -383,7 +383,7 @@ function StatBlock({
 }: {
   label: string;
   value: string;
-  icon: (props: { size?: number; color?: string }) => JSX.Element;
+  icon: (props: { size?: number; color?: string }) => React.ReactElement;
 }) {
   return (
     <YStack padding="$3" borderRadius="$4" backgroundColor="var(--color2)" gap="$2" flexGrow={1}>

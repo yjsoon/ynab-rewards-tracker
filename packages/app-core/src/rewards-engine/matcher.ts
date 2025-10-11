@@ -10,6 +10,10 @@ export interface Transaction {
   account_id: string;
   flag_name?: string | null;
   flag_color?: string | null;
+  payee_name?: string | null;
+  category_name?: string | null;
+  approved?: boolean;
+  cleared?: string;
 }
 
 export interface TransactionWithRewards extends Transaction {

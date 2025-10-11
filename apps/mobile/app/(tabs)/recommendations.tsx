@@ -1,5 +1,5 @@
 import { ScrollView } from 'react-native';
-import { YStack, Card, H2, H6, Paragraph, XStack } from 'tamagui';
+import { YStack, Card, H2, Text, Paragraph, XStack } from 'tamagui';
 import { useDemoRewards } from '@/hooks/useDemoRewards';
 
 export default function RecommendationsScreen() {
@@ -19,7 +19,7 @@ export default function RecommendationsScreen() {
             <Card key={index} elevate size="$4" bordered padding="$4">
               <YStack gap="$2">
                 <XStack justifyContent="space-between" alignItems="center">
-                  <H6>{rec.cardName}</H6>
+                  <Text fontSize="$6" fontWeight="700">{rec.cardName}</Text>
                   <Paragraph
                     size="$2"
                     paddingHorizontal="$3"

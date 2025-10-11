@@ -1,6 +1,6 @@
 import { Tabs } from 'expo-router';
 import { Home, Lightbulb, Activity, Settings } from '@tamagui/lucide-icons';
-import { useTheme } from 'tamagui';
+import { useTheme } from '@tamagui/core';
 
 export default function TabsLayout() {
   const theme = useTheme();
@@ -10,11 +10,11 @@ export default function TabsLayout() {
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: theme.background.val,
-          borderTopColor: theme.backgroundHover.val,
+          backgroundColor: theme.background?.val,
+          borderTopColor: theme.backgroundHover?.val,
         },
-        tabBarActiveTintColor: theme.accent.val,
-        tabBarInactiveTintColor: theme.colorHover.val,
+        tabBarActiveTintColor: theme.accent?.val,
+        tabBarInactiveTintColor: theme.colorHover?.val,
       }}
     >
       <Tabs.Screen

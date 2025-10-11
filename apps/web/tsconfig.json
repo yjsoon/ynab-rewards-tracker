@@ -8,7 +8,9 @@
     "skipLibCheck": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@ynab-counter/app-core": ["../../packages/app-core/src"],
+      "@ynab-counter/app-core/*": ["../../packages/app-core/src/*"]
     },
     "types": [
       "node"
@@ -31,7 +33,8 @@
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
-    ".next/types/**/*.ts"
+    ".next/types/**/*.ts",
+    "../../packages/app-core/src/**/*.ts"
   ],
   "exclude": [
     "node_modules"
