@@ -40,6 +40,47 @@ export function Button({
     onPress();
   };
 
+  // Get container styles safely
+  const getContainerStyle = (v: ButtonVariant) => {
+    switch (v) {
+      case 'filled': return styles.filledContainer;
+      case 'tinted': return styles.tintedContainer;
+      case 'plain': return styles.plainContainer;
+    }
+  };
+
+  const getPressedStyle = (v: ButtonVariant) => {
+    switch (v) {
+      case 'filled': return styles.filledPressed;
+      case 'tinted': return styles.tintedPressed;
+      case 'plain': return styles.plainPressed;
+    }
+  };
+
+  const getSizeContainerStyle = (s: ButtonSize) => {
+    switch (s) {
+      case 'small': return styles.smallContainer;
+      case 'medium': return styles.mediumContainer;
+      case 'large': return styles.largeContainer;
+    }
+  };
+
+  const getTextStyle = (v: ButtonVariant) => {
+    switch (v) {
+      case 'filled': return styles.filledText;
+      case 'tinted': return styles.tintedText;
+      case 'plain': return styles.plainText;
+    }
+  };
+
+  const getSizeTextStyle = (s: ButtonSize) => {
+    switch (s) {
+      case 'small': return styles.smallText;
+      case 'medium': return styles.mediumText;
+      case 'large': return styles.largeText;
+    }
+  };
+
   return (
     <Pressable
       onPress={handlePress}
@@ -47,11 +88,12 @@ export function Button({
       accessibilityLabel={accessibilityLabel}
       accessibilityHint={accessibilityHint}
       accessibilityRole="button"
+      accessibilityState={{ disabled }}
       style={({ pressed }) => [
         styles.base,
-        styles[`${variant}Container`],
-        styles[`${size}Container`],
-        pressed && styles[`${variant}Pressed`],
+        getContainerStyle(variant),
+        getSizeContainerStyle(size),
+        pressed && getPressedStyle(variant),
         disabled && styles.disabled,
         style,
       ]}
@@ -59,8 +101,8 @@ export function Button({
       <Text
         style={[
           styles.baseText,
-          styles[`${variant}Text`],
-          styles[`${size}Text`],
+          getTextStyle(variant),
+          getSizeTextStyle(size),
           disabled && styles.disabledText,
           textStyle,
         ]}
@@ -91,11 +133,10 @@ const styles = StyleSheet.create({
   },
   
   tintedContainer: {
-    backgroundColor: semanticColors.systemBlue,
-    opacity: 0.15,
+    backgroundColor: '#007AFF26', // systemBlue at 15% opacity
   },
   tintedPressed: {
-    opacity: 0.25,
+    backgroundColor: '#007AFF40', // systemBlue at 25% opacity
   },
   tintedText: {
     color: semanticColors.systemBlue,

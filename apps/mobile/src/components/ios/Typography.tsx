@@ -36,9 +36,19 @@ export function Typography({
   numberOfLines,
   allowFontScaling = true,
 }: TypographyProps) {
+  // Safe color style mapping
+  const getColorStyle = (c: NonNullable<TypographyProps['color']>) => {
+    switch (c) {
+      case 'primary': return styles.primaryColor;
+      case 'secondary': return styles.secondaryColor;
+      case 'tertiary': return styles.tertiaryColor;
+      case 'quaternary': return styles.quaternaryColor;
+    }
+  };
+
   return (
     <Text
-      style={[styles[variant], styles[`${color}Color`], style]}
+      style={[styles[variant], getColorStyle(color), style]}
       numberOfLines={numberOfLines}
       allowFontScaling={allowFontScaling}
     >
