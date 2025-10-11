@@ -1,59 +1,113 @@
-import { ScrollView } from 'react-native';
-import { YStack, Card, H2, Text, Paragraph, XStack } from 'tamagui';
+import React from 'react';
+import { ScrollView, View, StyleSheet } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import { useDemoRewards } from '@/hooks/useDemoRewards';
+import { Card, ListItem, Headline, Body, Footnote, Caption1 } from '@/components/ios';
+import { semanticColors } from '@/theme/semanticColors';
 
 export default function RecommendationsScreen() {
+  const navigation = useNavigation();
   const { recommendations } = useDemoRewards();
 
+  React.useLayoutEffect(() => {
+    navigation.setOptions({
+      headerLargeTitle: true,
+      title: 'Recommendations',
+    });
+  }, [navigation]);
+
   return (
-    <ScrollView style={{ flex: 1 }}>
-      <YStack padding="$4" gap="$4" backgroundColor="$background">
-        <H2>Recommendations</H2>
-
-        {recommendations.length === 0 ? (
-          <Card padding="$4" bordered>
-            <Paragraph theme="alt1">No recommendations available yet.</Paragraph>
-          </Card>
-        ) : (
-          recommendations.map((rec, index) => (
-            <Card key={index} elevate size="$4" bordered padding="$4">
-              <YStack gap="$2">
-                <XStack justifyContent="space-between" alignItems="center">
-                  <Text fontSize="$6" fontWeight="700">{rec.cardName}</Text>
-                  <Paragraph
-                    size="$2"
-                    paddingHorizontal="$3"
-                    paddingVertical="$1.5"
-                    borderRadius="$4"
-                    backgroundColor={
-                      rec.priority === 'high'
-                        ? '$error'
-                        : rec.priority === 'medium'
-                        ? '$warning'
-                        : '$success'
-                    }
-                    color="white"
-                    fontWeight="600"
-                    textTransform="capitalize"
-                  >
-                    {rec.priority}
-                  </Paragraph>
-                </XStack>
-                <Paragraph size="$3">{rec.reason}</Paragraph>
-                {rec.action && (
-                  <Paragraph size="$2" theme="alt1">
-                    {rec.action}
-                  </Paragraph>
-                )}
-              </YStack>
+    <SafeAreaView style={styles.container} edges={['left', 'right']}>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={styles.scrollContent}
+      >
+        <View style={styles.content}>
+          {recommendations.length === 0 ? (
+            <Card>
+              <ListItem>
+                <Footnote color="secondary">No recommendations available yet.</Footnote>
+              </ListItem>
             </Card>
-          ))
-        )}
+          ) : (
+            recommendations.map((rec, index) => (
+              <Card key={index}>
+                <ListItem>
+                  <View style={styles.recommendationContent}>
+                    <View style={styles.recommendationHeader}>
+                      <Headline>{rec.cardName}</Headline>
+                      <View style={[styles.priorityBadge, styles[`priority${rec.priority}`]]}>
+                        <Caption1 style={styles.priorityBadgeText}>
+                          {rec.priority.toUpperCase()}
+                        </Caption1>
+                      </View>
+                    </View>
+                    <Body color="secondary">{rec.reason}</Body>
+                    {rec.action && (
+                      <Footnote color="tertiary">{rec.action}</Footnote>
+                    )}
+                  </View>
+                </ListItem>
+              </Card>
+            ))
+          )}
 
-        <Paragraph theme="alt1" size="$2" textAlign="center">
-          Recommendations powered by shared rewards engine
-        </Paragraph>
-      </YStack>
-    </ScrollView>
+          <View style={styles.footer}>
+            <Footnote color="tertiary" style={styles.footerText}>
+              Recommendations powered by shared rewards engine
+            </Footnote>
+          </View>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: 16,
+  },
+  content: {
+    gap: 16,
+  },
+  recommendationContent: {
+    gap: 12,
+    width: '100%',
+  },
+  recommendationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+  },
+  priorityBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  priorityBadgeText: {
+    color: semanticColors.primaryButtonForeground,
+    fontWeight: '600',
+  },
+  priorityhigh: {
+    backgroundColor: semanticColors.systemRed,
+  },
+  prioritymedium: {
+    backgroundColor: semanticColors.systemOrange,
+  },
+  prioritylow: {
+    backgroundColor: semanticColors.systemGreen,
+  },
+  footer: {
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  footerText: {
+    textAlign: 'center',
+  },
+});

@@ -1,48 +1,51 @@
 import { Tabs } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { Home, Lightbulb, Activity, Settings } from '@tamagui/lucide-icons';
-import { useTheme } from '@tamagui/core';
 
 export default function TabsLayout() {
-  const theme = useTheme();
+  const handleTabPress = () => {
+    Haptics.selectionAsync().catch(() => {
+      // Silently fail if haptics not available
+    });
+  };
 
   return (
     <Tabs
       screenOptions={{
-        headerShown: false,
-        tabBarStyle: {
-          backgroundColor: theme.background?.val,
-          borderTopColor: theme.backgroundHover?.val,
-        },
-        tabBarActiveTintColor: theme.accent?.val,
-        tabBarInactiveTintColor: theme.colorHover?.val,
+        headerShown: true,
+        headerTransparent: false,
+      }}
+      screenListeners={{
+        tabPress: handleTabPress,
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color, size }) => <Home size={size} color={color} />,
+          tabBarIcon: ({ color }) => <Home size={28} color={color} />,
         }}
       />
       <Tabs.Screen
         name="recommendations"
         options={{
           title: 'Recommendations',
-          tabBarIcon: ({ color, size }) => <Lightbulb size={size} color={color} />,
+          tabBarLabel: 'Ideas',
+          tabBarIcon: ({ color }) => <Lightbulb size={28} color={color} />,
         }}
       />
       <Tabs.Screen
         name="transactions"
         options={{
           title: 'Activity',
-          tabBarIcon: ({ color, size }) => <Activity size={size} color={color} />,
+          tabBarIcon: ({ color }) => <Activity size={28} color={color} />,
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
           title: 'Settings',
-          tabBarIcon: ({ color, size }) => <Settings size={size} color={color} />,
+          tabBarIcon: ({ color }) => <Settings size={28} color={color} />,
         }}
       />
     </Tabs>
