@@ -37,3 +37,6 @@ build/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
+
+# Tamagui
+apps/mobile/.tamagui/
