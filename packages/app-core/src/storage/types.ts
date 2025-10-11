@@ -34,6 +34,9 @@ export interface CreditCard {
   subcategories?: CardSubcategory[];
 }
 
+// Legacy alias retained for compatibility with existing imports
+export type Card = CreditCard;
+
 export interface RewardRule {
   id: string;
   cardId: string;
