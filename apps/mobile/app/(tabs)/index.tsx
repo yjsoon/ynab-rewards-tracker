@@ -1,17 +1,24 @@
 import React, { useMemo } from 'react';
-import {
-  Button,
-  Card,
-  H1,
-  H2,
-  Paragraph,
-  ScrollView,
-  Separator,
-  Text,
-  XStack,
-  YStack,
-} from 'tamagui';
+import { View, StyleSheet, ScrollView } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useHaptics } from '@/hooks/useHaptics';
 import { CircleDollarSign, CreditCard as CreditCardIcon, TrendingUp } from '@tamagui/lucide-icons';
+import { semanticColors } from '@/theme/semanticColors';
+
+import {
+  Card,
+  ListItem,
+  Button,
+  ProgressView,
+  SectionHeader,
+  Separator,
+  Body,
+  Footnote,
+  Title2,
+  Headline,
+  Caption1,
+} from '@/components/ios';
 
 import type {
   AppSettings,
@@ -179,6 +186,16 @@ const clampPercent = (value: number | undefined) => {
 };
 
 export default function HomeScreen() {
+  const navigation = useNavigation();
+  const { impact } = useHaptics();
+
+  React.useLayoutEffect(() => {
+    navigation.setOptions({
+      headerLargeTitle: true,
+      title: 'YJAB',
+    });
+  }, [navigation]);
+
   const summaries = useMemo<CardSummary[]>(() => {
     return sampleCards.map((card) => {
       const period = SimpleRewardsCalculator.calculatePeriod(card);
@@ -200,144 +217,179 @@ export default function HomeScreen() {
   }, [summaries]);
 
   return (
-    <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 48 }}>
-      <YStack gap="$6">
-        <YStack gap="$2">
-          <H1 size="$10">YJAB Mobile</H1>
-          <Paragraph theme="alt1">
-            Keep an eye on your credit card reward momentum wherever you are. These demos use
-            representative data to preview the mobile experience.
-          </Paragraph>
-        </YStack>
+    <SafeAreaView style={styles.container} edges={['left', 'right']}>
+      <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={styles.scrollContent}
+      >
+        <View style={styles.content}>
+          <View style={styles.introSection}>
+            <Footnote color="secondary">
+              Track credit card rewards momentum. Demos use representative data.
+            </Footnote>
+          </View>
 
-        {featured ? <FeaturedCardHighlight summary={featured} /> : null}
+          {featured ? <FeaturedCardHighlight summary={featured} haptics={impact} /> : null}
 
-        <YStack gap="$4">
-          <XStack alignItems="center" justifyContent="space-between">
-            <H2 size="$8">Active cards</H2>
-            <Button size="$3" themeInverse icon={TrendingUp}>
-              View trends
-            </Button>
-          </XStack>
+          <SectionHeader>Active Cards</SectionHeader>
 
-          <YStack gap="$4">
-            {summaries.map((summary) => (
-              <Card key={summary.card.id} bordered elevate padding="$4" gap="$3">
-                <Card.Header padded={false}>
-                  <XStack alignItems="center" gap="$3">
+          {summaries.map((summary, index) => (
+            <View key={summary.card.id} style={styles.cardSection}>
+              <Card>
+                <ListItem>
+                  <View style={styles.cardHeader}>
                     <CardIcon cardType={summary.card.type} />
-                    <YStack>
-                      <Text fontWeight="700" fontSize="$6">
-                        {summary.card.name}
-                      </Text>
-                      <Paragraph theme="alt2">{summary.card.issuer}</Paragraph>
-                    </YStack>
-                  </XStack>
-                </Card.Header>
+                    <View style={styles.cardHeaderText}>
+                      <Headline>{summary.card.name}</Headline>
+                      <Footnote color="secondary">{summary.card.issuer}</Footnote>
+                    </View>
+                  </View>
+                </ListItem>
 
-                <YStack gap="$3">
-                  <YStack gap="$2">
-                    <Paragraph size="$3" theme="alt2">
-                      Current period • {summary.period}
-                    </Paragraph>
-                    <XStack gap="$4" flexWrap="wrap">
-                      <StatBlock
-                        label="Reward earned"
-                        value={currencyFormatter.format(summary.calculation.rewardEarnedDollars)}
-                        icon={TrendingUp}
-                      />
-                      <StatBlock
-                        label="Total spend"
-                        value={currencyFormatter.format(summary.calculation.totalSpend)}
-                        icon={CircleDollarSign}
-                      />
-                    </XStack>
-                  </YStack>
+                <Separator inset={16} />
 
-                  {typeof summary.calculation.minimumSpendProgress === 'number' ? (
-                    <ProgressSection
-                      title="Minimum spend"
-                      value={summary.calculation.minimumSpendProgress}
-                      helper={summary.calculation.minimumSpendMet ? 'Goal hit' : 'Almost there'}
+                <ListItem>
+                  <View style={styles.periodInfo}>
+                    <Caption1 color="tertiary">CURRENT PERIOD</Caption1>
+                    <Body>{summary.period}</Body>
+                  </View>
+                </ListItem>
+
+                <Separator inset={16} />
+
+                <ListItem>
+                  <View style={styles.statsGrid}>
+                    <StatBlock
+                      label="Reward earned"
+                      value={currencyFormatter.format(summary.calculation.rewardEarnedDollars)}
+                      icon={TrendingUp}
                     />
-                  ) : null}
-
-                  {typeof summary.calculation.maximumSpendProgress === 'number' ? (
-                    <ProgressSection
-                      title="Maximum cap"
-                      value={summary.calculation.maximumSpendProgress}
-                      helper={summary.calculation.maximumSpendExceeded ? 'Cap reached' : 'Room remaining'}
-                      tone="secondary"
+                    <StatBlock
+                      label="Total spend"
+                      value={currencyFormatter.format(summary.calculation.totalSpend)}
+                      icon={CircleDollarSign}
                     />
-                  ) : null}
+                  </View>
+                </ListItem>
 
-                  {summary.calculation.subcategoryBreakdowns?.length ? (
-                    <YStack gap="$2">
-                      <Separator />
-                      <Text fontWeight="600">Subcategory activity</Text>
-                      <YStack gap="$2">
-                        {summary.calculation.subcategoryBreakdowns.slice(0, 3).map((entry) => (
-                          <XStack key={entry.id} justifyContent="space-between" alignItems="center">
-                            <Paragraph>{entry.name}</Paragraph>
-                            <Paragraph theme="alt2">
-                              {currencyFormatter.format(entry.rewardEarnedDollars ?? entry.rewardEarned ?? 0)}
-                            </Paragraph>
-                          </XStack>
-                        ))}
-                      </YStack>
-                    </YStack>
-                  ) : null}
-                </YStack>
+                    {typeof summary.calculation.minimumSpendProgress === 'number' ? (
+                  <>
+                    <Separator inset={16} />
+                    <ListItem>
+                      <ProgressSection
+                        title="Minimum spend"
+                        value={summary.calculation.minimumSpendProgress}
+                        helper={summary.calculation.minimumSpendMet ? 'Goal hit' : 'Almost there'}
+                      />
+                    </ListItem>
+                  </>
+                ) : null}
 
-                <Card.Footer padded={false}>
-                  <Button size="$3" chromeless>
-                    Manage card
-                  </Button>
-                </Card.Footer>
+                {typeof summary.calculation.maximumSpendProgress === 'number' ? (
+                  <>
+                    <Separator inset={16} />
+                    <ListItem>
+                      <ProgressSection
+                        title="Maximum cap"
+                        value={summary.calculation.maximumSpendProgress}
+                        helper={summary.calculation.maximumSpendExceeded ? 'Cap reached' : 'Room remaining'}
+                        tone="secondary"
+                      />
+                    </ListItem>
+                  </>
+                ) : null}
+
+                {summary.calculation.subcategoryBreakdowns?.length ? (
+                  <>
+                    <Separator inset={16} />
+                    <ListItem>
+                      <View style={styles.subcategoriesSection}>
+                        <Body style={styles.subcategoriesTitle}>Subcategory activity</Body>
+                        <View style={styles.subcategoriesList}>
+                          {summary.calculation.subcategoryBreakdowns.slice(0, 3).map((entry) => (
+                            <View key={entry.id} style={styles.subcategoryRow}>
+                              <Body>{entry.name}</Body>
+                              <Footnote color="secondary">
+                                {currencyFormatter.format(entry.rewardEarnedDollars ?? entry.rewardEarned ?? 0)}
+                              </Footnote>
+                            </View>
+                          ))}
+                        </View>
+                      </View>
+                    </ListItem>
+                  </>
+                ) : null}
+
+                <Separator inset={16} />
+
+                <ListItem
+                  onPress={() => {
+                    impact('light');
+                    console.log('Manage card');
+                  }}
+                  showDisclosure
+                  accessibilityLabel={`Manage settings for ${summary.card.name}`}
+                  accessibilityHint="Opens card configuration and preferences"
+                >
+                  <Body>Manage card</Body>
+                </ListItem>
               </Card>
-            ))}
-          </YStack>
-        </YStack>
-      </YStack>
-    </ScrollView>
+            </View>
+          ))}
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
-function FeaturedCardHighlight({ summary }: { summary: CardSummary }) {
+function FeaturedCardHighlight({
+  summary,
+  haptics
+}: {
+  summary: CardSummary;
+  haptics: (style: 'light' | 'medium' | 'heavy') => void;
+}) {
   const rewardDisplay = currencyFormatter.format(summary.calculation.rewardEarnedDollars);
   const spendDisplay = currencyFormatter.format(summary.calculation.eligibleSpend);
   const effectiveRate = SimpleRewardsCalculator.calculateEffectiveRate(summary.calculation);
 
   return (
-    <YStack
-      padding="$5"
-      borderRadius="$6"
-      backgroundColor="$backgroundStrong"
-      gap="$4"
-      elevation="$4"
-    >
-      <XStack alignItems="center" gap="$3">
-        <TrendingUp size={26} color="var(--colorHover)" />
-        <YStack>
-          <Paragraph size="$3" theme="alt2">
-            Suggested focus card
-          </Paragraph>
-          <Text fontSize="$7" fontWeight="700">
-            {summary.card.name}
-          </Text>
-        </YStack>
-      </XStack>
+    <View style={styles.featuredSection}>
+      <Card style={styles.featuredCard}>
+        <ListItem>
+          <View style={styles.featuredContent}>
+            <View style={styles.featuredHeader}>
+              <TrendingUp size={24} color={semanticColors.systemBlue} />
+              <View style={styles.featuredHeaderText}>
+                <Caption1 color="secondary">SUGGESTED FOCUS CARD</Caption1>
+                <Headline>{summary.card.name}</Headline>
+              </View>
+            </View>
 
-      <Paragraph theme="alt1">
-        Earned <Text color="$color11" fontWeight="700">{rewardDisplay}</Text> so far this period from
-        <Text fontWeight="700"> {spendDisplay}</Text> of eligible spend. Effective rate{' '}
-        <Text fontWeight="700">{effectiveRate.toFixed(2)}%</Text>.
-      </Paragraph>
+            <View style={styles.featuredStats}>
+              <Body color="secondary">
+                Earned <Body style={styles.featuredHighlight}>{rewardDisplay}</Body> so far this period from{' '}
+                <Body style={styles.featuredHighlight}>{spendDisplay}</Body> of eligible spend. Effective rate{' '}
+                <Body style={styles.featuredHighlight}>{effectiveRate.toFixed(2)}%</Body>.
+              </Body>
+            </View>
 
-      <Button size="$3" themeInverse>
-        See transaction insights
-      </Button>
-    </YStack>
+            <Button
+              variant="filled"
+              size="medium"
+              onPress={() => {
+                haptics('medium');
+                console.log('See transaction insights');
+              }}
+              accessibilityLabel={`See transaction insights for ${summary.card.name}`}
+              accessibilityHint="Opens detailed breakdown of rewards and spending"
+            >
+              See transaction insights
+            </Button>
+          </View>
+        </ListItem>
+      </Card>
+    </View>
   );
 }
 
@@ -352,27 +404,30 @@ function ProgressSection({
   helper: string;
   tone?: 'primary' | 'secondary';
 }) {
-  const clamped = clampPercent(value);
-  const barColor = tone === 'secondary' ? 'var(--color5)' : 'var(--color10)';
+  const normalizedValue = Math.max(0, Math.min(100, value)) / 100;
+  const tintColor = tone === 'secondary'
+    ? semanticColors.systemGray
+    : semanticColors.systemBlue;
 
   return (
-    <YStack gap="$2">
-      <XStack justifyContent="space-between" alignItems="center">
-        <Paragraph>{title}</Paragraph>
-        <Paragraph theme="alt2">{clamped.toFixed(0)}%</Paragraph>
-      </XStack>
-      <YStack height={8} borderRadius={999} backgroundColor="var(--color2)" overflow="hidden">
-        <YStack
-          backgroundColor={barColor}
-          width={`${clamped}%`}
-          height="100%"
-          borderRadius={999}
-        />
-      </YStack>
-      <Paragraph size="$2" theme="alt2">
-        {helper}
-      </Paragraph>
-    </YStack>
+    <View style={styles.progressSection}>
+      <View style={styles.progressHeader}>
+        <Body>{title}</Body>
+        <Footnote color="secondary">{Math.round(value)}%</Footnote>
+      </View>
+      <ProgressView
+        value={normalizedValue}
+        tintColor={tintColor}
+        accessibilityLabel={`${title} progress`}
+        accessibilityValue={{
+          min: 0,
+          max: 100,
+          now: Math.round(value),
+        }}
+        accessibilityHint={helper}
+      />
+      <Caption1 color="tertiary" style={styles.progressHelper}>{helper}</Caption1>
+    </View>
   );
 }
 
@@ -386,21 +441,118 @@ function StatBlock({
   icon: (props: { size?: number; color?: string }) => React.ReactElement;
 }) {
   return (
-    <YStack padding="$3" borderRadius="$4" backgroundColor="var(--color2)" gap="$2" flexGrow={1}>
-      <XStack alignItems="center" gap="$2">
-        <Icon size={18} color="var(--color10)" />
-        <Paragraph theme="alt2" size="$2">
-          {label}
-        </Paragraph>
-      </XStack>
-      <Text fontWeight="700" fontSize="$6">
-        {value}
-      </Text>
-    </YStack>
+    <View style={styles.statBlock}>
+      <View style={styles.statHeader}>
+        <Icon size={16} color={semanticColors.systemBlue} />
+        <Caption1 color="secondary">{label}</Caption1>
+      </View>
+      <Headline>{value}</Headline>
+    </View>
   );
 }
 
 function CardIcon({ cardType }: { cardType: CreditCard['type'] }) {
-  const tone = cardType === 'cashback' ? 'var(--color10)' : 'var(--color11)';
-  return <CreditCardIcon size={26} color={tone} />;
+  const color = cardType === 'cashback'
+    ? semanticColors.systemBlue
+    : semanticColors.systemPurple;
+  return <CreditCardIcon size={24} color={color} />;
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: semanticColors.systemGroupedBackground,
+  },
+  scrollContent: {
+    paddingBottom: 32,
+  },
+  content: {
+    gap: 8,
+  },
+  introSection: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  featuredSection: {
+    paddingHorizontal: 16,
+    marginBottom: 8,
+  },
+  featuredCard: {
+    overflow: 'visible',
+  },
+  featuredContent: {
+    gap: 16,
+  },
+  featuredHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  featuredHeaderText: {
+    flex: 1,
+    gap: 2,
+  },
+  featuredStats: {
+    paddingVertical: 8,
+  },
+  featuredHighlight: {
+    fontWeight: '600',
+    color: semanticColors.systemBlue,
+  },
+  cardSection: {
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  cardHeaderText: {
+    flex: 1,
+    gap: 2,
+  },
+  periodInfo: {
+    gap: 4,
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  statBlock: {
+    flex: 1,
+    gap: 8,
+  },
+  statHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  progressSection: {
+    gap: 8,
+    width: '100%',
+  },
+  progressHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  progressHelper: {
+    marginTop: 4,
+  },
+  subcategoriesSection: {
+    gap: 12,
+    width: '100%',
+  },
+  subcategoriesTitle: {
+    fontWeight: '600',
+  },
+  subcategoriesList: {
+    gap: 8,
+  },
+  subcategoryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+});
