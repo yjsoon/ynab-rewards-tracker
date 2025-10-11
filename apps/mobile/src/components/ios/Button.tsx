@@ -14,6 +14,8 @@ interface ButtonProps {
   disabled?: boolean;
   style?: ViewStyle;
   textStyle?: TextStyle;
+  accessibilityLabel?: string;
+  accessibilityHint?: string;
 }
 
 /**
@@ -28,6 +30,8 @@ export function Button({
   disabled = false,
   style,
   textStyle,
+  accessibilityLabel,
+  accessibilityHint,
 }: ButtonProps) {
   const { impact } = useHaptics();
 
@@ -40,6 +44,9 @@ export function Button({
     <Pressable
       onPress={handlePress}
       disabled={disabled}
+      accessibilityLabel={accessibilityLabel}
+      accessibilityHint={accessibilityHint}
+      accessibilityRole="button"
       style={({ pressed }) => [
         styles.base,
         styles[`${variant}Container`],

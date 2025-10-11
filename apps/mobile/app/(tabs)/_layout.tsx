@@ -13,9 +13,7 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: true,
-        headerLargeTitle: true,
         headerTransparent: false,
-        headerBlurEffect: 'systemMaterial',
       }}
       screenListeners={{
         tabPress: handleTabPress,

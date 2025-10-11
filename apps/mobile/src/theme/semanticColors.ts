@@ -1,11 +1,11 @@
-import { PlatformColor, Platform, DynamicColorIOS } from 'react-native';
+import { PlatformColor, Platform, DynamicColorIOS, type ColorValue } from 'react-native';
 
 /**
  * Helper to create explicit light/dark color pairs for iOS
  * Falls back to light color on Android
  */
-function dynamicColor(lightColor: string, darkColor: string) {
-  if (Platform.OS === 'ios' && Platform.Version >= 13) {
+function dynamicColor(lightColor: string, darkColor: string): ColorValue {
+  if (Platform.OS === 'ios' && Number(Platform.Version) >= 13) {
     return DynamicColorIOS({ light: lightColor, dark: darkColor });
   }
   return lightColor;

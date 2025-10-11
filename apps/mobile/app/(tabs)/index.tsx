@@ -359,7 +359,7 @@ function FeaturedCardHighlight({
         <ListItem>
           <View style={styles.featuredContent}>
             <View style={styles.featuredHeader}>
-              <TrendingUp size={24} color={semanticColors.systemBlue} />
+              <TrendingUp size={24} color={semanticColors.systemBlue as string} />
               <View style={styles.featuredHeaderText}>
                 <Caption1 color="secondary">SUGGESTED FOCUS CARD</Caption1>
                 <Headline>{summary.card.name}</Headline>
@@ -443,7 +443,7 @@ function StatBlock({
   return (
     <View style={styles.statBlock}>
       <View style={styles.statHeader}>
-        <Icon size={16} color={semanticColors.systemBlue} />
+        <Icon size={16} color={semanticColors.systemBlue as string} />
         <Caption1 color="secondary">{label}</Caption1>
       </View>
       <Headline>{value}</Headline>
@@ -452,9 +452,9 @@ function StatBlock({
 }
 
 function CardIcon({ cardType }: { cardType: CreditCard['type'] }) {
-  const color = cardType === 'cashback'
+  const color = (cardType === 'cashback'
     ? semanticColors.systemBlue
-    : semanticColors.systemPurple;
+    : semanticColors.systemPurple) as string;
   return <CreditCardIcon size={24} color={color} />;
 }
 

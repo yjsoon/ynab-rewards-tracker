@@ -55,7 +55,7 @@ export function ListItem({
       {showDisclosure && (
         <ChevronRight
           size={18}
-          color={semanticColors.systemGray3}
+          color={semanticColors.systemGray3 as string}
           style={styles.disclosure}
         />
       )}

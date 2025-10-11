@@ -1,11 +1,11 @@
 import React from 'react';
-import { View, StyleSheet, ViewStyle, AccessibilityValue } from 'react-native';
+import { View, StyleSheet, ViewStyle, AccessibilityValue, type ColorValue } from 'react-native';
 import { semanticColors } from '../../theme/semanticColors';
 
 interface ProgressViewProps {
   value: number; // 0-1 (percentage as decimal)
-  tintColor?: string;
-  trackTintColor?: string;
+  tintColor?: ColorValue;
+  trackTintColor?: ColorValue;
   style?: ViewStyle;
   accessibilityLabel?: string;
   accessibilityHint?: string;
