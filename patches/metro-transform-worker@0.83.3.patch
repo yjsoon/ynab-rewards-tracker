@@ -1,0 +1,17 @@
+diff --git a/package.json b/package.json
+index 3a5cc6a600304aa8287312921fc155122b360209..91321c4ae348c38872704a06f36bf6613251ed8a 100644
+--- a/package.json
++++ b/package.json
+@@ -1,10 +1,11 @@
+ {
+   "name": "metro-transform-worker",
+   "version": "0.83.3",
+   "description": "🚇 Transform worker for Metro.",
+   "main": "src/index.js",
+   "exports": {
+     ".": "./src/index.js",
+     "./package.json": "./package.json",
+-    "./private/*": "./src/*.js"
++    "./private/*": "./src/*.js",
++    "./src/utils/getMinifier": "./src/utils/getMinifier.js"
+   },

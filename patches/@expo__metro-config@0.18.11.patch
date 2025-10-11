@@ -1,0 +1,22 @@
+diff --git a/build/file-store.js b/build/file-store.js
+index 6beb69851f2157cb9ea545e460e7bf1134e58bbb..7b92695852ebe6c400c6417ed2713a87c30aed85 100644
+--- a/build/file-store.js
++++ b/build/file-store.js
+@@ -4,9 +4,15 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
+ };
+ Object.defineProperty(exports, "__esModule", { value: true });
+ exports.FileStore = void 0;
+-const FileStore_1 = __importDefault(require("metro-cache/src/stores/FileStore"));
++let MetroFileStore;
++try {
++    MetroFileStore = require("metro-cache").FileStore;
++}
++catch (error) {
++    MetroFileStore = require("metro-cache/src/stores/FileStore");
++}
+ const debug = require('debug')('expo:metro:cache');
+-class FileStore extends FileStore_1.default {
++class FileStore extends MetroFileStore {
+     async set(key, value) {
+         // Prevent caching of CSS files that have the skipCache flag set.
+         if (value?.output?.[0]?.data?.css?.skipCache) {
