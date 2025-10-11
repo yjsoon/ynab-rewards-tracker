@@ -1,1 +1,1 @@
-export * from '@ynab-counter/app-core/storage';
+export * from '@ynab-counter/app-core/storage/internal-types';
