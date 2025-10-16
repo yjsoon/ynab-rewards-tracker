@@ -74,11 +74,11 @@ export function getFlagHex(flagColor?: string | null): string {
 function hexToRgb(hex: string) {
   const normalised = hex.replace('#', '');
 
-  const bigint = parseInt(normalised, 16);
   if (normalised.length === 3) {
-    const r = (bigint >> 8) & 0xf;
-    const g = (bigint >> 4) & 0xf;
-    const b = bigint & 0xf;
+    const r = parseInt(normalised[0], 16);
+    const g = parseInt(normalised[1], 16);
+    const b = parseInt(normalised[2], 16);
+
     return {
       r: (r << 4) | r,
       g: (g << 4) | g,
@@ -86,6 +86,7 @@ function hexToRgb(hex: string) {
     };
   }
 
+  const bigint = parseInt(normalised, 16);
   const r = (bigint >> 16) & 0xff;
   const g = (bigint >> 8) & 0xff;
   const b = bigint & 0xff;
