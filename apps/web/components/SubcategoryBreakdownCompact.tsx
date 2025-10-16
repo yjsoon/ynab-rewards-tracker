@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CurrencyAmount } from './CurrencyAmount';
-import { getFlagHex } from '@/lib/flag-colors';
+import { getFlagHex, getFlagClasses, getFlagBorderColor } from '@/lib/flag-colors';
 
 interface SubcategoryBreakdown {
   subcategoryId?: string;
@@ -25,17 +25,6 @@ interface SubcategoryBreakdownCompactProps {
   currency: string;
   flagNames: Record<string, string>;
 }
-
-// Map flag colours to actual colours for visual representation
-const FLAG_COLOR_BG_MAP: Record<string, string> = {
-  red: 'bg-red-500/10',
-  orange: 'bg-orange-500/10',
-  yellow: 'bg-yellow-500/10',
-  green: 'bg-green-500/10',
-  blue: 'bg-blue-500/10',
-  purple: 'bg-purple-500/10',
-  unflagged: 'bg-gray-500/10',
-};
 
 export function SubcategoryBreakdownCompact({
   breakdowns,
@@ -90,7 +79,7 @@ export function SubcategoryBreakdownCompact({
         <div className="flex h-6 w-full overflow-hidden rounded-md bg-muted/30 border border-border/40">
           {segments.map((segment, index) => {
             const isCapped = segment.maximumSpendExceeded;
-            const color = getFlagHex(segment.flagColor);
+            const color = isCapped ? '#ef4444' : getFlagHex(segment.flagColor);
             const width = segment.percentage;
 
             if (width < 0.5) return null; // Skip tiny segments
@@ -134,24 +123,29 @@ export function SubcategoryBreakdownCompact({
         /* Expanded View - All Details */
         <div className="space-y-2">
           {sortedBreakdowns.map((entry) => {
-            const bgClass = FLAG_COLOR_BG_MAP[entry.flagColor] || FLAG_COLOR_BG_MAP.unflagged;
+            const flagColours = getFlagClasses(entry.flagColor);
+            const borderColor = getFlagBorderColor(entry.flagColor, 0.4);
 
             return (
               <div
                 key={entry.subcategoryId || `${entry.flagColor}-${entry.name}`}
                 className={cn(
-                  "flex flex-col gap-1 rounded-lg p-2 sm:flex-row sm:items-center sm:justify-between",
-                  bgClass
+                  "flex flex-col gap-1 rounded-lg border border-border p-2 sm:flex-row sm:items-center sm:justify-between",
+                  flagColours.bg
                 )}
+                style={{ borderColor }}
               >
                 <div className="flex flex-1 items-center gap-3">
                   <div
-                    className="h-3 w-3 rounded-full flex-shrink-0"
-                    style={{
-                      backgroundColor: entry.maximumSpendExceeded
-                        ? '#ef4444'
-                        : getFlagHex(entry.flagColor)
-                    }}
+                    className={cn(
+                      'h-3 w-3 rounded-full flex-shrink-0',
+                      entry.maximumSpendExceeded ? 'bg-red-500' : ''
+                    )}
+                    style={
+                      !entry.maximumSpendExceeded
+                        ? { backgroundColor: getFlagHex(entry.flagColor) }
+                        : undefined
+                    }
                   />
                   <div className="flex-1">
                     <div className="flex items-baseline gap-2">
