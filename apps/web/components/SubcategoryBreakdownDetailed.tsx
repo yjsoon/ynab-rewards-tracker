@@ -3,7 +3,7 @@
 import { cn } from '@/lib/utils';
 import { CurrencyAmount } from './CurrencyAmount';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
-import { getFlagHex, getFlagClasses } from '@/lib/flag-colors';
+import { getFlagHex, getFlagClasses, getFlagBorderColor } from '@/lib/flag-colors';
 
 interface SubcategoryBreakdown {
   subcategoryId?: string;
@@ -99,17 +99,21 @@ export function SubcategoryBreakdownDetailed({
             ? "text-blue-600"
             : "text-gray-500";
 
+          const cardStyle = !isCapped && !isDisabled
+            ? { borderColor: getFlagBorderColor(entry.flagColor, 0.4) }
+            : undefined;
+
           return (
             <div
               key={entry.subcategoryId || `${entry.flagColor}-${index}`}
               className={cn(
-                "relative rounded-lg border p-4 transition-all hover:shadow-sm",
-                isCapped
-                  ? "border-red-200 bg-red-50/50 dark:border-red-900 dark:bg-red-950/20"
-                  : `${colorScheme.border} ${colorScheme.bg}`,
+                "relative rounded-lg border border-border p-4 transition-all hover:shadow-sm",
+                isCapped && "border-red-200 bg-red-50/50 dark:border-red-900 dark:bg-red-950/20",
+                !isCapped && colorScheme.bg,
                 isDisabled && !isCapped && "border-gray-300 bg-muted/20 text-muted-foreground dark:border-gray-700 dark:bg-muted/10",
                 isDisabled && "opacity-90"
               )}
+              style={cardStyle}
             >
               {/* Status badge for maxed or disabled subcategories */}
               {(isCapped || isDisabled) && (
@@ -130,8 +134,11 @@ export function SubcategoryBreakdownDetailed({
                     <div
                       className={cn(
                         "h-4 w-4 rounded-full flex-shrink-0",
-                        isCapped ? "bg-red-500" : isDisabled ? "bg-gray-400" : colorScheme.dot
+                        isCapped ? "bg-red-500" : isDisabled ? "bg-gray-400" : ''
                       )}
+                      style={
+                        !isCapped && !isDisabled ? { backgroundColor: getFlagHex(entry.flagColor) } : undefined
+                      }
                     />
                     <div>
                       <h4 className="font-semibold text-sm">{entry.name}</h4>
