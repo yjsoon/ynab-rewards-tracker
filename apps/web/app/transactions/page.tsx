@@ -60,7 +60,7 @@ export default function TransactionsPage() {
     [cards]
   );
 
-  const { recentTransactions, accountsMap, loading, error } = useTrackedTransactions({
+  const { recentTransactions, accountsMap, loading, error, hasCachedData, refreshing, lastUpdatedAt } = useTrackedTransactions({
     pat,
     selectedBudgetId: selectedBudget.id,
     trackedAccountIds,
@@ -68,6 +68,8 @@ export default function TransactionsPage() {
     lookbackDays: TRANSACTION_LOOKBACK_DAYS,
     recentLimit: EXTENDED_TRANSACTIONS_LIMIT
   });
+
+  const tableLoading = loading && !hasCachedData;
 
   if (!setupStatus.pat) {
     return <DashboardLanding />;
@@ -99,11 +101,13 @@ export default function TransactionsPage() {
         </CardHeader>
         <CardContent>
           <RecentTransactionsTable
-            loading={loading}
+            loading={tableLoading}
             error={error}
             transactions={recentTransactions}
             accountsMap={accountsMap}
             lookbackDays={TRANSACTION_LOOKBACK_DAYS}
+            refreshing={refreshing}
+            lastUpdatedAt={lastUpdatedAt}
           />
         </CardContent>
       </Card>
