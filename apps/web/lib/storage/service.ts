@@ -21,6 +21,10 @@ import type {
   TagMapping,
   ThemeGroup,
   YnabConnection,
+  DashboardTransactionsCacheEntry,
+  DashboardTransactionsCachePayload,
+  CachedTransaction,
+  Transaction,
 } from '@ynab-counter/app-core/storage';
 import type {
   MutableCard,
@@ -29,6 +33,8 @@ import type {
 } from '@ynab-counter/app-core/storage';
 
 export class StorageService {
+  private static readonly DASHBOARD_CACHE_LIMIT = 500;
+
   private ensureVersion(): void {
     if (typeof window === 'undefined') {
       return;
@@ -421,6 +427,158 @@ export class StorageService {
     }
 
     return cleaned;
+  }
+
+  /**
+   * Sanitizes a transaction for cache storage by keeping only essential fields
+   * and normalizing optional properties.
+   * Returns null if required fields are missing or invalid.
+   */
+  private sanitizeTransactionForCache(txn: Transaction | CachedTransaction): CachedTransaction | null {
+    // Validate required fields
+    if (
+      typeof txn.id !== 'string' ||
+      typeof txn.date !== 'string' ||
+      typeof txn.amount !== 'number' ||
+      typeof txn.account_id !== 'string'
+    ) {
+      return null;
+    }
+
+    return {
+      id: txn.id,
+      date: txn.date,
+      amount: txn.amount,
+      account_id: txn.account_id,
+      payee_name: txn.payee_name ?? null,
+      category_name: txn.category_name ?? null,
+      flag_color: txn.flag_color ?? null,
+      flag_name: txn.flag_name ?? null,
+      cleared: txn.cleared ?? null,
+      approved: txn.approved,
+    };
+  }
+
+  getDashboardTransactionsCache(
+    budgetId: string,
+    sinceDate: string,
+    trackedAccountIds: string[],
+    ttlMs = 5 * 60 * 1000
+  ): DashboardTransactionsCacheEntry | null {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+
+    const storage = this.getStorage();
+    const entries = storage.cachedData?.dashboardTransactions || [];
+
+    // Normalize tracked account IDs for consistent matching
+    const normalizedIds = [...trackedAccountIds].sort().join(',');
+
+    const now = Date.now();
+    const match = entries.find((entry) => {
+      const entryIds = [...entry.trackedAccountIds].sort().join(',');
+      return (
+        entry.budgetId === budgetId &&
+        entry.sinceDate === sinceDate &&
+        entryIds === normalizedIds
+      );
+    });
+
+    if (!match) {
+      return null;
+    }
+
+    const age = now - new Date(match.fetchedAt).getTime();
+    if (age > ttlMs) {
+      return null;
+    }
+
+    // Handle legacy data: sanitize transactions and limit to most recent using DASHBOARD_CACHE_LIMIT
+    const transactions = Array.isArray(match.transactions) ? match.transactions : [];
+    const sanitized = transactions
+      .map(txn => this.sanitizeTransactionForCache(txn))
+      .filter((txn): txn is CachedTransaction => txn !== null)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, StorageService.DASHBOARD_CACHE_LIMIT);
+
+    return {
+      ...match,
+      transactions: sanitized,
+    };
+  }
+
+  setDashboardTransactionsCache(payload: DashboardTransactionsCachePayload): void {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const storage = this.getStorage();
+    storage.cachedData = storage.cachedData || {};
+    const entries = storage.cachedData.dashboardTransactions || [];
+
+    // Sort transactions by date (newest first), sanitize, and limit to most recent
+    const sanitized = [...payload.transactions]
+      .map(txn => this.sanitizeTransactionForCache(txn))
+      .filter((txn): txn is CachedTransaction => txn !== null)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, StorageService.DASHBOARD_CACHE_LIMIT);
+
+    // Normalize and sanitize entry
+    const normalized: DashboardTransactionsCacheEntry = {
+      budgetId: payload.budgetId,
+      sinceDate: payload.sinceDate,
+      fetchedAt: payload.fetchedAt,
+      trackedAccountIds: [...payload.trackedAccountIds].sort(),
+      transactions: sanitized,
+      accounts: payload.accounts,
+    };
+
+    const normalizedKey = `${normalized.budgetId}::${normalized.sinceDate}::${normalized.trackedAccountIds.join(',')}`;
+
+    // Remove existing entry with same key
+    const filtered = entries.filter((existing) => {
+      const existingKey = `${existing.budgetId}::${existing.sinceDate}::${[...existing.trackedAccountIds].sort().join(',')}`;
+      return existingKey !== normalizedKey;
+    });
+
+    filtered.push(normalized);
+
+    // Cap at 5 entries, remove oldest by fetchedAt
+    if (filtered.length > 5) {
+      filtered.sort((a, b) => new Date(b.fetchedAt).getTime() - new Date(a.fetchedAt).getTime());
+      filtered.splice(5);
+    }
+
+    storage.cachedData.dashboardTransactions = filtered;
+    this.setStorage(storage);
+  }
+
+  pruneDashboardTransactionsCache(ttlMs = 5 * 60 * 1000): void {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const storage = this.getStorage();
+    const entries = storage.cachedData?.dashboardTransactions || [];
+
+    if (entries.length === 0) {
+      return;
+    }
+
+    const now = Date.now();
+    const filtered = entries.filter((entry) => {
+      const age = now - new Date(entry.fetchedAt).getTime();
+      return age <= ttlMs;
+    });
+
+    if (filtered.length === entries.length) {
+      return;
+    }
+
+    storage.cachedData = storage.cachedData || {};
+    storage.cachedData.dashboardTransactions = filtered;
+    this.setStorage(storage);
   }
 
   exportSettings(): string {

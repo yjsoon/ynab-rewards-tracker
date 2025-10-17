@@ -6,9 +6,9 @@ import type {
   RewardRule,
   CreditCard,
   RewardCalculation,
-  AppSettings
+  AppSettings,
+  TransactionWithRewards
 } from '../storage/types';
-import type { TransactionWithRewards } from './matcher';
 import { parseYnabDate } from './date-utils';
 import { calculateCardPeriod, getRecentCardPeriods } from './utils/periods';
 

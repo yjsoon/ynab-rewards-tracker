@@ -4,6 +4,7 @@
 
 export { RewardsCalculator } from './calculator';
 export { SimpleRewardsCalculator } from './simple-calculator';
+export type { Transaction, TransactionWithRewards } from '../storage/types';
 export { TransactionMatcher } from './matcher';
 export { RecommendationEngine } from './recommendations';
 export { computeCurrentPeriod } from './compute';
@@ -15,4 +16,3 @@ export type {
   CategoryCardInsight,
   CategoryRecommendation,
 } from './types';
-export type { Transaction, TransactionWithRewards } from './matcher';

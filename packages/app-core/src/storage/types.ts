@@ -1,5 +1,63 @@
 import type { YnabFlagColor } from '../ynab/constants';
 
+/**
+ * Unified transaction type used across web and core packages.
+ * Combines fields from YNAB API responses with computed reward tracking.
+ */
+export interface Transaction {
+  id: string;
+  date: string;
+  amount: number;
+  account_id: string;
+  payee_name?: string | null;
+  category_name?: string | null;
+  memo?: string | null;
+  cleared?: string | null;
+  approved?: boolean;
+  flag_color?: string | null;
+  flag_name?: string | null;
+  subtransactions?: Transaction[];
+}
+
+/**
+ * Transaction extended with rewards calculation metadata.
+ * Used by rewards engine and dashboard components.
+ */
+export interface TransactionWithRewards extends Transaction {
+  // Legacy rewards object format (used by matcher)
+  rewards?: {
+    cardId: string;
+    amount: number;
+    rate: number;
+  };
+  // Modern computed fields (used by web components)
+  eligibleAmount?: number;
+  rewardEarned?: number;
+}
+
+/**
+ * Minimal transaction shape for dashboard cache storage.
+ * Reduces localStorage footprint by keeping only essential fields.
+ */
+export type CachedTransaction = Pick<
+  Transaction,
+  'id' | 'date' | 'amount' | 'account_id' | 'payee_name' |
+  'category_name' | 'flag_color' | 'flag_name' | 'cleared' | 'approved'
+>;
+
+/**
+ * Payload type for callers setting dashboard cache with full Transaction objects.
+ * The service layer will sanitize these to CachedTransaction internally.
+ */
+export interface DashboardTransactionsCachePayload {
+  budgetId: string;
+  sinceDate: string;
+  fetchedAt: string;
+  trackedAccountIds: string[];
+  transactions: Transaction[];
+  accounts: Array<{ id: string; name: string }>;
+}
+
 export interface CardSubcategory {
   id: string;
   name: string;
@@ -153,6 +211,15 @@ export interface AppSettings {
   collapsedCardGroups?: Partial<Record<'cashback' | 'miles', boolean>>;
 }
 
+export interface DashboardTransactionsCacheEntry {
+  budgetId: string;
+  sinceDate: string;
+  fetchedAt: string;
+  trackedAccountIds: string[];
+  transactions: CachedTransaction[];
+  accounts: Array<{ id: string; name: string }>;
+}
+
 export interface StorageData {
   ynab: YnabConnection;
   cards: CreditCard[];
@@ -168,5 +235,6 @@ export interface StorageData {
     transactions?: unknown[];
     lastUpdated?: string;
     flagNames?: Partial<Record<YnabFlagColor, string>>;
+    dashboardTransactions?: DashboardTransactionsCacheEntry[];
   };
 }
