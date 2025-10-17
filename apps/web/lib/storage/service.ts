@@ -495,8 +495,10 @@ export class StorageService {
     }
 
     // Handle legacy data: sanitize transactions and limit to most recent using DASHBOARD_CACHE_LIMIT
-    const transactions = Array.isArray(match.transactions) ? match.transactions : [];
-    const sanitized = transactions
+    if (!Array.isArray(match.transactions)) {
+      return null;
+    }
+    const sanitized = match.transactions
       .map(txn => this.sanitizeTransactionForCache(txn))
       .filter((txn): txn is CachedTransaction => txn !== null)
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())

@@ -5,10 +5,41 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { YnabClient } from "@/lib/ynab-client";
 import { storage } from "@/lib/storage";
 import { SimpleRewardsCalculator } from "@/lib/rewards-engine";
-import type { CreditCard } from "@/lib/storage";
+import type { CreditCard, CachedTransaction } from "@/lib/storage";
 import type { Transaction } from "@/types/transaction";
 
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Type guard that validates cached transactions and safely converts them to full Transaction objects.
+ * Fills in missing optional fields (memo, subtransactions) that aren't stored in cache.
+ */
+function isCachedTransactionArray(data: unknown): data is CachedTransaction[] {
+  if (!Array.isArray(data)) {
+    return false;
+  }
+  return data.every((item) => {
+    return (
+      typeof item === 'object' &&
+      item !== null &&
+      typeof item.id === 'string' &&
+      typeof item.date === 'string' &&
+      typeof item.amount === 'number' &&
+      typeof item.account_id === 'string'
+    );
+  });
+}
+
+/**
+ * Safely converts cached transactions to full Transaction objects by adding missing optional fields.
+ */
+function cachedToTransaction(cached: CachedTransaction): Transaction {
+  return {
+    ...cached,
+    memo: undefined,
+    subtransactions: undefined,
+  };
+}
 
 interface UseTrackedTransactionsArgs {
   pat?: string;
@@ -183,9 +214,14 @@ export function useTrackedTransactions({
         accountNameMap.set(acc.id, acc.name);
       });
       setAccountsMap(accountNameMap);
-      setAllTransactions(
-        Array.isArray(cached.transactions) ? (cached.transactions as Transaction[]) : []
-      );
+
+      // Validate and convert cached transactions to full Transaction objects
+      if (isCachedTransactionArray(cached.transactions)) {
+        setAllTransactions(cached.transactions.map(cachedToTransaction));
+      } else {
+        setAllTransactions([]);
+      }
+
       setHasCachedData(true);
       setLastUpdatedAt(cached.fetchedAt);
       // Trigger background refresh
