@@ -9,6 +9,7 @@ import { CurrencyAmount } from "@/components/CurrencyAmount";
 import { SpendingProgressBar } from "@/components/SpendingProgressBar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { RefreshBadge } from "@/components/RefreshBadge";
 import type { CreditCard } from "@/lib/storage";
 import type { Transaction } from "@/types/transaction";
 
@@ -17,9 +18,10 @@ interface CardSummaryCompactProps {
   pat?: string;
   prefetchedTransactions?: Transaction[];
   onHideCard?: (cardId: string, hiddenUntil: string) => void;
+  isRefreshing?: boolean;
 }
 
-export function CardSummaryCompact({ card, pat, prefetchedTransactions, onHideCard }: CardSummaryCompactProps) {
+export function CardSummaryCompact({ card, pat, prefetchedTransactions, onHideCard, isRefreshing }: CardSummaryCompactProps) {
   const { settings } = useSettings();
   const { selectedBudget } = useSelectedBudget();
 
@@ -147,7 +149,8 @@ export function CardSummaryCompact({ card, pat, prefetchedTransactions, onHideCa
     : undefined;
 
   return (
-    <div className="flex h-full flex-col gap-2.5">
+    <div className="relative flex h-full flex-col gap-2.5">
+      <RefreshBadge isRefreshing={isRefreshing} />
       <div className="flex items-center justify-between">
         <span className="text-xs uppercase tracking-wide text-muted-foreground">Spent</span>
         <span className="text-base font-semibold">
