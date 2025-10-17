@@ -9,6 +9,7 @@ import {
   ChevronRight,
   CreditCard as CreditCardIcon,
   GripVertical,
+  Loader2,
   Percent,
   Settings2,
   TrendingUp,
@@ -50,6 +51,34 @@ import {
 import { CardSpendingSummary } from "@/components/CardSpendingSummary";
 import { CardSummaryCompact } from "@/components/CardSummaryCompact";
 
+function DashboardCardSkeleton({ viewMode }: { viewMode: DashboardViewMode }) {
+  return (
+    <Card className="animate-pulse">
+      <CardHeader className="pb-3">
+        <div className="h-5 bg-muted rounded w-32" />
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {viewMode === 'detailed' ? (
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="h-16 bg-muted rounded" />
+              <div className="h-16 bg-muted rounded" />
+            </div>
+            <div className="h-2 bg-muted rounded w-full" />
+            <div className="h-10 bg-muted rounded w-full" />
+          </>
+        ) : (
+          <>
+            <div className="h-4 bg-muted rounded w-full" />
+            <div className="h-2 bg-muted rounded w-full" />
+            <div className="h-4 bg-muted rounded w-2/3" />
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 interface DashboardCardOverviewProps {
   cards: CreditCard[];
   cashbackCards: CreditCard[];
@@ -62,6 +91,10 @@ interface DashboardCardOverviewProps {
   onUnhideAll(): void;
   pat: string;
   prefetchedTransactions: Transaction[];
+  transactionsLoading: boolean;
+  transactionsRefreshing: boolean;
+  hasCachedTransactions: boolean;
+  transactionsLastUpdatedAt: string | null;
   cashbackCollapsed: boolean;
   milesCollapsed: boolean;
   onToggleGroup(category: 'cashback' | 'miles'): void;
@@ -88,6 +121,10 @@ export function DashboardCardOverview({
   onUnhideAll,
   pat,
   prefetchedTransactions,
+  transactionsLoading,
+  transactionsRefreshing,
+  hasCachedTransactions,
+  transactionsLastUpdatedAt,
   cashbackCollapsed,
   milesCollapsed,
   onToggleGroup,
@@ -95,6 +132,18 @@ export function DashboardCardOverview({
 }: DashboardCardOverviewProps) {
   const hiddenCount = hiddenCards.length;
   const hasVisibleCards = visibleFeaturedCards.length > 0;
+
+  const isInitialLoading = transactionsLoading && !hasCachedTransactions;
+
+  const formattedTime = useMemo(() => {
+    if (!transactionsLastUpdatedAt) return null;
+    try {
+      const date = new Date(transactionsLastUpdatedAt);
+      return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return null;
+    }
+  }, [transactionsLastUpdatedAt]);
 
   const handleShowAll = useCallback(() => {
     onUnhideAll();
@@ -106,6 +155,24 @@ export function DashboardCardOverview({
   );
 
   const summaryContent = useMemo(() => {
+    if (isInitialLoading && visibleFeaturedCards.length > 0) {
+      const skeletonCount = Math.min(visibleFeaturedCards.length, 6);
+      return (
+        <div
+          className={cn(
+            "grid gap-4",
+            viewMode === "detailed"
+              ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"
+              : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+          )}
+        >
+          {Array.from({ length: skeletonCount }).map((_, i) => (
+            <DashboardCardSkeleton key={i} viewMode={viewMode} />
+          ))}
+        </div>
+      );
+    }
+
     if (cards.length === 0) {
       return (
         <Card className="mb-8">
@@ -163,6 +230,7 @@ export function DashboardCardOverview({
             isCollapsed={cashbackCollapsed}
             onToggleCollapse={() => onToggleGroup('cashback')}
             onReorderCards={(orderedIds) => onReorderCards('cashback', orderedIds)}
+            isRefreshing={transactionsRefreshing}
           />
         )}
         {milesCards.length > 0 && (
@@ -178,11 +246,13 @@ export function DashboardCardOverview({
             isCollapsed={milesCollapsed}
             onToggleCollapse={() => onToggleGroup('miles')}
             onReorderCards={(orderedIds) => onReorderCards('miles', orderedIds)}
+            isRefreshing={transactionsRefreshing}
           />
         )}
       </>
     );
   }, [
+    isInitialLoading,
     cards.length,
     hasVisibleCards,
     cashbackCards,
@@ -197,10 +267,24 @@ export function DashboardCardOverview({
     milesCollapsed,
     onToggleGroup,
     onReorderCards,
+    transactionsRefreshing,
+    visibleFeaturedCards.length,
   ]);
 
   return (
     <div className="space-y-8 mb-8">
+      {transactionsRefreshing && (
+        <div className="flex items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50/50 py-2 px-4 text-sm text-blue-700 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-300">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span>Refreshing YNAB data…</span>
+          {formattedTime && <span className="text-xs text-muted-foreground ml-2">Updated {formattedTime}</span>}
+        </div>
+      )}
+
+      {!transactionsRefreshing && formattedTime && (
+        <p className="text-xs text-muted-foreground text-center">Updated {formattedTime}</p>
+      )}
+
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-3">
           <h2 className="text-2xl font-bold">Your Cards</h2>
@@ -265,6 +349,7 @@ interface CardGroupProps {
   isCollapsed: boolean;
   onToggleCollapse(): void;
   onReorderCards(orderedIds: string[]): void;
+  isRefreshing: boolean;
 }
 
 function CardGroup({
@@ -279,6 +364,7 @@ function CardGroup({
   isCollapsed,
   onToggleCollapse,
   onReorderCards,
+  isRefreshing,
 }: CardGroupProps) {
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const sensors = useSensors(
@@ -383,6 +469,7 @@ function CardGroup({
                     prefetchedTransactions={prefetchedTransactions}
                     onHideCard={onHideCard}
                     isSorting={Boolean(activeDragId)}
+                    isRefreshing={isRefreshing}
                   />
                 );
               })}
@@ -403,9 +490,10 @@ interface SortableDashboardCardProps {
   prefetchedTransactions: Transaction[];
   onHideCard(cardId: string, hiddenUntil: string): void;
   isSorting: boolean;
+  isRefreshing: boolean;
 }
 
-function SortableDashboardCard({ card, viewMode, pat, prefetchedTransactions, onHideCard, isSorting }: SortableDashboardCardProps) {
+function SortableDashboardCard({ card, viewMode, pat, prefetchedTransactions, onHideCard, isSorting, isRefreshing }: SortableDashboardCardProps) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id: card.id,
   });
@@ -527,6 +615,7 @@ function SortableDashboardCard({ card, viewMode, pat, prefetchedTransactions, on
               prefetchedTransactions={prefetchedTransactions}
               onHideCard={onHideCard}
               showHideOption
+              isRefreshing={isRefreshing}
             />
           ) : (
             <CardSummaryCompact
@@ -534,6 +623,7 @@ function SortableDashboardCard({ card, viewMode, pat, prefetchedTransactions, on
               pat={pat}
               prefetchedTransactions={prefetchedTransactions}
               onHideCard={onHideCard}
+              isRefreshing={isRefreshing}
             />
           )}
         </CardContent>

@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import { CurrencyAmount } from '@/components/CurrencyAmount';
 import { SpendingProgressBar } from '@/components/SpendingProgressBar';
 import { SubcategoryBreakdownCompact } from '@/components/SubcategoryBreakdownCompact';
+import { RefreshBadge } from '@/components/RefreshBadge';
 import { Button } from '@/components/ui/button';
 import { AlertCircle, TrendingUp, Percent, XCircle } from 'lucide-react';
 import {
@@ -26,9 +27,10 @@ interface CardSpendingSummaryProps {
   prefetchedTransactions?: Transaction[];
   onHideCard?: (cardId: string, hiddenUntil: string) => void;
   showHideOption?: boolean;
+  isRefreshing?: boolean;
 }
 
-export function CardSpendingSummary({ card, pat, prefetchedTransactions, onHideCard, showHideOption }: CardSpendingSummaryProps) {
+export function CardSpendingSummary({ card, pat, prefetchedTransactions, onHideCard, showHideOption, isRefreshing }: CardSpendingSummaryProps) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const abortRef = useRef<AbortController | null>(null);
@@ -193,7 +195,8 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions, onHideC
     : 'text-muted-foreground';
 
   return (
-    <div className="flex h-full flex-col gap-4">
+    <div className="relative flex h-full flex-col gap-4">
+      <RefreshBadge isRefreshing={isRefreshing} />
       {/* Spending and Rewards Summary */}
       <div className="grid grid-cols-2 gap-2">
         <div className="rounded-lg bg-muted/10 p-3 text-left">

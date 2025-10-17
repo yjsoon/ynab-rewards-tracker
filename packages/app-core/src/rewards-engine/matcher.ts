@@ -2,27 +2,7 @@
  * Transaction matching utilities for rewards calculation
  */
 
-// Transaction types will be provided by the consuming application
-export interface Transaction {
-  id: string;
-  date: string;
-  amount: number;
-  account_id: string;
-  flag_name?: string | null;
-  flag_color?: string | null;
-  payee_name?: string | null;
-  category_name?: string | null;
-  approved?: boolean;
-  cleared?: string;
-}
-
-export interface TransactionWithRewards extends Transaction {
-  rewards?: {
-    cardId: string;
-    amount: number;
-    rate: number;
-  };
-}
+import type { Transaction, TransactionWithRewards } from '../storage/types';
 
 function absFromMilli(amount: number): number {
   return Math.abs(amount) / 1000;

@@ -2,8 +2,7 @@
  * Simplified rewards calculation using card earning rates
  */
 
-import type { AppSettings, CreditCard } from '../storage/types';
-import type { Transaction } from './matcher';
+import type { AppSettings, CreditCard, Transaction } from '../storage/types';
 import {
   calculateMaximumSpendProgress,
   calculateMinimumSpendProgress,

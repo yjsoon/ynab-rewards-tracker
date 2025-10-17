@@ -128,7 +128,7 @@ export default function DashboardPage() {
     [settings.cardOrdering]
   );
 
-  const { allTransactions } = useTrackedTransactions({
+  const { allTransactions, loading, hasCachedData, refreshing, lastUpdatedAt } = useTrackedTransactions({
     pat,
     selectedBudgetId: selectedBudget.id,
     trackedAccountIds,
@@ -275,6 +275,10 @@ export default function DashboardPage() {
         onUnhideAll={handleUnhideAll}
         pat={pat}
         prefetchedTransactions={allTransactions}
+        transactionsLoading={loading}
+        transactionsRefreshing={refreshing}
+        hasCachedTransactions={hasCachedData}
+        transactionsLastUpdatedAt={lastUpdatedAt}
         cashbackCollapsed={cashbackCollapsed}
         milesCollapsed={milesCollapsed}
         onToggleGroup={handleToggleGroup}

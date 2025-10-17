@@ -3,9 +3,43 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { YnabClient } from "@/lib/ynab-client";
+import { storage } from "@/lib/storage";
 import { SimpleRewardsCalculator } from "@/lib/rewards-engine";
-import type { CreditCard } from "@/lib/storage";
+import type { CreditCard, CachedTransaction } from "@/lib/storage";
 import type { Transaction } from "@/types/transaction";
+
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Type guard that validates cached transactions and safely converts them to full Transaction objects.
+ * Fills in missing optional fields (memo, subtransactions) that aren't stored in cache.
+ */
+function isCachedTransactionArray(data: unknown): data is CachedTransaction[] {
+  if (!Array.isArray(data)) {
+    return false;
+  }
+  return data.every((item) => {
+    return (
+      typeof item === 'object' &&
+      item !== null &&
+      typeof item.id === 'string' &&
+      typeof item.date === 'string' &&
+      typeof item.amount === 'number' &&
+      typeof item.account_id === 'string'
+    );
+  });
+}
+
+/**
+ * Safely converts cached transactions to full Transaction objects by adding missing optional fields.
+ */
+function cachedToTransaction(cached: CachedTransaction): Transaction {
+  return {
+    ...cached,
+    memo: undefined,
+    subtransactions: undefined,
+  };
+}
 
 interface UseTrackedTransactionsArgs {
   pat?: string;
@@ -23,6 +57,9 @@ interface UseTrackedTransactionsResult {
   loading: boolean;
   error: string;
   refresh(): void;
+  hasCachedData: boolean;
+  lastUpdatedAt: string | null;
+  refreshing: boolean;
 }
 
 /**
@@ -48,6 +85,8 @@ export function useTrackedTransactions({
   const [accountsMap, setAccountsMap] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [hasCachedData, setHasCachedData] = useState(false);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
   const lastFetchKeyRef = useRef("");
@@ -73,6 +112,8 @@ export function useTrackedTransactions({
       setAllTransactions([]);
       setAccountsMap(new Map());
       setError("");
+      setHasCachedData(false);
+      setLastUpdatedAt(null);
       return;
     }
 
@@ -103,6 +144,20 @@ export function useTrackedTransactions({
         signal: controller.signal,
       });
       setAllTransactions(transactions);
+
+      // Persist to cache after successful fetch
+      const now = new Date().toISOString();
+      storage.setDashboardTransactionsCache({
+        budgetId: selectedBudgetId,
+        sinceDate: earliestTrackedWindow,
+        fetchedAt: now,
+        trackedAccountIds: [...trackedAccountIds].sort(), // Normalize for consistent key
+        transactions: transactions,
+        accounts: accounts.map((acc) => ({ id: acc.id, name: acc.name })),
+      });
+
+      setHasCachedData(true);
+      setLastUpdatedAt(now);
     } catch (err) {
       if (!(err instanceof Error) || err.name !== "AbortError") {
         const message = err instanceof Error ? err.message : String(err);
@@ -115,7 +170,7 @@ export function useTrackedTransactions({
         abortRef.current = null;
       }
     }
-  }, [pat, selectedBudgetId, earliestTrackedWindow]);
+  }, [pat, selectedBudgetId, earliestTrackedWindow, trackedAccountIds]);
 
   useEffect(() => {
     if (!pat || !selectedBudgetId) {
@@ -123,18 +178,61 @@ export function useTrackedTransactions({
       setRecentTransactions([]);
       setAllTransactions([]);
       setAccountsMap(new Map());
+      setHasCachedData(false);
+      setLastUpdatedAt(null);
       return;
     }
 
-    const fetchKey = [pat, selectedBudgetId, earliestTrackedWindow].join("::");
+    const fetchKey = [
+      pat,
+      selectedBudgetId,
+      earliestTrackedWindow,
+      [...trackedAccountIds].sort().join(',')
+    ].join("::");
 
     if (lastFetchKeyRef.current === fetchKey) {
       return;
     }
 
     lastFetchKeyRef.current = fetchKey;
-    loadTransactions();
-  }, [pat, selectedBudgetId, earliestTrackedWindow, loadTransactions]);
+
+    // Prune expired entries on mount
+    storage.pruneDashboardTransactionsCache(CACHE_TTL_MS);
+
+    // Attempt to hydrate from cache
+    const cached = storage.getDashboardTransactionsCache(
+      selectedBudgetId,
+      earliestTrackedWindow,
+      trackedAccountIds,
+      CACHE_TTL_MS
+    );
+
+    if (cached) {
+      // Hydrate from cache without entering loading state
+      const accountNameMap = new Map<string, string>();
+      cached.accounts.forEach((acc) => {
+        accountNameMap.set(acc.id, acc.name);
+      });
+      setAccountsMap(accountNameMap);
+
+      // Validate and convert cached transactions to full Transaction objects
+      if (isCachedTransactionArray(cached.transactions)) {
+        setAllTransactions(cached.transactions.map(cachedToTransaction));
+      } else {
+        setAllTransactions([]);
+      }
+
+      setHasCachedData(true);
+      setLastUpdatedAt(cached.fetchedAt);
+      // Trigger background refresh
+      loadTransactions();
+    } else {
+      // No cache - proceed with network fetch
+      setHasCachedData(false);
+      setLastUpdatedAt(null);
+      loadTransactions();
+    }
+  }, [pat, selectedBudgetId, earliestTrackedWindow, trackedAccountIds, loadTransactions]);
 
   useEffect(() => {
     return () => {
@@ -187,6 +285,8 @@ export function useTrackedTransactions({
     loadTransactions();
   }, [loadTransactions]);
 
+  const refreshing = loading && hasCachedData;
+
   return {
     recentTransactions,
     allTransactions,
@@ -194,5 +294,8 @@ export function useTrackedTransactions({
     loading,
     error,
     refresh,
+    hasCachedData,
+    lastUpdatedAt,
+    refreshing,
   };
 }

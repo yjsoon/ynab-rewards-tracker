@@ -13,9 +13,11 @@ interface RecentTransactionsTableProps {
   transactions: Transaction[];
   accountsMap: Map<string, string>;
   lookbackDays: number;
+  refreshing?: boolean;
+  lastUpdatedAt?: string | null;
 }
 
-export function RecentTransactionsTable({ loading, error, transactions, accountsMap, lookbackDays }: RecentTransactionsTableProps) {
+export function RecentTransactionsTable({ loading, error, transactions, accountsMap, lookbackDays, refreshing, lastUpdatedAt }: RecentTransactionsTableProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
@@ -38,9 +40,26 @@ export function RecentTransactionsTable({ loading, error, transactions, accounts
     return <p className="text-center py-8 text-muted-foreground">No recent transactions found.</p>;
   }
 
+  const formattedTime = lastUpdatedAt ? (() => {
+    try {
+      const date = new Date(lastUpdatedAt);
+      return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return null;
+    }
+  })() : null;
+
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full" role="table" aria-label={`Recent transactions (Last ${lookbackDays} Days)`}>
+    <div className="space-y-3">
+      {refreshing && (
+        <div className="flex items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50/50 py-2 px-4 text-sm text-blue-700 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-300">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span>Refreshing…</span>
+        </div>
+      )}
+
+      <div className="overflow-x-auto">
+        <table className="w-full" role="table" aria-label={`Recent transactions (Last ${lookbackDays} Days)`}>
         <thead>
           <tr className="border-b" role="row">
             <th className="text-left p-2 font-medium" scope="col">
@@ -78,6 +97,11 @@ export function RecentTransactionsTable({ loading, error, transactions, accounts
           ))}
         </tbody>
       </table>
+    </div>
+
+      {formattedTime && (
+        <p className="text-xs text-muted-foreground text-center">Updated {formattedTime}</p>
+      )}
     </div>
   );
 }
