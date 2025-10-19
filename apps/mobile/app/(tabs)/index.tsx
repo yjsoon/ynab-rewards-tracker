@@ -37,26 +37,48 @@ import {
   type SubcategoryCalculation,
   type TransactionWithRewards,
 } from '@ynab-counter/app-core/rewards-engine';
+import { createRewardCalculationFromSimple } from '@ynab-counter/app-core/rewards-engine/utils/reward-calculation';
 import type { CreditCard, RewardCalculation, SubcategoryBreakdown } from '@ynab-counter/app-core/storage/types';
+import { findBestDashboardEntry } from '@/lib/dashboardCache';
 
 const currencyFormatter = new Intl.NumberFormat('en-US', {
   style: 'currency',
   currency: 'USD',
 });
 
-type CardSummary = {
+export type CardSummary = {
   card: CreditCard;
   period: string;
   calculation: SimplifiedCalculation & { periodStart?: string; periodEnd?: string };
+  rewardCalculation: RewardCalculation;
   source: 'stored' | 'computed' | 'demo';
 };
 
-function useCardSummaries(): { summaries: CardSummary[]; isDemo: boolean } {
-  const { state } = useStorage();
+type CardSummaryResult = {
+  summaries: CardSummary[];
+  calculations: RewardCalculation[];
+  isDemo: boolean;
+  isEmpty: boolean;
+  isLoading: boolean;
+};
+
+export function useCardSummaries(): CardSummaryResult {
+  const { state, status } = useStorage();
   const demo = useDemoRewards();
 
   return useMemo(() => {
+    if (!status.isHydrated) {
+      return {
+        summaries: [],
+        calculations: [],
+        isDemo: false,
+        isEmpty: false,
+        isLoading: true,
+      };
+    }
+
     if (state.cards.length === 0) {
+      const rewardCalculation = createRewardCalculationFromSimple(demo.card, demo.calculation);
       return {
         summaries: [
           {
@@ -67,32 +89,37 @@ function useCardSummaries(): { summaries: CardSummary[]; isDemo: boolean } {
               periodStart: demo.period.start,
               periodEnd: demo.period.end,
             },
+            rewardCalculation,
             source: 'demo' as const,
           },
         ],
+        calculations: [rewardCalculation],
         isDemo: true,
+        isEmpty: false,
+        isLoading: false,
       };
     }
 
     const hiddenIds = new Set((state.hiddenCards || []).map((hidden) => hidden.cardId));
+    const activeCards = state.cards.filter((card) => !hiddenIds.has(card.id));
 
-    const summaries: CardSummary[] = state.cards
-      .filter((card) => !hiddenIds.has(card.id))
+    const summaries: CardSummary[] = activeCards
       .map((card) => {
         const period = SimpleRewardsCalculator.calculatePeriod(card);
         const stored = findStoredCalculation(state.calculations, card.id, period.start, period.end);
 
         if (stored) {
-        return {
-          card,
-          period: stored.period,
-          calculation: convertStoredCalculation(card, stored),
-          source: 'stored' as const,
-        };
+          return {
+            card,
+            period: stored.period,
+            calculation: convertStoredCalculation(card, stored),
+            rewardCalculation: stored,
+            source: 'stored' as const,
+          };
         }
 
         const transactions = extractCachedTransactions(state, card.ynabAccountId);
-    const computed = SimpleRewardsCalculator.calculateCardRewards(
+        const computed = SimpleRewardsCalculator.calculateCardRewards(
           card,
           transactions,
           period,
@@ -107,13 +134,31 @@ function useCardSummaries(): { summaries: CardSummary[]; isDemo: boolean } {
             periodStart: period.start,
             periodEnd: period.end,
           },
+          rewardCalculation: createRewardCalculationFromSimple(card, computed),
           source: 'computed' as const,
         };
       })
-      .sort((a, b) => b.calculation.rewardEarnedDollars - a.calculation.rewardEarnedDollars);
+      .sort((a, b) => {
+        const valueA = a.calculation.rewardEarnedDollars ?? a.calculation.rewardEarned ?? 0;
+        const valueB = b.calculation.rewardEarnedDollars ?? b.calculation.rewardEarned ?? 0;
+        return valueB - valueA;
+      });
 
-    return { summaries, isDemo: false };
-  }, [state, demo]);
+    const hasActivity = summaries.some((summary) => {
+      const totalSpend = summary.calculation.totalSpend ?? 0;
+      const rewardEarned =
+        summary.calculation.rewardEarnedDollars ?? summary.calculation.rewardEarned ?? 0;
+      return Math.abs(totalSpend) > 0 || Math.abs(rewardEarned) > 0;
+    });
+
+    return {
+      summaries,
+      calculations: summaries.map((summary) => summary.rewardCalculation),
+      isDemo: false,
+      isEmpty: summaries.length > 0 && !hasActivity,
+      isLoading: status.isRefreshing,
+    };
+  }, [demo, state, status.isHydrated, status.isRefreshing]);
 }
 
 function findStoredCalculation(
@@ -186,10 +231,20 @@ function deriveRewardRate(card: CreditCard, flagColor: string | null): number {
   return matched.rewardValue ?? 0;
 }
 
-function extractCachedTransactions(state: ReturnType<typeof useStorage>['state'], accountId: string): TransactionWithRewards[] {
-  const entries = state.cachedData?.dashboardTransactions ?? [];
-  return entries
-    .flatMap((entry) => entry.transactions)
+function extractCachedTransactions(
+  state: ReturnType<typeof useStorage>['state'],
+  accountId: string,
+): TransactionWithRewards[] {
+  const entry = findBestDashboardEntry(
+    state.cachedData?.dashboardTransactions,
+    state.selectedBudget.id,
+    state.trackedAccountIds,
+  );
+  if (!entry) {
+    return [];
+  }
+
+  return entry.transactions
     .filter((txn) => txn.account_id === accountId)
     .map((txn) => ({ ...txn, rewards: undefined }));
 }
@@ -205,7 +260,7 @@ export default function HomeScreen() {
   const navigation = useNavigation();
   const { impact } = useHaptics();
   const { actions } = useStorage();
-  const { summaries, isDemo } = useCardSummaries();
+  const { summaries, isDemo, isEmpty, isLoading } = useCardSummaries();
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -232,11 +287,14 @@ export default function HomeScreen() {
   }, [navigation, actions, impact]);
 
   const featured = useMemo(() => {
-    if (summaries.length === 0) return null;
-    return [...summaries].sort(
-      (a, b) => b.calculation.rewardEarnedDollars - a.calculation.rewardEarnedDollars,
-    )[0];
-  }, [summaries]);
+    if (summaries.length === 0 || isEmpty) return null;
+    return [...summaries]
+      .sort((a, b) => {
+        const valueA = a.calculation.rewardEarnedDollars ?? a.calculation.rewardEarned ?? 0;
+        const valueB = b.calculation.rewardEarnedDollars ?? b.calculation.rewardEarned ?? 0;
+        return valueB - valueA;
+      })[0];
+  }, [summaries, isEmpty]);
 
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
@@ -247,15 +305,19 @@ export default function HomeScreen() {
         <View style={styles.content}>
           <View style={styles.introSection}>
             <Footnote color="secondary">
-              {isDemo
+              {isLoading
+                ? 'Loading your rewards data...'
+                : isDemo
                 ? 'Currently showing demo data. Connect YNAB to see live rewards.'
+                : isEmpty
+                ? 'No live activity yet. Keep using your tracked cards to see rewards.'
                 : 'Track your credit card rewards progress.'}
             </Footnote>
           </View>
 
           {featured ? (
             <FeaturedCardHighlight summary={featured} haptics={impact} />
-          ) : (
+          ) : isLoading ? null : (
             <EmptyState />
           )}
 
