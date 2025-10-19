@@ -21,24 +21,24 @@ export const semanticColors = {
   secondaryLabel: Platform.OS === 'ios' ? PlatformColor('secondaryLabel') : '#3C3C43',
   tertiaryLabel: Platform.OS === 'ios' ? PlatformColor('tertiaryLabel') : '#3C3C4399',
   quaternaryLabel: Platform.OS === 'ios' ? PlatformColor('quaternaryLabel') : '#3C3C4330',
-  
+
   // Backgrounds
   systemBackground: Platform.OS === 'ios' ? PlatformColor('systemBackground') : '#FFFFFF',
   secondarySystemBackground: Platform.OS === 'ios' ? PlatformColor('secondarySystemBackground') : '#F2F2F7',
   tertiarySystemBackground: Platform.OS === 'ios' ? PlatformColor('tertiarySystemBackground') : '#FFFFFF',
   systemGroupedBackground: Platform.OS === 'ios' ? PlatformColor('systemGroupedBackground') : '#F2F2F7',
   secondarySystemGroupedBackground: Platform.OS === 'ios' ? PlatformColor('secondarySystemGroupedBackground') : '#FFFFFF',
-  
+
   // Fills
   systemFill: Platform.OS === 'ios' ? PlatformColor('systemFill') : '#78788033',
   secondarySystemFill: Platform.OS === 'ios' ? PlatformColor('secondarySystemFill') : '#78788028',
   tertiarySystemFill: Platform.OS === 'ios' ? PlatformColor('tertiarySystemFill') : '#7676801E',
   quaternarySystemFill: Platform.OS === 'ios' ? PlatformColor('quaternarySystemFill') : '#74748014',
-  
+
   // Separators
   separator: Platform.OS === 'ios' ? PlatformColor('separator') : '#C6C6C8',
   opaqueSeparator: Platform.OS === 'ios' ? PlatformColor('opaqueSeparator') : '#C6C6C8',
-  
+
   // System accent colors
   systemBlue: Platform.OS === 'ios' ? PlatformColor('systemBlue') : '#007AFF',
   systemGreen: Platform.OS === 'ios' ? PlatformColor('systemGreen') : '#34C759',
@@ -49,7 +49,7 @@ export const semanticColors = {
   systemRed: Platform.OS === 'ios' ? PlatformColor('systemRed') : '#FF3B30',
   systemTeal: Platform.OS === 'ios' ? PlatformColor('systemTeal') : '#5AC8FA',
   systemYellow: Platform.OS === 'ios' ? PlatformColor('systemYellow') : '#FFCC00',
-  
+
   // System grays
   systemGray: Platform.OS === 'ios' ? PlatformColor('systemGray') : '#8E8E93',
   systemGray2: Platform.OS === 'ios' ? PlatformColor('systemGray2') : '#AEAEB2',
@@ -57,8 +57,33 @@ export const semanticColors = {
   systemGray4: Platform.OS === 'ios' ? PlatformColor('systemGray4') : '#D1D1D6',
   systemGray5: Platform.OS === 'ios' ? PlatformColor('systemGray5') : '#E5E5EA',
   systemGray6: Platform.OS === 'ios' ? PlatformColor('systemGray6') : '#F2F2F7',
-  
+
   // Custom tokens for specific use cases
   // Button text that stays white in both light and dark modes for contrast
   primaryButtonForeground: dynamicColor('#FFFFFF', '#FFFFFF'),
 };
+
+// Hex string equivalents for places that require string colors (e.g. react-native-svg icons)
+export const semanticHex = {
+  systemBlue: '#007AFF',
+  systemPurple: '#AF52DE',
+  systemOrange: '#FF9500',
+  systemGreen: '#34C759',
+  systemGray2: '#AEAEB2',
+  systemGray3: '#C7C7CC',
+};
+
+// Append an alpha channel to a #RRGGBB color (returns #RRGGBBAA)
+export function withAlpha(hex: string, alpha: string): string {
+  if (!hex || hex[0] !== '#') return hex;
+  if (hex.length === 7) return `${hex}${alpha}`; // #RRGGBB
+  if (hex.length === 9) return `${hex.slice(0, 7)}${alpha}`; // #RRGGBBAA -> replace
+  if (hex.length === 4) {
+    // #RGB -> #RRGGBB then add alpha
+    const r = hex[1];
+    const g = hex[2];
+    const b = hex[3];
+    return `#${r}${r}${g}${g}${b}${b}${alpha}`;
+  }
+  return `${hex}${alpha}`;
+}

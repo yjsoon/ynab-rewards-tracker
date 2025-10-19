@@ -14,7 +14,7 @@ import {
   AlertCircle,
   ChevronRight,
 } from '@tamagui/lucide-icons';
-import { semanticColors } from '@/theme/semanticColors';
+import { semanticColors, semanticHex, withAlpha } from '@/theme/semanticColors';
 
 import {
   Card,
@@ -355,7 +355,7 @@ export default function HomeScreen() {
                               accessibilityHint="Opens detailed category breakdown"
                             >
                               <Caption1 color="primary">See all</Caption1>
-                              <ChevronRight size={14} color={semanticColors.systemBlue as string} />
+                              <ChevronRight size={14} color={semanticHex.systemBlue} />
                             </TouchableOpacity>
                           </View>
                         </ListItem>
@@ -510,7 +510,7 @@ function StatBlock({
 }) {
   return (
     <View style={styles.statBlock}>
-      <Icon size={20} color={semanticColors.systemBlue as string} />
+      <Icon size={20} color={semanticHex.systemBlue} />
       <Caption2 color="secondary" style={styles.statLabel}>
         {label}
       </Caption2>
@@ -521,13 +521,13 @@ function StatBlock({
 
 function CardIcon({ cardType }: { cardType: CreditCard['type'] }) {
   const color = cardType === 'cashback'
-    ? semanticColors.systemBlue
-    : semanticColors.systemPurple;
+    ? semanticHex.systemBlue
+    : semanticHex.systemPurple;
 
   return (
-    <View style={[styles.cardIcon, { backgroundColor: `${color as string}20` }]}
+    <View style={[styles.cardIcon, { backgroundColor: withAlpha(color, '20') }]}
     >
-      <CreditCardIcon size={16} color={color as string} />
+      <CreditCardIcon size={16} color={color} />
     </View>
   );
 }
@@ -541,7 +541,7 @@ function EmptyState() {
       <Card style={styles.emptyStateCard}>
         <ListItem>
           <View style={styles.emptyStateContent}>
-            <AlertCircle size={40} color={semanticColors.systemGray2 as string} />
+            <AlertCircle size={40} color={semanticHex.systemGray2} />
             <Headline style={styles.emptyTitle}>No cards configured yet</Headline>
             <Body color="secondary" style={styles.emptyCopy}>
               Connect your YNAB account and add a card to start tracking live rewards.
@@ -618,10 +618,10 @@ const styles = StyleSheet.create({
     backgroundColor: semanticColors.tertiarySystemFill as string,
   },
   demoBadge: {
-    backgroundColor: `${semanticColors.systemOrange as string}30`,
+    backgroundColor: withAlpha(semanticHex.systemOrange, '30'),
   },
   computedBadge: {
-    backgroundColor: `${semanticColors.systemGreen as string}30`,
+    backgroundColor: withAlpha(semanticHex.systemGreen, '30'),
   },
   cardSection: {
     marginBottom: 16,

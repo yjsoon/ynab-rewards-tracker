@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Pressable, StyleSheet, ViewStyle, AccessibilityRole, AccessibilityValue } from 'react-native';
 import { ChevronRight } from '@tamagui/lucide-icons';
 import { useHaptics } from '../../hooks/useHaptics';
-import { semanticColors } from '../../theme/semanticColors';
+import { semanticColors, semanticHex } from '../../theme/semanticColors';
 
 interface ListItemProps {
   children: React.ReactNode;
@@ -61,7 +61,7 @@ export function ListItem({
       {showDisclosure && (
         <ChevronRight
           size={18}
-          color={semanticColors.systemGray3 as string}
+          color={semanticHex.systemGray3}
           style={styles.disclosure}
         />
       )}

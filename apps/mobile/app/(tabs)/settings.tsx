@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useHaptics } from '@/hooks/useHaptics';
 import { Card, ListItem, Button, Footnote, SectionHeader, Separator, Headline, Caption1 } from '@/components/ios';
-import { semanticColors } from '@/theme/semanticColors';
+import { semanticColors, semanticHex, withAlpha } from '@/theme/semanticColors';
 import { useStorage } from '@/contexts/StorageContext';
 import { validatePAT } from '@/lib/ynab-api';
 import type { YnabAccountSummary, YnabBudgetSummary } from '@/lib/ynab-client';
@@ -192,7 +192,7 @@ export default function SettingsScreen() {
                     <View style={[styles.statusDot, styles[`statusDot_${statusMeta.tone}`]]} />
                     <Headline>{statusMeta.label}</Headline>
                     {state.connectionStatus === 'connecting' ? (
-                      <ActivityIndicator size="small" color={semanticColors.systemBlue as string} />
+                      <ActivityIndicator size="small" color={semanticHex.systemBlue} />
                     ) : null}
                   </View>
                   {state.connectionError ? (
@@ -427,7 +427,7 @@ const styles = StyleSheet.create({
     backgroundColor: semanticColors.secondarySystemFill,
   },
   trackBadgeActive: {
-    backgroundColor: `${semanticColors.systemBlue as string}22`,
+    backgroundColor: withAlpha(semanticHex.systemBlue, '22'),
   },
   aboutInfo: {
     gap: 8,
