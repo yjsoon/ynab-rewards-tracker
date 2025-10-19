@@ -34,7 +34,7 @@ import type {
 } from '@ynab-counter/app-core/storage';
 
 const PAT_SECURE_STORE_KEY = 'ynab_counter_pat';
-const LEGACY_PAT_SECURE_STORE_KEY = 'ynab-counter:pat';
+const LEGACY_PAT_SECURE_STORE_KEY = 'ynab_counter_pat_legacy';
 
 class StorageService {
   private static readonly DASHBOARD_CACHE_LIMIT = 500;
