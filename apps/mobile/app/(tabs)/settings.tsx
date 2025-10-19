@@ -1,14 +1,114 @@
-import React from 'react';
-import { ScrollView, TextInput, KeyboardAvoidingView, Platform, View, StyleSheet } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ScrollView,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  View,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useHaptics } from '@/hooks/useHaptics';
-import { Card, ListItem, Button, Footnote, SectionHeader, Separator } from '@/components/ios';
+import { Card, ListItem, Button, Footnote, SectionHeader, Separator, Headline, Caption1 } from '@/components/ios';
 import { semanticColors } from '@/theme/semanticColors';
+import { useStorage } from '@/contexts/StorageContext';
+import { validatePAT } from '@/lib/ynab-api';
+import type { YnabAccountSummary, YnabBudgetSummary } from '@/lib/ynab-client';
+
+const connectionStatusCopy: Record<
+  'disconnected' | 'connecting' | 'connected' | 'error',
+  { label: string; tone: 'primary' | 'secondary' | 'danger' }
+> = {
+  disconnected: { label: 'Disconnected', tone: 'secondary' },
+  connecting: { label: 'Connecting…', tone: 'primary' },
+  connected: { label: 'Connected', tone: 'primary' },
+  error: { label: 'Connection error', tone: 'danger' },
+};
 
 export default function SettingsScreen() {
   const navigation = useNavigation();
   const { impact, notification } = useHaptics();
+  const { state, actions } = useStorage();
+  const [tokenInput, setTokenInput] = useState(state.pat ?? '');
+  const [tokenVisible, setTokenVisible] = useState(false);
+  const [isValidatingToken, setIsValidatingToken] = useState(false);
+  const [validationError, setValidationError] = useState<string | undefined>();
+  const [selectedBudgetId, setSelectedBudgetId] = useState<string | undefined>(state.selectedBudget.id);
+  const [trackedAccounts, setTrackedAccounts] = useState<string[]>(state.trackedAccountIds);
+  const previousConnectionStatusRef = useRef(state.connectionStatus);
+  const previousBudgetIdRef = useRef<string | undefined>(state.selectedBudget.id);
+  const previousTrackedAccountsRef = useRef<string[]>(state.trackedAccountIds);
+
+  useEffect(() => {
+    setTokenInput(state.pat ?? '');
+  }, [state.pat]);
+
+  useEffect(() => {
+    const previousStatus = previousConnectionStatusRef.current;
+    previousConnectionStatusRef.current = state.connectionStatus;
+
+    if (!state.pat || state.connectionStatus !== 'connected') {
+      return;
+    }
+
+    if (previousStatus !== 'connected') {
+      actions.syncBudgetsAndAccounts().catch((error) => {
+        console.error('Failed to sync budgets/accounts', error);
+      });
+    }
+  }, [state.connectionStatus, state.pat, actions]);
+
+  useEffect(() => {
+    const previousBudgetId = previousBudgetIdRef.current;
+    previousBudgetIdRef.current = state.selectedBudget.id;
+
+    if (!state.pat || !state.selectedBudget.id) {
+      return;
+    }
+
+    if (previousBudgetId && previousBudgetId === state.selectedBudget.id) {
+      return;
+    }
+
+    actions.syncBudgetsAndAccounts().catch((error) => {
+      console.error('Failed to sync budgets/accounts after budget change', error);
+    });
+  }, [state.selectedBudget.id, state.pat, actions]);
+
+  useEffect(() => {
+    const previousAccounts = previousTrackedAccountsRef.current;
+    previousTrackedAccountsRef.current = state.trackedAccountIds;
+
+    if (!state.pat) {
+      return;
+    }
+
+    const prevSet = new Set(previousAccounts);
+    const currentSet = new Set(state.trackedAccountIds);
+    const hasChanged =
+      prevSet.size !== currentSet.size ||
+      [...prevSet].some((id) => !currentSet.has(id)) ||
+      [...currentSet].some((id) => !prevSet.has(id));
+
+    if (hasChanged) {
+      actions.syncBudgetsAndAccounts().catch((error) => {
+        console.error('Failed to sync budgets/accounts after tracked accounts change', error);
+      });
+    }
+  }, [state.trackedAccountIds, state.pat, actions]);
+
+  useEffect(() => {
+    if (state.selectedBudget.id) {
+      setSelectedBudgetId(state.selectedBudget.id);
+    }
+  }, [state.selectedBudget.id]);
+
+  useEffect(() => {
+    setTrackedAccounts(state.trackedAccountIds);
+  }, [state.trackedAccountIds]);
 
   React.useLayoutEffect(() => {
     navigation.setOptions({
@@ -17,14 +117,58 @@ export default function SettingsScreen() {
     });
   }, [navigation]);
 
-  const handleConnect = () => {
-    impact('heavy');
-    // Simulate connection attempt
-    setTimeout(() => {
+  const statusMeta = connectionStatusCopy[state.connectionStatus];
+
+  const handleValidateToken = useCallback(async () => {
+    const trimmed = tokenInput.trim();
+    if (!trimmed) {
+      setValidationError('Token is required');
+      return;
+    }
+
+    setIsValidatingToken(true);
+    setValidationError(undefined);
+    try {
+      const result = await validatePAT(trimmed);
+      if (!result.valid) {
+        setValidationError(result.message ?? 'Invalid token');
+        notification('error');
+        return;
+      }
+
+      await actions.setPAT(trimmed);
       notification('success');
-      console.log('Connect to YNAB clicked');
-    }, 500);
-  };
+    } catch (error) {
+      setValidationError(error instanceof Error ? error.message : 'Unable to validate token');
+      notification('error');
+    } finally {
+      setIsValidatingToken(false);
+    }
+  }, [tokenInput, actions, notification]);
+
+  const handleDisconnect = useCallback(async () => {
+    impact('medium');
+    await actions.clearPAT();
+    notification('warning');
+  }, [actions, impact, notification]);
+
+  const handleSelectBudget = useCallback(async (budget: YnabBudgetSummary) => {
+    impact('light');
+    setSelectedBudgetId(budget.id);
+    await actions.setSelectedBudget(budget.id, budget.name);
+  }, [actions, impact]);
+
+  const toggleTrackedAccount = useCallback(async (accountId: string) => {
+    impact('light');
+    const nextIds = trackedAccounts.includes(accountId)
+      ? trackedAccounts.filter(id => id !== accountId)
+      : [...trackedAccounts, accountId];
+    setTrackedAccounts(nextIds);
+    await actions.setTrackedAccountIds(nextIds);
+  }, [trackedAccounts, actions, impact]);
+
+  const connectedBudgets = useMemo(() => state.budgets ?? [], [state.budgets]);
+  const connectedAccounts = useMemo(() => state.accounts ?? [], [state.accounts]);
 
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
@@ -43,14 +187,17 @@ export default function SettingsScreen() {
             <Card>
               <ListItem>
                 <View style={styles.fieldGroup}>
-                  <Footnote color="secondary">Personal Access Token</Footnote>
-                  <TextInput
-                    placeholder="Enter your YNAB PAT"
-                    secureTextEntry
-                    style={styles.textInput}
-                    placeholderTextColor={semanticColors.tertiaryLabel}
-                    onFocus={() => impact('light')}
-                  />
+                  <Footnote color="secondary">Status</Footnote>
+                  <View style={styles.statusRow}>
+                    <View style={[styles.statusDot, styles[`statusDot_${statusMeta.tone}`]]} />
+                    <Headline>{statusMeta.label}</Headline>
+                    {state.connectionStatus === 'connecting' ? (
+                      <ActivityIndicator size="small" color={semanticColors.systemBlue as string} />
+                    ) : null}
+                  </View>
+                  {state.connectionError ? (
+                    <Caption1 style={styles.statusError}>{state.connectionError}</Caption1>
+                  ) : null}
                 </View>
               </ListItem>
 
@@ -58,13 +205,25 @@ export default function SettingsScreen() {
 
               <ListItem>
                 <View style={styles.fieldGroup}>
-                  <Footnote color="secondary">Budget</Footnote>
+                  <Footnote color="secondary">Personal Access Token</Footnote>
                   <TextInput
-                    placeholder="Budget alias or ID"
+                    placeholder="Enter your YNAB PAT"
+                    secureTextEntry={!tokenVisible}
+                    value={tokenInput}
+                    onChangeText={setTokenInput}
                     style={styles.textInput}
                     placeholderTextColor={semanticColors.tertiaryLabel}
                     onFocus={() => impact('light')}
                   />
+                  <TouchableOpacity
+                    onPress={() => setTokenVisible(prev => !prev)}
+                    style={styles.revealButton}
+                  >
+                    <Caption1 color="primary">{tokenVisible ? 'Hide token' : 'Show token'}</Caption1>
+                  </TouchableOpacity>
+                  {validationError ? (
+                    <Caption1 style={styles.errorText}>{validationError}</Caption1>
+                  ) : null}
                 </View>
               </ListItem>
 
@@ -74,15 +233,101 @@ export default function SettingsScreen() {
                 <Button
                   variant="filled"
                   size="medium"
-                  onPress={handleConnect}
+                  onPress={handleValidateToken}
                   style={styles.connectButton}
-                  accessibilityLabel="Connect to YNAB"
-                  accessibilityHint="Connects your YNAB account using the personal access token"
+                  accessibilityLabel="Validate YNAB token"
+                  accessibilityHint="Validates your personal access token and fetches budgets"
+                  disabled={isValidatingToken || !tokenInput.trim()}
                 >
-                  Connect to YNAB
+                  {isValidatingToken ? 'Validating…' : 'Connect to YNAB'}
+                </Button>
+              </ListItem>
+
+              <Separator inset={16} />
+
+              <ListItem>
+                <Button
+                  variant="plain"
+                  size="medium"
+                  onPress={handleDisconnect}
+                  style={styles.connectButton}
+                  accessibilityLabel="Disconnect YNAB"
+                  accessibilityHint="Disconnects your YNAB account from YJAB"
+                  disabled={!state.pat}
+                >
+                  Disconnect
                 </Button>
               </ListItem>
             </Card>
+
+            {state.pat ? (
+              <>
+                <SectionHeader>Budgets</SectionHeader>
+                <Card>
+                  {connectedBudgets.length === 0 ? (
+                    <ListItem>
+                      <Caption1 color="secondary">No budgets available. Refresh after connecting.</Caption1>
+                    </ListItem>
+                  ) : (
+                    connectedBudgets.map((budget, index) => (
+                      <React.Fragment key={budget.id}>
+                        {index > 0 ? <Separator inset={16} /> : null}
+                        <ListItem
+                          onPress={() => handleSelectBudget(budget)}
+                          showDisclosure={false}
+                          accessibilityLabel={`Select budget ${budget.name}`}
+                          accessibilityRole="radio"
+                          accessibilityState={{ selected: selectedBudgetId === budget.id }}
+                        >
+                          <View style={styles.budgetRow}>
+                            <View style={styles.budgetInfo}>
+                              <Headline>{budget.name}</Headline>
+                              <Caption1 color="secondary">Last modified {new Date(budget.last_modified_on).toLocaleDateString()}</Caption1>
+                            </View>
+                            {selectedBudgetId === budget.id ? (
+                              <Caption1 color="primary">Selected</Caption1>
+                            ) : null}
+                          </View>
+                        </ListItem>
+                      </React.Fragment>
+                    ))
+                  )}
+                </Card>
+
+                <SectionHeader>Tracked accounts</SectionHeader>
+                <Card>
+                  {connectedAccounts.length === 0 ? (
+                    <ListItem>
+                      <Caption1 color="secondary">Select a budget to see its accounts.</Caption1>
+                    </ListItem>
+                  ) : (
+                    connectedAccounts.map((account, index) => (
+                      <React.Fragment key={account.id}>
+                        {index > 0 ? <Separator inset={16} /> : null}
+                        <ListItem
+                          onPress={() => toggleTrackedAccount(account.id)}
+                          accessibilityLabel={`Toggle tracking for ${account.name}`}
+                          accessibilityRole="checkbox"
+                          accessibilityState={{ checked: trackedAccounts.includes(account.id) }}
+                        >
+                          <View style={styles.accountRow}>
+                            <View style={styles.accountInfo}>
+                              <Headline>{account.name}</Headline>
+                              <Caption1 color="secondary">{formatAccountType(account.type)}</Caption1>
+                            </View>
+                            <View style={[styles.trackBadge, trackedAccounts.includes(account.id) && styles.trackBadgeActive]}>
+                              <Caption1 color={trackedAccounts.includes(account.id) ? 'primary' : 'secondary'}>
+                                {trackedAccounts.includes(account.id) ? 'Tracking' : 'Track'}
+                              </Caption1>
+                            </View>
+                          </View>
+                        </ListItem>
+                      </React.Fragment>
+                    ))
+                  )}
+                </Card>
+              </>
+            ) : null}
 
             <SectionHeader>About</SectionHeader>
             <Card>
@@ -114,6 +359,29 @@ const styles = StyleSheet.create({
     gap: 8,
     width: '100%',
   },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  statusDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: semanticColors.separator,
+  },
+  statusDot_primary: {
+    backgroundColor: semanticColors.systemBlue,
+  },
+  statusDot_secondary: {
+    backgroundColor: semanticColors.systemGray2,
+  },
+  statusDot_danger: {
+    backgroundColor: semanticColors.systemRed,
+  },
+  statusError: {
+    color: semanticColors.systemRed,
+  },
   textInput: {
     borderWidth: 1,
     borderColor: semanticColors.separator,
@@ -123,10 +391,62 @@ const styles = StyleSheet.create({
     fontSize: 17,
     color: semanticColors.label,
   },
+  revealButton: {
+    alignSelf: 'flex-start',
+  },
+  errorText: {
+    color: semanticColors.systemRed,
+  },
   connectButton: {
     width: '100%',
+  },
+  budgetRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+  },
+  budgetInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  accountRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+  },
+  accountInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  trackBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: semanticColors.secondarySystemFill,
+  },
+  trackBadgeActive: {
+    backgroundColor: `${semanticColors.systemBlue as string}22`,
   },
   aboutInfo: {
     gap: 8,
   },
 });
+
+function formatAccountType(type: string) {
+  switch (type) {
+    case 'creditCard':
+      return 'Credit card';
+    case 'checking':
+      return 'Checking';
+    case 'savings':
+      return 'Savings';
+    case 'cash':
+      return 'Cash';
+    case 'lineOfCredit':
+      return 'Line of credit';
+    default:
+      return type;
+  }
+}

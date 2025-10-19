@@ -1,11 +1,11 @@
 # YJAB - YNAB Journal of Awards & Bonuses
 
-A client-side rewards tracker spanning a production-ready web app and an early-stage mobile companion. Both platforms analyse YNAB transactions (real in web, demo in mobile) to track credit card rewards with user-defined rules. All user data continues to live in browser or device storage — no server database is used.
+A client-side rewards tracker spanning a production-ready web app and an in-progress mobile companion. Both platforms analyse YNAB transactions to track credit card rewards with user-defined rules. All user data lives in browser or device storage — no server database is used. The mobile app is actively integrating live storage/sync flows and continues to rely on demo data until current work (tracked in bd) is completed.
 
 ## Platforms Overview
 
 - **Web App (`apps/web`)**: Fully featured, production-ready experience with complete YNAB integration, rewards calculation engine, storage persistence, and dashboard analytics.
-- **Mobile App (`apps/mobile`)**: Expo-based companion app with complete UI flows (Home, Settings, Transactions, Recommendations) backed by hardcoded demo data while core integrations are under development.
+- **Mobile App (`apps/mobile`)**: Expo-based companion app currently wiring up live YNAB integration, AsyncStorage persistence, and rewards calculations. Home and Settings screens are mid-integration; card management UI and remaining tab screens still need implementation.
 - **Shared Foundation (`packages/app-core`)**: Cross-platform rewards engine, storage types, and utilities consumed by both apps.
 
 ## Tech Stack
@@ -22,39 +22,34 @@ A client-side rewards tracker spanning a production-ready web app and an early-s
 - Expo (React Native 0.81) with Expo Router
 - TypeScript + Tamagui component system and theming
 - `@react-navigation/native` + Expo Router tabs
-- `expo-haptics`, `expo-constants`, `expo-secure-store`
-- `@react-native-async-storage/async-storage` (planned for persistence)
+- `expo-haptics`, `expo-constants`, `expo-secure-store` (for PAT security)
+- `@react-native-async-storage/async-storage` (persistence layer under active integration)
 - React Native Safe Area, Gesture Handler, Reanimated, SVG for platform affordances
+- Direct YNAB API integration via native fetch (no proxy required)
 
 ### Shared Foundation (`packages/app-core`)
 - Rewards calculation engine, recommendation helpers, and matcher utilities
 - Storage type definitions, constants, and helpers for local persistence
 - Shared date utilities, minimum spend helpers, and YNAB client abstractions
 
-## Current Feature Matrix
+## Current Status Snapshot
 
-| Capability | Web (apps/web) | Mobile (apps/mobile) |
+| Area | Web (apps/web) | Mobile (apps/mobile) |
 | --- | --- | --- |
-| UI Screens & Navigation | ✅ | ✅ Demo UI |
-| YNAB Authentication & Sync | ✅ | ❌ Missing |
-| Rewards Calculation Engine | ✅ | ⏳ Demo (sample data) |
-| Storage Persistence | ✅ | ❌ Missing |
-| Card CRUD & Settings | ✅ | ❌ Missing |
-| Transaction Fetching | ✅ | ⏳ Demo (seeded list) |
-| Recommendations & Insights | ✅ | ⏳ Static content |
+| UI Screens & Navigation | Stable and production-ready | Core tabs scaffolded; several flows incomplete |
+| YNAB Authentication & Sync | Fully functional | StorageContext and PAT flows under active development; live sync not yet validated end-to-end |
+| Rewards Calculation Engine | Production usage | Shares engine, but mobile still mixes demo data with partial live wiring |
+| Storage Persistence | Browser localStorage service | AsyncStorage + SecureStore integration in progress |
+| Card & Rule Management | Complete CRUD | UI missing; tracked in bd |
+| Transactions & Analytics | Full parity | Transactions/Recommendations tabs pending live wiring |
 
-## Mobile Feature Gaps
+All actionable work should be tracked in **bd**. This document is an architectural reference—do not maintain TODOs here. When new tasks arise, log or update a bd issue instead.
 
-- Operates entirely in demo mode via `useDemoRewards`; lacks live YNAB API token capture or refresh.
-- No persistent storage yet; AsyncStorage integration and syncing are pending.
-- Card CRUD flows (create, edit, archive) are absent — UI currently assumes a single demo card.
-- Rewards calculations rely on shared engine but are not wired to real transactions.
-- Real transaction fetching, filtering, and categorisation are not connected.
-- Settings screen buttons trigger haptics but do not yet initiate authentication or syncing flows.
+> Note: Until bd issues confirm the live storage/sync flow is complete, assume the mobile app falls back to `useDemoRewards`.
 
 ## Core Features
 
-The production web app currently delivers the following capabilities (the mobile app reuses the same concepts but remains demo-only until integrations land).
+The production web app currently delivers the following capabilities. The mobile app implements most infrastructure but lacks UI for card/rules management.
 
 ### YNAB Integration
 - Connect via Personal Access Token (PAT)
@@ -106,6 +101,28 @@ The production web app currently delivers the following capabilities (the mobile
 ## Project Structure
 
 ```
+
+## Issue Tracking with bd
+
+This repository uses the bd CLI (from the Beads project) for issue tracking. The database is initialized at `.beads/ynab-counter.db` and bd auto-discovers it from the repo root.
+
+Common commands:
+- Show ready work: `bd ready`
+- List all issues: `bd list`
+- Show details: `bd show ynab-counter-<id>`
+- Create a new issue:
+  - `bd create "Title" -d "Description" -l mobile,P0,ui -p 0 -t feature`
+- Close/reopen: `bd close ynab-counter-<id>` / `bd reopen ynab-counter-<id>`
+- Blocked view: `bd blocked`
+
+Labels and priorities:
+- Labels in use: `mobile`, `P0`, `P1`, `P2`, `ui`, `infra`
+- Priority flag `-p` ranges 0 (highest) to 4 (lowest)
+
+Notes:
+- bd walks up like git to find `.beads/`
+- Issues are per-repo; use `bd list` and `bd ready` to navigate work
+- For advanced usage, see Beads documentation: https://github.com/steveyegge/beads
 apps/
 ├── web/                      # Next.js production app
 │   ├── app/                  # App Router routes (dashboard, cards, settings, API)
@@ -115,8 +132,12 @@ apps/
 ├── mobile/                   # Expo + React Native companion app
 │   ├── app/                  # Expo Router tabs (Home, Transactions, Recommendations, Settings)
 │   ├── components/ios/       # iOS-inspired primitives (Card, Button, Typography)
-│   ├── src/hooks/            # Mobile-specific hooks (demo rewards, haptics, keyboard)
-│   └── theme/                # Semantic colour tokens shared across screens
+│   ├── src/
+│   │   ├── contexts/         # StorageContext with state management & sync orchestration
+│   │   ├── hooks/            # Mobile-specific hooks (demo rewards, haptics, keyboard)
+│   │   ├── lib/              # YNAB client, API wrappers, sync service
+│   │   ├── storage/          # AsyncStorage service & persistence layer
+│   │   └── theme/            # Semantic colour tokens shared across screens
 packages/
 ├── app-core/                 # Shared rewards engine, storage types, utilities
 ├── core/                     # Additional core utilities (legacy)
@@ -128,15 +149,16 @@ packages/
 ## Architecture Patterns
 
 - Both apps consume the shared rewards engine and storage types from `packages/app-core`, ensuring consistent calculations and data structures.
-- Web persists data via the `storage.ts` service (browser `localStorage`); mobile will mirror this through an AsyncStorage-backed implementation once persistence ships.
-- Mobile demo data is generated through `useDemoRewards`, which wraps the shared simple calculator in a mocked environment to validate UI flows before live wiring.
-- API interactions remain centralised in the web app's `/api/ynab/*` routes; future mobile work will reuse `packages/ynab-client` for direct device-side calls.
+- Web persists data via `storage.ts` service (browser `localStorage`); mobile mirrors this through AsyncStorage with SecureStore for sensitive PAT storage.
+- Mobile uses `useDemoRewards` as fallback when no cards configured, otherwise computes live rewards from cached YNAB transactions.
+- Web routes YNAB API calls through `/api/ynab/*` proxy; mobile makes direct API calls using native fetch with built-in retry and rate limiting.
+- Both apps use React Context (`StorageContext`) for state management with automatic hydration and sync orchestration.
 
 ## Data Model
 
 ### Resetting Local Storage
-- Browser state lives under `ynab-rewards-tracker` key
-- Bump `STORAGE_VERSION` in `apps/web/lib/storage.ts` to force-clear cached data
+- **Web**: Browser state lives under `ynab-rewards-tracker` key. Bump `STORAGE_VERSION` in `apps/web/lib/storage.ts` to force-clear cached data
+- **Mobile**: AsyncStorage uses `ynab-rewards-tracker:` prefix. Bump `STORAGE_VERSION` in `packages/app-core/src/storage/constants.ts` to force-clear cached data. PAT stored separately in SecureStore for security
 
 ### Core Entities
 ```typescript
@@ -217,35 +239,9 @@ pnpm --filter ./apps/mobile android    # Launch Android emulator via Expo
 - No environment variables needed for the web app (fully client-side)
 - Static export possible with some limitations
 
-## Roadmap
+## Roadmap & Task Management
 
-### Web Roadmap
-
-#### P1 — Next Actions
-- [ ] Persist per-transaction category overrides
-- [ ] Shared TransactionsList component for reuse
-- [ ] Calculator window enforcement with tests
-- [ ] Comprehensive test coverage for calculator & recommendations
-- [ ] Accessibility improvements (labels, ARIA)
-
-#### P2 — Quality & UX
-- [ ] Branding assets (favicon, OG images)
-- [ ] Recommendations "why" tooltips
-- [ ] Progress & limits UX improvements
-- [ ] MappingForm extraction for reuse
-
-#### P3 — Enhancements
-- [ ] Transaction period overrides (local only)
-- [ ] Background refresh while app is open
-- [ ] Debug tooling for rewards engine
-
-### Mobile Roadmap
-
-1. **Phase 1 — Foundation**: Introduce storage context, navigation guards, and real app-core wiring; replace demo card with shared types.
-2. **Phase 2 — YNAB Connectivity**: Implement PAT capture, budget selection, and transaction fetching using `packages/ynab-client`.
-3. **Phase 3 — Persistence & Sync**: Add AsyncStorage-backed persistence, sync flows, and initial cloud sync parity.
-4. **Phase 4 — Rewards Integration**: Hook live transactions into the shared rewards engine, surface progress, and enable card CRUD flows.
-5. **Phase 5 — Parity & Polish**: Align recommendations, accessibility, and visual polish with the web experience; prepare for TestFlight/Play Store distribution.
+Roadmaps and priorities are maintained in bd. Use the CLI (`bd ready`, `bd list`, `bd show`, `bd close`, `bd reopen`) to inspect and update the backlog. Keep this document focused on architecture; do not add checklists or TODO items here.
 
 ## Contributing Guidelines
 - TypeScript-first development

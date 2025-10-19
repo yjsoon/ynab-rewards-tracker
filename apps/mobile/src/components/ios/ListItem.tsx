@@ -15,6 +15,10 @@ interface ListItemProps {
   accessibilityHint?: string;
   accessibilityValue?: AccessibilityValue;
   accessibilityRole?: AccessibilityRole;
+  accessibilityState?: {
+    selected?: boolean;
+    checked?: boolean;
+  };
 }
 
 /**
@@ -32,6 +36,7 @@ export function ListItem({
   accessibilityHint,
   accessibilityValue,
   accessibilityRole,
+  accessibilityState,
 }: ListItemProps) {
   const { selection } = useHaptics();
 
@@ -42,11 +47,12 @@ export function ListItem({
 
   // Derive shared accessibility props
   const accessibilityProps = {
-    accessible: !!(accessibilityLabel || accessibilityHint),
+    accessible: !!(accessibilityLabel || accessibilityHint || accessibilityRole),
     accessibilityLabel,
     accessibilityHint,
     accessibilityValue,
     accessibilityRole: accessibilityRole || (handlePress ? 'button' : undefined),
+    accessibilityState,
   };
 
   const content = (
