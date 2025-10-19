@@ -15,7 +15,6 @@ import { useHaptics } from '@/hooks/useHaptics';
 import { Card, ListItem, Button, Footnote, SectionHeader, Separator, Headline, Caption1 } from '@/components/ios';
 import { semanticColors, semanticHex, withAlpha } from '@/theme/semanticColors';
 import { useStorage } from '@/contexts/StorageContext';
-import { validatePAT } from '@/lib/ynab-api';
 import type { YnabAccountSummary, YnabBudgetSummary } from '@/lib/ynab-client';
 
 const connectionStatusCopy: Record<
@@ -34,32 +33,16 @@ export default function SettingsScreen() {
   const { state, actions } = useStorage();
   const [tokenInput, setTokenInput] = useState(state.pat ?? '');
   const [tokenVisible, setTokenVisible] = useState(false);
-  const [isValidatingToken, setIsValidatingToken] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
   const [validationError, setValidationError] = useState<string | undefined>();
   const [selectedBudgetId, setSelectedBudgetId] = useState<string | undefined>(state.selectedBudget.id);
   const [trackedAccounts, setTrackedAccounts] = useState<string[]>(state.trackedAccountIds);
-  const previousConnectionStatusRef = useRef(state.connectionStatus);
   const previousBudgetIdRef = useRef<string | undefined>(state.selectedBudget.id);
   const previousTrackedAccountsRef = useRef<string[]>(state.trackedAccountIds);
 
   useEffect(() => {
     setTokenInput(state.pat ?? '');
   }, [state.pat]);
-
-  useEffect(() => {
-    const previousStatus = previousConnectionStatusRef.current;
-    previousConnectionStatusRef.current = state.connectionStatus;
-
-    if (!state.pat || state.connectionStatus !== 'connected') {
-      return;
-    }
-
-    if (previousStatus !== 'connected') {
-      actions.syncBudgetsAndAccounts().catch((error) => {
-        console.error('Failed to sync budgets/accounts', error);
-      });
-    }
-  }, [state.connectionStatus, state.pat, actions]);
 
   useEffect(() => {
     const previousBudgetId = previousBudgetIdRef.current;
@@ -119,32 +102,30 @@ export default function SettingsScreen() {
 
   const statusMeta = connectionStatusCopy[state.connectionStatus];
 
-  const handleValidateToken = useCallback(async () => {
+  const handleConnect = useCallback(async () => {
     const trimmed = tokenInput.trim();
     if (!trimmed) {
       setValidationError('Token is required');
       return;
     }
 
-    setIsValidatingToken(true);
+    impact('light');
+    console.log('[SettingsScreen] handleConnect: start');
+    setIsConnecting(true);
     setValidationError(undefined);
     try {
-      const result = await validatePAT(trimmed);
-      if (!result.valid) {
-        setValidationError(result.message ?? 'Invalid token');
-        notification('error');
-        return;
-      }
-
       await actions.setPAT(trimmed);
       notification('success');
     } catch (error) {
-      setValidationError(error instanceof Error ? error.message : 'Unable to validate token');
+      const message = error instanceof Error ? error.message : 'Failed to connect to YNAB';
+      setValidationError(message);
       notification('error');
+      console.error('[SettingsScreen] handleConnect: error', error);
     } finally {
-      setIsValidatingToken(false);
+      setIsConnecting(false);
+      console.log('[SettingsScreen] handleConnect: finished');
     }
-  }, [tokenInput, actions, notification]);
+  }, [tokenInput, actions, notification, impact]);
 
   const handleDisconnect = useCallback(async () => {
     impact('medium');
@@ -233,13 +214,13 @@ export default function SettingsScreen() {
                 <Button
                   variant="filled"
                   size="medium"
-                  onPress={handleValidateToken}
+                  onPress={handleConnect}
                   style={styles.connectButton}
-                  accessibilityLabel="Validate YNAB token"
-                  accessibilityHint="Validates your personal access token and fetches budgets"
-                  disabled={isValidatingToken || !tokenInput.trim()}
+                  accessibilityLabel="Connect to YNAB"
+                  accessibilityHint="Saves your personal access token and fetches budgets"
+                  disabled={isConnecting || !tokenInput.trim()}
                 >
-                  {isValidatingToken ? 'Validating…' : 'Connect to YNAB'}
+                  {isConnecting ? 'Connecting…' : 'Connect to YNAB'}
                 </Button>
               </ListItem>
 

@@ -239,6 +239,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
       const trackedAccountIds = overrides.trackedAccountIds ?? state.trackedAccountIds;
 
       if (!pat) {
+        console.log('[StorageContext] performSync: no PAT available, skipping sync');
         setState((prev) => ({
           ...prev,
           connectionStatus: 'disconnected',
@@ -246,6 +247,12 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         }));
         return;
       }
+
+      console.log('[StorageContext] performSync: begin', {
+        selectedBudgetId,
+        trackedCount: trackedAccountIds.length,
+        sinceDate: options.sinceDate,
+      });
 
       setState((prev) => ({
         ...prev,
@@ -325,6 +332,12 @@ export function StorageProvider({ children }: { children: ReactNode }) {
             lastSuccessfulSync: new Date().toISOString(),
           },
         }));
+        console.log('[StorageContext] performSync: success', {
+          budgetId: nextSelectedBudget.id,
+          budgets: result.budgets.length,
+          accounts: result.accounts.length,
+          transactions: result.transactions.length,
+        });
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Failed to sync with YNAB';
         setState((prev) => ({
@@ -336,6 +349,9 @@ export function StorageProvider({ children }: { children: ReactNode }) {
           ...prev,
           error: error instanceof Error ? error : new Error(message),
         }));
+        const failure = error instanceof Error ? error : new Error(message);
+        console.error('[StorageContext] performSync: failed', failure);
+        throw failure;
       }
     },
     [state.cachedData, state.pat, state.selectedBudget, state.trackedAccountIds],
@@ -404,20 +420,32 @@ export function StorageProvider({ children }: { children: ReactNode }) {
     () => ({
       refresh,
       setPAT: async (pat: string) => {
-        await storage.setPAT(pat);
+        const trimmed = pat.trim();
+        console.log('[StorageContext] setPAT: received PAT update');
+        await storage.setPAT(trimmed);
         const selection = await storage.getSelectedBudget();
+        console.log('[StorageContext] setPAT: selection after set', selection);
         setState((prev) => ({
           ...prev,
-          pat,
+          pat: trimmed,
           connectionStatus: 'connecting',
           connectionError: undefined,
           selectedBudget: selection,
         }));
-        await performSync({}, {
-          pat,
-          selectedBudgetId: selection.id,
-          trackedAccountIds: state.trackedAccountIds,
-        });
+        console.log('[StorageContext] setPAT: triggering performSync');
+        try {
+          await performSync({}, {
+            pat: trimmed,
+            selectedBudgetId: selection.id,
+            trackedAccountIds: state.trackedAccountIds,
+          });
+          console.log('[StorageContext] setPAT: performSync completed');
+        } catch (error) {
+          console.error('[StorageContext] setPAT: performSync failed', error);
+          await storage.clearPAT();
+          await refresh();
+          throw error instanceof Error ? error : new Error('Failed to connect to YNAB');
+        }
       },
       clearPAT: async () => {
         await storage.clearPAT();
