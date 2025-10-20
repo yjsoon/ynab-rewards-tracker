@@ -48,7 +48,7 @@ export default function SettingsScreen() {
     const previousBudgetId = previousBudgetIdRef.current;
     previousBudgetIdRef.current = state.selectedBudget.id;
 
-    if (!state.pat || !state.selectedBudget.id) {
+    if (!state.pat || state.connectionStatus === 'connecting' || !state.selectedBudget.id) {
       return;
     }
 
@@ -59,7 +59,7 @@ export default function SettingsScreen() {
     actions.syncBudgetsAndAccounts().catch((error) => {
       console.error('Failed to sync budgets/accounts after budget change', error);
     });
-  }, [state.selectedBudget.id, state.pat, actions]);
+  }, [state.connectionStatus, state.selectedBudget.id, state.pat, actions]);
 
   useEffect(() => {
     const previousAccounts = previousTrackedAccountsRef.current;

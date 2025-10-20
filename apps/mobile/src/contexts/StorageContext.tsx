@@ -9,6 +9,7 @@ import React, {
 } from 'react';
 import { storage } from '@/storage/service';
 import { ynabSync } from '@/lib/sync';
+import { fetchBudgets } from '@/lib/ynab-api';
 import type {
   AppSettings,
   CreditCard,
@@ -357,6 +358,67 @@ export function StorageProvider({ children }: { children: ReactNode }) {
     [state.cachedData, state.pat, state.selectedBudget, state.trackedAccountIds],
   );
 
+  const initialiseConnection = useCallback(
+    async (pat: string, trackedAccountIds: string[], selectedBudgetId?: string) => {
+      console.log('[StorageContext] initialiseConnection: begin', {
+        hasSelectedBudget: Boolean(selectedBudgetId),
+        trackedCount: trackedAccountIds.length,
+      });
+      setState((prev) => ({
+        ...prev,
+        pat,
+        connectionStatus: 'connecting',
+        connectionError: undefined,
+      }));
+
+      try {
+        const budgets = await fetchBudgets(pat);
+        let nextBudget = selectedBudgetId ? budgets.find((budget) => budget.id === selectedBudgetId) : undefined;
+
+        if (!nextBudget && budgets.length === 1) {
+          nextBudget = budgets[0];
+          await storage.setSelectedBudget(nextBudget.id, nextBudget.name);
+        }
+
+        setState((prev) => ({
+          ...prev,
+          pat,
+          budgets,
+          selectedBudget: nextBudget ? { id: nextBudget.id, name: nextBudget.name } : {},
+          accounts: nextBudget ? prev.accounts : [],
+          connectionStatus: nextBudget ? 'connecting' : 'connected',
+          connectionError: undefined,
+        }));
+
+        if (!nextBudget) {
+          console.log('[StorageContext] initialiseConnection: waiting for budget selection');
+          return;
+        }
+
+        await performSync({}, {
+          pat,
+          selectedBudgetId: nextBudget.id,
+          trackedAccountIds,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to connect to YNAB';
+        console.error('[StorageContext] initialiseConnection: failed', error);
+        setState((prev) => ({
+          ...prev,
+          pat: undefined,
+          connectionStatus: 'error',
+          connectionError: message,
+          selectedBudget: {},
+          budgets: [],
+          accounts: [],
+        }));
+        await storage.clearPAT();
+        throw error instanceof Error ? error : new Error(message);
+      }
+    },
+    [performSync],
+  );
+
   useEffect(() => {
     let cancelled = false;
 
@@ -371,11 +433,11 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         setStatus({ isHydrated: true, isRefreshing: false });
 
         if (hydrated.pat) {
-          await performSync({}, {
-            pat: hydrated.pat,
-            selectedBudgetId: hydrated.selectedBudget.id,
-            trackedAccountIds: hydrated.trackedAccountIds,
-          });
+          await initialiseConnection(
+            hydrated.pat,
+            hydrated.trackedAccountIds,
+            hydrated.selectedBudget.id,
+          );
         }
       } catch (error) {
         if (cancelled) {
@@ -394,7 +456,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [performSync]);
+  }, [initialiseConnection]);
 
   const refresh = useCallback(async () => {
       setStatus((prev) => ({ ...prev, isRefreshing: true, error: undefined }));
@@ -423,29 +485,9 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         const trimmed = pat.trim();
         console.log('[StorageContext] setPAT: received PAT update');
         await storage.setPAT(trimmed);
-        const selection = await storage.getSelectedBudget();
-        console.log('[StorageContext] setPAT: selection after set', selection);
-        setState((prev) => ({
-          ...prev,
-          pat: trimmed,
-          connectionStatus: 'connecting',
-          connectionError: undefined,
-          selectedBudget: selection,
-        }));
-        console.log('[StorageContext] setPAT: triggering performSync');
-        try {
-          await performSync({}, {
-            pat: trimmed,
-            selectedBudgetId: selection.id,
-            trackedAccountIds: state.trackedAccountIds,
-          });
-          console.log('[StorageContext] setPAT: performSync completed');
-        } catch (error) {
-          console.error('[StorageContext] setPAT: performSync failed', error);
-          await storage.clearPAT();
-          await refresh();
-          throw error instanceof Error ? error : new Error('Failed to connect to YNAB');
-        }
+        const storedSelection = await storage.getSelectedBudget();
+        console.log('[StorageContext] setPAT: stored selection', storedSelection);
+        await initialiseConnection(trimmed, state.trackedAccountIds, storedSelection.id);
       },
       clearPAT: async () => {
         await storage.clearPAT();
@@ -546,7 +588,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         }));
       },
     }),
-    [performSync, refresh, state.trackedAccountIds],
+    [initialiseConnection, performSync, refresh, state.trackedAccountIds],
   );
 
   const value = useMemo<StorageContextValue>(
