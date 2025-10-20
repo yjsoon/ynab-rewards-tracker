@@ -537,6 +537,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         setState((prev) => ({
           ...prev,
           selectedBudget: { id: budgetId, name: budgetName },
+          connectionError: undefined,
         }));
       },
       setTrackedAccountIds: async (accountIds: string[]) => {

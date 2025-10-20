@@ -37,6 +37,10 @@ export default function SettingsScreen() {
   const [validationError, setValidationError] = useState<string | undefined>();
   const [selectedBudgetId, setSelectedBudgetId] = useState<string | undefined>(state.selectedBudget.id);
   const [trackedAccounts, setTrackedAccounts] = useState<string[]>(state.trackedAccountIds);
+  const [isConfirmingBudget, setIsConfirmingBudget] = useState(false);
+  const connectedBudgets = useMemo(() => state.budgets ?? [], [state.budgets]);
+  const connectedAccounts = useMemo(() => state.accounts ?? [], [state.accounts]);
+
   const previousBudgetIdRef = useRef<string | undefined>(state.selectedBudget.id);
   const previousTrackedAccountsRef = useRef<string[]>(state.trackedAccountIds);
 
@@ -45,21 +49,8 @@ export default function SettingsScreen() {
   }, [state.pat]);
 
   useEffect(() => {
-    const previousBudgetId = previousBudgetIdRef.current;
     previousBudgetIdRef.current = state.selectedBudget.id;
-
-    if (!state.pat || state.connectionStatus === 'connecting' || !state.selectedBudget.id) {
-      return;
-    }
-
-    if (previousBudgetId && previousBudgetId === state.selectedBudget.id) {
-      return;
-    }
-
-    actions.syncBudgetsAndAccounts().catch((error) => {
-      console.error('Failed to sync budgets/accounts after budget change', error);
-    });
-  }, [state.connectionStatus, state.selectedBudget.id, state.pat, actions]);
+  }, [state.selectedBudget.id]);
 
   useEffect(() => {
     const previousAccounts = previousTrackedAccountsRef.current;
@@ -130,14 +121,42 @@ export default function SettingsScreen() {
   const handleDisconnect = useCallback(async () => {
     impact('medium');
     await actions.disconnect();
+    setSelectedBudgetId(undefined);
+    setTrackedAccounts([]);
     notification('warning');
   }, [actions, impact, notification]);
 
-  const handleSelectBudget = useCallback(async (budget: YnabBudgetSummary) => {
+  const handleSelectBudget = useCallback((budget: YnabBudgetSummary) => {
     impact('light');
     setSelectedBudgetId(budget.id);
-    await actions.setSelectedBudget(budget.id, budget.name);
-  }, [actions, impact]);
+    setValidationError(undefined);
+  }, [impact]);
+
+  const handleConfirmBudget = useCallback(async () => {
+    if (!selectedBudgetId) {
+      return;
+    }
+
+    const budget = connectedBudgets.find((entry) => entry.id === selectedBudgetId);
+    if (!budget) {
+      return;
+    }
+
+    setIsConfirmingBudget(true);
+    setValidationError(undefined);
+    try {
+      await actions.setSelectedBudget(budget.id, budget.name);
+      await actions.syncBudgetsAndAccounts();
+      notification('success');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to sync budget';
+      setValidationError(message);
+      notification('error');
+      console.error('Failed to sync selected budget', error);
+    } finally {
+      setIsConfirmingBudget(false);
+    }
+  }, [actions, connectedBudgets, notification, selectedBudgetId]);
 
   const toggleTrackedAccount = useCallback(async (accountId: string) => {
     impact('light');
@@ -147,9 +166,6 @@ export default function SettingsScreen() {
     setTrackedAccounts(nextIds);
     await actions.setTrackedAccountIds(nextIds);
   }, [trackedAccounts, actions, impact]);
-
-  const connectedBudgets = useMemo(() => state.budgets ?? [], [state.budgets]);
-  const connectedAccounts = useMemo(() => state.accounts ?? [], [state.accounts]);
 
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
@@ -210,19 +226,25 @@ export default function SettingsScreen() {
 
               <Separator inset={16} />
 
-              <ListItem>
-                <Button
-                  variant="filled"
-                  size="medium"
-                  onPress={handleConnect}
-                  style={styles.connectButton}
-                  accessibilityLabel="Connect to YNAB"
-                  accessibilityHint="Saves your personal access token and fetches budgets"
-                  disabled={isConnecting || !tokenInput.trim()}
-                >
-                  {isConnecting ? 'Connecting…' : 'Connect to YNAB'}
-                </Button>
-              </ListItem>
+              {state.connectionStatus !== 'connected' || connectedBudgets.length === 0 ? (
+                <ListItem>
+                  <Button
+                    variant="filled"
+                    size="medium"
+                    onPress={handleConnect}
+                    style={styles.connectButton}
+                    accessibilityLabel="Connect to YNAB"
+                    accessibilityHint="Saves your personal access token and fetches budgets"
+                    disabled={isConnecting || !tokenInput.trim()}
+                  >
+                    {isConnecting ? 'Connecting…' : 'Connect to YNAB'}
+                  </Button>
+                </ListItem>
+              ) : (
+                <ListItem>
+                  <Footnote color="tertiary">Connected. Choose a budget below to continue.</Footnote>
+                </ListItem>
+              )}
 
               <Separator inset={16} />
 
@@ -274,6 +296,21 @@ export default function SettingsScreen() {
                     ))
                   )}
                 </Card>
+
+                {connectedBudgets.length > 0 ? (
+                  <Card style={styles.confirmCard}>
+                    <ListItem>
+                      <Button
+                        variant="filled"
+                        size="medium"
+                        onPress={handleConfirmBudget}
+                        disabled={!selectedBudgetId || isConfirmingBudget}
+                      >
+                        {isConfirmingBudget ? 'Starting sync…' : 'Continue with this budget'}
+                      </Button>
+                    </ListItem>
+                  </Card>
+                ) : null}
 
                 <SectionHeader>Tracked accounts</SectionHeader>
                 <Card>
@@ -380,6 +417,9 @@ const styles = StyleSheet.create({
   },
   connectButton: {
     width: '100%',
+  },
+  confirmCard: {
+    marginTop: 12,
   },
   budgetRow: {
     flexDirection: 'row',
