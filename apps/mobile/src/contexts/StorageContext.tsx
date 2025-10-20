@@ -11,6 +11,8 @@ import React, {
 import { storage } from '@/storage/service';
 import { ynabSync } from '@/lib/sync';
 import { fetchBudgets } from '@/lib/ynab-api';
+import { SimpleRewardsCalculator } from '@ynab-counter/app-core/rewards-engine';
+import { createRewardCalculationFromSimple } from '@ynab-counter/app-core/rewards-engine/utils/reward-calculation';
 import type {
   AppSettings,
   CreditCard,
@@ -294,8 +296,9 @@ export function StorageProvider({ children }: { children: ReactNode }) {
 
         let nextCachedData = state.cachedData;
         const effectiveBudgetId = nextSelectedBudget.id;
+        let transactionsPayload: Transaction[] = [];
         if (effectiveBudgetId) {
-          const transactionsPayload = result.transactions.map((txn) => ({
+          transactionsPayload = result.transactions.map((txn) => ({
             id: txn.id,
             date: txn.date,
             amount: txn.amount,
@@ -320,7 +323,44 @@ export function StorageProvider({ children }: { children: ReactNode }) {
 
           await storage.setDashboardTransactionsCache(payload);
           nextCachedData = mergeDashboardCache(state.cachedData, payload);
+        } else {
+          transactionsPayload = result.transactions.map((txn) => ({
+            id: txn.id,
+            date: txn.date,
+            amount: txn.amount,
+            account_id: txn.account_id,
+            payee_name: txn.payee_name ?? null,
+            category_name: txn.category_name ?? null,
+            memo: txn.memo ?? null,
+            cleared: txn.cleared ?? null,
+            approved: txn.approved ?? false,
+            flag_color: txn.flag_color ?? null,
+            flag_name: txn.flag_name ?? null,
+          })) as Transaction[];
         }
+
+        const calculatedRewards = state.cards.map((card) => {
+          if (!card.ynabAccountId) {
+            return null;
+          }
+          const period = SimpleRewardsCalculator.calculatePeriod(card);
+          const cardTransactions = transactionsPayload.filter((txn) => txn.account_id === card.ynabAccountId);
+          const calculation = SimpleRewardsCalculator.calculateCardRewards(card, cardTransactions, period, state.settings);
+          return createRewardCalculationFromSimple(card, calculation);
+        }).filter((value): value is RewardCalculation => Boolean(value));
+
+        if (calculatedRewards.length > 0) {
+          await Promise.all(calculatedRewards.map((entry) => storage.saveCalculation(entry)));
+        }
+
+        const mergedCalculations = (() => {
+          if (calculatedRewards.length === 0) {
+            return state.calculations;
+          }
+          const replacementKeys = new Set(calculatedRewards.map((entry) => `${entry.cardId}::${entry.period}`));
+          const preserved = state.calculations.filter((entry) => !replacementKeys.has(`${entry.cardId}::${entry.period}`));
+          return [...preserved, ...calculatedRewards];
+        })();
 
         setState((prev) => ({
           ...prev,
@@ -329,6 +369,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
           accounts: result.accounts,
           selectedBudget: nextSelectedBudget,
           cachedData: nextCachedData,
+          calculations: mergedCalculations,
           connectionStatus: 'connected',
           connectionError: undefined,
           metadata: {
@@ -358,7 +399,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         throw failure;
       }
     },
-    [state.cachedData, state.pat, state.selectedBudget, state.trackedAccountIds],
+    [state.cachedData, state.pat, state.selectedBudget, state.trackedAccountIds, state.cards, state.calculations, state.settings],
   );
 
   const initialiseConnection = useCallback(
