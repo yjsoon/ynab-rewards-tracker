@@ -129,7 +129,7 @@ export default function SettingsScreen() {
 
   const handleDisconnect = useCallback(async () => {
     impact('medium');
-    await actions.clearPAT();
+    await actions.disconnect();
     notification('warning');
   }, [actions, impact, notification]);
 

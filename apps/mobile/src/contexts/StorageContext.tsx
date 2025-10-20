@@ -72,6 +72,7 @@ type StorageActions = {
   refresh: () => Promise<void>;
   setPAT: (pat: string) => Promise<void>;
   clearPAT: () => Promise<void>;
+  disconnect: () => Promise<void>;
   setSelectedBudget: (budgetId: string, budgetName: string) => Promise<void>;
   setTrackedAccountIds: (accountIds: string[]) => Promise<void>;
   syncBudgetsAndAccounts: (options?: SyncOptions) => Promise<void>;
@@ -121,6 +122,7 @@ const noopActions: StorageActions = {
   refresh: async () => {},
   setPAT: async () => {},
   clearPAT: async () => {},
+  disconnect: async () => {},
   setSelectedBudget: async () => {},
   setTrackedAccountIds: async () => {},
   syncBudgetsAndAccounts: async () => {},
@@ -507,6 +509,17 @@ export function StorageProvider({ children }: { children: ReactNode }) {
           trackedAccountIds: [],
           budgets: [],
           accounts: [],
+        }));
+      },
+      disconnect: async () => {
+        setState((prev) => ({
+          ...prev,
+          connectionStatus: 'disconnected',
+          connectionError: undefined,
+          metadata: {
+            ...prev.metadata,
+            lastAttemptedSync: undefined,
+          },
         }));
       },
       setSelectedBudget: async (budgetId: string, budgetName: string) => {
