@@ -4,6 +4,7 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -360,7 +361,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
 
   const initialiseConnection = useCallback(
     async (pat: string, trackedAccountIds: string[], selectedBudgetId?: string) => {
-      console.log('[StorageContext] initialiseConnection: begin', {
+      console.log('[StorageContext] initialiseConnection:v2 begin', {
         hasSelectedBudget: Boolean(selectedBudgetId),
         trackedCount: trackedAccountIds.length,
       });
@@ -419,6 +420,11 @@ export function StorageProvider({ children }: { children: ReactNode }) {
     [performSync],
   );
 
+  const initialiseConnectionRef = useRef(initialiseConnection);
+  useEffect(() => {
+    initialiseConnectionRef.current = initialiseConnection;
+  }, [initialiseConnection]);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -433,7 +439,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         setStatus({ isHydrated: true, isRefreshing: false });
 
         if (hydrated.pat) {
-          await initialiseConnection(
+          await initialiseConnectionRef.current(
             hydrated.pat,
             hydrated.trackedAccountIds,
             hydrated.selectedBudget.id,
@@ -456,7 +462,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [initialiseConnection]);
+  }, []);
 
   const refresh = useCallback(async () => {
       setStatus((prev) => ({ ...prev, isRefreshing: true, error: undefined }));
