@@ -191,6 +191,15 @@ async function hydrate(): Promise<StorageState> {
   };
 }
 
+// Normalize period strings written in different formats
+function normalizePeriod(period: string) {
+  if (!period.includes(' → ')) {
+    return { start: period, end: period };
+  }
+  const [start, end] = period.split(' → ');
+  return { start, end };
+}
+
 function mergeDashboardCache(
   existing: StorageData['cachedData'] | undefined,
   payload: DashboardTransactionsCachePayload,

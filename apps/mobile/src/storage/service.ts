@@ -36,6 +36,14 @@ import type {
 const PAT_SECURE_STORE_KEY = 'ynab_counter_pat';
 const LEGACY_PAT_SECURE_STORE_KEY = 'ynab_counter_pat_legacy';
 
+export function normalizePeriod(period: string) {
+  if (!period.includes(' → ')) {
+    return { start: period, end: period };
+  }
+  const [start, end] = period.split(' → ');
+  return { start, end };
+}
+
 class StorageService {
   private static readonly DASHBOARD_CACHE_LIMIT = 500;
   private static readonly DASHBOARD_CACHE_MAX_ENTRIES = 5;
@@ -365,16 +373,24 @@ class StorageService {
 
   async saveCalculation(calculation: RewardCalculation): Promise<void> {
     const storage = await this.load();
-    const index = storage.calculations.findIndex((existing) =>
-      existing.cardId === calculation.cardId &&
-      existing.ruleId === calculation.ruleId &&
-      existing.period === calculation.period
-    );
+    const normalizedPeriod = normalizePeriod(calculation.period);
+    const index = storage.calculations.findIndex((existing) => {
+      if (existing.cardId !== calculation.cardId) {
+        return false;
+      }
+      const existingPeriod = normalizePeriod(existing.period);
+      return existingPeriod.start === normalizedPeriod.start && existingPeriod.end === normalizedPeriod.end;
+    });
+
+    const nextEntry: RewardCalculation = {
+      ...calculation,
+      period: `${normalizedPeriod.start} → ${normalizedPeriod.end}`
+    };
 
     if (index >= 0) {
-      storage.calculations[index] = calculation;
+      storage.calculations[index] = nextEntry;
     } else {
-      storage.calculations.push(calculation);
+      storage.calculations.push(nextEntry);
     }
 
     await this.save(storage);
