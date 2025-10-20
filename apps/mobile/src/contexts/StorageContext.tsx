@@ -363,6 +363,16 @@ export function StorageProvider({ children }: { children: ReactNode }) {
 
   const initialiseConnection = useCallback(
     async (pat: string, trackedAccountIds: string[], selectedBudgetId?: string) => {
+      if (!pat) {
+        console.log('[StorageContext] initialiseConnection:v2 skipped (no PAT)');
+        setState((prev) => ({
+          ...prev,
+          connectionStatus: 'disconnected',
+          connectionError: undefined,
+        }));
+        return;
+      }
+
       console.log('[StorageContext] initialiseConnection:v2 begin', {
         hasSelectedBudget: Boolean(selectedBudgetId),
         trackedCount: trackedAccountIds.length,

@@ -145,7 +145,8 @@ export class YnabClient {
 
       return response.json() as Promise<T>;
     } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') {
+      const hasDomException = typeof DOMException !== 'undefined';
+      if (hasDomException && error instanceof DOMException && error.name === 'AbortError') {
         throw createYnabError('network_error', undefined, 'YNAB request timed out');
       }
 
