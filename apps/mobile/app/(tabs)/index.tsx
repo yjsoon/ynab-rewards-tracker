@@ -5,7 +5,6 @@ import { useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useHaptics } from '@/hooks/useHaptics';
 import { useStorage } from '@/contexts/StorageContext';
-import { useDemoRewards } from '@/hooks/useDemoRewards';
 import {
   CircleDollarSign,
   CreditCard as CreditCardIcon,
@@ -13,9 +12,9 @@ import {
   RefreshCw,
   AlertCircle,
   ChevronRight,
+  Settings,
 } from '@tamagui/lucide-icons';
 import { semanticColors, semanticHex, withAlpha } from '@/theme/semanticColors';
-
 import {
   Card,
   ListItem,
@@ -30,7 +29,6 @@ import {
   Caption1,
   Caption2,
 } from '@/components/ios';
-
 import {
   SimpleRewardsCalculator,
   type SimplifiedCalculation,
@@ -40,6 +38,11 @@ import {
 import { createRewardCalculationFromSimple } from '@ynab-counter/app-core/rewards-engine/utils/reward-calculation';
 import type { CreditCard, RewardCalculation, SubcategoryBreakdown } from '@ynab-counter/app-core/storage/types';
 import { findBestDashboardEntry } from '@/lib/dashboardCache';
+
+export const options = {
+  title: 'YJAB',
+  headerLargeTitle: true,
+};
 
 const currencyFormatter = new Intl.NumberFormat('en-US', {
   style: 'currency',
@@ -51,51 +54,34 @@ export type CardSummary = {
   period: string;
   calculation: SimplifiedCalculation & { periodStart?: string; periodEnd?: string };
   rewardCalculation: RewardCalculation;
-  source: 'stored' | 'computed' | 'demo';
+  source: 'stored' | 'computed';
 };
 
 type CardSummaryResult = {
   summaries: CardSummary[];
   calculations: RewardCalculation[];
-  isDemo: boolean;
   isEmpty: boolean;
   isLoading: boolean;
 };
 
 export function useCardSummaries(): CardSummaryResult {
   const { state, status } = useStorage();
-  const demo = useDemoRewards();
 
   return useMemo(() => {
     if (!status.isHydrated) {
       return {
         summaries: [],
         calculations: [],
-        isDemo: false,
         isEmpty: false,
         isLoading: true,
       };
     }
 
     if (state.cards.length === 0) {
-      const rewardCalculation = createRewardCalculationFromSimple(demo.card, demo.calculation);
       return {
-        summaries: [
-          {
-            card: demo.card,
-            period: demo.period.label,
-            calculation: {
-              ...demo.calculation,
-              periodStart: demo.period.start,
-              periodEnd: demo.period.end,
-            },
-            rewardCalculation,
-            source: 'demo' as const,
-          },
-        ],
-        calculations: [rewardCalculation],
-        isDemo: true,
-        isEmpty: false,
+        summaries: [],
+        calculations: [],
+        isEmpty: true,
         isLoading: false,
       };
     }
@@ -154,11 +140,10 @@ export function useCardSummaries(): CardSummaryResult {
     return {
       summaries,
       calculations: summaries.map((summary) => summary.rewardCalculation),
-      isDemo: false,
       isEmpty: summaries.length > 0 && !hasActivity,
       isLoading: status.isRefreshing,
     };
-  }, [demo, state, status.isHydrated, status.isRefreshing]);
+  }, [state, status.isHydrated, status.isRefreshing]);
 }
 
 function findStoredCalculation(
@@ -260,30 +245,52 @@ export default function HomeScreen() {
   const navigation = useNavigation();
   const { impact } = useHaptics();
   const { actions } = useStorage();
-  const { summaries, isDemo, isEmpty, isLoading } = useCardSummaries();
+  const { summaries, isEmpty, isLoading } = useCardSummaries();
 
   useLayoutEffect(() => {
-    navigation.setOptions({
-      headerLargeTitle: true,
+    const parent = navigation.getParent();
+
+    parent?.setOptions({
+      headerLargeTitle: false,
+      headerTitle: 'YJAB',
       title: 'YJAB',
       headerRight: () => (
-        <Button
-          variant="plain"
-          size="small"
-          onPress={() => {
-            impact('light');
-            actions.refresh().catch((error) => {
-              console.error('Refresh failed', error);
-            });
-          }}
-          accessibilityLabel="Refresh rewards data"
-          accessibilityHint="Reload latest storage snapshot"
-          style={styles.refreshButton}
-        >
-          <RefreshCw size={16} />
-        </Button>
+        <View style={styles.headerButtons}>
+          <Button
+            variant="plain"
+            size="small"
+            onPress={() => {
+              impact('light');
+              navigation.navigate('settings' as never);
+            }}
+            accessibilityLabel="Settings"
+            accessibilityHint="Open settings"
+            style={styles.headerButton}
+          >
+            <Settings size={16} color={semanticHex.systemBlue} />
+          </Button>
+          <Button
+            variant="plain"
+            size="small"
+            onPress={() => {
+              impact('light');
+              actions.refresh().catch((error) => {
+                console.error('Refresh failed', error);
+              });
+            }}
+            accessibilityLabel="Refresh rewards data"
+            accessibilityHint="Reload latest storage snapshot"
+            style={styles.headerButton}
+          >
+            <RefreshCw size={16} color={semanticHex.systemBlue} />
+          </Button>
+        </View>
       ),
     });
+
+    return () => {
+      parent?.setOptions({ headerRight: undefined });
+    };
   }, [navigation, actions, impact]);
 
   const featured = useMemo(() => {
@@ -303,18 +310,6 @@ export default function HomeScreen() {
         contentContainerStyle={styles.scrollContent}
       >
         <View style={styles.content}>
-          <View style={styles.introSection}>
-            <Footnote color="secondary">
-              {isLoading
-                ? 'Loading your rewards data...'
-                : isDemo
-                ? 'Currently showing demo data. Connect YNAB to see live rewards.'
-                : isEmpty
-                ? 'No live activity yet. Keep using your tracked cards to see rewards.'
-                : 'Track your credit card rewards progress.'}
-            </Footnote>
-          </View>
-
           {featured ? (
             <FeaturedCardHighlight summary={featured} haptics={impact} />
           ) : isLoading ? null : (
@@ -643,7 +638,11 @@ const styles = StyleSheet.create({
   introSection: {
     marginBottom: 8,
   },
-  refreshButton: {
+  headerButtons: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  headerButton: {
     paddingHorizontal: 8,
     paddingVertical: 4,
   },

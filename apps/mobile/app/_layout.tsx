@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Stack } from 'expo-router';
 import { TamaguiProvider, Theme } from 'tamagui';
 import { useFonts } from 'expo-font';
@@ -8,6 +8,7 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StorageProvider, useStorage } from '@/contexts/StorageContext';
+import { semanticColors } from '@/theme/semanticColors';
 import config from '../tamagui.config';
 
 SplashScreen.preventAutoHideAsync().catch(() => {
@@ -15,7 +16,14 @@ SplashScreen.preventAutoHideAsync().catch(() => {
 });
 
 function AppShell() {
-  const { status } = useStorage();
+  const { status, state } = useStorage();
+
+  const isSetupComplete = useMemo(() =>
+    !!state.pat &&
+    !!state.selectedBudget.id &&
+    state.trackedAccountIds.length > 0,
+    [state.pat, state.selectedBudget.id, state.trackedAccountIds.length]
+  );
 
   useEffect(() => {
     if (status.isHydrated) {
@@ -42,10 +50,51 @@ function AppShell() {
     );
   }
 
+  if (!isSetupComplete) {
+    return (
+      <Theme name="dark">
+        <Stack screenOptions={{ headerShown: true }}>
+          <Stack.Screen
+            name="settings"
+            options={{
+              headerTitle: 'Settings',
+              headerLargeTitle: false,
+              headerBackVisible: false,
+              gestureEnabled: false,
+              headerStyle: { backgroundColor: semanticColors.systemBackground as string },
+              headerTintColor: semanticColors.label as string,
+              headerTitleStyle: { color: semanticColors.label as string },
+            }}
+          />
+        </Stack>
+        <StatusBar style="light" />
+      </Theme>
+    );
+  }
+
   return (
     <Theme name="dark">
       <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(tabs)" />
+        <Stack.Screen
+          name="(tabs)"
+          options={{
+            headerShown: true,
+            headerLargeTitle: false,
+            headerTitle: 'YJAB',
+            title: 'YJAB',
+            headerStyle: { backgroundColor: semanticColors.systemBackground as string },
+            headerTintColor: semanticColors.label as string,
+            headerTitleStyle: { color: semanticColors.label as string },
+          }}
+        />
+        <Stack.Screen
+          name="settings"
+          options={{
+            presentation: 'modal',
+            headerShown: true,
+            headerTitle: "Settings",
+          }}
+        />
       </Stack>
       <StatusBar style="light" />
     </Theme>
