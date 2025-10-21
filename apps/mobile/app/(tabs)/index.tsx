@@ -249,6 +249,7 @@ export default function HomeScreen() {
 
   useLayoutEffect(() => {
     const parent = navigation.getParent();
+    const root = parent?.getParent();
 
     parent?.setOptions({
       headerLargeTitle: false,
@@ -261,7 +262,7 @@ export default function HomeScreen() {
             size="small"
             onPress={() => {
               impact('light');
-              navigation.navigate('settings' as never);
+              (root ?? navigation).navigate('settings' as never);
             }}
             accessibilityLabel="Settings"
             accessibilityHint="Open settings"
