@@ -2,6 +2,7 @@ import React, { useLayoutEffect, useMemo } from 'react';
 import type { ComponentType } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useHaptics } from '@/hooks/useHaptics';
 import { useStorage } from '@/contexts/StorageContext';
@@ -243,19 +244,14 @@ const clampPercent = (value: number | undefined) => {
 
 export default function HomeScreen() {
   const navigation = useNavigation();
+  const router = useRouter();
   const { impact } = useHaptics();
   const { actions } = useStorage();
   const { summaries, isEmpty, isLoading } = useCardSummaries();
 
   const navigateToSettings = React.useCallback(() => {
-    let target: any = navigation;
-    let current: any = navigation.getParent?.();
-    while (current) {
-      target = current;
-      current = current.getParent?.();
-    }
-    target?.navigate?.('settings');
-  }, [navigation]);
+    router.navigate('/settings');
+  }, [router]);
 
   useLayoutEffect(() => {
     const parent = navigation.getParent();
