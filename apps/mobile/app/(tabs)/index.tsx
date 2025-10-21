@@ -247,9 +247,18 @@ export default function HomeScreen() {
   const { actions } = useStorage();
   const { summaries, isEmpty, isLoading } = useCardSummaries();
 
+  const navigateToSettings = React.useCallback(() => {
+    let target: any = navigation;
+    let current: any = navigation.getParent?.();
+    while (current) {
+      target = current;
+      current = current.getParent?.();
+    }
+    target?.navigate?.('settings');
+  }, [navigation]);
+
   useLayoutEffect(() => {
     const parent = navigation.getParent();
-    const root = parent?.getParent();
 
     parent?.setOptions({
       headerLargeTitle: false,
@@ -262,7 +271,7 @@ export default function HomeScreen() {
             size="small"
             onPress={() => {
               impact('light');
-              (root ?? navigation).navigate('settings' as never);
+              navigateToSettings();
             }}
             accessibilityLabel="Settings"
             accessibilityHint="Open settings"
@@ -292,7 +301,7 @@ export default function HomeScreen() {
     return () => {
       parent?.setOptions({ headerRight: undefined });
     };
-  }, [navigation, actions, impact]);
+  }, [navigation, actions, impact, navigateToSettings]);
 
   const featured = useMemo(() => {
     if (summaries.length === 0 || isEmpty) return null;
@@ -314,7 +323,7 @@ export default function HomeScreen() {
           {featured ? (
             <FeaturedCardHighlight summary={featured} haptics={impact} />
           ) : isLoading ? null : (
-            <EmptyState />
+            <EmptyState onOpenSettings={navigateToSettings} />
           )}
 
           {summaries.length > 0 ? (
@@ -590,8 +599,7 @@ function CardIcon({ cardType }: { cardType: CreditCard['type'] }) {
   );
 }
 
-function EmptyState() {
-  const navigation = useNavigation();
+function EmptyState({ onOpenSettings }: { onOpenSettings: () => void }) {
   const { impact } = useHaptics();
 
   return (
@@ -609,7 +617,7 @@ function EmptyState() {
               size="medium"
               onPress={() => {
                 impact('medium');
-                navigation.navigate('settings' as never);
+                onOpenSettings();
               }}
               accessibilityLabel="Go to settings"
               accessibilityHint="Opens settings to connect YNAB"
