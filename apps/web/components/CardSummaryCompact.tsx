@@ -113,10 +113,10 @@ export function CardSummaryCompact({ card, pat, prefetchedTransactions, onHideCa
 
   if (loading) {
     return (
-      <div className="flex flex-col gap-2">
-        <div className="h-3 w-24 rounded bg-muted/40 animate-pulse" />
-        <div className="h-2 rounded bg-muted/30 animate-pulse" />
-        <div className="h-3 w-32 rounded bg-muted/40 animate-pulse" />
+      <div className="flex flex-col gap-2 opacity-60">
+        <div className="h-3 w-24 rounded bg-muted/40" />
+        <div className="h-2 rounded bg-muted/30" />
+        <div className="h-3 w-32 rounded bg-muted/40" />
       </div>
     );
   }

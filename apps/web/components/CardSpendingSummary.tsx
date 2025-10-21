@@ -143,7 +143,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions, onHideC
     return (
       <div className="space-y-3">
         <div className="bg-muted/5 rounded-lg p-3">
-          <div className="animate-pulse">
+          <div className="opacity-60">
             <div className="h-6 bg-muted rounded w-20 mx-auto mb-1"></div>
             <div className="h-3 bg-muted rounded w-24 mx-auto"></div>
           </div>
