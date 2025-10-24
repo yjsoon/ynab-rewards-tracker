@@ -57,6 +57,7 @@ function AppShell() {
           <Stack.Screen
             name="settings"
             options={{
+              presentation: 'modal',
               headerTitle: 'Settings',
               headerLargeTitle: false,
               headerBackVisible: false,
