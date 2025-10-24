@@ -393,6 +393,25 @@ export function StorageProvider({ children }: { children: ReactNode }) {
           transactions: result.transactions.length,
         });
       } catch (error) {
+        const isAbortError =
+          error instanceof Error &&
+          (error.name === 'AbortError' || error.message.toLowerCase().includes('abort'));
+
+        if (isAbortError) {
+          console.log('[StorageContext] performSync: aborted (user cancelled)', error);
+          setState((prev) => ({
+            ...prev,
+            connectionStatus: pat ? 'connected' : 'disconnected',
+            connectionError: undefined,
+          }));
+          setStatus((prev) => ({
+            ...prev,
+            error: undefined,
+          }));
+          return;
+        }
+
+        // Non-abort errors: preserve existing behavior
         const message = error instanceof Error ? error.message : 'Failed to sync with YNAB';
         setState((prev) => ({
           ...prev,

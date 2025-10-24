@@ -50,50 +50,38 @@ function AppShell() {
     );
   }
 
-  if (!isSetupComplete) {
-    return (
-      <Theme name="dark">
-        <Stack screenOptions={{ headerShown: true }}>
+  return (
+    <Theme name="dark">
+      <Stack
+        screenOptions={{ headerShown: false }}
+        initialRouteName={isSetupComplete ? '(tabs)' : 'settings'}
+      >
+        {isSetupComplete && (
           <Stack.Screen
-            name="settings"
+            name="(tabs)"
             options={{
-              presentation: 'modal',
-              headerTitle: 'Settings',
+              headerShown: true,
               headerLargeTitle: false,
-              headerBackVisible: false,
-              gestureEnabled: false,
+              headerTitle: 'YJAB',
+              title: 'YJAB',
               headerStyle: { backgroundColor: semanticColors.systemBackground as string },
               headerTintColor: semanticColors.label as string,
               headerTitleStyle: { color: semanticColors.label as string },
             }}
           />
-        </Stack>
-        <StatusBar style="light" />
-      </Theme>
-    );
-  }
-
-  return (
-    <Theme name="dark">
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen
-          name="(tabs)"
-          options={{
-            headerShown: true,
-            headerLargeTitle: false,
-            headerTitle: 'YJAB',
-            title: 'YJAB',
-            headerStyle: { backgroundColor: semanticColors.systemBackground as string },
-            headerTintColor: semanticColors.label as string,
-            headerTitleStyle: { color: semanticColors.label as string },
-          }}
-        />
+        )}
         <Stack.Screen
           name="settings"
           options={{
             presentation: 'modal',
             headerShown: true,
-            headerTitle: "Settings",
+            headerTitle: 'Settings',
+            headerLargeTitle: false,
+            headerBackVisible: isSetupComplete,
+            gestureEnabled: isSetupComplete,
+            headerStyle: { backgroundColor: semanticColors.systemBackground as string },
+            headerTintColor: semanticColors.label as string,
+            headerTitleStyle: { color: semanticColors.label as string },
           }}
         />
       </Stack>
