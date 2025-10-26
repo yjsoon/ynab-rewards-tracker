@@ -34,10 +34,8 @@ export function useDebouncedCallback<TArgs extends unknown[]>(
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const callbackRef = useRef(callback);
 
-  // Update callback ref when it changes
-  useEffect(() => {
-    callbackRef.current = callback;
-  }, [callback]);
+  // Update callback ref during render
+  callbackRef.current = callback;
 
   const debouncedCallback = useCallback(
     (...args: TArgs) => {
