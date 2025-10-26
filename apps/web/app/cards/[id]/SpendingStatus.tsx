@@ -147,7 +147,7 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
       <Card>
         <CardContent className="p-6">
           <div className="flex items-center justify-center">
-            <div className="animate-pulse text-muted-foreground">Loading spending data...</div>
+            <div className="text-muted-foreground opacity-60">Loading spending data...</div>
           </div>
         </CardContent>
       </Card>

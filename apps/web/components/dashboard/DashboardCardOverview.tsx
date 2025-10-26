@@ -53,7 +53,7 @@ import { CardSummaryCompact } from "@/components/CardSummaryCompact";
 
 function DashboardCardSkeleton({ viewMode }: { viewMode: DashboardViewMode }) {
   return (
-    <Card className="animate-pulse">
+    <Card className="opacity-60">
       <CardHeader className="pb-3">
         <div className="h-5 bg-muted rounded w-32" />
       </CardHeader>
@@ -277,12 +277,7 @@ export function DashboardCardOverview({
         <div className="flex items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50/50 py-2 px-4 text-sm text-blue-700 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-300">
           <Loader2 className="h-4 w-4 animate-spin" />
           <span>Refreshing YNAB data…</span>
-          {formattedTime && <span className="text-xs text-muted-foreground ml-2">Updated {formattedTime}</span>}
         </div>
-      )}
-
-      {!transactionsRefreshing && formattedTime && (
-        <p className="text-xs text-muted-foreground text-center">Updated {formattedTime}</p>
       )}
 
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
