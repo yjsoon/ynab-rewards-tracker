@@ -80,7 +80,6 @@ export function useTrackedTransactions({
   lookbackDays,
   recentLimit,
 }: UseTrackedTransactionsArgs): UseTrackedTransactionsResult {
-  const [recentTransactions, setRecentTransactions] = useState<Transaction[]>([]);
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
   const [accountsMap, setAccountsMap] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(false);
@@ -108,7 +107,6 @@ export function useTrackedTransactions({
 
   const loadTransactions = useCallback(async () => {
     if (!pat || !selectedBudgetId) {
-      setRecentTransactions([]);
       setAllTransactions([]);
       setAccountsMap(new Map());
       setError("");
@@ -175,7 +173,6 @@ export function useTrackedTransactions({
   useEffect(() => {
     if (!pat || !selectedBudgetId) {
       lastFetchKeyRef.current = "";
-      setRecentTransactions([]);
       setAllTransactions([]);
       setAccountsMap(new Map());
       setHasCachedData(false);
@@ -240,10 +237,9 @@ export function useTrackedTransactions({
     };
   }, []);
 
-  useEffect(() => {
+  const recentTransactions = useMemo(() => {
     if (!pat || !selectedBudgetId) {
-      setRecentTransactions([]);
-      return;
+      return [];
     }
 
     const sortedTransactions = [...allTransactions].sort(
@@ -270,7 +266,7 @@ export function useTrackedTransactions({
       filtered = filtered.slice(0, recentLimit);
     }
 
-    setRecentTransactions(filtered);
+    return filtered;
   }, [
     allTransactions,
     pat,
