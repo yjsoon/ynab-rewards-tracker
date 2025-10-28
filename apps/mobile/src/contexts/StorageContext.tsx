@@ -401,7 +401,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
           console.log('[StorageContext] performSync: aborted (user cancelled)', error);
           setState((prev) => ({
             ...prev,
-            connectionStatus: pat ? 'connected' : 'disconnected',
+            connectionStatus: pat ? prev.connectionStatus : 'disconnected',
             connectionError: undefined,
           }));
           setStatus((prev) => ({
