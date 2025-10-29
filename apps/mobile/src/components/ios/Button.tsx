@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { type ReactNode } from 'react';
 import { Pressable, Text, StyleSheet, ViewStyle, TextStyle } from 'react-native';
 import { useHaptics } from '../../hooks/useHaptics';
 import { semanticColors } from '../../theme/semanticColors';
@@ -7,7 +7,7 @@ type ButtonVariant = 'filled' | 'tinted' | 'plain';
 type ButtonSize = 'small' | 'medium' | 'large';
 
 interface ButtonProps {
-  children: string;
+  children: ReactNode;
   onPress: () => void;
   variant?: ButtonVariant;
   size?: ButtonSize;

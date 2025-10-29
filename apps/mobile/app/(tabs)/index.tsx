@@ -1,11 +1,21 @@
-import React, { useMemo } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
+import React, { useLayoutEffect, useMemo } from 'react';
+import type { ComponentType } from 'react';
+import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useHaptics } from '@/hooks/useHaptics';
-import { CircleDollarSign, CreditCard as CreditCardIcon, TrendingUp } from '@tamagui/lucide-icons';
-import { semanticColors } from '@/theme/semanticColors';
-
+import { useStorage } from '@/contexts/StorageContext';
+import {
+  CircleDollarSign,
+  CreditCard as CreditCardIcon,
+  TrendingUp,
+  RefreshCw,
+  AlertCircle,
+  ChevronRight,
+  Settings,
+} from '@tamagui/lucide-icons';
+import { semanticColors, semanticHex, withAlpha } from '@/theme/semanticColors';
 import {
   Card,
   ListItem,
@@ -18,165 +28,212 @@ import {
   Title2,
   Headline,
   Caption1,
+  Caption2,
 } from '@/components/ios';
-
-import type {
-  AppSettings,
-  CreditCard,
-} from '@ynab-counter/app-core/storage/types';
 import {
   SimpleRewardsCalculator,
   type SimplifiedCalculation,
-  type Transaction,
+  type SubcategoryCalculation,
   type TransactionWithRewards,
 } from '@ynab-counter/app-core/rewards-engine';
+import { createRewardCalculationFromSimple } from '@ynab-counter/app-core/rewards-engine/utils/reward-calculation';
+import type { CreditCard, RewardCalculation, SubcategoryBreakdown } from '@ynab-counter/app-core/storage/types';
+import { findBestDashboardEntry } from '@/lib/dashboardCache';
+
+export const options = {
+  title: 'YJAB',
+  headerLargeTitle: true,
+};
 
 const currencyFormatter = new Intl.NumberFormat('en-US', {
   style: 'currency',
   currency: 'USD',
 });
 
-const appSettings: AppSettings = {
-  milesValuation: 0.012,
-  currency: 'USD',
-};
-
-const sampleCards: CreditCard[] = [
-  {
-    id: 'cash-hero',
-    name: 'Cash Hero Everyday',
-    issuer: 'Metro Bank',
-    type: 'cashback',
-    ynabAccountId: 'account-cash',
-    featured: true,
-    earningRate: 2.5,
-    earningBlockSize: null,
-    minimumSpend: 600,
-    maximumSpend: 2500,
-    billingCycle: { type: 'calendar' },
-    subcategoriesEnabled: true,
-    subcategories: [
-      {
-        id: 'groceries',
-        name: 'Groceries',
-        flagColor: 'blue',
-        rewardValue: 4,
-        milesBlockSize: null,
-        minimumSpend: 400,
-        maximumSpend: 1200,
-        priority: 1,
-        active: true,
-        excludeFromRewards: false,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-      {
-        id: 'dining',
-        name: 'Dining',
-        flagColor: 'red',
-        rewardValue: 3,
-        milesBlockSize: null,
-        minimumSpend: null,
-        maximumSpend: null,
-        priority: 2,
-        active: true,
-        excludeFromRewards: false,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-    ],
-  },
-  {
-    id: 'miles-plus',
-    name: 'Miles Plus Premier',
-    issuer: 'Skyward',
-    type: 'miles',
-    ynabAccountId: 'account-miles',
-    featured: false,
-    earningRate: 1.8,
-    earningBlockSize: 5,
-    minimumSpend: 1000,
-    maximumSpend: null,
-    billingCycle: { type: 'billing', dayOfMonth: 20 },
-    subcategoriesEnabled: false,
-  },
-];
-
-const sampleTransactions: Record<string, Transaction[]> = {
-  'cash-hero': [
-    {
-      id: 'txn-1',
-      account_id: 'account-cash',
-      amount: -125_000,
-      approved: true,
-      cleared: 'cleared',
-      date: '2024-10-02',
-      payee_name: 'Fresh Market',
-      category_name: 'Groceries',
-      flag_color: 'blue',
-    },
-    {
-      id: 'txn-2',
-      account_id: 'account-cash',
-      amount: -89_990,
-      approved: true,
-      cleared: 'cleared',
-      date: '2024-10-04',
-      payee_name: 'Sushi Hub',
-      category_name: 'Dining',
-      flag_color: 'red',
-    },
-    {
-      id: 'txn-3',
-      account_id: 'account-cash',
-      amount: -64_430,
-      approved: true,
-      cleared: 'cleared',
-      date: '2024-10-08',
-      payee_name: 'Whole Pantry',
-      category_name: 'Groceries',
-      flag_color: 'blue',
-    },
-  ],
-  'miles-plus': [
-    {
-      id: 'txn-4',
-      account_id: 'account-miles',
-      amount: -408_750,
-      approved: true,
-      cleared: 'cleared',
-      date: '2024-09-23',
-      payee_name: 'Voyage Airlines',
-      category_name: 'Travel',
-    },
-    {
-      id: 'txn-5',
-      account_id: 'account-miles',
-      amount: -112_000,
-      approved: true,
-      cleared: 'cleared',
-      date: '2024-10-01',
-      payee_name: 'City Taxi',
-      category_name: 'Transport',
-    },
-    {
-      id: 'txn-6',
-      account_id: 'account-miles',
-      amount: -189_500,
-      approved: true,
-      cleared: 'cleared',
-      date: '2024-10-05',
-      payee_name: 'World Bistro',
-      category_name: 'Dining',
-    },
-  ],
-};
-
-type CardSummary = {
+export type CardSummary = {
   card: CreditCard;
-  period: SimplifiedCalculation['period'];
-  calculation: SimplifiedCalculation;
+  period: string;
+  calculation: SimplifiedCalculation & { periodStart?: string; periodEnd?: string };
+  rewardCalculation: RewardCalculation;
+  source: 'stored' | 'computed';
 };
+
+type CardSummaryResult = {
+  summaries: CardSummary[];
+  calculations: RewardCalculation[];
+  isEmpty: boolean;
+  isLoading: boolean;
+};
+
+export function useCardSummaries(): CardSummaryResult {
+  const { state, status } = useStorage();
+
+  return useMemo(() => {
+    if (!status.isHydrated) {
+      return {
+        summaries: [],
+        calculations: [],
+        isEmpty: false,
+        isLoading: true,
+      };
+    }
+
+    if (state.cards.length === 0) {
+      return {
+        summaries: [],
+        calculations: [],
+        isEmpty: true,
+        isLoading: false,
+      };
+    }
+
+    const hiddenIds = new Set((state.hiddenCards || []).map((hidden) => hidden.cardId));
+    const activeCards = state.cards.filter((card) => !hiddenIds.has(card.id));
+
+    const summaries: CardSummary[] = activeCards
+      .map((card) => {
+        const period = SimpleRewardsCalculator.calculatePeriod(card);
+        const stored = findStoredCalculation(state.calculations, card.id, period.start, period.end);
+
+        if (stored) {
+          return {
+            card,
+            period: stored.period,
+            calculation: convertStoredCalculation(card, stored),
+            rewardCalculation: stored,
+            source: 'stored' as const,
+          };
+        }
+
+        const transactions = extractCachedTransactions(state, card.ynabAccountId);
+        const computed = SimpleRewardsCalculator.calculateCardRewards(
+          card,
+          transactions,
+          period,
+          state.settings,
+        );
+
+        return {
+          card,
+          period: computed.period,
+          calculation: {
+            ...computed,
+            periodStart: period.start,
+            periodEnd: period.end,
+          },
+          rewardCalculation: createRewardCalculationFromSimple(card, computed),
+          source: 'computed' as const,
+        };
+      })
+      .sort((a, b) => {
+        const valueA = a.calculation.rewardEarnedDollars ?? a.calculation.rewardEarned ?? 0;
+        const valueB = b.calculation.rewardEarnedDollars ?? b.calculation.rewardEarned ?? 0;
+        return valueB - valueA;
+      });
+
+    const hasActivity = summaries.some((summary) => {
+      const totalSpend = summary.calculation.totalSpend ?? 0;
+      const rewardEarned =
+        summary.calculation.rewardEarnedDollars ?? summary.calculation.rewardEarned ?? 0;
+      return Math.abs(totalSpend) > 0 || Math.abs(rewardEarned) > 0;
+    });
+
+    return {
+      summaries,
+      calculations: summaries.map((summary) => summary.rewardCalculation),
+      isEmpty: summaries.length > 0 && !hasActivity,
+      isLoading: status.isRefreshing,
+    };
+  }, [state, status.isHydrated, status.isRefreshing]);
+}
+
+function findStoredCalculation(
+  calculations: RewardCalculation[],
+  cardId: string,
+  periodStart: string,
+  periodEnd: string,
+) {
+  return calculations.find((calc) => {
+    if (calc.cardId !== cardId) return false;
+    const [calcStart, calcEnd] = calc.period.split(' → ');
+    return calcStart === periodStart && calcEnd === periodEnd;
+  });
+}
+
+function convertStoredCalculation(card: CreditCard, stored: RewardCalculation): CardSummary['calculation'] {
+  const [periodStart, periodEnd] = stored.period.split(' → ');
+
+  return {
+    cardId: stored.cardId,
+    period: stored.period,
+    periodStart,
+    periodEnd,
+    rewardType: stored.rewardType,
+    totalSpend: stored.totalSpend,
+    eligibleSpend: stored.eligibleSpend,
+    rewardEarned: stored.rewardEarned,
+    rewardEarnedDollars: stored.rewardEarnedDollars ?? stored.rewardEarned,
+    minimumSpendMet: stored.minimumMet,
+    minimumSpendProgress: stored.minimumProgress,
+    maximumSpendExceeded: stored.maximumExceeded,
+    maximumSpendProgress: stored.maximumProgress,
+    subcategoryBreakdowns: mapStoredSubcategories(card, stored.subcategoryBreakdowns),
+  };
+}
+
+function mapStoredSubcategories(
+  card: CreditCard,
+  breakdowns: SubcategoryBreakdown[] | undefined,
+): SubcategoryCalculation[] | undefined {
+  if (!breakdowns) return undefined;
+
+  return breakdowns.map((entry) => ({
+    id: entry.subcategoryId,
+    name: entry.name,
+    flagColor: entry.flagColor,
+    totalSpend: entry.totalSpend,
+    eligibleSpend: entry.eligibleSpend,
+    eligibleSpendBeforeBlocks: entry.eligibleSpendBeforeBlocks ?? entry.eligibleSpend,
+    rewardEarned: entry.rewardEarned,
+    rewardEarnedDollars: entry.rewardEarnedDollars ?? entry.rewardEarned,
+    rewardRate: deriveRewardRate(card, entry.flagColor ?? null),
+    minimumSpendMet: entry.minimumSpendMet,
+    maximumSpendExceeded: entry.maximumSpendExceeded,
+    active: true,
+    excluded: false,
+  }));
+}
+
+function deriveRewardRate(card: CreditCard, flagColor: string | null): number {
+  if (!card.subcategoriesEnabled || !card.subcategories?.length) {
+    return card.earningRate ?? 0;
+  }
+
+  const matched = card.subcategories.find((subcategory) => subcategory.flagColor === flagColor);
+  if (!matched || matched.excludeFromRewards) {
+    return 0;
+  }
+
+  return matched.rewardValue ?? 0;
+}
+
+function extractCachedTransactions(
+  state: ReturnType<typeof useStorage>['state'],
+  accountId: string,
+): TransactionWithRewards[] {
+  const entry = findBestDashboardEntry(
+    state.cachedData?.dashboardTransactions,
+    state.selectedBudget.id,
+    state.trackedAccountIds,
+  );
+  if (!entry) {
+    return [];
+  }
+
+  return entry.transactions
+    .filter((txn) => txn.account_id === accountId)
+    .map((txn) => ({ ...txn, rewards: undefined }));
+}
 
 const clampPercent = (value: number | undefined) => {
   if (typeof value !== 'number' || Number.isNaN(value)) {
@@ -187,34 +244,70 @@ const clampPercent = (value: number | undefined) => {
 
 export default function HomeScreen() {
   const navigation = useNavigation();
+  const router = useRouter();
   const { impact } = useHaptics();
+  const { actions } = useStorage();
+  const { summaries, isEmpty, isLoading } = useCardSummaries();
 
-  React.useLayoutEffect(() => {
-    navigation.setOptions({
-      headerLargeTitle: true,
+  const navigateToSettings = React.useCallback(() => {
+    router.navigate('/settings');
+  }, [router]);
+
+  useLayoutEffect(() => {
+    const parent = navigation.getParent();
+
+    parent?.setOptions({
+      headerLargeTitle: false,
+      headerTitle: 'YJAB',
       title: 'YJAB',
+      headerRight: () => (
+        <View style={styles.headerButtons}>
+          <Button
+            variant="plain"
+            size="small"
+            onPress={() => {
+              impact('light');
+              navigateToSettings();
+            }}
+            accessibilityLabel="Settings"
+            accessibilityHint="Open settings"
+            style={styles.headerButton}
+          >
+            <Settings size={16} color={semanticHex.systemBlue} />
+          </Button>
+          <Button
+            variant="plain"
+            size="small"
+            onPress={() => {
+              impact('light');
+              actions.refresh().catch((error) => {
+                console.error('Refresh failed', error);
+              });
+            }}
+            accessibilityLabel="Refresh rewards data"
+            accessibilityHint="Reload latest storage snapshot"
+            style={styles.headerButton}
+          >
+            <RefreshCw size={16} color={semanticHex.systemBlue} />
+          </Button>
+        </View>
+      ),
     });
-  }, [navigation]);
 
-  const summaries = useMemo<CardSummary[]>(() => {
-    return sampleCards.map((card) => {
-      const period = SimpleRewardsCalculator.calculatePeriod(card);
-      const transactions = sampleTransactions[card.id] ?? [];
-      const calculation = SimpleRewardsCalculator.calculateCardRewards(
-        card,
-        transactions as TransactionWithRewards[],
-        period,
-        appSettings,
-      );
-      return { card, period: calculation.period, calculation };
-    });
-  }, []);
+    return () => {
+      parent?.setOptions({ headerRight: undefined });
+    };
+  }, [navigation, actions, impact, navigateToSettings]);
 
   const featured = useMemo(() => {
-    return [...summaries].sort(
-      (a, b) => b.calculation.rewardEarnedDollars - a.calculation.rewardEarnedDollars,
-    )[0];
-  }, [summaries]);
+    if (summaries.length === 0 || isEmpty) return null;
+    return [...summaries]
+      .sort((a, b) => {
+        const valueA = a.calculation.rewardEarnedDollars ?? a.calculation.rewardEarned ?? 0;
+        const valueB = b.calculation.rewardEarnedDollars ?? b.calculation.rewardEarned ?? 0;
+        return valueB - valueA;
+      })[0];
+  }, [summaries, isEmpty]);
 
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
@@ -223,119 +316,156 @@ export default function HomeScreen() {
         contentContainerStyle={styles.scrollContent}
       >
         <View style={styles.content}>
-          <View style={styles.introSection}>
-            <Footnote color="secondary">
-              Track credit card rewards momentum. Demos use representative data.
-            </Footnote>
-          </View>
+          {featured ? (
+            <FeaturedCardHighlight summary={featured} haptics={impact} />
+          ) : isLoading ? null : (
+            <EmptyState onOpenSettings={navigateToSettings} />
+          )}
 
-          {featured ? <FeaturedCardHighlight summary={featured} haptics={impact} /> : null}
+          {summaries.length > 0 ? (
+            <>
+              <SectionHeader>Active Cards</SectionHeader>
 
-          <SectionHeader>Active Cards</SectionHeader>
-
-          {summaries.map((summary, index) => (
-            <View key={summary.card.id} style={styles.cardSection}>
-              <Card>
-                <ListItem>
-                  <View style={styles.cardHeader}>
-                    <CardIcon cardType={summary.card.type} />
-                    <View style={styles.cardHeaderText}>
-                      <Headline>{summary.card.name}</Headline>
-                      <Footnote color="secondary">{summary.card.issuer}</Footnote>
-                    </View>
-                  </View>
-                </ListItem>
-
-                <Separator inset={16} />
-
-                <ListItem>
-                  <View style={styles.periodInfo}>
-                    <Caption1 color="tertiary">CURRENT PERIOD</Caption1>
-                    <Body>{summary.period}</Body>
-                  </View>
-                </ListItem>
-
-                <Separator inset={16} />
-
-                <ListItem>
-                  <View style={styles.statsGrid}>
-                    <StatBlock
-                      label="Reward earned"
-                      value={currencyFormatter.format(summary.calculation.rewardEarnedDollars)}
-                      icon={TrendingUp}
-                    />
-                    <StatBlock
-                      label="Total spend"
-                      value={currencyFormatter.format(summary.calculation.totalSpend)}
-                      icon={CircleDollarSign}
-                    />
-                  </View>
-                </ListItem>
-
-                    {typeof summary.calculation.minimumSpendProgress === 'number' ? (
-                  <>
-                    <Separator inset={16} />
+              {summaries.map((summary) => (
+                <View key={`${summary.card.id}-${summary.period}`} style={styles.cardSection}>
+                  <Card>
                     <ListItem>
-                      <ProgressSection
-                        title="Minimum spend"
-                        value={summary.calculation.minimumSpendProgress}
-                        helper={summary.calculation.minimumSpendMet ? 'Goal hit' : 'Almost there'}
-                      />
-                    </ListItem>
-                  </>
-                ) : null}
-
-                {typeof summary.calculation.maximumSpendProgress === 'number' ? (
-                  <>
-                    <Separator inset={16} />
-                    <ListItem>
-                      <ProgressSection
-                        title="Maximum cap"
-                        value={summary.calculation.maximumSpendProgress}
-                        helper={summary.calculation.maximumSpendExceeded ? 'Cap reached' : 'Room remaining'}
-                        tone="secondary"
-                      />
-                    </ListItem>
-                  </>
-                ) : null}
-
-                {summary.calculation.subcategoryBreakdowns?.length ? (
-                  <>
-                    <Separator inset={16} />
-                    <ListItem>
-                      <View style={styles.subcategoriesSection}>
-                        <Body style={styles.subcategoriesTitle}>Subcategory activity</Body>
-                        <View style={styles.subcategoriesList}>
-                          {summary.calculation.subcategoryBreakdowns.slice(0, 3).map((entry) => (
-                            <View key={entry.id} style={styles.subcategoryRow}>
-                              <Body>{entry.name}</Body>
-                              <Footnote color="secondary">
-                                {currencyFormatter.format(entry.rewardEarnedDollars ?? entry.rewardEarned ?? 0)}
-                              </Footnote>
-                            </View>
-                          ))}
+                      <View style={styles.cardHeader}>
+                        <CardIcon cardType={summary.card.type} />
+                        <View style={styles.cardHeaderText}>
+                          <Headline>{summary.card.name}</Headline>
+                          <Footnote color="secondary">{summary.card.issuer}</Footnote>
                         </View>
+                        {summary.source !== 'stored' ? (
+                          <View
+                          style={[
+                            styles.sourceBadge,
+                            summary.source === 'computed'
+                              ? styles.computedBadge
+                              : styles.storedBadge,
+                          ]}
+                        >
+                          <Caption2 color="primary">
+                            {summary.source === 'computed' ? 'ESTIMATE' : 'LIVE'}
+                          </Caption2>
+                        </View>
+                        ) : null}
                       </View>
                     </ListItem>
-                  </>
-                ) : null}
 
-                <Separator inset={16} />
+                    <Separator inset={16} />
 
-                <ListItem
-                  onPress={() => {
-                    impact('light');
-                    console.log('Manage card');
-                  }}
-                  showDisclosure
-                  accessibilityLabel={`Manage settings for ${summary.card.name}`}
-                  accessibilityHint="Opens card configuration and preferences"
-                >
-                  <Body>Manage card</Body>
-                </ListItem>
-              </Card>
-            </View>
-          ))}
+                    <ListItem>
+                      <View style={styles.periodInfo}>
+                        <Caption1 color="tertiary">Current period</Caption1>
+                        <Body>{summary.period}</Body>
+                      </View>
+                    </ListItem>
+
+                    <Separator inset={16} />
+
+                    <ListItem>
+                      <View style={styles.statsGrid}>
+                        <StatBlock
+                          icon={TrendingUp}
+                          label="Reward earned"
+                          value={currencyFormatter.format(summary.calculation.rewardEarnedDollars)}
+                        />
+                        <StatBlock
+                          icon={CircleDollarSign}
+                          label="Total spend"
+                          value={currencyFormatter.format(summary.calculation.totalSpend)}
+                        />
+                      </View>
+                    </ListItem>
+
+                    {typeof summary.calculation.minimumSpendProgress === 'number' ? (
+                      <>
+                        <Separator inset={16} />
+                        <ListItem>
+                          <ProgressSection
+                            title="Minimum spend"
+                            value={summary.calculation.minimumSpendProgress}
+                            helper={summary.calculation.minimumSpendMet ? 'Goal hit' : 'Keep going'}
+                          />
+                        </ListItem>
+                      </>
+                    ) : null}
+
+                    {typeof summary.calculation.maximumSpendProgress === 'number' ? (
+                      <>
+                        <Separator inset={16} />
+                        <ListItem>
+                          <ProgressSection
+                            title="Maximum cap"
+                            value={summary.calculation.maximumSpendProgress}
+                            helper={summary.calculation.maximumSpendExceeded ? 'Cap reached' : 'Room remaining'}
+                            tone="secondary"
+                          />
+                        </ListItem>
+                      </>
+                    ) : null}
+
+                    {summary.calculation.subcategoryBreakdowns?.length ? (
+                      <>
+                        <Separator inset={16} />
+                        <ListItem>
+                          <View style={styles.subcategoriesHeader}>
+                            <Body style={styles.subcategoriesTitle}>Subcategory activity</Body>
+                            <TouchableOpacity
+                              onPress={() => {
+                                impact('light');
+                                console.log('See category breakdown');
+                              }}
+                              style={styles.manageButton}
+                              accessibilityLabel={`View detailed categories for ${summary.card.name}`}
+                              accessibilityHint="Opens detailed category breakdown"
+                            >
+                              <Caption1 color="primary">See all</Caption1>
+                              <ChevronRight size={14} color={semanticHex.systemBlue} />
+                            </TouchableOpacity>
+                          </View>
+                        </ListItem>
+
+                        {summary.calculation.subcategoryBreakdowns.slice(0, 3).map((entry) => (
+                          <View key={entry.id} style={styles.subcategoryItem}>
+                            <Separator inset={16} />
+                            <ListItem>
+                              <View style={styles.subcategoryContent}>
+                                <View style={styles.subcategoryInfo}>
+                                  <Body>{entry.name}</Body>
+                                  <Caption2 color="secondary">
+                                    {currencyFormatter.format(entry.totalSpend)} spent
+                                  </Caption2>
+                                </View>
+                                <Footnote color="primary">
+                                  {currencyFormatter.format(entry.rewardEarnedDollars ?? entry.rewardEarned ?? 0)}
+                                </Footnote>
+                              </View>
+                            </ListItem>
+                          </View>
+                        ))}
+                      </>
+                    ) : null}
+
+                    <Separator inset={16} />
+
+                    <ListItem
+                      onPress={() => {
+                        impact('light');
+                        console.log('Manage card');
+                      }}
+                      showDisclosure
+                      accessibilityLabel={`Manage settings for ${summary.card.name}`}
+                      accessibilityHint="Opens card configuration and preferences"
+                    >
+                      <Body>Manage card</Body>
+                    </ListItem>
+                  </Card>
+                </View>
+              ))}
+            </>
+          ) : null}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -344,7 +474,7 @@ export default function HomeScreen() {
 
 function FeaturedCardHighlight({
   summary,
-  haptics
+  haptics,
 }: {
   summary: CardSummary;
   haptics: (style: 'light' | 'medium' | 'heavy') => void;
@@ -356,38 +486,54 @@ function FeaturedCardHighlight({
   return (
     <View style={styles.featuredSection}>
       <Card style={styles.featuredCard}>
-        <ListItem>
-          <View style={styles.featuredContent}>
-            <View style={styles.featuredHeader}>
-              <TrendingUp size={24} color={semanticColors.systemBlue as string} />
-              <View style={styles.featuredHeaderText}>
-                <Caption1 color="secondary">SUGGESTED FOCUS CARD</Caption1>
-                <Headline>{summary.card.name}</Headline>
+        <TouchableOpacity
+          onPress={() => {
+            haptics('medium');
+            console.log('See transaction insights');
+          }}
+          style={styles.featuredContent}
+          accessibilityLabel={`See insights for ${summary.card.name}`}
+          accessibilityHint="Opens detailed breakdown of rewards and spending"
+        >
+          <View style={styles.featuredHeader}>
+            <View style={styles.featuredHeaderText}>
+              <Caption1 color="secondary">Suggested focus card</Caption1>
+              <Headline>{summary.card.name}</Headline>
+              <Footnote color="secondary">{summary.card.issuer}</Footnote>
+            </View>
+            {summary.source !== 'stored' && (
+              <View
+                style={[
+                  styles.sourceBadge,
+                  summary.source === 'computed' ? styles.computedBadge : styles.storedBadge,
+                ]}
+              >
+                <Caption2 color="primary">
+                  {summary.source === 'computed' ? 'ESTIMATE' : 'LIVE'}
+                </Caption2>
               </View>
-            </View>
-
-            <View style={styles.featuredStats}>
-              <Body color="secondary">
-                Earned <Body style={styles.featuredHighlight}>{rewardDisplay}</Body> so far this period from{' '}
-                <Body style={styles.featuredHighlight}>{spendDisplay}</Body> of eligible spend. Effective rate{' '}
-                <Body style={styles.featuredHighlight}>{effectiveRate.toFixed(2)}%</Body>.
-              </Body>
-            </View>
-
-            <Button
-              variant="filled"
-              size="medium"
-              onPress={() => {
-                haptics('medium');
-                console.log('See transaction insights');
-              }}
-              accessibilityLabel={`See transaction insights for ${summary.card.name}`}
-              accessibilityHint="Opens detailed breakdown of rewards and spending"
-            >
-              See transaction insights
-            </Button>
+            )}
           </View>
-        </ListItem>
+
+          <Body color="secondary" style={styles.featuredCopy}>
+            Earned <Body style={styles.featuredHighlight}>{rewardDisplay}</Body> so far this period from{' '}
+            <Body style={styles.featuredHighlight}>{spendDisplay}</Body> of eligible spend. Effective rate{' '}
+            <Body style={styles.featuredHighlight}>{effectiveRate.toFixed(2)}%</Body>.
+          </Body>
+
+          <Button
+            variant="filled"
+            size="medium"
+            onPress={() => {
+              haptics('medium');
+              console.log('See transaction insights');
+            }}
+            accessibilityLabel={`See transaction insights for ${summary.card.name}`}
+            accessibilityHint="Opens detailed breakdown of rewards and spending"
+          >
+            See transaction insights
+          </Button>
+        </TouchableOpacity>
       </Card>
     </View>
   );
@@ -406,30 +552,21 @@ function ProgressSection({
 }) {
   const normalizedValue = Math.max(0, Math.min(100, value)) / 100;
   const tintColor = tone === 'secondary'
-    ? semanticColors.systemGray
+    ? semanticColors.systemOrange
     : semanticColors.systemBlue;
 
   return (
     <View style={styles.progressSection}>
       <View style={styles.progressHeader}>
-        <Body>{title}</Body>
-        <Footnote color="secondary">{Math.round(value)}%</Footnote>
+        <Footnote color="tertiary">{title}</Footnote>
+        <Caption1 color="secondary">{helper}</Caption1>
       </View>
-      <ProgressView
-        value={normalizedValue}
-        tintColor={tintColor}
-        accessibilityLabel={`${title} progress`}
-        accessibilityValue={{
-          min: 0,
-          max: 100,
-          now: Math.round(value),
-        }}
-        accessibilityHint={helper}
-      />
-      <Caption1 color="tertiary" style={styles.progressHelper}>{helper}</Caption1>
+      <ProgressView value={normalizedValue} tintColor={tintColor} style={styles.progressBar} />
     </View>
   );
 }
+
+type StatBlockIcon = ComponentType<{ size?: number; color?: string }>;
 
 function StatBlock({
   label,
@@ -438,69 +575,127 @@ function StatBlock({
 }: {
   label: string;
   value: string;
-  icon: (props: { size?: number; color?: string }) => React.ReactElement;
+  icon: StatBlockIcon;
 }) {
   return (
     <View style={styles.statBlock}>
-      <View style={styles.statHeader}>
-        <Icon size={16} color={semanticColors.systemBlue as string} />
-        <Caption1 color="secondary">{label}</Caption1>
-      </View>
-      <Headline>{value}</Headline>
+      <Icon size={20} color={semanticHex.systemBlue} />
+      <Caption2 color="secondary" style={styles.statLabel}>
+        {label}
+      </Caption2>
+      <Footnote style={styles.statValue}>{value}</Footnote>
     </View>
   );
 }
 
 function CardIcon({ cardType }: { cardType: CreditCard['type'] }) {
-  const color = (cardType === 'cashback'
-    ? semanticColors.systemBlue
-    : semanticColors.systemPurple) as string;
-  return <CreditCardIcon size={24} color={color} />;
+  const color = cardType === 'cashback'
+    ? semanticHex.systemBlue
+    : semanticHex.systemPurple;
+
+  return (
+    <View style={[styles.cardIcon, { backgroundColor: withAlpha(color, '20') }]}
+    >
+      <CreditCardIcon size={16} color={color} />
+    </View>
+  );
+}
+
+function EmptyState({ onOpenSettings }: { onOpenSettings: () => void }) {
+  const { impact } = useHaptics();
+
+  return (
+    <View style={styles.emptyStateContainer}>
+      <Card style={styles.emptyStateCard}>
+        <ListItem>
+          <View style={styles.emptyStateContent}>
+            <AlertCircle size={40} color={semanticHex.systemGray2} />
+            <Headline style={styles.emptyTitle}>No cards configured yet</Headline>
+            <Body color="secondary" style={styles.emptyCopy}>
+              Connect your YNAB account and add a card to start tracking live rewards.
+            </Body>
+            <Button
+              variant="filled"
+              size="medium"
+              onPress={() => {
+                impact('medium');
+                onOpenSettings();
+              }}
+              accessibilityLabel="Go to settings"
+              accessibilityHint="Opens settings to connect YNAB"
+            >
+              Go to Settings
+            </Button>
+          </View>
+        </ListItem>
+      </Card>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: semanticColors.systemGroupedBackground,
+    backgroundColor: semanticColors.systemBackground as string,
   },
   scrollContent: {
-    paddingBottom: 32,
+    paddingBottom: 48,
   },
   content: {
-    gap: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    gap: 24,
   },
   introSection: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  featuredSection: {
-    paddingHorizontal: 16,
     marginBottom: 8,
   },
+  headerButtons: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  headerButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  featuredSection: {
+    marginBottom: 24,
+  },
   featuredCard: {
-    overflow: 'visible',
+    backgroundColor: semanticColors.secondarySystemBackground as string,
   },
   featuredContent: {
     gap: 16,
+    padding: 20,
   },
   featuredHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
   },
   featuredHeaderText: {
     flex: 1,
-    gap: 2,
+    gap: 4,
   },
-  featuredStats: {
-    paddingVertical: 8,
+  featuredCopy: {
+    lineHeight: 20,
   },
   featuredHighlight: {
+    color: semanticColors.systemBlue as string,
     fontWeight: '600',
-    color: semanticColors.systemBlue,
+  },
+  sourceBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: semanticColors.tertiarySystemFill as string,
+  },
+  computedBadge: {
+    backgroundColor: withAlpha(semanticHex.systemGreen, '30'),
+  },
+  storedBadge: {
+    backgroundColor: withAlpha(semanticHex.systemBlue, '30'),
   },
   cardSection: {
-    paddingHorizontal: 16,
     marginBottom: 16,
   },
   cardHeader: {
@@ -512,47 +707,91 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
   },
+  cardIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   periodInfo: {
-    gap: 4,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
   },
   statsGrid: {
     flexDirection: 'row',
-    gap: 12,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 16,
   },
   statBlock: {
     flex: 1,
-    gap: 8,
-  },
-  statHeader: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
+  },
+  statLabel: {
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  statValue: {
+    fontWeight: '600',
   },
   progressSection: {
+    flex: 1,
     gap: 8,
-    width: '100%',
   },
   progressHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  progressHelper: {
-    marginTop: 4,
+  progressBar: {
+    height: 6,
+    borderRadius: 3,
   },
-  subcategoriesSection: {
-    gap: 12,
-    width: '100%',
+  subcategoriesHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   subcategoriesTitle: {
     fontWeight: '600',
   },
-  subcategoriesList: {
-    gap: 8,
+  manageButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
-  subcategoryRow: {
+  subcategoryItem: {
+    flex: 1,
+  },
+  subcategoryContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 12,
+  },
+  subcategoryInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  emptyStateContainer: {
+    marginTop: 16,
+  },
+  emptyStateCard: {
+    paddingVertical: 24,
+  },
+  emptyStateContent: {
+    alignItems: 'center',
+    gap: 16,
+    paddingHorizontal: 16,
+  },
+  emptyTitle: {
+    textAlign: 'center',
+  },
+  emptyCopy: {
+    textAlign: 'center',
   },
 });

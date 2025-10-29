@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Pressable, StyleSheet, ViewStyle, AccessibilityRole, AccessibilityValue } from 'react-native';
 import { ChevronRight } from '@tamagui/lucide-icons';
 import { useHaptics } from '../../hooks/useHaptics';
-import { semanticColors } from '../../theme/semanticColors';
+import { semanticColors, semanticHex } from '../../theme/semanticColors';
 
 interface ListItemProps {
   children: React.ReactNode;
@@ -15,6 +15,10 @@ interface ListItemProps {
   accessibilityHint?: string;
   accessibilityValue?: AccessibilityValue;
   accessibilityRole?: AccessibilityRole;
+  accessibilityState?: {
+    selected?: boolean;
+    checked?: boolean;
+  };
 }
 
 /**
@@ -32,6 +36,7 @@ export function ListItem({
   accessibilityHint,
   accessibilityValue,
   accessibilityRole,
+  accessibilityState,
 }: ListItemProps) {
   const { selection } = useHaptics();
 
@@ -42,11 +47,12 @@ export function ListItem({
 
   // Derive shared accessibility props
   const accessibilityProps = {
-    accessible: !!(accessibilityLabel || accessibilityHint),
+    accessible: !!(accessibilityLabel || accessibilityHint || accessibilityRole),
     accessibilityLabel,
     accessibilityHint,
     accessibilityValue,
     accessibilityRole: accessibilityRole || (handlePress ? 'button' : undefined),
+    accessibilityState,
   };
 
   const content = (
@@ -55,7 +61,7 @@ export function ListItem({
       {showDisclosure && (
         <ChevronRight
           size={18}
-          color={semanticColors.systemGray3 as string}
+          color={semanticHex.systemGray3}
           style={styles.disclosure}
         />
       )}

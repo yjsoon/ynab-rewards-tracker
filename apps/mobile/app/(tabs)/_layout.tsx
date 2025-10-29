@@ -1,6 +1,6 @@
 import { Tabs } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { Home, Lightbulb, Activity, Settings } from '@tamagui/lucide-icons';
+import { Home, Lightbulb, Activity } from '@tamagui/lucide-icons';
 
 export default function TabsLayout() {
   const handleTabPress = () => {
@@ -12,8 +12,7 @@ export default function TabsLayout() {
   return (
     <Tabs
       screenOptions={{
-        headerShown: true,
-        headerTransparent: false,
+        headerShown: false,
       }}
       screenListeners={{
         tabPress: handleTabPress,
@@ -22,15 +21,14 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
+          title: 'YJAB',
           tabBarIcon: ({ color }) => <Home size={28} color={color} />,
         }}
       />
       <Tabs.Screen
         name="recommendations"
         options={{
-          title: 'Recommendations',
-          tabBarLabel: 'Ideas',
+          title: 'Ideas',
           tabBarIcon: ({ color }) => <Lightbulb size={28} color={color} />,
         }}
       />
@@ -39,13 +37,6 @@ export default function TabsLayout() {
         options={{
           title: 'Activity',
           tabBarIcon: ({ color }) => <Activity size={28} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="settings"
-        options={{
-          title: 'Settings',
-          tabBarIcon: ({ color }) => <Settings size={28} color={color} />,
         }}
       />
     </Tabs>
