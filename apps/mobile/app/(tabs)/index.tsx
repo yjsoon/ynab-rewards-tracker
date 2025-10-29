@@ -250,7 +250,7 @@ export default function HomeScreen() {
   const { summaries, isEmpty, isLoading } = useCardSummaries();
 
   const navigateToSettings = React.useCallback(() => {
-    router.navigate('/settings');
+    router.push('/settings');
   }, [router]);
 
   useLayoutEffect(() => {

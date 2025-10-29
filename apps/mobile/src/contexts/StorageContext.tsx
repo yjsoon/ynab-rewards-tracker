@@ -32,9 +32,14 @@ import type {
   YnabTransactionSummary,
 } from '@/lib/ynab-client';
 
-type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
+type ConnectionStatus = 'disconnected' | 'authenticating' | 'awaiting_budget' | 'connected' | 'error';
 
 type SelectedBudget = { id?: string; name?: string };
+
+type PendingConnectionChanges = {
+  budget?: { id: string; name: string };
+  trackedAccountIds?: string[];
+};
 
 type StorageStatus = {
   isHydrated: boolean;
@@ -45,14 +50,18 @@ type StorageStatus = {
 type Metadata = {
   lastAttemptedSync?: string;
   lastSuccessfulSync?: string;
+  accountsBudgetId?: string;
 };
 
 type StorageState = {
   pat?: string;
   connectionStatus: ConnectionStatus;
+  isSyncing: boolean;
   connectionError?: string;
   selectedBudget: SelectedBudget;
   trackedAccountIds: string[];
+  pending?: PendingConnectionChanges;
+  hasPendingChanges: boolean;
   cards: CreditCard[];
   rules: RewardRule[];
   tagMappings: TagMapping[];
@@ -78,6 +87,10 @@ type StorageActions = {
   setSelectedBudget: (budgetId: string, budgetName: string) => Promise<void>;
   setTrackedAccountIds: (accountIds: string[]) => Promise<void>;
   syncBudgetsAndAccounts: (options?: SyncOptions) => Promise<void>;
+  stageBudgetSelection: (budgetId: string, budgetName: string) => void;
+  stageTrackedAccountIds: (ids: string[]) => void;
+  applyPendingChanges: () => Promise<void>;
+  clearPendingChanges: () => void;
   setSettings: (settings: Partial<AppSettings>) => Promise<void>;
   setCards: (cards: CreditCard[]) => Promise<void>;
   setRules: (rules: RewardRule[]) => Promise<void>;
@@ -100,8 +113,11 @@ const LOAD_ERROR_MESSAGE = 'Failed to load storage';
 
 const defaultState: StorageState = {
   connectionStatus: 'disconnected',
+  isSyncing: false,
   selectedBudget: {},
   trackedAccountIds: [],
+  pending: undefined,
+  hasPendingChanges: false,
   cards: [],
   rules: [],
   tagMappings: [],
@@ -128,6 +144,10 @@ const noopActions: StorageActions = {
   setSelectedBudget: async () => {},
   setTrackedAccountIds: async () => {},
   syncBudgetsAndAccounts: async () => {},
+  stageBudgetSelection: () => {},
+  stageTrackedAccountIds: () => {},
+  applyPendingChanges: async () => {},
+  clearPendingChanges: () => {},
   setSettings: async () => {},
   setCards: async () => {},
   setRules: async () => {},
@@ -172,11 +192,23 @@ async function hydrate(): Promise<StorageState> {
     storage.getCachedData(),
   ]);
 
+  let connectionStatus: ConnectionStatus;
+  if (!pat) {
+    connectionStatus = 'disconnected';
+  } else if (!selectedBudget.id) {
+    connectionStatus = 'awaiting_budget';
+  } else {
+    connectionStatus = 'connected';
+  }
+
   return {
     pat: pat ?? undefined,
-    connectionStatus: pat ? 'connecting' : 'disconnected',
+    connectionStatus,
+    isSyncing: false,
     selectedBudget,
     trackedAccountIds,
+    pending: undefined,
+    hasPendingChanges: false,
     cards,
     rules,
     tagMappings,
@@ -249,6 +281,18 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         setState((prev) => ({
           ...prev,
           connectionStatus: 'disconnected',
+          isSyncing: false,
+          connectionError: undefined,
+        }));
+        return;
+      }
+
+      if (!selectedBudgetId) {
+        console.log('[StorageContext] performSync: no budget selected, setting awaiting_budget');
+        setState((prev) => ({
+          ...prev,
+          connectionStatus: 'awaiting_budget',
+          isSyncing: false,
           connectionError: undefined,
         }));
         return;
@@ -262,7 +306,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
 
       setState((prev) => ({
         ...prev,
-        connectionStatus: 'connecting',
+        isSyncing: true,
         connectionError: undefined,
         metadata: {
           ...prev.metadata,
@@ -370,11 +414,15 @@ export function StorageProvider({ children }: { children: ReactNode }) {
           selectedBudget: nextSelectedBudget,
           cachedData: nextCachedData,
           calculations: mergedCalculations,
-          connectionStatus: 'connected',
+          connectionStatus: effectiveBudgetId ? 'connected' : 'awaiting_budget',
+          isSyncing: false,
           connectionError: undefined,
+          pending: undefined,
+          hasPendingChanges: false,
           metadata: {
             ...prev.metadata,
             lastSuccessfulSync: new Date().toISOString(),
+            accountsBudgetId: effectiveBudgetId,
           },
         }));
         console.log('[StorageContext] performSync: success', {
@@ -393,6 +441,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
           setState((prev) => ({
             ...prev,
             connectionStatus: pat ? prev.connectionStatus : 'disconnected',
+            isSyncing: false,
             connectionError: undefined,
           }));
           setStatus((prev) => ({
@@ -407,6 +456,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         setState((prev) => ({
           ...prev,
           connectionStatus: 'error',
+          isSyncing: false,
           connectionError: message,
         }));
         setStatus((prev) => ({
@@ -424,23 +474,25 @@ export function StorageProvider({ children }: { children: ReactNode }) {
   const initialiseConnection = useCallback(
     async (pat: string, trackedAccountIds: string[], selectedBudgetId?: string) => {
       if (!pat) {
-        console.log('[StorageContext] initialiseConnection:v2 skipped (no PAT)');
+        console.log('[StorageContext] initialiseConnection: skipped (no PAT)');
         setState((prev) => ({
           ...prev,
           connectionStatus: 'disconnected',
+          isSyncing: false,
           connectionError: undefined,
         }));
         return;
       }
 
-      console.log('[StorageContext] initialiseConnection:v2 begin', {
+      console.log('[StorageContext] initialiseConnection: begin', {
         hasSelectedBudget: Boolean(selectedBudgetId),
         trackedCount: trackedAccountIds.length,
       });
       setState((prev) => ({
         ...prev,
         pat,
-        connectionStatus: 'connecting',
+        connectionStatus: 'authenticating',
+        isSyncing: false,
         connectionError: undefined,
       }));
 
@@ -453,20 +505,28 @@ export function StorageProvider({ children }: { children: ReactNode }) {
           await storage.setSelectedBudget(nextBudget.id, nextBudget.name);
         }
 
+        if (!nextBudget) {
+          setState((prev) => ({
+            ...prev,
+            pat,
+            budgets,
+            selectedBudget: {},
+            accounts: [],
+            connectionStatus: 'awaiting_budget',
+            connectionError: undefined,
+          }));
+          console.log('[StorageContext] initialiseConnection: waiting for budget selection');
+          return;
+        }
+
         setState((prev) => ({
           ...prev,
           pat,
           budgets,
-          selectedBudget: nextBudget ? { id: nextBudget.id, name: nextBudget.name } : {},
-          accounts: nextBudget ? prev.accounts : [],
-          connectionStatus: nextBudget ? 'connecting' : 'connected',
+          selectedBudget: { id: nextBudget.id, name: nextBudget.name },
+          connectionStatus: 'authenticating',
           connectionError: undefined,
         }));
-
-        if (!nextBudget) {
-          console.log('[StorageContext] initialiseConnection: waiting for budget selection');
-          return;
-        }
 
         await performSync({}, {
           pat,
@@ -480,6 +540,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
           ...prev,
           pat: undefined,
           connectionStatus: 'error',
+          isSyncing: false,
           connectionError: message,
           selectedBudget: {},
           budgets: [],
@@ -569,28 +630,37 @@ export function StorageProvider({ children }: { children: ReactNode }) {
       },
       clearPAT: async () => {
         await storage.clearPAT();
-        await storage.clearBudgetSelection();
-        await storage.setTrackedAccountIds([]);
         setState((prev) => ({
           ...prev,
           pat: undefined,
           connectionStatus: 'disconnected',
+          isSyncing: false,
           connectionError: undefined,
           selectedBudget: {},
           trackedAccountIds: [],
+          pending: undefined,
+          hasPendingChanges: false,
           budgets: [],
           accounts: [],
+          cachedData: undefined,
+          metadata: {},
         }));
       },
       disconnect: async () => {
+        await storage.resetConnectionState();
         setState((prev) => ({
           ...prev,
           connectionStatus: 'disconnected',
+          isSyncing: false,
           connectionError: undefined,
-          metadata: {
-            ...prev.metadata,
-            lastAttemptedSync: undefined,
-          },
+          selectedBudget: {},
+          trackedAccountIds: [],
+          pending: undefined,
+          hasPendingChanges: false,
+          budgets: [],
+          accounts: [],
+          cachedData: undefined,
+          metadata: {},
         }));
       },
       setSelectedBudget: async (budgetId: string, budgetName: string) => {
@@ -610,6 +680,92 @@ export function StorageProvider({ children }: { children: ReactNode }) {
       },
       syncBudgetsAndAccounts: async (options) => {
         await performSync(options ?? {});
+      },
+      stageBudgetSelection: (budgetId: string, budgetName: string) => {
+        setState((prev) => {
+          const matchesSelected = prev.selectedBudget.id === budgetId;
+          const nextPendingBudget = matchesSelected ? undefined : { id: budgetId, name: budgetName };
+          const nextPendingTracked = prev.pending?.trackedAccountIds;
+
+          const hasChanges = Boolean(nextPendingBudget || nextPendingTracked);
+
+          return {
+            ...prev,
+            pending: hasChanges ? {
+              budget: nextPendingBudget,
+              trackedAccountIds: nextPendingTracked,
+            } : undefined,
+            hasPendingChanges: hasChanges,
+          };
+        });
+      },
+      stageTrackedAccountIds: (ids: string[]) => {
+        const unique = Array.from(new Set(ids));
+        unique.sort();
+        setState((prev) => {
+          const prevIds = [...prev.trackedAccountIds].sort();
+          const matchesState = unique.length === prevIds.length && unique.every((id, idx) => id === prevIds[idx]);
+          const nextPendingTracked = matchesState ? undefined : unique;
+          const nextPendingBudget = prev.pending?.budget;
+
+          const hasChanges = Boolean(nextPendingBudget || nextPendingTracked);
+
+          return {
+            ...prev,
+            pending: hasChanges ? {
+              budget: nextPendingBudget,
+              trackedAccountIds: nextPendingTracked,
+            } : undefined,
+            hasPendingChanges: hasChanges,
+          };
+        });
+      },
+      applyPendingChanges: async () => {
+        const pat = state.pat;
+        if (!pat) {
+          setState((prev) => ({
+            ...prev,
+            connectionStatus: 'disconnected',
+            pending: undefined,
+            hasPendingChanges: false,
+          }));
+          return;
+        }
+        const pending = state.pending;
+        if (!pending || (!pending.budget && !pending.trackedAccountIds)) {
+          return;
+        }
+
+        const nextBudget = pending.budget ?? state.selectedBudget;
+        const nextTrackedIds = pending.trackedAccountIds ?? state.trackedAccountIds;
+
+        if (pending.budget && nextBudget.id && nextBudget.name) {
+          await storage.setSelectedBudget(nextBudget.id, nextBudget.name);
+        }
+        if (pending.trackedAccountIds) {
+          await storage.setTrackedAccountIds(nextTrackedIds);
+        }
+
+        setState((prev) => ({
+          ...prev,
+          selectedBudget: nextBudget.id ? nextBudget : prev.selectedBudget,
+          trackedAccountIds: pending.trackedAccountIds ? nextTrackedIds : prev.trackedAccountIds,
+          pending: undefined,
+          hasPendingChanges: false,
+        }));
+
+        await performSync({}, {
+          pat,
+          selectedBudgetId: nextBudget.id,
+          trackedAccountIds: nextTrackedIds,
+        });
+      },
+      clearPendingChanges: () => {
+        setState((prev) => ({
+          ...prev,
+          pending: undefined,
+          hasPendingChanges: false,
+        }));
       },
       setSettings: async (settings) => {
         await storage.updateSettings(settings);
@@ -679,7 +835,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         }));
       },
     }),
-    [initialiseConnection, performSync, refresh, state.trackedAccountIds],
+    [initialiseConnection, performSync, refresh, state.trackedAccountIds, state.pat, state.pending, state.selectedBudget],
   );
 
   const value = useMemo<StorageContextValue>(
