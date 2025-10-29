@@ -170,7 +170,7 @@ export default function SettingsScreen() {
 
   const handleDisconnect = useCallback(async () => {
     impact('medium');
-    await actions.disconnect();
+    await actions.clearPAT();
     setSelectedBudgetId(undefined);
     setTrackedAccounts([]);
     notification('warning');

@@ -579,6 +579,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
       clearPAT: async () => {
         await storage.clearPAT();
         await storage.clearBudgetSelection();
+        await storage.setTrackedAccountIds([]);
         setState((prev) => ({
           ...prev,
           pat: undefined,
