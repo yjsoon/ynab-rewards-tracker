@@ -152,6 +152,20 @@ class StorageService {
     await this.save(storage);
   }
 
+  private wipeConnectionState(storage: MutableStorageData): void {
+    delete storage.ynab.selectedBudgetId;
+    delete storage.ynab.selectedBudgetName;
+    storage.ynab.trackedAccountIds = [];
+    storage.calculations = [];
+    storage.cachedData = undefined;
+  }
+
+  async resetConnectionState(): Promise<void> {
+    const storage = await this.load() as MutableStorageData;
+    this.wipeConnectionState(storage);
+    await this.save(storage);
+  }
+
   async getPAT(): Promise<YnabConnection['pat']> {
     let securePat = await SecureStore.getItemAsync(PAT_SECURE_STORE_KEY);
     if (!securePat) {
@@ -188,11 +202,12 @@ class StorageService {
   async clearPAT(): Promise<void> {
     await SecureStore.deleteItemAsync(PAT_SECURE_STORE_KEY);
     await SecureStore.deleteItemAsync(LEGACY_PAT_SECURE_STORE_KEY);
-    const storage = await this.load();
+    const storage = await this.load() as MutableStorageData;
     if (storage.ynab.pat) {
       delete storage.ynab.pat;
-      await this.save(storage);
     }
+    this.wipeConnectionState(storage);
+    await this.save(storage);
   }
 
   async clearBudgetSelection(): Promise<void> {
