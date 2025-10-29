@@ -378,6 +378,9 @@ class StorageService {
       if (existing.cardId !== calculation.cardId) {
         return false;
       }
+      if ((existing.ruleId ?? null) !== (calculation.ruleId ?? null)) {
+        return false;
+      }
       const existingPeriod = normalizePeriod(existing.period);
       return existingPeriod.start === normalizedPeriod.start && existingPeriod.end === normalizedPeriod.end;
     });
