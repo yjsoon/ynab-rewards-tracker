@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ScrollView,
   TextInput,
@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
 import { useHaptics } from '@/hooks/useHaptics';
 import { Card, ListItem, Button, Footnote, SectionHeader, Separator, Headline, Caption1 } from '@/components/ios';
 import { semanticColors, semanticHex, withAlpha } from '@/theme/semanticColors';
@@ -30,6 +31,7 @@ const connectionStatusCopy: Record<
 
 export default function SettingsScreen() {
   const navigation = useNavigation();
+  const router = useRouter();
   const { impact, notification } = useHaptics();
   const { state, actions } = useStorage();
 
@@ -56,6 +58,9 @@ export default function SettingsScreen() {
   const [isApplyingChanges, setIsApplyingChanges] = useState(false);
   const [hasLocalAccountToggles, setHasLocalAccountToggles] = useState(false);
   const [activeBudgetSyncId, setActiveBudgetSyncId] = useState<string | undefined>();
+
+  const isApplyingRef = useRef(false);
+
   const connectedBudgets = useMemo(() => state.budgets ?? [], [state.budgets]);
   const connectedAccounts = useMemo(() => state.accounts ?? [], [state.accounts]);
 
@@ -166,34 +171,53 @@ export default function SettingsScreen() {
   }, [activeBudgetSyncId, isSyncing, state.selectedBudget.id, state.pending?.budget?.id, state.metadata?.accountsBudgetId, state.connectionError]);
 
   const handleDone = useCallback(async () => {
+    if (isApplyingRef.current) {
+      console.log('[Settings] handleDone: already applying, ignoring');
+      return;
+    }
+    
+    console.log('[Settings] handleDone called', {
+      hasPendingChanges: state.hasPendingChanges,
+      hasLocalTrackedChanges,
+      isApplyingChanges
+    });
+    
     const hasPendingToSave = state.hasPendingChanges || hasLocalTrackedChanges;
 
     if (hasPendingToSave) {
-      setIsApplyingChanges(true);
-      try {
-        if (hasLocalTrackedChanges) {
-          actions.stageTrackedAccountIds(trackedAccounts);
-        }
-        await actions.applyPendingChanges();
-        notification('success');
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Failed to apply changes';
-        setValidationError(message);
-        notification('error');
-        return;
-      } finally {
-        setIsApplyingChanges(false);
-      }
-    }
+      console.log('[Settings] handleDone: applying changes in background');
+      isApplyingRef.current = true;
 
-    impact('light');
-    navigation.goBack();
-  }, [state.hasPendingChanges, hasLocalTrackedChanges, actions, trackedAccounts, notification, impact, navigation]);
+      // Close immediately
+      impact('light');
+      router.back();
+
+      // Apply changes in background (fire and forget)
+      (async () => {
+        try {
+          if (hasLocalTrackedChanges) {
+            actions.stageTrackedAccountIds(trackedAccounts);
+          }
+          await actions.applyPendingChanges();
+          notification('success');
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Failed to apply changes';
+          console.log('[Settings] handleDone: error caught', message);
+          notification('error');
+        } finally {
+          isApplyingRef.current = false;
+        }
+      })();
+    } else {
+      // No changes, just close
+      impact('light');
+      router.back();
+    }
+  }, [state.hasPendingChanges, hasLocalTrackedChanges, actions, trackedAccounts, notification, impact, router]);
 
   const doneButtonLabel = useMemo(() => {
-    const hasChanges = state.hasPendingChanges || hasLocalTrackedChanges;
-    return hasChanges ? 'Apply & Done' : 'Done';
-  }, [state.hasPendingChanges, hasLocalTrackedChanges]);
+    return 'Done';
+  }, []);
 
   React.useLayoutEffect(() => {
     navigation.setOptions({
@@ -316,10 +340,10 @@ export default function SettingsScreen() {
       setIsApplyingChanges(false);
     }
 
-    if (wasInSetupMode && navigation.canGoBack()) {
-      navigation.goBack();
+    if (wasInSetupMode) {
+      router.back();
     }
-  }, [actions, trackedAccounts, isSetupMode, notification, navigation]);
+  }, [actions, trackedAccounts, isSetupMode, notification, router]);
 
   const shouldShowConnectButton = isDisconnected || isError || isAuthenticating;
   const connectButtonLabel = isAuthenticating ? 'Connecting…' : (isError ? 'Retry connection' : 'Connect to YNAB');

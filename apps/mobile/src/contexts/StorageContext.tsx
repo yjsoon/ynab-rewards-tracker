@@ -320,6 +320,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
           selectedBudgetId,
           trackedAccountIds,
           sinceDate: options.sinceDate,
+          skipTransactions: options.skipTransactions,
         });
 
         let nextSelectedBudget: SelectedBudget = state.selectedBudget;
@@ -528,7 +529,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
           connectionError: undefined,
         }));
 
-        await performSync({}, {
+        await performSync({ skipTransactions: true }, {
           pat,
           selectedBudgetId: nextBudget.id,
           trackedAccountIds,
@@ -754,7 +755,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
           hasPendingChanges: false,
         }));
 
-        await performSync({}, {
+        await performSync({ skipTransactions: true }, {
           pat,
           selectedBudgetId: nextBudget.id,
           trackedAccountIds: nextTrackedIds,
