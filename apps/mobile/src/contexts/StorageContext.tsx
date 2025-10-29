@@ -8,7 +8,7 @@ import React, {
   useState,
   type ReactNode,
 } from 'react';
-import { storage } from '@/storage/service';
+import { normalizePeriod, storage } from '@/storage/service';
 import { ynabSync } from '@/lib/sync';
 import { fetchBudgets } from '@/lib/ynab-api';
 import { SimpleRewardsCalculator } from '@ynab-counter/app-core/rewards-engine';
@@ -189,15 +189,6 @@ async function hydrate(): Promise<StorageState> {
     accounts: [],
     metadata: {},
   };
-}
-
-// Normalize period strings written in different formats
-function normalizePeriod(period: string) {
-  if (!period.includes(' → ')) {
-    return { start: period, end: period };
-  }
-  const [start, end] = period.split(' → ');
-  return { start, end };
 }
 
 function mergeDashboardCache(

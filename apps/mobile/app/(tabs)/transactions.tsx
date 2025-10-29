@@ -166,7 +166,7 @@ export default function TransactionsScreen() {
                 <View style={styles.transactionInfo}>
                   <Headline>{item.payeeName}</Headline>
                   <Footnote color="secondary">
-                    {[item.categoryName ?? 'Uncategorised', item.accountName, new Date(item.date).toLocaleDateString()]
+                    {[item.categoryName ?? 'Uncategorized', item.accountName, new Date(item.date).toLocaleDateString()]
                       .filter(Boolean)
                       .join(' • ')}
                   </Footnote>

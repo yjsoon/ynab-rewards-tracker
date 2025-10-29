@@ -338,13 +338,17 @@ export default function HomeScreen() {
                         </View>
                         {summary.source !== 'stored' ? (
                           <View
-                            style={[
-                              styles.sourceBadge,
-                              summary.source === 'demo' ? styles.demoBadge : styles.computedBadge,
-                            ]}
-                          >
-                            <Caption2 color="primary">{summary.source === 'demo' ? 'DEMO' : 'LIVE'}</Caption2>
-                          </View>
+                          style={[
+                            styles.sourceBadge,
+                            summary.source === 'computed'
+                              ? styles.computedBadge
+                              : styles.storedBadge,
+                          ]}
+                        >
+                          <Caption2 color="primary">
+                            {summary.source === 'computed' ? 'ESTIMATE' : 'LIVE'}
+                          </Caption2>
+                        </View>
                         ) : null}
                       </View>
                     </ListItem>
@@ -501,10 +505,12 @@ function FeaturedCardHighlight({
               <View
                 style={[
                   styles.sourceBadge,
-                  summary.source === 'demo' ? styles.demoBadge : styles.computedBadge,
+                  summary.source === 'computed' ? styles.computedBadge : styles.storedBadge,
                 ]}
               >
-                <Caption2 color="primary">{summary.source === 'demo' ? 'DEMO' : 'LIVE'}</Caption2>
+                <Caption2 color="primary">
+                  {summary.source === 'computed' ? 'ESTIMATE' : 'LIVE'}
+                </Caption2>
               </View>
             )}
           </View>
@@ -683,11 +689,11 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: semanticColors.tertiarySystemFill as string,
   },
-  demoBadge: {
-    backgroundColor: withAlpha(semanticHex.systemOrange, '30'),
-  },
   computedBadge: {
     backgroundColor: withAlpha(semanticHex.systemGreen, '30'),
+  },
+  storedBadge: {
+    backgroundColor: withAlpha(semanticHex.systemBlue, '30'),
   },
   cardSection: {
     marginBottom: 16,
