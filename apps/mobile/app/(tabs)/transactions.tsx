@@ -2,7 +2,6 @@ import React, { useMemo } from 'react';
 import { FlatList, View, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { useDemoRewards } from '@/hooks/useDemoRewards';
 import { useHaptics } from '@/hooks/useHaptics';
 import { useStorage } from '@/contexts/StorageContext';
 import { findBestDashboardEntry, buildAccountsMap } from '@/lib/dashboardCache';
@@ -20,7 +19,6 @@ type DisplayTransaction = {
 
 type TransactionsContent = {
   transactions: DisplayTransaction[];
-  isDemo: boolean;
   isLoading: boolean;
   statusMessage: string;
   infoMessage?: string;
@@ -29,13 +27,11 @@ type TransactionsContent = {
 
 function useTransactionsContent(): TransactionsContent {
   const { state, status } = useStorage();
-  const { transactions: demoTransactions } = useDemoRewards();
 
   return useMemo(() => {
     if (!status.isHydrated) {
       return {
         transactions: [],
-        isDemo: false,
         isLoading: true,
         statusMessage: 'Loading transactions…',
       };
@@ -50,25 +46,16 @@ function useTransactionsContent(): TransactionsContent {
     if (!entry) {
       if (state.connectionStatus !== 'connected' || !state.pat) {
         return {
-          transactions: demoTransactions.map((txn) => ({
-            id: txn.id,
-            date: txn.date,
-            amount: txn.amount,
-            payeeName: txn.payeeName,
-            categoryName: txn.category,
-            accountName: 'Demo account',
-          })),
-          isDemo: true,
+          transactions: [],
           isLoading: false,
-          statusMessage: 'Connect YNAB to replace demo transactions.',
-          infoMessage: 'Demo transactions are shown until you connect YNAB.',
+          statusMessage: 'Complete setup to see transactions.',
+          infoMessage: 'Connect your YNAB account to view transaction history.',
         };
       }
 
       if (state.trackedAccountIds.length === 0) {
         return {
           transactions: [],
-          isDemo: false,
           isLoading: false,
           statusMessage: 'Select at least one credit card account in Settings to see activity.',
         };
@@ -76,7 +63,6 @@ function useTransactionsContent(): TransactionsContent {
 
       return {
         transactions: [],
-        isDemo: false,
         isLoading: false,
         statusMessage: 'No cached transactions yet. Pull down on Home to sync from YNAB.',
       };
@@ -100,7 +86,6 @@ function useTransactionsContent(): TransactionsContent {
 
     return {
       transactions: mapped,
-      isDemo: false,
       isLoading: status.isRefreshing,
       statusMessage:
         mapped.length === 0
@@ -110,7 +95,6 @@ function useTransactionsContent(): TransactionsContent {
       lastUpdated: entry.fetchedAt,
     };
   }, [
-    demoTransactions,
     state.cachedData?.dashboardTransactions,
     state.connectionStatus,
     state.pat,
@@ -124,7 +108,7 @@ function useTransactionsContent(): TransactionsContent {
 export default function TransactionsScreen() {
   const navigation = useNavigation();
   const { impact } = useHaptics();
-  const { transactions, isDemo, isLoading, statusMessage, infoMessage } = useTransactionsContent();
+  const { transactions, isLoading, statusMessage, infoMessage } = useTransactionsContent();
 
   const currencyFormatter = useMemo(
     () =>
@@ -146,22 +130,19 @@ export default function TransactionsScreen() {
   }, [navigation]);
 
   const renderHeader = React.useCallback(() => {
-    if (!infoMessage && !isDemo && !(isLoading && transactions.length > 0)) {
+    if (!infoMessage && !(isLoading && transactions.length > 0)) {
       return null;
     }
 
     return (
       <View style={styles.noticeContainer}>
         {infoMessage ? <Footnote color="secondary">{infoMessage}</Footnote> : null}
-        {isDemo ? (
-          <Footnote color="tertiary">Demo transactions shown until YNAB sync completes.</Footnote>
-        ) : null}
         {isLoading && transactions.length > 0 ? (
-          <Footnote color="tertiary">Refreshing…</Footnote>
+          <Footnote color="tertiary">Refreshing transactions…</Footnote>
         ) : null}
       </View>
     );
-  }, [infoMessage, isDemo, isLoading, transactions.length]);
+  }, [infoMessage, isLoading, transactions.length]);
 
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>

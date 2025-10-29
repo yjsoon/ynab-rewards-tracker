@@ -23,7 +23,7 @@ function getActionDetails(action: CardRecommendation['action']): { label: string
 
 export default function RecommendationsScreen() {
   const navigation = useNavigation();
-  const { summaries, calculations, isDemo, isLoading } = useCardSummaries();
+  const { summaries, calculations, isLoading } = useCardSummaries();
   const { state, status } = useStorage();
 
   const recommendations = useMemo(() => {
@@ -37,12 +37,10 @@ export default function RecommendationsScreen() {
 
   const infoMessage = isLoading
     ? 'Loading recommendations…'
-    : isDemo
-    ? 'Demo recommendations shown until you connect YNAB.'
     : state.connectionStatus !== 'connected'
-    ? 'Sync your YNAB data from Home to refresh recommendations.'
+    ? 'Complete setup to see recommendations.'
     : calculations.length === 0
-    ? 'Run a sync so we can analyse your latest spend.'
+    ? 'Sync your data from Home to generate recommendations.'
     : undefined;
 
   React.useLayoutEffect(() => {
