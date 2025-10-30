@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { ScrollView, View, StyleSheet, type ColorValue } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { RecommendationEngine } from '@ynab-counter/app-core/rewards-engine';
 import type { CardRecommendation } from '@ynab-counter/app-core/rewards-engine/types';
 import { useStorage } from '@/contexts/StorageContext';
@@ -43,12 +43,25 @@ export default function RecommendationsScreen() {
     ? 'Sync your data from Home to generate recommendations.'
     : undefined;
 
-  React.useLayoutEffect(() => {
-    navigation.setOptions({
-      headerLargeTitle: true,
-      title: 'Recommendations',
-    });
-  }, [navigation]);
+  useFocusEffect(
+    React.useCallback(() => {
+      const parent = navigation.getParent();
+      parent?.setOptions({
+        headerLargeTitle: true,
+        headerTitle: 'Tips',
+        title: 'Tips',
+        headerRight: undefined,
+        headerSearchBarOptions: undefined,
+      });
+
+      return () => {
+        parent?.setOptions({
+          headerRight: undefined,
+          headerSearchBarOptions: undefined,
+        });
+      };
+    }, [navigation])
+  );
 
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>

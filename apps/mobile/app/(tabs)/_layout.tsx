@@ -9,7 +9,7 @@ export default function TabsLayout() {
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="recommendations">
         <Icon sf="lightbulb.fill" />
-        <Label>Ideas</Label>
+        <Label>Tips</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="transactions">
         <Icon sf="chart.line.uptrend.xyaxis" />

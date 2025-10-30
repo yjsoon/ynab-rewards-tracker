@@ -63,8 +63,6 @@ function AppShell() {
             options={{
               headerShown: true,
               headerLargeTitle: false,
-              headerTitle: 'YJAB',
-              title: 'YJAB',
               headerStyle: { backgroundColor: semanticColors.systemBackground as string },
               headerTintColor: semanticColors.label as string,
               headerTitleStyle: { color: semanticColors.label as string },

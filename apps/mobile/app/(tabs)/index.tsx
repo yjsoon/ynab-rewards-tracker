@@ -335,55 +335,61 @@ export default function HomeScreen() {
     router.push('/settings');
   }, [router]);
 
-  useLayoutEffect(() => {
-    const parent = navigation.getParent();
+  useFocusEffect(
+    React.useCallback(() => {
+      const parent = navigation.getParent();
 
-    parent?.setOptions({
-      headerLargeTitle: false,
-      headerTitle: 'YJAB',
-      title: 'YJAB',
-      headerRight: () => (
-        <View style={styles.headerButtons}>
-          <Button
-            variant="plain"
-            size="small"
-            onPress={() => {
-              impact('light');
-              navigateToSettings();
-            }}
-            accessibilityLabel="Settings"
-            accessibilityHint="Open settings"
-            style={styles.headerButton}
-          >
-            <Settings size={16} color={semanticHex.systemBlue} />
-          </Button>
-          <Button
-            variant="plain"
-            size="small"
-            onPress={async () => {
-              impact('light');
-              try {
-                // Refresh storage first, then fetch transactions
-                await actions.refresh();
-                await actions.syncBudgetsAndAccounts({ skipTransactions: false, sinceDate: getStartOfCurrentMonthISO() });
-              } catch (error) {
-                console.error('Refresh failed', error);
-              }
-            }}
-            accessibilityLabel="Refresh rewards data"
-            accessibilityHint="Reload latest storage snapshot and fetch transactions"
-            style={styles.headerButton}
-          >
-            <RefreshCw size={16} color={semanticHex.systemBlue} />
-          </Button>
-        </View>
-      ),
-    });
+      parent?.setOptions({
+        headerLargeTitle: false,
+        headerTitle: 'YJAB',
+        title: 'YJAB',
+        headerSearchBarOptions: undefined,
+        headerRight: () => (
+          <View style={styles.headerButtons}>
+            <Button
+              variant="plain"
+              size="small"
+              onPress={() => {
+                impact('light');
+                navigateToSettings();
+              }}
+              accessibilityLabel="Settings"
+              accessibilityHint="Open settings"
+              style={styles.headerButton}
+            >
+              <Settings size={16} color={semanticHex.systemBlue} />
+            </Button>
+            <Button
+              variant="plain"
+              size="small"
+              onPress={async () => {
+                impact('light');
+                try {
+                  // Refresh storage first, then fetch transactions
+                  await actions.refresh();
+                  await actions.syncBudgetsAndAccounts({ skipTransactions: false, sinceDate: getStartOfCurrentMonthISO() });
+                } catch (error) {
+                  console.error('Refresh failed', error);
+                }
+              }}
+              accessibilityLabel="Refresh rewards data"
+              accessibilityHint="Reload latest storage snapshot and fetch transactions"
+              style={styles.headerButton}
+            >
+              <RefreshCw size={16} color={semanticHex.systemBlue} />
+            </Button>
+          </View>
+        ),
+      });
 
-    return () => {
-      parent?.setOptions({ headerRight: undefined });
-    };
-  }, [navigation, actions, impact, navigateToSettings]);
+      return () => {
+        parent?.setOptions({
+          headerRight: undefined,
+          headerSearchBarOptions: undefined,
+        });
+      };
+    }, [navigation, actions, impact, navigateToSettings])
+  );
 
   const featured = useMemo(() => {
     if (summaries.length === 0) return null;
