@@ -193,6 +193,38 @@ export default function SettingsScreen() {
     }
   }, [state.hasPendingChanges, hasLocalTrackedChanges, actions, trackedAccounts, notification, impact, router]);
 
+  const handleFinishSetup = useCallback(async () => {
+    setValidationError(undefined);
+    setIsApplyingChanges(true);
+    const wasInSetupMode = isSetupMode;
+    const hadNoBackStack = !canDismiss;
+    
+    // Navigate immediately if in setup mode to avoid label change
+    if (wasInSetupMode) {
+      if (hadNoBackStack) {
+        router.replace('/(tabs)');
+      } else {
+        router.back();
+      }
+    }
+    
+    try {
+      actions.stageTrackedAccountIds(trackedAccounts);
+      await actions.applyPendingChanges();
+      notification('success');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to apply changes';
+      setValidationError(message);
+      notification('error');
+      // If navigation already happened, we can't go back, so just log the error
+      if (!wasInSetupMode) {
+        return;
+      }
+    } finally {
+      setIsApplyingChanges(false);
+    }
+  }, [actions, trackedAccounts, isSetupMode, notification, router, canDismiss]);
+
   const doneButtonLabel = useMemo(() => {
     if (isSetupMode) {
       return finishSetupButtonLabel;
@@ -310,33 +342,6 @@ export default function SettingsScreen() {
     setHasLocalAccountToggles(true);
     actions.stageTrackedAccountIds(nextIds);
   }, [trackedAccounts, actions, impact, state.isSyncing, isApplyingChanges]);
-
-  const handleFinishSetup = useCallback(async () => {
-    setValidationError(undefined);
-    setIsApplyingChanges(true);
-    const wasInSetupMode = isSetupMode;
-    
-    // Navigate immediately if in setup mode to avoid label change
-    if (wasInSetupMode) {
-      router.replace('/(tabs)');
-    }
-    
-    try {
-      actions.stageTrackedAccountIds(trackedAccounts);
-      await actions.applyPendingChanges();
-      notification('success');
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to apply changes';
-      setValidationError(message);
-      notification('error');
-      // If navigation already happened, we can't go back, so just log the error
-      if (!wasInSetupMode) {
-        return;
-      }
-    } finally {
-      setIsApplyingChanges(false);
-    }
-  }, [actions, trackedAccounts, isSetupMode, notification, router]);
 
   const shouldShowConnectButton = isDisconnected || isError || isAuthenticating;
   const connectButtonLabel = isAuthenticating ? 'Connecting…' : (isError ? 'Retry connection' : 'Connect to YNAB');
