@@ -22,9 +22,8 @@ function AppShell() {
     () =>
       Boolean(state.pat) &&
       Boolean(state.selectedBudget.id) &&
-      state.trackedAccountIds.length > 0 &&
-      state.connectionStatus === 'connected',
-    [state.pat, state.selectedBudget.id, state.trackedAccountIds.length, state.connectionStatus]
+      state.trackedAccountIds.length > 0,
+    [state.pat, state.selectedBudget.id, state.trackedAccountIds.length]
   );
 
   useEffect(() => {
