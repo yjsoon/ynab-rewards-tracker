@@ -274,6 +274,12 @@ const clampPercent = (value: number | undefined) => {
   return Math.max(0, Math.min(100, value));
 };
 
+function getStartOfCurrentMonthISO(): string {
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  return startOfMonth.toISOString().split('T')[0];
+}
+
 export default function HomeScreen() {
   const navigation = useNavigation();
   const router = useRouter();
@@ -303,7 +309,8 @@ export default function HomeScreen() {
       }
 
       const hasCards = state.cards.length > 0;
-      const cacheEntry = state.cachedData?.dashboardTransactions?.find(
+      const dashboardTransactions = state.cachedData?.dashboardTransactions;
+      const cacheEntry = dashboardTransactions?.find(
         (entry) => entry.budgetId === state.selectedBudget.id
       );
       
@@ -317,16 +324,11 @@ export default function HomeScreen() {
           budgetId: state.selectedBudget.id,
         });
         
-        // Use start of current month as sinceDate
-        const now = new Date();
-        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-        const sinceDate = startOfMonth.toISOString().split('T')[0];
-        
-        actions.syncBudgetsAndAccounts({ skipTransactions: false, sinceDate }).catch((error) => {
+        actions.syncBudgetsAndAccounts({ skipTransactions: false, sinceDate: getStartOfCurrentMonthISO() }).catch((error) => {
           console.error('[HomeScreen] Failed to fetch transactions', error);
         });
       }
-    }, [status.isHydrated, state.pat, state.selectedBudget.id, state.trackedAccountIds.length, state.cards.length, state.cachedData, state.isSyncing, actions])
+    }, [status.isHydrated, state.pat, state.selectedBudget.id, state.trackedAccountIds.length, state.cards.length, state.cachedData?.dashboardTransactions, state.isSyncing, actions])
   );
 
   const navigateToSettings = React.useCallback(() => {
@@ -358,18 +360,15 @@ export default function HomeScreen() {
           <Button
             variant="plain"
             size="small"
-            onPress={() => {
+            onPress={async () => {
               impact('light');
-              // Refresh storage and fetch transactions
-              const now = new Date();
-              const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-              const sinceDate = startOfMonth.toISOString().split('T')[0];
-              Promise.all([
-                actions.refresh(),
-                actions.syncBudgetsAndAccounts({ skipTransactions: false, sinceDate }),
-              ]).catch((error) => {
+              try {
+                // Refresh storage first, then fetch transactions
+                await actions.refresh();
+                await actions.syncBudgetsAndAccounts({ skipTransactions: false, sinceDate: getStartOfCurrentMonthISO() });
+              } catch (error) {
                 console.error('Refresh failed', error);
-              });
+              }
             }}
             accessibilityLabel="Refresh rewards data"
             accessibilityHint="Reload latest storage snapshot and fetch transactions"

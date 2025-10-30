@@ -111,6 +111,13 @@ type StorageContextValue = {
 
 const STORAGE_REFRESH_ERROR = 'Failed to refresh storage';
 const LOAD_ERROR_MESSAGE = 'Failed to load storage';
+const AUTO_CREATED_CARD_ISSUER = 'Unknown';
+
+function getStartOfCurrentMonthISO(): string {
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  return startOfMonth.toISOString().split('T')[0];
+}
 
 const defaultState: StorageState = {
   connectionStatus: 'disconnected',
@@ -424,7 +431,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
               const newCard: CreditCard = {
                 id: `ynab-${accountId}`,
                 name: account.name,
-                issuer: 'Unknown',
+                issuer: AUTO_CREATED_CARD_ISSUER,
                 type: 'cashback',
                 featured: true,
                 ynabAccountId: accountId,
@@ -815,11 +822,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         // If setup just completed, fetch transactions now
         if (wasSetupMode && nextBudget.id && nextTrackedIds.length > 0) {
           console.log('[StorageContext] applyPendingChanges: setup completed, fetching transactions');
-          // Use start of current month as sinceDate
-          const now = new Date();
-          const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-          const sinceDate = startOfMonth.toISOString().split('T')[0];
-          await performSync({ skipTransactions: false, sinceDate }, {
+          await performSync({ skipTransactions: false, sinceDate: getStartOfCurrentMonthISO() }, {
             pat,
             selectedBudgetId: nextBudget.id,
             trackedAccountIds: nextTrackedIds,
