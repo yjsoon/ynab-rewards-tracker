@@ -299,9 +299,9 @@ export default function HomeScreen() {
     });
   }, [status.isHydrated, isLoading, isEmpty, state.cards.length, summaries.length]);
 
-  // Fetch transactions when returning to homepage if we have cards but no cache entry
-  // Only fetch if no cache entry exists (regardless of transaction count) to avoid infinite loops
-  // when cards exist but user genuinely has no transactions
+  // Automatically refresh and fetch transactions when page first loads
+  // This ensures we get the latest data instead of showing ESTIMATE badges
+  const hasAutoRefreshed = React.useRef(false);
   useFocusEffect(
     React.useCallback(() => {
       if (!status.isHydrated || !state.pat || !state.selectedBudget.id || state.trackedAccountIds.length === 0) {
@@ -309,26 +309,28 @@ export default function HomeScreen() {
       }
 
       const hasCards = state.cards.length > 0;
-      const dashboardTransactions = state.cachedData?.dashboardTransactions;
-      const cacheEntry = dashboardTransactions?.find(
-        (entry) => entry.budgetId === state.selectedBudget.id
-      );
-      
-      // Only fetch if cache entry doesn't exist at all (not if it exists with 0 transactions)
-      // This prevents infinite loops when user has cards but no transactions
-      const needsFetch = hasCards && !cacheEntry && !state.isSyncing;
-
-      if (needsFetch) {
-        console.log('[HomeScreen] No cache entry found, fetching transactions...', {
-          hasCards,
-          budgetId: state.selectedBudget.id,
-        });
-        
-        actions.syncBudgetsAndAccounts({ skipTransactions: false, sinceDate: getStartOfCurrentMonthISO() }).catch((error) => {
-          console.error('[HomeScreen] Failed to fetch transactions', error);
-        });
+      if (!hasCards || state.isSyncing || hasAutoRefreshed.current) {
+        return;
       }
-    }, [status.isHydrated, state.pat, state.selectedBudget.id, state.trackedAccountIds.length, state.cards.length, state.cachedData?.dashboardTransactions, state.isSyncing, actions])
+
+      // Mark as refreshed to prevent multiple calls during this session
+      hasAutoRefreshed.current = true;
+
+      console.log('[HomeScreen] Auto-refreshing on initial load...', {
+        hasCards,
+        budgetId: state.selectedBudget.id,
+      });
+
+      // Refresh storage first, then fetch transactions (same as manual refresh button)
+      (async () => {
+        try {
+          await actions.refresh();
+          await actions.syncBudgetsAndAccounts({ skipTransactions: false, sinceDate: getStartOfCurrentMonthISO() });
+        } catch (error) {
+          console.error('[HomeScreen] Auto-refresh failed', error);
+        }
+      })();
+    }, [status.isHydrated, state.pat, state.selectedBudget.id, state.trackedAccountIds.length, state.cards.length, state.isSyncing, actions])
   );
 
   const navigateToSettings = React.useCallback(() => {
@@ -429,19 +431,12 @@ export default function HomeScreen() {
                             <Footnote color="secondary">{summary.card.issuer}</Footnote>
                           ) : null}
                         </View>
-                        {summary.source !== 'stored' ? (
+                        {(status.isRefreshing || state.isSyncing) ? (
                           <View
-                          style={[
-                            styles.sourceBadge,
-                            summary.source === 'computed'
-                              ? styles.computedBadge
-                              : styles.storedBadge,
-                          ]}
-                        >
-                          <Caption2 color="primary">
-                            {summary.source === 'computed' ? 'ESTIMATE' : 'LIVE'}
-                          </Caption2>
-                        </View>
+                            style={[styles.sourceBadge, styles.computedBadge]}
+                          >
+                            <Caption2 color="primary">Loading…</Caption2>
+                          </View>
                         ) : null}
                       </View>
                     </ListItem>
@@ -572,6 +567,7 @@ function FeaturedCardHighlight({
   summary: CardSummary;
   haptics: (style: 'light' | 'medium' | 'heavy') => void;
 }) {
+  const { state, status } = useStorage();
   const rewardDisplay = currencyFormatter.format(summary.calculation.rewardEarnedDollars);
   const spendDisplay = currencyFormatter.format(summary.calculation.eligibleSpend);
   const effectiveRate = SimpleRewardsCalculator.calculateEffectiveRate(summary.calculation);
@@ -596,16 +592,11 @@ function FeaturedCardHighlight({
                 <Footnote color="secondary">{summary.card.issuer}</Footnote>
               ) : null}
             </View>
-            {summary.source !== 'stored' && (
+            {(status.isRefreshing || state.isSyncing) && (
               <View
-                style={[
-                  styles.sourceBadge,
-                  summary.source === 'computed' ? styles.computedBadge : styles.storedBadge,
-                ]}
+                style={[styles.sourceBadge, styles.computedBadge]}
               >
-                <Caption2 color="primary">
-                  {summary.source === 'computed' ? 'ESTIMATE' : 'LIVE'}
-                </Caption2>
+                <Caption2 color="primary">Loading…</Caption2>
               </View>
             )}
           </View>
