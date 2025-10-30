@@ -8,7 +8,6 @@ import { useHaptics } from '@/hooks/useHaptics';
 import { useStorage } from '@/contexts/StorageContext';
 import {
   CircleDollarSign,
-  CreditCard as CreditCardIcon,
   TrendingUp,
   RefreshCw,
   AlertCircle,
@@ -412,10 +411,11 @@ export default function HomeScreen() {
                   <Card>
                     <ListItem>
                       <View style={styles.cardHeader}>
-                        <CardIcon cardType={summary.card.type} />
                         <View style={styles.cardHeaderText}>
                           <Headline>{summary.card.name}</Headline>
-                          <Footnote color="secondary">{summary.card.issuer}</Footnote>
+                          {summary.card.issuer && summary.card.issuer !== 'Unknown' ? (
+                            <Footnote color="secondary">{summary.card.issuer}</Footnote>
+                          ) : null}
                         </View>
                         {summary.source !== 'stored' ? (
                           <View
@@ -580,7 +580,9 @@ function FeaturedCardHighlight({
             <View style={styles.featuredHeaderText}>
               <Caption1 color="secondary">Suggested focus card</Caption1>
               <Headline>{summary.card.name}</Headline>
-              <Footnote color="secondary">{summary.card.issuer}</Footnote>
+              {summary.card.issuer && summary.card.issuer !== 'Unknown' ? (
+                <Footnote color="secondary">{summary.card.issuer}</Footnote>
+              ) : null}
             </View>
             {summary.source !== 'stored' && (
               <View
@@ -665,19 +667,6 @@ function StatBlock({
         {label}
       </Caption2>
       <Footnote style={styles.statValue}>{value}</Footnote>
-    </View>
-  );
-}
-
-function CardIcon({ cardType }: { cardType: CreditCard['type'] }) {
-  const color = cardType === 'cashback'
-    ? semanticHex.systemBlue
-    : semanticHex.systemPurple;
-
-  return (
-    <View style={[styles.cardIcon, { backgroundColor: withAlpha(color, '20') }]}
-    >
-      <CreditCardIcon size={16} color={color} />
     </View>
   );
 }
@@ -787,13 +776,6 @@ const styles = StyleSheet.create({
   cardHeaderText: {
     flex: 1,
     gap: 2,
-  },
-  cardIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   periodInfo: {
     flexDirection: 'row',
