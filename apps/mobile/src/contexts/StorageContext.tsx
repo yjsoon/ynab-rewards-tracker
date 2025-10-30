@@ -410,6 +410,51 @@ export function StorageProvider({ children }: { children: ReactNode }) {
           return [...preserved, ...calculatedRewards];
         })();
 
+        // Auto-create cards from tracked accounts (similar to web app)
+        const cardsByAccountId = new Map(
+          state.cards.filter((c): c is CreditCard & { ynabAccountId: string } => Boolean(c.ynabAccountId))
+            .map((card) => [card.ynabAccountId, card] as const)
+        );
+
+        const newCards: CreditCard[] = [];
+        trackedAccountIds.forEach((accountId) => {
+          if (!cardsByAccountId.has(accountId)) {
+            const account = result.accounts.find((acc) => acc.id === accountId);
+            if (account) {
+              const newCard: CreditCard = {
+                id: `ynab-${accountId}`,
+                name: account.name,
+                issuer: 'Unknown',
+                type: 'cashback',
+                featured: true,
+                ynabAccountId: accountId,
+                billingCycle: {
+                  type: 'calendar',
+                  dayOfMonth: 1,
+                },
+                earningRate: 1,
+                earningBlockSize: null,
+                minimumSpend: null,
+                maximumSpend: null,
+                subcategoriesEnabled: false,
+                subcategories: [],
+              };
+              newCards.push(newCard);
+            }
+          }
+        });
+
+        if (newCards.length > 0) {
+          await Promise.all(newCards.map((card) => storage.saveCard(card)));
+          console.log('[StorageContext] performSync: created cards from accounts', {
+            count: newCards.length,
+            cards: newCards.map((c) => ({ id: c.id, name: c.name })),
+          });
+        }
+
+        // Reload cards after potential creation
+        const updatedCards = await storage.getCards();
+
         setState((prev) => ({
           ...prev,
           pat,
@@ -418,6 +463,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
           selectedBudget: nextSelectedBudget,
           cachedData: nextCachedData,
           calculations: mergedCalculations,
+          cards: updatedCards,
           connectionStatus: effectiveBudgetId ? 'connected' : 'awaiting_budget',
           isSyncing: false,
           connectionError: undefined,
@@ -742,6 +788,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
 
         const nextBudget = pending.budget ?? state.selectedBudget;
         const nextTrackedIds = pending.trackedAccountIds ?? state.trackedAccountIds;
+        const wasSetupMode = !state.selectedBudget.id || state.trackedAccountIds.length === 0;
 
         if (pending.budget && nextBudget.id && nextBudget.name) {
           await storage.setSelectedBudget(nextBudget.id, nextBudget.name);
@@ -758,11 +805,26 @@ export function StorageProvider({ children }: { children: ReactNode }) {
           hasPendingChanges: false,
         }));
 
+        // Initial sync skips transactions for speed
         await performSync({ skipTransactions: true }, {
           pat,
           selectedBudgetId: nextBudget.id,
           trackedAccountIds: nextTrackedIds,
         });
+
+        // If setup just completed, fetch transactions now
+        if (wasSetupMode && nextBudget.id && nextTrackedIds.length > 0) {
+          console.log('[StorageContext] applyPendingChanges: setup completed, fetching transactions');
+          // Use start of current month as sinceDate
+          const now = new Date();
+          const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+          const sinceDate = startOfMonth.toISOString().split('T')[0];
+          await performSync({ skipTransactions: false, sinceDate }, {
+            pat,
+            selectedBudgetId: nextBudget.id,
+            trackedAccountIds: nextTrackedIds,
+          });
+        }
       },
       clearPendingChanges: () => {
         setState((prev) => ({

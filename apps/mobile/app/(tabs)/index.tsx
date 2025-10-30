@@ -1,7 +1,7 @@
-import React, { useLayoutEffect, useMemo } from 'react';
+import React, { useLayoutEffect, useMemo, useEffect } from 'react';
 import type { ComponentType } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useHaptics } from '@/hooks/useHaptics';
@@ -78,7 +78,11 @@ export function useCardSummaries(): CardSummaryResult {
       };
     }
 
+    const hiddenIds = new Set((state.hiddenCards || []).map((hidden) => hidden.cardId));
+    const activeCards = state.cards.filter((card) => !hiddenIds.has(card.id));
+
     if (state.cards.length === 0) {
+      console.log('[useCardSummaries] No cards found in state');
       return {
         summaries: [],
         calculations: [],
@@ -87,8 +91,11 @@ export function useCardSummaries(): CardSummaryResult {
       };
     }
 
-    const hiddenIds = new Set((state.hiddenCards || []).map((hidden) => hidden.cardId));
-    const activeCards = state.cards.filter((card) => !hiddenIds.has(card.id));
+    console.log('[useCardSummaries] Processing cards:', {
+      totalCards: state.cards.length,
+      activeCards: activeCards.length,
+      hiddenCards: hiddenIds.size,
+    });
 
     const summaries: CardSummary[] = activeCards
       .map((card) => {
@@ -131,17 +138,15 @@ export function useCardSummaries(): CardSummaryResult {
         return valueB - valueA;
       });
 
-    const hasActivity = summaries.some((summary) => {
-      const totalSpend = summary.calculation.totalSpend ?? 0;
-      const rewardEarned =
-        summary.calculation.rewardEarnedDollars ?? summary.calculation.rewardEarned ?? 0;
-      return Math.abs(totalSpend) > 0 || Math.abs(rewardEarned) > 0;
+    console.log('[useCardSummaries] Result:', {
+      summariesCount: summaries.length,
+      isEmpty: state.cards.length === 0,
     });
 
     return {
       summaries,
       calculations: summaries.map((summary) => summary.rewardCalculation),
-      isEmpty: summaries.length > 0 && !hasActivity,
+      isEmpty: state.cards.length === 0,
       isLoading: status.isRefreshing,
     };
   }, [state, status.isHydrated, status.isRefreshing]);
@@ -246,8 +251,53 @@ export default function HomeScreen() {
   const navigation = useNavigation();
   const router = useRouter();
   const { impact } = useHaptics();
-  const { actions } = useStorage();
+  const { state, status, actions } = useStorage();
   const { summaries, isEmpty, isLoading } = useCardSummaries();
+
+  // Debug logging
+  useEffect(() => {
+    console.log('[HomeScreen] State:', {
+      isHydrated: status.isHydrated,
+      isLoading,
+      isEmpty,
+      cardsCount: state.cards.length,
+      summariesCount: summaries.length,
+      cards: state.cards.map(c => ({ id: c.id, name: c.name })),
+    });
+  }, [status.isHydrated, isLoading, isEmpty, state.cards.length, summaries.length]);
+
+  // Fetch transactions when returning to homepage if we have cards but no transactions
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!status.isHydrated || !state.pat || !state.selectedBudget.id || state.trackedAccountIds.length === 0) {
+        return;
+      }
+
+      // Check if we need to fetch transactions (cards exist but no cached transactions)
+      const hasCards = state.cards.length > 0;
+      const cacheEntry = state.cachedData?.dashboardTransactions?.find(
+        (entry) => entry.budgetId === state.selectedBudget.id
+      );
+      const hasCachedTransactions = cacheEntry && cacheEntry.transactions.length > 0;
+
+      if (hasCards && !hasCachedTransactions && !state.isSyncing) {
+        console.log('[HomeScreen] No cached transactions found, fetching...', {
+          hasCards,
+          hasCacheEntry: !!cacheEntry,
+          cacheTransactionCount: cacheEntry?.transactions.length ?? 0,
+        });
+        
+        // Use start of current month as sinceDate
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const sinceDate = startOfMonth.toISOString().split('T')[0];
+        
+        actions.syncBudgetsAndAccounts({ skipTransactions: false, sinceDate }).catch((error) => {
+          console.error('[HomeScreen] Failed to fetch transactions', error);
+        });
+      }
+    }, [status.isHydrated, state.pat, state.selectedBudget.id, state.trackedAccountIds.length, state.cards.length, state.cachedData, state.isSyncing, actions])
+  );
 
   const navigateToSettings = React.useCallback(() => {
     router.push('/settings');
@@ -280,12 +330,19 @@ export default function HomeScreen() {
             size="small"
             onPress={() => {
               impact('light');
-              actions.refresh().catch((error) => {
+              // Refresh storage and fetch transactions
+              const now = new Date();
+              const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+              const sinceDate = startOfMonth.toISOString().split('T')[0];
+              Promise.all([
+                actions.refresh(),
+                actions.syncBudgetsAndAccounts({ skipTransactions: false, sinceDate }),
+              ]).catch((error) => {
                 console.error('Refresh failed', error);
               });
             }}
             accessibilityLabel="Refresh rewards data"
-            accessibilityHint="Reload latest storage snapshot"
+            accessibilityHint="Reload latest storage snapshot and fetch transactions"
             style={styles.headerButton}
           >
             <RefreshCw size={16} color={semanticHex.systemBlue} />
@@ -300,14 +357,14 @@ export default function HomeScreen() {
   }, [navigation, actions, impact, navigateToSettings]);
 
   const featured = useMemo(() => {
-    if (summaries.length === 0 || isEmpty) return null;
+    if (summaries.length === 0) return null;
     return [...summaries]
       .sort((a, b) => {
         const valueA = a.calculation.rewardEarnedDollars ?? a.calculation.rewardEarned ?? 0;
         const valueB = b.calculation.rewardEarnedDollars ?? b.calculation.rewardEarned ?? 0;
         return valueB - valueA;
       })[0];
-  }, [summaries, isEmpty]);
+  }, [summaries]);
 
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
@@ -316,13 +373,13 @@ export default function HomeScreen() {
         contentContainerStyle={styles.scrollContent}
       >
         <View style={styles.content}>
-          {featured ? (
-            <FeaturedCardHighlight summary={featured} haptics={impact} />
-          ) : isLoading ? null : (
+          {isEmpty && !isLoading ? (
             <EmptyState onOpenSettings={navigateToSettings} />
-          )}
+          ) : featured ? (
+            <FeaturedCardHighlight summary={featured} haptics={impact} />
+          ) : null}
 
-          {summaries.length > 0 ? (
+          {summaries.length > 0 && !isEmpty ? (
             <>
               <SectionHeader>Active Cards</SectionHeader>
 
@@ -636,7 +693,7 @@ function EmptyState({ onOpenSettings }: { onOpenSettings: () => void }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: semanticColors.systemBackground as string,
+    backgroundColor: semanticColors.systemGroupedBackground as string,
   },
   scrollContent: {
     paddingBottom: 48,
@@ -661,7 +718,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   featuredCard: {
-    backgroundColor: semanticColors.secondarySystemBackground as string,
+    backgroundColor: semanticColors.secondarySystemGroupedBackground as string,
   },
   featuredContent: {
     gap: 16,
