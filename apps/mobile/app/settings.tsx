@@ -194,8 +194,19 @@ export default function SettingsScreen() {
   }, [state.hasPendingChanges, hasLocalTrackedChanges, actions, trackedAccounts, notification, impact, router]);
 
   const doneButtonLabel = useMemo(() => {
+    if (isSetupMode) {
+      return finishSetupButtonLabel;
+    }
     return 'Done';
-  }, []);
+  }, [isSetupMode, finishSetupButtonLabel]);
+
+  const handleNavBarDone = useCallback(() => {
+    if (isSetupMode) {
+      handleFinishSetup();
+    } else {
+      handleDone();
+    }
+  }, [isSetupMode, handleFinishSetup, handleDone]);
 
   React.useLayoutEffect(() => {
     navigation.setOptions({
@@ -203,23 +214,23 @@ export default function SettingsScreen() {
       headerLargeTitle: false,
       headerBackVisible: !isSetupMode,
       gestureEnabled: !isSetupMode,
-      headerRight: !isSetupMode && canDismiss
+      headerRight: (isSetupMode || canDismiss)
         ? () => (
             <Button
               variant="plain"
               size="small"
-              onPress={handleDone}
+              onPress={handleNavBarDone}
               accessibilityLabel={doneButtonLabel}
-              accessibilityHint="Close settings"
+              accessibilityHint={isSetupMode ? "Complete setup" : "Close settings"}
               style={styles.doneButton}
-              disabled={isApplyingChanges}
+              disabled={isSetupMode ? finishSetupDisabled : isApplyingChanges}
             >
-              {isApplyingChanges ? 'Applying…' : doneButtonLabel}
+              {isApplyingChanges || isConfirmingBudget ? (isSetupMode ? 'Finishing setup…' : 'Applying…') : doneButtonLabel}
             </Button>
           )
         : undefined,
     });
-  }, [navigation, isSetupMode, canDismiss, handleDone, doneButtonLabel, isApplyingChanges]);
+  }, [navigation, isSetupMode, canDismiss, handleNavBarDone, doneButtonLabel, finishSetupDisabled, isApplyingChanges, isConfirmingBudget]);
 
   const statusMeta = connectionStatusCopy[state.connectionStatus];
 
@@ -304,6 +315,12 @@ export default function SettingsScreen() {
     setValidationError(undefined);
     setIsApplyingChanges(true);
     const wasInSetupMode = isSetupMode;
+    
+    // Navigate immediately if in setup mode to avoid label change
+    if (wasInSetupMode) {
+      router.replace('/(tabs)');
+    }
+    
     try {
       actions.stageTrackedAccountIds(trackedAccounts);
       await actions.applyPendingChanges();
@@ -312,14 +329,12 @@ export default function SettingsScreen() {
       const message = error instanceof Error ? error.message : 'Failed to apply changes';
       setValidationError(message);
       notification('error');
-      return;
+      // If navigation already happened, we can't go back, so just log the error
+      if (!wasInSetupMode) {
+        return;
+      }
     } finally {
       setIsApplyingChanges(false);
-    }
-
-    if (wasInSetupMode) {
-      // Navigate to tabs when setup completes (replace instead of back for initial setup)
-      router.replace('/(tabs)');
     }
   }, [actions, trackedAccounts, isSetupMode, notification, router]);
 
