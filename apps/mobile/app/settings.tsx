@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import { useHaptics } from '@/hooks/useHaptics';
+import { useToast } from '@/contexts/ToastContext';
 import { Card, ListItem, Button, Footnote, SectionHeader, Separator, Headline, Caption1 } from '@/components/ios';
 import { semanticColors, semanticHex, withAlpha } from '@/theme/semanticColors';
 import { useStorage } from '@/contexts/StorageContext';
@@ -33,6 +34,7 @@ export default function SettingsScreen() {
   const navigation = useNavigation();
   const router = useRouter();
   const { impact, notification } = useHaptics();
+  const { show: showToast } = useToast();
   const { state, actions } = useStorage();
 
   const canDismiss = navigation.canGoBack();
@@ -213,17 +215,28 @@ export default function SettingsScreen() {
       await actions.applyPendingChanges();
       notification('success');
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to apply changes';
-      setValidationError(message);
-      notification('error');
-      // If navigation already happened, we can't go back, so just log the error
+      const errorMessage = error instanceof Error ? error.message : undefined;
+      const toastMessage = errorMessage || 'Couldn\'t finish setup. Failed to sync with YNAB';
+      
+      setValidationError(errorMessage || 'Failed to finish setup');
+      
+      // Show toast error that persists after navigation
+      // This ensures users see feedback even if they've navigated away from Settings
+      // The toast appears within 300ms (animation duration) and survives navigation
+      // Note: showToast already triggers haptic feedback, so we don't call notification('error') here
+      showToast({
+        variant: 'error',
+        message: toastMessage,
+      });
+      
+      // If navigation already happened, we can't go back, so just return
       if (!wasInSetupMode) {
         return;
       }
     } finally {
       setIsApplyingChanges(false);
     }
-  }, [actions, trackedAccounts, isSetupMode, notification, router, canDismiss]);
+  }, [actions, trackedAccounts, isSetupMode, notification, router, canDismiss, showToast]);
 
   const doneButtonLabel = useMemo(() => {
     if (isSetupMode) {

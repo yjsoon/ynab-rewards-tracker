@@ -8,6 +8,7 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StorageProvider, useStorage } from '@/contexts/StorageContext';
+import { ToastProvider } from '@/contexts/ToastContext';
 import { semanticColors } from '@/theme/semanticColors';
 import config from '../tamagui.config';
 
@@ -112,7 +113,9 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <TamaguiProvider config={config}>
           <StorageProvider>
-            <AppShell />
+            <ToastProvider>
+              <AppShell />
+            </ToastProvider>
           </StorageProvider>
         </TamaguiProvider>
       </SafeAreaProvider>
