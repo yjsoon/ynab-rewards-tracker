@@ -13,7 +13,6 @@
     "@babel/runtime": "^7.25.0",
     "@expo/metro-runtime": "~6.1.2",
     "@react-native-async-storage/async-storage": "2.2.0",
-    "@react-navigation/bottom-tabs": "^7.7.2",
     "@react-navigation/native": "^7.0.14",
     "@react-navigation/native-stack": "^7.0.12",
     "@tamagui/config": "^1.115.3",
