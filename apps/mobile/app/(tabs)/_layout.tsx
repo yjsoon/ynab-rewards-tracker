@@ -1,44 +1,20 @@
-import { Tabs } from 'expo-router';
-import * as Haptics from 'expo-haptics';
-import { Home, Lightbulb, Activity } from '@tamagui/lucide-icons';
+import { NativeTabs, Icon, Label } from 'expo-router/unstable-native-tabs';
 
 export default function TabsLayout() {
-  const handleTabPress = () => {
-    Haptics.selectionAsync().catch(() => {
-      // Silently fail if haptics not available
-    });
-  };
-
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-      }}
-      screenListeners={{
-        tabPress: handleTabPress,
-      }}
-    >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'YJAB',
-          tabBarIcon: ({ color }) => <Home size={28} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="recommendations"
-        options={{
-          title: 'Ideas',
-          tabBarIcon: ({ color }) => <Lightbulb size={28} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="transactions"
-        options={{
-          title: 'Activity',
-          tabBarIcon: ({ color }) => <Activity size={28} color={color} />,
-        }}
-      />
-    </Tabs>
+    <NativeTabs>
+      <NativeTabs.Trigger name="index">
+        <Icon sf="house.fill" />
+        <Label>YJAB</Label>
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="recommendations">
+        <Icon sf="lightbulb.fill" />
+        <Label>Ideas</Label>
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="transactions">
+        <Icon sf="chart.line.uptrend.xyaxis" />
+        <Label>Activity</Label>
+      </NativeTabs.Trigger>
+    </NativeTabs>
   );
 }
