@@ -318,7 +318,8 @@ export default function SettingsScreen() {
     }
 
     if (wasInSetupMode) {
-      router.back();
+      // Navigate to tabs when setup completes (replace instead of back for initial setup)
+      router.replace('/(tabs)');
     }
   }, [actions, trackedAccounts, isSetupMode, notification, router]);
 
