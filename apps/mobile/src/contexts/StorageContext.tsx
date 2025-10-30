@@ -77,6 +77,7 @@ type StorageState = {
 
 type SyncOptions = {
   sinceDate?: string;
+  skipTransactions?: boolean;
 };
 
 type StorageActions = {
@@ -384,7 +385,9 @@ export function StorageProvider({ children }: { children: ReactNode }) {
           })) as Transaction[];
         }
 
-        const calculatedRewards = state.cards.map((card) => {
+        // Only recalculate rewards if transactions were actually fetched
+        // When skipTransactions is true, preserve existing calculations instead of overwriting with zeros
+        const calculatedRewards = options.skipTransactions ? [] : state.cards.map((card) => {
           if (!card.ynabAccountId) {
             return null;
           }

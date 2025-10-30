@@ -153,39 +153,19 @@ export default function SettingsScreen() {
     const isCurrent = (state.selectedBudget.id === activeBudgetSyncId) ||
                       (state.pending?.budget?.id === activeBudgetSyncId);
     const accountsAreFresh = state.metadata?.accountsBudgetId === activeBudgetSyncId;
-    console.log('[Settings] activeBudgetSyncId effect:', {
-      activeBudgetSyncId,
-      isSyncing,
-      isCurrent,
-      accountsAreFresh,
-      selectedBudgetId: state.selectedBudget.id,
-      pendingBudgetId: state.pending?.budget?.id,
-      metadataBudgetId: state.metadata?.accountsBudgetId,
-      accountsCount: state.accounts.length,
-      connectionError: state.connectionError
-    });
     if ((!isSyncing && isCurrent && accountsAreFresh) || state.connectionError) {
-      console.log('[Settings] Clearing activeBudgetSyncId');
       setActiveBudgetSyncId(undefined);
     }
   }, [activeBudgetSyncId, isSyncing, state.selectedBudget.id, state.pending?.budget?.id, state.metadata?.accountsBudgetId, state.connectionError]);
 
   const handleDone = useCallback(async () => {
     if (isApplyingRef.current) {
-      console.log('[Settings] handleDone: already applying, ignoring');
       return;
     }
-    
-    console.log('[Settings] handleDone called', {
-      hasPendingChanges: state.hasPendingChanges,
-      hasLocalTrackedChanges,
-      isApplyingChanges
-    });
     
     const hasPendingToSave = state.hasPendingChanges || hasLocalTrackedChanges;
 
     if (hasPendingToSave) {
-      console.log('[Settings] handleDone: applying changes in background');
       isApplyingRef.current = true;
 
       // Close immediately
@@ -201,8 +181,6 @@ export default function SettingsScreen() {
           await actions.applyPendingChanges();
           notification('success');
         } catch (error) {
-          const message = error instanceof Error ? error.message : 'Failed to apply changes';
-          console.log('[Settings] handleDone: error caught', message);
           notification('error');
         } finally {
           isApplyingRef.current = false;
@@ -253,7 +231,6 @@ export default function SettingsScreen() {
     }
 
     impact('light');
-    console.log('[SettingsScreen] handleConnect: start');
     setValidationError(undefined);
     try {
       await actions.setPAT(trimmed);
@@ -538,12 +515,6 @@ export default function SettingsScreen() {
                     </ListItem>
                   </Card>
                 ) : null}
-
-                {console.log('[Settings] Rendering accounts section:', {
-                  activeBudgetSyncId,
-                  accountsLength: connectedAccounts.length,
-                  pat: !!state.pat
-                }) || null}
 
                 <SectionHeader>Tracked accounts</SectionHeader>
                 <Card>
