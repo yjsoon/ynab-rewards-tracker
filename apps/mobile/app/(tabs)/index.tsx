@@ -1,14 +1,13 @@
-import React, { useLayoutEffect, useMemo } from 'react';
+import React, { useLayoutEffect, useMemo, useEffect } from 'react';
 import type { ComponentType } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useHaptics } from '@/hooks/useHaptics';
 import { useStorage } from '@/contexts/StorageContext';
 import {
   CircleDollarSign,
-  CreditCard as CreditCardIcon,
   TrendingUp,
   RefreshCw,
   AlertCircle,
@@ -78,7 +77,11 @@ export function useCardSummaries(): CardSummaryResult {
       };
     }
 
+    const hiddenIds = new Set((state.hiddenCards || []).map((hidden) => hidden.cardId));
+    const activeCards = state.cards.filter((card) => !hiddenIds.has(card.id));
+
     if (state.cards.length === 0) {
+      console.log('[useCardSummaries] No cards found in state');
       return {
         summaries: [],
         calculations: [],
@@ -87,8 +90,11 @@ export function useCardSummaries(): CardSummaryResult {
       };
     }
 
-    const hiddenIds = new Set((state.hiddenCards || []).map((hidden) => hidden.cardId));
-    const activeCards = state.cards.filter((card) => !hiddenIds.has(card.id));
+    console.log('[useCardSummaries] Processing cards:', {
+      totalCards: state.cards.length,
+      activeCards: activeCards.length,
+      hiddenCards: hiddenIds.size,
+    });
 
     const summaries: CardSummary[] = activeCards
       .map((card) => {
@@ -131,17 +137,15 @@ export function useCardSummaries(): CardSummaryResult {
         return valueB - valueA;
       });
 
-    const hasActivity = summaries.some((summary) => {
-      const totalSpend = summary.calculation.totalSpend ?? 0;
-      const rewardEarned =
-        summary.calculation.rewardEarnedDollars ?? summary.calculation.rewardEarned ?? 0;
-      return Math.abs(totalSpend) > 0 || Math.abs(rewardEarned) > 0;
+    console.log('[useCardSummaries] Result:', {
+      summariesCount: summaries.length,
+      isEmpty: state.cards.length === 0,
     });
 
     return {
       summaries,
       calculations: summaries.map((summary) => summary.rewardCalculation),
-      isEmpty: summaries.length > 0 && !hasActivity,
+      isEmpty: state.cards.length === 0,
       isLoading: status.isRefreshing,
     };
   }, [state, status.isHydrated, status.isRefreshing]);
@@ -155,13 +159,41 @@ function findStoredCalculation(
 ) {
   return calculations.find((calc) => {
     if (calc.cardId !== cardId) return false;
-    const [calcStart, calcEnd] = calc.period.split(' → ');
-    return calcStart === periodStart && calcEnd === periodEnd;
+    
+    // Handle both formats: "2025-10" (label) or "2025-10-01 → 2025-10-31" (start → end)
+    if (calc.period.includes(' → ')) {
+      const [calcStart, calcEnd] = calc.period.split(' → ');
+      return calcStart === periodStart && calcEnd === periodEnd;
+    }
+    
+    // Handle label format: check length to determine comparison strategy
+    // - Length 10 (YYYY-MM-DD): billing cycle cards use start date as label
+    // - Length 7 (YYYY-MM): calendar cards use month label
+    if (calc.period.length === 10) {
+      // Billing cycle card: compare full start date
+      return calc.period === periodStart;
+    } else {
+      // Calendar card: extract YYYY-MM from periodStart to match label format
+      const periodLabel = periodStart.substring(0, 7); // "2025-10-01" -> "2025-10"
+      return calc.period === periodLabel;
+    }
   });
 }
 
 function convertStoredCalculation(card: CreditCard, stored: RewardCalculation): CardSummary['calculation'] {
-  const [periodStart, periodEnd] = stored.period.split(' → ');
+  let periodStart: string;
+  let periodEnd: string;
+  
+  // Handle both formats: "2025-10" (label) or "2025-10-01 → 2025-10-31" (start → end)
+  if (stored.period.includes(' → ')) {
+    [periodStart, periodEnd] = stored.period.split(' → ');
+  } else {
+    // If period is just a label, we need to calculate the actual dates
+    // For now, use the current period calculation as fallback
+    const period = SimpleRewardsCalculator.calculatePeriod(card);
+    periodStart = period.start;
+    periodEnd = period.end;
+  }
 
   return {
     cardId: stored.cardId,
@@ -242,12 +274,62 @@ const clampPercent = (value: number | undefined) => {
   return Math.max(0, Math.min(100, value));
 };
 
+function getStartOfCurrentMonthISO(): string {
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  return startOfMonth.toISOString().split('T')[0];
+}
+
 export default function HomeScreen() {
   const navigation = useNavigation();
   const router = useRouter();
   const { impact } = useHaptics();
-  const { actions } = useStorage();
+  const { state, status, actions } = useStorage();
   const { summaries, isEmpty, isLoading } = useCardSummaries();
+
+  // Debug logging
+  useEffect(() => {
+    console.log('[HomeScreen] State:', {
+      isHydrated: status.isHydrated,
+      isLoading,
+      isEmpty,
+      cardsCount: state.cards.length,
+      summariesCount: summaries.length,
+      cards: state.cards.map(c => ({ id: c.id, name: c.name })),
+    });
+  }, [status.isHydrated, isLoading, isEmpty, state.cards.length, summaries.length]);
+
+  // Fetch transactions when returning to homepage if we have cards but no cache entry
+  // Only fetch if no cache entry exists (regardless of transaction count) to avoid infinite loops
+  // when cards exist but user genuinely has no transactions
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!status.isHydrated || !state.pat || !state.selectedBudget.id || state.trackedAccountIds.length === 0) {
+        return;
+      }
+
+      const hasCards = state.cards.length > 0;
+      const dashboardTransactions = state.cachedData?.dashboardTransactions;
+      const cacheEntry = dashboardTransactions?.find(
+        (entry) => entry.budgetId === state.selectedBudget.id
+      );
+      
+      // Only fetch if cache entry doesn't exist at all (not if it exists with 0 transactions)
+      // This prevents infinite loops when user has cards but no transactions
+      const needsFetch = hasCards && !cacheEntry && !state.isSyncing;
+
+      if (needsFetch) {
+        console.log('[HomeScreen] No cache entry found, fetching transactions...', {
+          hasCards,
+          budgetId: state.selectedBudget.id,
+        });
+        
+        actions.syncBudgetsAndAccounts({ skipTransactions: false, sinceDate: getStartOfCurrentMonthISO() }).catch((error) => {
+          console.error('[HomeScreen] Failed to fetch transactions', error);
+        });
+      }
+    }, [status.isHydrated, state.pat, state.selectedBudget.id, state.trackedAccountIds.length, state.cards.length, state.cachedData?.dashboardTransactions, state.isSyncing, actions])
+  );
 
   const navigateToSettings = React.useCallback(() => {
     router.push('/settings');
@@ -278,14 +360,18 @@ export default function HomeScreen() {
           <Button
             variant="plain"
             size="small"
-            onPress={() => {
+            onPress={async () => {
               impact('light');
-              actions.refresh().catch((error) => {
+              try {
+                // Refresh storage first, then fetch transactions
+                await actions.refresh();
+                await actions.syncBudgetsAndAccounts({ skipTransactions: false, sinceDate: getStartOfCurrentMonthISO() });
+              } catch (error) {
                 console.error('Refresh failed', error);
-              });
+              }
             }}
             accessibilityLabel="Refresh rewards data"
-            accessibilityHint="Reload latest storage snapshot"
+            accessibilityHint="Reload latest storage snapshot and fetch transactions"
             style={styles.headerButton}
           >
             <RefreshCw size={16} color={semanticHex.systemBlue} />
@@ -300,14 +386,14 @@ export default function HomeScreen() {
   }, [navigation, actions, impact, navigateToSettings]);
 
   const featured = useMemo(() => {
-    if (summaries.length === 0 || isEmpty) return null;
+    if (summaries.length === 0) return null;
     return [...summaries]
       .sort((a, b) => {
         const valueA = a.calculation.rewardEarnedDollars ?? a.calculation.rewardEarned ?? 0;
         const valueB = b.calculation.rewardEarnedDollars ?? b.calculation.rewardEarned ?? 0;
         return valueB - valueA;
       })[0];
-  }, [summaries, isEmpty]);
+  }, [summaries]);
 
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
@@ -316,13 +402,13 @@ export default function HomeScreen() {
         contentContainerStyle={styles.scrollContent}
       >
         <View style={styles.content}>
-          {featured ? (
-            <FeaturedCardHighlight summary={featured} haptics={impact} />
-          ) : isLoading ? null : (
+          {isEmpty && !isLoading ? (
             <EmptyState onOpenSettings={navigateToSettings} />
-          )}
+          ) : featured ? (
+            <FeaturedCardHighlight summary={featured} haptics={impact} />
+          ) : null}
 
-          {summaries.length > 0 ? (
+          {summaries.length > 0 && !isEmpty ? (
             <>
               <SectionHeader>Active Cards</SectionHeader>
 
@@ -331,10 +417,11 @@ export default function HomeScreen() {
                   <Card>
                     <ListItem>
                       <View style={styles.cardHeader}>
-                        <CardIcon cardType={summary.card.type} />
                         <View style={styles.cardHeaderText}>
                           <Headline>{summary.card.name}</Headline>
-                          <Footnote color="secondary">{summary.card.issuer}</Footnote>
+                          {summary.card.issuer && summary.card.issuer !== 'Unknown' ? (
+                            <Footnote color="secondary">{summary.card.issuer}</Footnote>
+                          ) : null}
                         </View>
                         {summary.source !== 'stored' ? (
                           <View
@@ -499,7 +586,9 @@ function FeaturedCardHighlight({
             <View style={styles.featuredHeaderText}>
               <Caption1 color="secondary">Suggested focus card</Caption1>
               <Headline>{summary.card.name}</Headline>
-              <Footnote color="secondary">{summary.card.issuer}</Footnote>
+              {summary.card.issuer && summary.card.issuer !== 'Unknown' ? (
+                <Footnote color="secondary">{summary.card.issuer}</Footnote>
+              ) : null}
             </View>
             {summary.source !== 'stored' && (
               <View
@@ -588,19 +677,6 @@ function StatBlock({
   );
 }
 
-function CardIcon({ cardType }: { cardType: CreditCard['type'] }) {
-  const color = cardType === 'cashback'
-    ? semanticHex.systemBlue
-    : semanticHex.systemPurple;
-
-  return (
-    <View style={[styles.cardIcon, { backgroundColor: withAlpha(color, '20') }]}
-    >
-      <CreditCardIcon size={16} color={color} />
-    </View>
-  );
-}
-
 function EmptyState({ onOpenSettings }: { onOpenSettings: () => void }) {
   const { impact } = useHaptics();
 
@@ -636,7 +712,7 @@ function EmptyState({ onOpenSettings }: { onOpenSettings: () => void }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: semanticColors.systemBackground as string,
+    backgroundColor: semanticColors.systemGroupedBackground as string,
   },
   scrollContent: {
     paddingBottom: 48,
@@ -661,7 +737,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   featuredCard: {
-    backgroundColor: semanticColors.secondarySystemBackground as string,
+    backgroundColor: semanticColors.secondarySystemGroupedBackground as string,
   },
   featuredContent: {
     gap: 16,
@@ -706,13 +782,6 @@ const styles = StyleSheet.create({
   cardHeaderText: {
     flex: 1,
     gap: 2,
-  },
-  cardIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   periodInfo: {
     flexDirection: 'row',
