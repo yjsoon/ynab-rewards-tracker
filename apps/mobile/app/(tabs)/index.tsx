@@ -266,25 +266,28 @@ export default function HomeScreen() {
     });
   }, [status.isHydrated, isLoading, isEmpty, state.cards.length, summaries.length]);
 
-  // Fetch transactions when returning to homepage if we have cards but no transactions
+  // Fetch transactions when returning to homepage if we have cards but no cache entry
+  // Only fetch if no cache entry exists (regardless of transaction count) to avoid infinite loops
+  // when cards exist but user genuinely has no transactions
   useFocusEffect(
     React.useCallback(() => {
       if (!status.isHydrated || !state.pat || !state.selectedBudget.id || state.trackedAccountIds.length === 0) {
         return;
       }
 
-      // Check if we need to fetch transactions (cards exist but no cached transactions)
       const hasCards = state.cards.length > 0;
       const cacheEntry = state.cachedData?.dashboardTransactions?.find(
         (entry) => entry.budgetId === state.selectedBudget.id
       );
-      const hasCachedTransactions = cacheEntry && cacheEntry.transactions.length > 0;
+      
+      // Only fetch if cache entry doesn't exist at all (not if it exists with 0 transactions)
+      // This prevents infinite loops when user has cards but no transactions
+      const needsFetch = hasCards && !cacheEntry && !state.isSyncing;
 
-      if (hasCards && !hasCachedTransactions && !state.isSyncing) {
-        console.log('[HomeScreen] No cached transactions found, fetching...', {
+      if (needsFetch) {
+        console.log('[HomeScreen] No cache entry found, fetching transactions...', {
           hasCards,
-          hasCacheEntry: !!cacheEntry,
-          cacheTransactionCount: cacheEntry?.transactions.length ?? 0,
+          budgetId: state.selectedBudget.id,
         });
         
         // Use start of current month as sinceDate
