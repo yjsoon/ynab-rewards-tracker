@@ -160,13 +160,34 @@ function findStoredCalculation(
 ) {
   return calculations.find((calc) => {
     if (calc.cardId !== cardId) return false;
-    const [calcStart, calcEnd] = calc.period.split(' → ');
-    return calcStart === periodStart && calcEnd === periodEnd;
+    
+    // Handle both formats: "2025-10" (label) or "2025-10-01 → 2025-10-31" (start → end)
+    if (calc.period.includes(' → ')) {
+      const [calcStart, calcEnd] = calc.period.split(' → ');
+      return calcStart === periodStart && calcEnd === periodEnd;
+    }
+    
+    // If period is just a label (e.g., "2025-10"), compare against period label
+    // Extract YYYY-MM from periodStart to match label format
+    const periodLabel = periodStart.substring(0, 7); // "2025-10-01" -> "2025-10"
+    return calc.period === periodLabel;
   });
 }
 
 function convertStoredCalculation(card: CreditCard, stored: RewardCalculation): CardSummary['calculation'] {
-  const [periodStart, periodEnd] = stored.period.split(' → ');
+  let periodStart: string;
+  let periodEnd: string;
+  
+  // Handle both formats: "2025-10" (label) or "2025-10-01 → 2025-10-31" (start → end)
+  if (stored.period.includes(' → ')) {
+    [periodStart, periodEnd] = stored.period.split(' → ');
+  } else {
+    // If period is just a label, we need to calculate the actual dates
+    // For now, use the current period calculation as fallback
+    const period = SimpleRewardsCalculator.calculatePeriod(card);
+    periodStart = period.start;
+    periodEnd = period.end;
+  }
 
   return {
     cardId: stored.cardId,
