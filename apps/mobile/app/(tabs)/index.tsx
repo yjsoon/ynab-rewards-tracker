@@ -166,10 +166,17 @@ function findStoredCalculation(
       return calcStart === periodStart && calcEnd === periodEnd;
     }
     
-    // If period is just a label (e.g., "2025-10"), compare against period label
-    // Extract YYYY-MM from periodStart to match label format
-    const periodLabel = periodStart.substring(0, 7); // "2025-10-01" -> "2025-10"
-    return calc.period === periodLabel;
+    // Handle label format: check length to determine comparison strategy
+    // - Length 10 (YYYY-MM-DD): billing cycle cards use start date as label
+    // - Length 7 (YYYY-MM): calendar cards use month label
+    if (calc.period.length === 10) {
+      // Billing cycle card: compare full start date
+      return calc.period === periodStart;
+    } else {
+      // Calendar card: extract YYYY-MM from periodStart to match label format
+      const periodLabel = periodStart.substring(0, 7); // "2025-10-01" -> "2025-10"
+      return calc.period === periodLabel;
+    }
   });
 }
 
