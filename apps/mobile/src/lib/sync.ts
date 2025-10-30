@@ -10,6 +10,7 @@ export interface SyncBudgetsAndAccountsOptions {
   onAccountsFetched?: (accounts: YnabAccountSummary[]) => void;
   onTransactionsFetched?: (transactions: YnabTransactionSummary[]) => void;
   sinceDate?: string;
+  skipTransactions?: boolean;
 }
 
 export interface SyncBudgetsAndAccountsResult {
@@ -25,6 +26,7 @@ export class YnabSync {
     selectedBudgetId,
     trackedAccountIds,
     sinceDate,
+    skipTransactions,
     onBudgetsFetched,
     onAccountsFetched,
     onTransactionsFetched,
@@ -52,7 +54,7 @@ export class YnabSync {
     onAccountsFetched?.(sortedAccounts);
 
     let transactions: YnabTransactionSummary[] = [];
-    if (budgetId) {
+    if (budgetId && !skipTransactions) {
       transactions = await fetchTransactions(pat, budgetId, { sinceDate });
       if (trackedAccountIds?.length) {
         const trackedSet = new Set(trackedAccountIds);

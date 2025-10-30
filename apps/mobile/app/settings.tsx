@@ -10,7 +10,8 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
 import { useHaptics } from '@/hooks/useHaptics';
 import { Card, ListItem, Button, Footnote, SectionHeader, Separator, Headline, Caption1 } from '@/components/ios';
 import { semanticColors, semanticHex, withAlpha } from '@/theme/semanticColors';
@@ -18,102 +19,183 @@ import { useStorage } from '@/contexts/StorageContext';
 import type { YnabAccountSummary, YnabBudgetSummary } from '@/lib/ynab-client';
 
 const connectionStatusCopy: Record<
-  'disconnected' | 'connecting' | 'connected' | 'error',
+  'disconnected' | 'authenticating' | 'awaiting_budget' | 'connected' | 'error',
   { label: string; tone: 'primary' | 'secondary' | 'danger' }
 > = {
   disconnected: { label: 'Disconnected', tone: 'secondary' },
-  connecting: { label: 'Connecting…', tone: 'primary' },
+  authenticating: { label: 'Connecting…', tone: 'primary' },
+  awaiting_budget: { label: 'Awaiting budget selection', tone: 'primary' },
   connected: { label: 'Connected', tone: 'primary' },
   error: { label: 'Connection error', tone: 'danger' },
 };
 
 export default function SettingsScreen() {
   const navigation = useNavigation();
+  const router = useRouter();
   const { impact, notification } = useHaptics();
   const { state, actions } = useStorage();
 
   const canDismiss = navigation.canGoBack();
 
+  const isAuthenticating = state.connectionStatus === 'authenticating';
+  const isSyncing = state.isSyncing;
+  const isAwaitingBudget = state.connectionStatus === 'awaiting_budget';
+  const isConnected = state.connectionStatus === 'connected';
+  const isDisconnected = state.connectionStatus === 'disconnected';
+  const isError = state.connectionStatus === 'error';
+
   const isSetupMode = useMemo(
-    () => !state.pat || !state.selectedBudget.id || state.trackedAccountIds.length === 0,
-    [state.pat, state.selectedBudget.id, state.trackedAccountIds.length]
+    () => !state.pat || !state.selectedBudget.id || state.trackedAccountIds.length === 0 || state.connectionStatus !== 'connected',
+    [state.pat, state.selectedBudget.id, state.trackedAccountIds.length, state.connectionStatus]
   );
 
-  const previousIsSetupModeRef = useRef(isSetupMode);
-  
   const [tokenInput, setTokenInput] = useState(state.pat ?? '');
   const [tokenVisible, setTokenVisible] = useState(false);
-  const [isConnecting, setIsConnecting] = useState(false);
   const [validationError, setValidationError] = useState<string | undefined>();
   const [selectedBudgetId, setSelectedBudgetId] = useState<string | undefined>(state.selectedBudget.id);
   const [trackedAccounts, setTrackedAccounts] = useState<string[]>(state.trackedAccountIds);
   const [isConfirmingBudget, setIsConfirmingBudget] = useState(false);
+  const [isApplyingChanges, setIsApplyingChanges] = useState(false);
+  const [hasLocalAccountToggles, setHasLocalAccountToggles] = useState(false);
+  const [activeBudgetSyncId, setActiveBudgetSyncId] = useState<string | undefined>();
+
+  const isApplyingRef = useRef(false);
+
   const connectedBudgets = useMemo(() => state.budgets ?? [], [state.budgets]);
   const connectedAccounts = useMemo(() => state.accounts ?? [], [state.accounts]);
 
+  const hasPendingBudget = Boolean(state.pending?.budget);
+  const hasPendingTracked = Boolean(state.pending?.trackedAccountIds);
+
+  const isBudgetsLoading = isAuthenticating ||
+    (state.budgets.length === 0 && state.connectionStatus === 'awaiting_budget' && !state.connectionError);
+
+  const hasLocalTrackedChanges = useMemo(() => {
+    const a = [...trackedAccounts].sort().join(',');
+    const b = [...state.trackedAccountIds].sort().join(',');
+    return a !== b;
+  }, [trackedAccounts, state.trackedAccountIds]);
+
   const shouldShowConfirmBudget = useMemo(() => {
     if (!selectedBudgetId || connectedBudgets.length === 0) return false;
-    // Show button if in setup mode OR user changed budget selection
-    return isSetupMode || selectedBudgetId !== state.selectedBudget.id;
-  }, [isSetupMode, selectedBudgetId, state.selectedBudget.id, connectedBudgets.length]);
+    if (isSyncing) return false;
+    return isAwaitingBudget || hasPendingBudget || selectedBudgetId !== state.selectedBudget.id;
+  }, [isAwaitingBudget, hasPendingBudget, isSyncing, selectedBudgetId, state.selectedBudget.id, connectedBudgets.length]);
 
-  const previousBudgetIdRef = useRef<string | undefined>(state.selectedBudget.id);
-  const previousTrackedAccountsRef = useRef<string[]>(state.trackedAccountIds);
+  const showFinishSetupCta = isSetupMode || hasPendingTracked || hasLocalTrackedChanges;
+
+  const finishSetupDisabled = isSyncing || isConfirmingBudget || isApplyingChanges || !selectedBudgetId || (isSetupMode && trackedAccounts.length === 0);
+
+  const confirmBudgetButtonLabel = (() => {
+    if (isConfirmingBudget || isSyncing) {
+      return isSetupMode ? 'Finishing setup…' : 'Applying…';
+    }
+    return 'Continue with this budget';
+  })();
+
+  const finishSetupButtonLabel = (() => {
+    if (isApplyingChanges) {
+      return isSetupMode ? 'Finishing setup…' : 'Applying…';
+    }
+    return isSetupMode ? 'Finish setup' : 'Apply tracking changes';
+  })();
+
+  useFocusEffect(
+    useCallback(() => {
+      // Reset flags that block toggling
+      setHasLocalAccountToggles(false);
+      setIsApplyingChanges(false);
+
+      // Sync local state with context only when no pending staged values
+      if (!state.pending?.trackedAccountIds) {
+        setTrackedAccounts(state.trackedAccountIds);
+      }
+      if (!state.pending?.budget) {
+        setSelectedBudgetId(state.selectedBudget.id);
+      }
+    }, [state.trackedAccountIds, state.selectedBudget.id, state.pending])
+  );
+
+  const getSortedAccounts = useCallback((accounts: YnabAccountSummary[], trackedIds: string[]) => {
+    const trackedSet = new Set(trackedIds);
+    const tracked = accounts.filter(acc => trackedSet.has(acc.id)).sort((a, b) => a.name.localeCompare(b.name));
+    const untracked = accounts.filter(acc => !trackedSet.has(acc.id)).sort((a, b) => a.name.localeCompare(b.name));
+    return [...tracked, ...untracked];
+  }, []);
+
+  const displayAccounts = useMemo(() => {
+    if (hasLocalAccountToggles) {
+      return connectedAccounts;
+    }
+    return getSortedAccounts(connectedAccounts, trackedAccounts);
+  }, [connectedAccounts, trackedAccounts, hasLocalAccountToggles, getSortedAccounts]);
 
   useEffect(() => {
     setTokenInput(state.pat ?? '');
   }, [state.pat]);
 
   useEffect(() => {
-    previousBudgetIdRef.current = state.selectedBudget.id;
-  }, [state.selectedBudget.id]);
-
-  useEffect(() => {
-    const previousAccounts = previousTrackedAccountsRef.current;
-    previousTrackedAccountsRef.current = state.trackedAccountIds;
-
-    if (!state.pat) {
-      return;
-    }
-
-    const prevSet = new Set(previousAccounts);
-    const currentSet = new Set(state.trackedAccountIds);
-    const hasChanged =
-      prevSet.size !== currentSet.size ||
-      [...prevSet].some((id) => !currentSet.has(id)) ||
-      [...currentSet].some((id) => !prevSet.has(id));
-
-    if (hasChanged) {
-      actions.syncBudgetsAndAccounts().catch((error) => {
-        console.error('Failed to sync budgets/accounts after tracked accounts change', error);
-      });
-    }
-  }, [state.trackedAccountIds, state.pat, actions]);
-
-  useEffect(() => {
-    if (state.selectedBudget.id) {
+    if (!state.pending?.budget) {
       setSelectedBudgetId(state.selectedBudget.id);
     }
-  }, [state.selectedBudget.id]);
+  }, [state.selectedBudget.id, state.pending?.budget]);
 
   useEffect(() => {
-    setTrackedAccounts(state.trackedAccountIds);
-  }, [state.trackedAccountIds]);
+    if (!state.pending?.trackedAccountIds) {
+      setTrackedAccounts(state.trackedAccountIds);
+      setHasLocalAccountToggles(false);
+      setActiveBudgetSyncId(undefined);
+    }
+  }, [state.trackedAccountIds, state.pending?.trackedAccountIds]);
 
   useEffect(() => {
-    const wasInSetupMode = previousIsSetupModeRef.current;
-    previousIsSetupModeRef.current = isSetupMode;
-
-    // Auto-dismiss when transitioning from setup mode to complete
-    if (wasInSetupMode && !isSetupMode && canDismiss) {
-      navigation.goBack();
+    if (!activeBudgetSyncId) return;
+    const isCurrent = (state.selectedBudget.id === activeBudgetSyncId) ||
+                      (state.pending?.budget?.id === activeBudgetSyncId);
+    const accountsAreFresh = state.metadata?.accountsBudgetId === activeBudgetSyncId;
+    if ((!isSyncing && isCurrent && accountsAreFresh) || state.connectionError) {
+      setActiveBudgetSyncId(undefined);
     }
+  }, [activeBudgetSyncId, isSyncing, state.selectedBudget.id, state.pending?.budget?.id, state.metadata?.accountsBudgetId, state.connectionError]);
 
-    // Auto-dismiss when transitioning from configured to setup (disconnect)
-    if (!wasInSetupMode && isSetupMode && canDismiss) {
-      navigation.goBack();
+  const handleDone = useCallback(async () => {
+    if (isApplyingRef.current) {
+      return;
     }
-  }, [isSetupMode, canDismiss, navigation]);
+    
+    const hasPendingToSave = state.hasPendingChanges || hasLocalTrackedChanges;
+
+    if (hasPendingToSave) {
+      isApplyingRef.current = true;
+
+      // Close immediately
+      impact('light');
+      router.back();
+
+      // Apply changes in background (fire and forget)
+      (async () => {
+        try {
+          if (hasLocalTrackedChanges) {
+            actions.stageTrackedAccountIds(trackedAccounts);
+          }
+          await actions.applyPendingChanges();
+          notification('success');
+        } catch (error) {
+          notification('error');
+        } finally {
+          isApplyingRef.current = false;
+        }
+      })();
+    } else {
+      // No changes, just close
+      impact('light');
+      router.back();
+    }
+  }, [state.hasPendingChanges, hasLocalTrackedChanges, actions, trackedAccounts, notification, impact, router]);
+
+  const doneButtonLabel = useMemo(() => {
+    return 'Done';
+  }, []);
 
   React.useLayoutEffect(() => {
     navigation.setOptions({
@@ -126,20 +208,18 @@ export default function SettingsScreen() {
             <Button
               variant="plain"
               size="small"
-              onPress={() => {
-                impact('light');
-                navigation.goBack();
-              }}
-              accessibilityLabel="Done"
+              onPress={handleDone}
+              accessibilityLabel={doneButtonLabel}
               accessibilityHint="Close settings"
               style={styles.doneButton}
+              disabled={isApplyingChanges}
             >
-              Done
+              {isApplyingChanges ? 'Applying…' : doneButtonLabel}
             </Button>
           )
         : undefined,
     });
-  }, [navigation, isSetupMode, canDismiss, impact]);
+  }, [navigation, isSetupMode, canDismiss, handleDone, doneButtonLabel, isApplyingChanges]);
 
   const statusMeta = connectionStatusCopy[state.connectionStatus];
 
@@ -151,8 +231,6 @@ export default function SettingsScreen() {
     }
 
     impact('light');
-    console.log('[SettingsScreen] handleConnect: start');
-    setIsConnecting(true);
     setValidationError(undefined);
     try {
       await actions.setPAT(trimmed);
@@ -162,9 +240,6 @@ export default function SettingsScreen() {
       setValidationError(message);
       notification('error');
       console.error('[SettingsScreen] handleConnect: error', error);
-    } finally {
-      setIsConnecting(false);
-      console.log('[SettingsScreen] handleConnect: finished');
     }
   }, [tokenInput, actions, notification, impact]);
 
@@ -179,8 +254,9 @@ export default function SettingsScreen() {
   const handleSelectBudget = useCallback((budget: YnabBudgetSummary) => {
     impact('light');
     setSelectedBudgetId(budget.id);
+    actions.stageBudgetSelection(budget.id, budget.name);
     setValidationError(undefined);
-  }, [impact]);
+  }, [impact, actions]);
 
   const handleConfirmBudget = useCallback(async () => {
     if (!selectedBudgetId) {
@@ -192,30 +268,73 @@ export default function SettingsScreen() {
       return;
     }
 
+    setActiveBudgetSyncId(budget.id);
     setIsConfirmingBudget(true);
     setValidationError(undefined);
     try {
-      await actions.setSelectedBudget(budget.id, budget.name);
-      await actions.syncBudgetsAndAccounts();
+      actions.stageBudgetSelection(budget.id, budget.name);
+      await actions.applyPendingChanges();
       notification('success');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to sync budget';
       setValidationError(message);
       notification('error');
       console.error('Failed to sync selected budget', error);
+      setActiveBudgetSyncId(undefined);
     } finally {
       setIsConfirmingBudget(false);
     }
   }, [actions, connectedBudgets, notification, selectedBudgetId]);
 
-  const toggleTrackedAccount = useCallback(async (accountId: string) => {
+  const toggleTrackedAccount = useCallback((accountId: string) => {
+    if (state.isSyncing || isApplyingChanges) {
+      return;
+    }
     impact('light');
+
     const nextIds = trackedAccounts.includes(accountId)
       ? trackedAccounts.filter(id => id !== accountId)
       : [...trackedAccounts, accountId];
     setTrackedAccounts(nextIds);
-    await actions.setTrackedAccountIds(nextIds);
-  }, [trackedAccounts, actions, impact]);
+    setHasLocalAccountToggles(true);
+    actions.stageTrackedAccountIds(nextIds);
+  }, [trackedAccounts, actions, impact, state.isSyncing, isApplyingChanges]);
+
+  const handleFinishSetup = useCallback(async () => {
+    setValidationError(undefined);
+    setIsApplyingChanges(true);
+    const wasInSetupMode = isSetupMode;
+    try {
+      actions.stageTrackedAccountIds(trackedAccounts);
+      await actions.applyPendingChanges();
+      notification('success');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to apply changes';
+      setValidationError(message);
+      notification('error');
+      return;
+    } finally {
+      setIsApplyingChanges(false);
+    }
+
+    if (wasInSetupMode) {
+      router.back();
+    }
+  }, [actions, trackedAccounts, isSetupMode, notification, router]);
+
+  const shouldShowConnectButton = isDisconnected || isError || isAuthenticating;
+  const connectButtonLabel = isAuthenticating ? 'Connecting…' : (isError ? 'Retry connection' : 'Connect to YNAB');
+  const connectButtonDisabled = isAuthenticating || isSyncing || isApplyingChanges || !tokenInput.trim();
+
+  const statusMessage = (() => {
+    if (isAwaitingBudget) {
+      return 'Token verified. Select a budget and at least one account, then tap Finish setup.';
+    }
+    if (isConnected) {
+      return isSetupMode ? 'Connected. Choose a budget below to continue.' : 'Connected.';
+    }
+    return null;
+  })();
 
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
@@ -250,7 +369,7 @@ export default function SettingsScreen() {
                   <View style={styles.statusRow}>
                     <View style={[styles.statusDot, styles[`statusDot_${statusMeta.tone}`]]} />
                     <Headline>{statusMeta.label}</Headline>
-                    {state.connectionStatus === 'connecting' ? (
+                    {(isAuthenticating || isSyncing) ? (
                       <ActivityIndicator size="small" color={semanticHex.systemBlue} />
                     ) : null}
                   </View>
@@ -288,7 +407,7 @@ export default function SettingsScreen() {
 
               <Separator inset={16} />
 
-              {state.connectionStatus !== 'connected' || connectedBudgets.length === 0 ? (
+              {shouldShowConnectButton ? (
                 <ListItem>
                   <Button
                     variant="filled"
@@ -297,83 +416,102 @@ export default function SettingsScreen() {
                     style={styles.connectButton}
                     accessibilityLabel="Connect to YNAB"
                     accessibilityHint="Saves your personal access token and fetches budgets"
-                    disabled={isConnecting || !tokenInput.trim()}
+                    disabled={connectButtonDisabled}
                   >
-                    {isConnecting ? 'Connecting…' : 'Connect to YNAB'}
+                    {connectButtonLabel}
                   </Button>
                 </ListItem>
-              ) : (
+              ) : statusMessage ? (
                 <ListItem>
                   <Footnote color="tertiary">
-                    {isSetupMode
-                      ? 'Connected. Choose a budget below to continue.'
-                      : 'Connected.'}
+                    {statusMessage}
                   </Footnote>
                 </ListItem>
-              )}
+              ) : null}
 
               <Separator inset={16} />
 
-              <ListItem>
-                <Button
-                  variant="plain"
-                  size="medium"
-                  onPress={handleDisconnect}
-                  style={styles.connectButton}
-                  accessibilityLabel="Disconnect YNAB"
-                  accessibilityHint="Disconnects your YNAB account from YJAB"
-                  disabled={!state.pat}
-                >
-                  Disconnect
-                </Button>
-              </ListItem>
+              {state.pat && (
+                <ListItem>
+                  <Button
+                    variant="plain"
+                    size="medium"
+                    onPress={handleDisconnect}
+                    style={styles.connectButton}
+                    accessibilityLabel="Disconnect YNAB"
+                    accessibilityHint="Disconnects your YNAB account from YJAB"
+                    disabled={!state.pat}
+                  >
+                    Disconnect
+                  </Button>
+                </ListItem>
+              )}
             </Card>
 
             {state.pat ? (
               <>
                 <SectionHeader>Budgets</SectionHeader>
                 <Card>
-                  {connectedBudgets.length === 0 ? (
+                  {isBudgetsLoading ? (
                     <ListItem>
-                      <Caption1 color="secondary">No budgets available. Refresh after connecting.</Caption1>
+                      <View style={styles.loadingContainer}>
+                        <ActivityIndicator size="small" color={semanticHex.systemBlue} />
+                        <Caption1 color="secondary">Loading budgets…</Caption1>
+                      </View>
+                    </ListItem>
+                  ) : connectedBudgets.length === 0 ? (
+                    <ListItem>
+                      <Caption1 color="secondary">No budgets available. Check your connection.</Caption1>
                     </ListItem>
                   ) : (
-                    connectedBudgets.map((budget, index) => (
-                      <React.Fragment key={budget.id}>
-                        {index > 0 ? <Separator inset={16} /> : null}
-                        <ListItem
-                          onPress={() => handleSelectBudget(budget)}
-                          showDisclosure={false}
-                          accessibilityLabel={`Select budget ${budget.name}`}
-                          accessibilityRole="radio"
-                          accessibilityState={{ selected: selectedBudgetId === budget.id }}
-                        >
-                          <View style={styles.budgetRow}>
-                            <View style={styles.budgetInfo}>
-                              <Headline>{budget.name}</Headline>
-                              <Caption1 color="secondary">Last modified {new Date(budget.last_modified_on).toLocaleDateString()}</Caption1>
+                    connectedBudgets.map((budget, index) => {
+                      const isBudgetSelected = selectedBudgetId === budget.id;
+
+                      return (
+                        <React.Fragment key={budget.id}>
+                          {index > 0 ? <Separator inset={16} /> : null}
+                          <ListItem
+                            onPress={() => handleSelectBudget(budget)}
+                            showDisclosure={false}
+                            accessibilityLabel={`Select budget ${budget.name}`}
+                            accessibilityRole="radio"
+                            accessibilityState={{ selected: isBudgetSelected }}
+                          >
+                            <View style={styles.budgetRow}>
+                              <View style={styles.budgetInfo}>
+                                <Headline>{budget.name}</Headline>
+                                <Caption1 color="secondary">Last modified {new Date(budget.last_modified_on).toLocaleDateString()}</Caption1>
+                              </View>
+                              {isBudgetSelected ? (
+                                <View style={styles.tickContainer}>
+                                  <Headline style={styles.tickIcon}>✓</Headline>
+                                </View>
+                              ) : null}
                             </View>
-                            {selectedBudgetId === budget.id ? (
-                              <Caption1 color="primary">Selected</Caption1>
-                            ) : null}
-                          </View>
-                        </ListItem>
-                      </React.Fragment>
-                    ))
+                          </ListItem>
+                        </React.Fragment>
+                      );
+                    })
                   )}
                 </Card>
 
                 {shouldShowConfirmBudget ? (
                   <Card style={styles.confirmCard}>
                     <ListItem>
-                      <Button
-                        variant="filled"
-                        size="medium"
-                        onPress={handleConfirmBudget}
-                        disabled={!selectedBudgetId || isConfirmingBudget}
-                      >
-                        {isConfirmingBudget ? 'Starting sync…' : 'Continue with this budget'}
-                      </Button>
+                      <View style={styles.confirmButtonRow}>
+                        <Button
+                          variant="filled"
+                          size="medium"
+                          onPress={handleConfirmBudget}
+                          disabled={!selectedBudgetId || isSyncing || isConfirmingBudget || isApplyingChanges}
+                          style={{ flex: 1 }}
+                        >
+                          {confirmBudgetButtonLabel}
+                        </Button>
+                        {isConfirmingBudget ? (
+                          <ActivityIndicator size="small" color={semanticHex.systemBlue} />
+                        ) : null}
+                      </View>
                     </ListItem>
                   </Card>
                 ) : null}
@@ -382,10 +520,17 @@ export default function SettingsScreen() {
                 <Card>
                   {connectedAccounts.length === 0 ? (
                     <ListItem>
-                      <Caption1 color="secondary">Select a budget to see its accounts.</Caption1>
+                      {activeBudgetSyncId ? (
+                        <View style={styles.loadingContainer}>
+                          <ActivityIndicator size="small" color={semanticHex.systemBlue} />
+                          <Caption1 color="secondary">Loading accounts…</Caption1>
+                        </View>
+                      ) : (
+                        <Caption1 color="secondary">Select a budget to see its accounts.</Caption1>
+                      )}
                     </ListItem>
                   ) : (
-                    connectedAccounts.map((account, index) => (
+                    displayAccounts.map((account, index) => (
                       <React.Fragment key={account.id}>
                         {index > 0 ? <Separator inset={16} /> : null}
                         <ListItem
@@ -410,6 +555,27 @@ export default function SettingsScreen() {
                     ))
                   )}
                 </Card>
+
+                {showFinishSetupCta ? (
+                  <Card style={styles.confirmCard}>
+                    <ListItem>
+                      <View style={styles.confirmButtonRow}>
+                        <Button
+                          variant="filled"
+                          size="medium"
+                          onPress={handleFinishSetup}
+                          disabled={finishSetupDisabled}
+                          style={{ flex: 1 }}
+                        >
+                          {finishSetupButtonLabel}
+                        </Button>
+                        {isApplyingChanges ? (
+                          <ActivityIndicator size="small" color={semanticHex.systemBlue} />
+                        ) : null}
+                      </View>
+                    </ListItem>
+                  </Card>
+                ) : null}
               </>
             ) : null}
 
@@ -492,8 +658,38 @@ const styles = StyleSheet.create({
   connectButton: {
     width: '100%',
   },
+  accessoryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  loadingText: {
+    marginLeft: 4,
+  },
+  tickContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  tickIcon: {
+    color: semanticHex.systemBlue,
+    fontSize: 20,
+    fontWeight: '600',
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    paddingVertical: 24,
+  },
   confirmCard: {
     marginTop: 12,
+  },
+  confirmButtonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    width: '100%',
   },
   budgetRow: {
     flexDirection: 'row',
