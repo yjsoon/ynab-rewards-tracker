@@ -253,29 +253,37 @@ export default function SettingsScreen() {
     }
   }, [isSetupMode, handleFinishSetup, handleDone]);
 
-  React.useLayoutEffect(() => {
-    navigation.setOptions({
-      title: 'Settings',
-      headerLargeTitle: false,
-      headerBackVisible: !isSetupMode,
-      gestureEnabled: !isSetupMode,
-      headerRight: (isSetupMode || canDismiss)
-        ? () => (
-            <Button
-              variant="plain"
-              size="small"
-              onPress={handleNavBarDone}
-              accessibilityLabel={doneButtonLabel}
-              accessibilityHint={isSetupMode ? "Complete setup" : "Close settings"}
-              style={styles.doneButton}
-              disabled={isSetupMode ? finishSetupDisabled : isApplyingChanges}
-            >
-              {isApplyingChanges || isConfirmingBudget ? (isSetupMode ? 'Finishing setup…' : 'Applying…') : doneButtonLabel}
-            </Button>
-          )
-        : undefined,
-    });
-  }, [navigation, isSetupMode, canDismiss, handleNavBarDone, doneButtonLabel, finishSetupDisabled, isApplyingChanges, isConfirmingBudget]);
+  useFocusEffect(
+    React.useCallback(() => {
+      navigation.setOptions({
+        title: 'Settings',
+        headerLargeTitle: false,
+        headerBackVisible: !isSetupMode,
+        gestureEnabled: !isSetupMode,
+        headerRight: (isSetupMode || canDismiss)
+          ? () => (
+              <Button
+                variant="plain"
+                size="small"
+                onPress={handleNavBarDone}
+                accessibilityLabel={doneButtonLabel}
+                accessibilityHint={isSetupMode ? "Complete setup" : "Close settings"}
+                style={styles.doneButton}
+                disabled={isSetupMode ? finishSetupDisabled : isApplyingChanges}
+              >
+                {isApplyingChanges || isConfirmingBudget ? (isSetupMode ? 'Finishing setup…' : 'Applying…') : doneButtonLabel}
+              </Button>
+            )
+          : undefined,
+      });
+
+      return () => {
+        navigation.setOptions({
+          headerRight: undefined,
+        });
+      };
+    }, [navigation, isSetupMode, canDismiss, handleNavBarDone, doneButtonLabel, finishSetupDisabled, isApplyingChanges, isConfirmingBudget])
+  );
 
   const statusMeta = connectionStatusCopy[state.connectionStatus];
 
