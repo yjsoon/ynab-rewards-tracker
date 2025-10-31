@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { FlatList, View, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useHaptics } from '@/hooks/useHaptics';
 import { useStorage } from '@/contexts/StorageContext';
 import { findBestDashboardEntry, buildAccountsMap } from '@/lib/dashboardCache';
@@ -119,15 +119,24 @@ export default function TransactionsScreen() {
     []
   );
 
-  React.useLayoutEffect(() => {
-    navigation.setOptions({
-      headerLargeTitle: true,
-      title: 'Activity',
-      headerSearchBarOptions: {
-        placeholder: 'Search transactions',
-      },
-    });
-  }, [navigation]);
+  useFocusEffect(
+    React.useCallback(() => {
+      const parent = navigation.getParent();
+      parent?.setOptions({
+        headerLargeTitle: true,
+        headerTitle: 'Activity',
+        title: 'Activity',
+        headerRight: undefined,
+        headerSearchBarOptions: undefined,
+      });
+
+      return () => {
+        parent?.setOptions({
+          headerSearchBarOptions: undefined,
+        });
+      };
+    }, [navigation])
+  );
 
   const renderHeader = React.useCallback(() => {
     if (!infoMessage && !(isLoading && transactions.length > 0)) {

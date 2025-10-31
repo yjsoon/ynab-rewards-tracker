@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import { useHaptics } from '@/hooks/useHaptics';
+import { useToast } from '@/contexts/ToastContext';
 import { Card, ListItem, Button, Footnote, SectionHeader, Separator, Headline, Caption1 } from '@/components/ios';
 import { semanticColors, semanticHex, withAlpha } from '@/theme/semanticColors';
 import { useStorage } from '@/contexts/StorageContext';
@@ -33,6 +34,7 @@ export default function SettingsScreen() {
   const navigation = useNavigation();
   const router = useRouter();
   const { impact, notification } = useHaptics();
+  const { show: showToast } = useToast();
   const { state, actions } = useStorage();
 
   const canDismiss = navigation.canGoBack();
@@ -193,33 +195,95 @@ export default function SettingsScreen() {
     }
   }, [state.hasPendingChanges, hasLocalTrackedChanges, actions, trackedAccounts, notification, impact, router]);
 
-  const doneButtonLabel = useMemo(() => {
-    return 'Done';
-  }, []);
+  const handleFinishSetup = useCallback(async () => {
+    setValidationError(undefined);
+    setIsApplyingChanges(true);
+    const wasInSetupMode = isSetupMode;
+    const hadNoBackStack = !canDismiss;
+    
+    // Navigate immediately if in setup mode to avoid label change
+    if (wasInSetupMode) {
+      if (hadNoBackStack) {
+        router.replace('/(tabs)');
+      } else {
+        router.back();
+      }
+    }
+    
+    try {
+      actions.stageTrackedAccountIds(trackedAccounts);
+      await actions.applyPendingChanges();
+      notification('success');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : undefined;
+      const toastMessage = errorMessage || 'Couldn\'t finish setup. Failed to sync with YNAB';
+      
+      setValidationError(errorMessage || 'Failed to finish setup');
+      
+      // Show toast error that persists after navigation
+      // This ensures users see feedback even if they've navigated away from Settings
+      // The toast appears within 300ms (animation duration) and survives navigation
+      // Note: showToast already triggers haptic feedback, so we don't call notification('error') here
+      showToast({
+        variant: 'error',
+        message: toastMessage,
+      });
+      
+      // If navigation already happened, we can't go back, so just return
+      if (!wasInSetupMode) {
+        return;
+      }
+    } finally {
+      setIsApplyingChanges(false);
+    }
+  }, [actions, trackedAccounts, isSetupMode, notification, router, canDismiss, showToast]);
 
-  React.useLayoutEffect(() => {
-    navigation.setOptions({
-      title: 'Settings',
-      headerLargeTitle: false,
-      headerBackVisible: !isSetupMode,
-      gestureEnabled: !isSetupMode,
-      headerRight: !isSetupMode && canDismiss
-        ? () => (
-            <Button
-              variant="plain"
-              size="small"
-              onPress={handleDone}
-              accessibilityLabel={doneButtonLabel}
-              accessibilityHint="Close settings"
-              style={styles.doneButton}
-              disabled={isApplyingChanges}
-            >
-              {isApplyingChanges ? 'Applying…' : doneButtonLabel}
-            </Button>
-          )
-        : undefined,
-    });
-  }, [navigation, isSetupMode, canDismiss, handleDone, doneButtonLabel, isApplyingChanges]);
+  const doneButtonLabel = useMemo(() => {
+    if (isSetupMode) {
+      return finishSetupButtonLabel;
+    }
+    return 'Done';
+  }, [isSetupMode, finishSetupButtonLabel]);
+
+  const handleNavBarDone = useCallback(() => {
+    if (isSetupMode) {
+      handleFinishSetup();
+    } else {
+      handleDone();
+    }
+  }, [isSetupMode, handleFinishSetup, handleDone]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      navigation.setOptions({
+        title: 'Settings',
+        headerLargeTitle: false,
+        headerBackVisible: !isSetupMode,
+        gestureEnabled: !isSetupMode,
+        headerRight: (isSetupMode || canDismiss)
+          ? () => (
+              <Button
+                variant="plain"
+                size="small"
+                onPress={handleNavBarDone}
+                accessibilityLabel={doneButtonLabel}
+                accessibilityHint={isSetupMode ? "Complete setup" : "Close settings"}
+                style={styles.doneButton}
+                disabled={isSetupMode ? finishSetupDisabled : isApplyingChanges}
+              >
+                {isApplyingChanges || isConfirmingBudget ? (isSetupMode ? 'Finishing setup…' : 'Applying…') : doneButtonLabel}
+              </Button>
+            )
+          : undefined,
+      });
+
+      return () => {
+        navigation.setOptions({
+          headerRight: undefined,
+        });
+      };
+    }, [navigation, isSetupMode, canDismiss, handleNavBarDone, doneButtonLabel, finishSetupDisabled, isApplyingChanges, isConfirmingBudget])
+  );
 
   const statusMeta = connectionStatusCopy[state.connectionStatus];
 
@@ -299,28 +363,6 @@ export default function SettingsScreen() {
     setHasLocalAccountToggles(true);
     actions.stageTrackedAccountIds(nextIds);
   }, [trackedAccounts, actions, impact, state.isSyncing, isApplyingChanges]);
-
-  const handleFinishSetup = useCallback(async () => {
-    setValidationError(undefined);
-    setIsApplyingChanges(true);
-    const wasInSetupMode = isSetupMode;
-    try {
-      actions.stageTrackedAccountIds(trackedAccounts);
-      await actions.applyPendingChanges();
-      notification('success');
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to apply changes';
-      setValidationError(message);
-      notification('error');
-      return;
-    } finally {
-      setIsApplyingChanges(false);
-    }
-
-    if (wasInSetupMode) {
-      router.back();
-    }
-  }, [actions, trackedAccounts, isSetupMode, notification, router]);
 
   const shouldShowConnectButton = isDisconnected || isError || isAuthenticating;
   const connectButtonLabel = isAuthenticating ? 'Connecting…' : (isError ? 'Retry connection' : 'Connect to YNAB');
