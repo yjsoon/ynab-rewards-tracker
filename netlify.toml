@@ -1,0 +1,19 @@
+[build]
+  base = "apps/web"
+  command = "pnpm build"
+  publish = ".next"
+
+  # Only build if web app or shared packages changed
+  # Returns exit code 1 (skip build) if only mobile files changed
+  ignore = """
+    if git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- apps/web packages; then
+      echo 'No changes to web app or packages, skipping build'
+      exit 1
+    else
+      echo 'Changes detected in web app or packages, building'
+      exit 0
+    fi
+  """
+
+[build.environment]
+  NODE_VERSION = "18"
