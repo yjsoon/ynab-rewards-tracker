@@ -20,7 +20,6 @@ import {
   ListItem,
   Button,
   ProgressView,
-  SectionHeader,
   Separator,
   Body,
   Footnote,
@@ -393,16 +392,6 @@ export default function HomeScreen() {
     }, [navigation, actions, impact, navigateToSettings])
   );
 
-  const featured = useMemo(() => {
-    if (summaries.length === 0) return null;
-    return [...summaries]
-      .sort((a, b) => {
-        const valueA = a.calculation.rewardEarnedDollars ?? a.calculation.rewardEarned ?? 0;
-        const valueB = b.calculation.rewardEarnedDollars ?? b.calculation.rewardEarned ?? 0;
-        return valueB - valueA;
-      })[0];
-  }, [summaries]);
-
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
       <ScrollView
@@ -412,18 +401,22 @@ export default function HomeScreen() {
         <View style={styles.content}>
           {isEmpty && !isLoading ? (
             <EmptyState onOpenSettings={navigateToSettings} />
-          ) : featured ? (
-            <FeaturedCardHighlight summary={featured} haptics={impact} />
           ) : null}
 
           {summaries.length > 0 && !isEmpty ? (
             <>
-              <SectionHeader>Active Cards</SectionHeader>
-
               {summaries.map((summary) => (
                 <View key={`${summary.card.id}-${summary.period}`} style={styles.cardSection}>
                   <Card>
-                    <ListItem>
+                    <ListItem
+                      onPress={() => {
+                        impact('light');
+                        console.log('Manage card');
+                      }}
+                      showDisclosure
+                      accessibilityLabel={`Manage settings for ${summary.card.name}`}
+                      accessibilityHint="Opens card configuration and preferences"
+                    >
                       <View style={styles.cardHeader}>
                         <View style={styles.cardHeaderText}>
                           <Headline>{summary.card.name}</Headline>
@@ -535,20 +528,6 @@ export default function HomeScreen() {
                         ))}
                       </>
                     ) : null}
-
-                    <Separator inset={16} />
-
-                    <ListItem
-                      onPress={() => {
-                        impact('light');
-                        console.log('Manage card');
-                      }}
-                      showDisclosure
-                      accessibilityLabel={`Manage settings for ${summary.card.name}`}
-                      accessibilityHint="Opens card configuration and preferences"
-                    >
-                      <Body>Manage card</Body>
-                    </ListItem>
                   </Card>
                 </View>
               ))}
@@ -557,71 +536,6 @@ export default function HomeScreen() {
         </View>
       </ScrollView>
     </SafeAreaView>
-  );
-}
-
-function FeaturedCardHighlight({
-  summary,
-  haptics,
-}: {
-  summary: CardSummary;
-  haptics: (style: 'light' | 'medium' | 'heavy') => void;
-}) {
-  const { state, status } = useStorage();
-  const rewardDisplay = currencyFormatter.format(summary.calculation.rewardEarnedDollars);
-  const spendDisplay = currencyFormatter.format(summary.calculation.eligibleSpend);
-  const effectiveRate = SimpleRewardsCalculator.calculateEffectiveRate(summary.calculation);
-
-  return (
-    <View style={styles.featuredSection}>
-      <Card style={styles.featuredCard}>
-        <TouchableOpacity
-          onPress={() => {
-            haptics('medium');
-            console.log('See transaction insights');
-          }}
-          style={styles.featuredContent}
-          accessibilityLabel={`See insights for ${summary.card.name}`}
-          accessibilityHint="Opens detailed breakdown of rewards and spending"
-        >
-          <View style={styles.featuredHeader}>
-            <View style={styles.featuredHeaderText}>
-              <Caption1 color="secondary">Suggested focus card</Caption1>
-              <Headline>{summary.card.name}</Headline>
-              {summary.card.issuer && summary.card.issuer !== 'Unknown' ? (
-                <Footnote color="secondary">{summary.card.issuer}</Footnote>
-              ) : null}
-            </View>
-            {(status.isRefreshing || state.isSyncing) && (
-              <View
-                style={[styles.sourceBadge, styles.computedBadge]}
-              >
-                <Caption2 color="primary">Loading…</Caption2>
-              </View>
-            )}
-          </View>
-
-          <Body color="secondary" style={styles.featuredCopy}>
-            Earned <Body style={styles.featuredHighlight}>{rewardDisplay}</Body> so far this period from{' '}
-            <Body style={styles.featuredHighlight}>{spendDisplay}</Body> of eligible spend. Effective rate{' '}
-            <Body style={styles.featuredHighlight}>{effectiveRate.toFixed(2)}%</Body>.
-          </Body>
-
-          <Button
-            variant="filled"
-            size="medium"
-            onPress={() => {
-              haptics('medium');
-              console.log('See transaction insights');
-            }}
-            accessibilityLabel={`See transaction insights for ${summary.card.name}`}
-            accessibilityHint="Opens detailed breakdown of rewards and spending"
-          >
-            See transaction insights
-          </Button>
-        </TouchableOpacity>
-      </Card>
-    </View>
   );
 }
 
@@ -729,32 +643,6 @@ const styles = StyleSheet.create({
   headerButton: {
     paddingHorizontal: 8,
     paddingVertical: 4,
-  },
-  featuredSection: {
-    marginBottom: 24,
-  },
-  featuredCard: {
-    backgroundColor: semanticColors.secondarySystemGroupedBackground as string,
-  },
-  featuredContent: {
-    gap: 16,
-    padding: 20,
-  },
-  featuredHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-  featuredHeaderText: {
-    flex: 1,
-    gap: 4,
-  },
-  featuredCopy: {
-    lineHeight: 20,
-  },
-  featuredHighlight: {
-    color: semanticColors.systemBlue as string,
-    fontWeight: '600',
   },
   sourceBadge: {
     paddingHorizontal: 8,
