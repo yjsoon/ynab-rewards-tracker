@@ -415,7 +415,7 @@ export default function SettingsScreen() {
                       <ActivityIndicator size="small" color={semanticHex.systemBlue} />
                     ) : null}
                   </View>
-                  {state.connectionError ? (
+                  {state.connectionError && !validationError ? (
                     <Caption1 style={styles.statusError}>{state.connectionError}</Caption1>
                   ) : null}
                 </View>
@@ -620,16 +620,6 @@ export default function SettingsScreen() {
                 ) : null}
               </>
             ) : null}
-
-            <SectionHeader>About</SectionHeader>
-            <Card>
-              <ListItem>
-                <View style={styles.aboutInfo}>
-                  <Footnote color="secondary">Version 0.1.0 (Demo Mode)</Footnote>
-                  <Footnote color="secondary">Built with Expo + React Native</Footnote>
-                </View>
-              </ListItem>
-            </Card>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -761,9 +751,6 @@ const styles = StyleSheet.create({
   },
   trackBadgeActive: {
     backgroundColor: withAlpha(semanticHex.systemBlue, '22'),
-  },
-  aboutInfo: {
-    gap: 8,
   },
   doneButton: {
     paddingHorizontal: 8,
