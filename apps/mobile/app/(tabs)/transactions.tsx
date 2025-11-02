@@ -240,6 +240,7 @@ const styles = StyleSheet.create({
   },
   cardItemWrapper: {
     backgroundColor: semanticColors.secondarySystemGroupedBackground,
+    overflow: 'hidden',
   },
   cardItemFirst: {
     borderTopLeftRadius: 10,

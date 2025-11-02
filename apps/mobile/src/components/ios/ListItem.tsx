@@ -29,7 +29,6 @@ export function ListItem({
   onPress,
   showDisclosure = false,
   isFirst = false,
-  isLast = false,
   style,
   accessibilityLabel,
   accessibilityHint,
