@@ -9,7 +9,6 @@ interface ListItemProps {
   onPress?: () => void;
   showDisclosure?: boolean;
   isFirst?: boolean;
-  isLast?: boolean;
   style?: ViewStyle;
   accessibilityLabel?: string;
   accessibilityHint?: string;
@@ -30,7 +29,6 @@ export function ListItem({
   onPress,
   showDisclosure = false,
   isFirst = false,
-  isLast = false,
   style,
   accessibilityLabel,
   accessibilityHint,
@@ -96,7 +94,7 @@ export function ListItem({
 
 const styles = StyleSheet.create({
   pressable: {
-    // No background by default - inherits Card background to avoid double-layered shading
+    backgroundColor: 'transparent', // Explicitly transparent to inherit Card background and avoid double-layered shading
     // This matches iOS Settings app behavior where list items are transparent inside grouped cards
   },
   pressed: {

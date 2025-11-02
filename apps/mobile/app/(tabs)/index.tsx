@@ -79,8 +79,8 @@ export function useCardSummaries(): CardSummaryResult {
     const hiddenIds = new Set((state.hiddenCards || []).map((hidden) => hidden.cardId));
     const activeCards = state.cards.filter((card) => !hiddenIds.has(card.id));
 
-    if (state.cards.length === 0) {
-      console.log('[useCardSummaries] No cards found in state');
+    if (activeCards.length === 0) {
+      console.log('[useCardSummaries] No active cards found');
       return {
         summaries: [],
         calculations: [],
@@ -138,13 +138,13 @@ export function useCardSummaries(): CardSummaryResult {
 
     console.log('[useCardSummaries] Result:', {
       summariesCount: summaries.length,
-      isEmpty: state.cards.length === 0,
+      isEmpty: summaries.length === 0,
     });
 
     return {
       summaries,
       calculations: summaries.map((summary) => summary.rewardCalculation),
-      isEmpty: state.cards.length === 0,
+      isEmpty: summaries.length === 0,
       isLoading: status.isRefreshing,
     };
   }, [state, status.isHydrated, status.isRefreshing]);
@@ -370,7 +370,7 @@ export default function HomeScreen() {
                   await actions.refresh();
                   await actions.syncBudgetsAndAccounts({ skipTransactions: false, sinceDate: getStartOfCurrentMonthISO() });
                 } catch (error) {
-                  console.error('Refresh failed', error);
+                  console.error('[HomeScreen] Refresh failed', error);
                 }
               }}
               accessibilityLabel="Refresh rewards data"

@@ -123,7 +123,7 @@ export default function TransactionsScreen() {
     React.useCallback(() => {
       const parent = navigation.getParent();
       parent?.setOptions({
-        headerLargeTitle: true,
+        headerLargeTitle: false,
         headerTitle: 'Activity',
         title: 'Activity',
         headerRight: undefined,
@@ -153,6 +153,43 @@ export default function TransactionsScreen() {
     );
   }, [infoMessage, isLoading, transactions.length]);
 
+
+  const renderTransaction = React.useCallback(
+    ({ item, index }: { item: DisplayTransaction; index: number }) => (
+      <ListItem
+        onPress={() => {
+          impact('light');
+          console.log('Transaction tapped:', item.id);
+        }}
+        showDisclosure
+        isFirst={index === 0}
+      >
+        <View style={styles.transactionRow}>
+          <View style={styles.transactionInfo}>
+            <Headline>{item.payeeName}</Headline>
+            <Footnote color="secondary">
+              {[item.categoryName ?? 'Uncategorized', item.accountName, new Date(item.date).toLocaleDateString()]
+                .filter(Boolean)
+                .join(' • ')}
+            </Footnote>
+          </View>
+          <Headline
+            style={
+              item.amount < 0
+                ? styles.amountNegative
+                : styles.amountPositive
+            }
+          >
+            {currencyFormatter.format(Math.abs(item.amount) / 1000)}
+          </Headline>
+        </View>
+      </ListItem>
+    ),
+    [transactions.length, currencyFormatter, impact]
+  );
+
+  // Use FlatList for virtualization while maintaining grouped table appearance
+  // Apply Card styling via contentContainerStyle - items render inside Card-styled scrollable area
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
       <FlatList
@@ -160,39 +197,22 @@ export default function TransactionsScreen() {
         keyExtractor={(item) => item.id}
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={styles.listContent}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
         ListHeaderComponent={renderHeader}
-        renderItem={({ item }) => (
-          <Card>
-            <ListItem
-              onPress={() => {
-                impact('light');
-                console.log('Transaction tapped:', item.id);
-              }}
-              showDisclosure
+        renderItem={({ item, index }) => {
+          const isFirst = index === 0;
+          const isLast = index === transactions.length - 1;
+          return (
+            <View
+              style={[
+                styles.cardItemWrapper,
+                isFirst && styles.cardItemFirst,
+                isLast && styles.cardItemLast,
+              ]}
             >
-              <View style={styles.transactionRow}>
-                <View style={styles.transactionInfo}>
-                  <Headline>{item.payeeName}</Headline>
-                  <Footnote color="secondary">
-                    {[item.categoryName ?? 'Uncategorized', item.accountName, new Date(item.date).toLocaleDateString()]
-                      .filter(Boolean)
-                      .join(' • ')}
-                  </Footnote>
-                </View>
-                <Headline
-                  style={
-                    item.amount < 0
-                      ? styles.amountNegative
-                      : styles.amountPositive
-                  }
-                >
-                  {currencyFormatter.format(Math.abs(item.amount) / 1000)}
-                </Headline>
-              </View>
-            </ListItem>
-          </Card>
-        )}
+              {renderTransaction({ item, index })}
+            </View>
+          );
+        }}
         ListEmptyComponent={() => (
           <Card>
             <ListItem>
@@ -202,6 +222,8 @@ export default function TransactionsScreen() {
             </ListItem>
           </Card>
         )}
+        ListFooterComponent={() => <View style={styles.footer} />}
+        ItemSeparatorComponent={undefined}
       />
     </SafeAreaView>
   );
@@ -213,15 +235,28 @@ const styles = StyleSheet.create({
     backgroundColor: semanticColors.systemGroupedBackground,
   },
   listContent: {
-    padding: 16,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+  },
+  cardItemWrapper: {
+    backgroundColor: semanticColors.secondarySystemGroupedBackground,
+    overflow: 'hidden',
+  },
+  cardItemFirst: {
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
+  },
+  cardItemLast: {
+    borderBottomLeftRadius: 10,
+    borderBottomRightRadius: 10,
   },
   noticeContainer: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 0,
     paddingBottom: 12,
     gap: 4,
   },
-  separator: {
-    height: 12,
+  footer: {
+    height: 16,
   },
   transactionRow: {
     flexDirection: 'row',
