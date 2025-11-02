@@ -96,7 +96,7 @@ export function ListItem({
 
 const styles = StyleSheet.create({
   pressable: {
-    // No background by default - inherits Card background to avoid double-layered shading
+    backgroundColor: 'transparent', // Explicitly transparent to inherit Card background and avoid double-layered shading
     // This matches iOS Settings app behavior where list items are transparent inside grouped cards
   },
   pressed: {
