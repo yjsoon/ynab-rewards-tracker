@@ -118,4 +118,4 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: semanticColors.separator,
   },
-}););
+});
