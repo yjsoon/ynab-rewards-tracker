@@ -370,7 +370,7 @@ export default function HomeScreen() {
                   await actions.refresh();
                   await actions.syncBudgetsAndAccounts({ skipTransactions: false, sinceDate: getStartOfCurrentMonthISO() });
                 } catch (error) {
-                  console.error('Refresh failed', error);
+                  console.error('[HomeScreen] Refresh failed', error);
                 }
               }}
               accessibilityLabel="Refresh rewards data"
