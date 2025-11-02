@@ -188,17 +188,32 @@ export default function TransactionsScreen() {
     [transactions.length, currencyFormatter, impact]
   );
 
-  // NOTE: Using ScrollView instead of FlatList for native iOS grouped table appearance.
-  // This trades virtualization for visual consistency. For lists with 100+ items,
-  // consider implementing a virtualized solution that maintains the grouped card styling.
+  // Use FlatList for virtualization while maintaining grouped table appearance
+  // Apply Card styling via contentContainerStyle - items render inside Card-styled scrollable area
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
-      <ScrollView
+      <FlatList
+        data={transactions}
+        keyExtractor={(item) => item.id}
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={styles.listContent}
-      >
-        {renderHeader()}
-        {transactions.length === 0 ? (
+        ListHeaderComponent={renderHeader}
+        renderItem={({ item, index }) => {
+          const isFirst = index === 0;
+          const isLast = index === transactions.length - 1;
+          return (
+            <View
+              style={[
+                styles.cardItemWrapper,
+                isFirst && styles.cardItemFirst,
+                isLast && styles.cardItemLast,
+              ]}
+            >
+              {renderTransaction({ item, index })}
+            </View>
+          );
+        }}
+        ListEmptyComponent={() => (
           <Card>
             <ListItem>
               <Footnote color="secondary">
@@ -206,17 +221,10 @@ export default function TransactionsScreen() {
               </Footnote>
             </ListItem>
           </Card>
-        ) : (
-          <Card>
-            {transactions.map((item, index) => (
-              <React.Fragment key={item.id}>
-                {renderTransaction({ item, index })}
-              </React.Fragment>
-            ))}
-          </Card>
         )}
-        <View style={styles.footer} />
-      </ScrollView>
+        ListFooterComponent={() => <View style={styles.footer} />}
+        ItemSeparatorComponent={null}
+      />
     </SafeAreaView>
   );
 }
@@ -229,6 +237,17 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: 20,
     paddingTop: 16,
+  },
+  cardItemWrapper: {
+    backgroundColor: semanticColors.secondarySystemGroupedBackground,
+  },
+  cardItemFirst: {
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
+  },
+  cardItemLast: {
+    borderBottomLeftRadius: 10,
+    borderBottomRightRadius: 10,
   },
   noticeContainer: {
     paddingHorizontal: 0,
