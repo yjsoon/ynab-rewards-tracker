@@ -188,9 +188,15 @@ export default function TransactionsScreen() {
     [transactions.length, currencyFormatter, impact]
   );
 
+  // NOTE: Using ScrollView instead of FlatList for native iOS grouped table appearance.
+  // This trades virtualization for visual consistency. For lists with 100+ items,
+  // consider implementing a virtualized solution that maintains the grouped card styling.
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
-      <View style={styles.listContent}>
+      <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={styles.listContent}
+      >
         {renderHeader()}
         {transactions.length === 0 ? (
           <Card>
@@ -202,17 +208,15 @@ export default function TransactionsScreen() {
           </Card>
         ) : (
           <Card>
-            <FlatList
-              data={transactions}
-              keyExtractor={(item) => item.id}
-              scrollEnabled={false}
-              renderItem={({ item, index }) => renderTransaction({ item, index })}
-              ItemSeparatorComponent={null}
-            />
+            {transactions.map((item, index) => (
+              <React.Fragment key={item.id}>
+                {renderTransaction({ item, index })}
+              </React.Fragment>
+            ))}
           </Card>
         )}
         <View style={styles.footer} />
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -225,7 +229,6 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: 20,
     paddingTop: 16,
-    flexGrow: 1,
   },
   noticeContainer: {
     paddingHorizontal: 0,
