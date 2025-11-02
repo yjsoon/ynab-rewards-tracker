@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { FlatList, View, StyleSheet } from 'react-native';
+import { ScrollView, View, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useHaptics } from '@/hooks/useHaptics';
@@ -123,7 +123,7 @@ export default function TransactionsScreen() {
     React.useCallback(() => {
       const parent = navigation.getParent();
       parent?.setOptions({
-        headerLargeTitle: true,
+        headerLargeTitle: false,
         headerTitle: 'Activity',
         title: 'Activity',
         headerRight: undefined,
@@ -153,47 +153,15 @@ export default function TransactionsScreen() {
     );
   }, [infoMessage, isLoading, transactions.length]);
 
+
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
-      <FlatList
-        data={transactions}
-        keyExtractor={(item) => item.id}
+      <ScrollView
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={styles.listContent}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
-        ListHeaderComponent={renderHeader}
-        renderItem={({ item }) => (
-          <Card>
-            <ListItem
-              onPress={() => {
-                impact('light');
-                console.log('Transaction tapped:', item.id);
-              }}
-              showDisclosure
-            >
-              <View style={styles.transactionRow}>
-                <View style={styles.transactionInfo}>
-                  <Headline>{item.payeeName}</Headline>
-                  <Footnote color="secondary">
-                    {[item.categoryName ?? 'Uncategorized', item.accountName, new Date(item.date).toLocaleDateString()]
-                      .filter(Boolean)
-                      .join(' • ')}
-                  </Footnote>
-                </View>
-                <Headline
-                  style={
-                    item.amount < 0
-                      ? styles.amountNegative
-                      : styles.amountPositive
-                  }
-                >
-                  {currencyFormatter.format(Math.abs(item.amount) / 1000)}
-                </Headline>
-              </View>
-            </ListItem>
-          </Card>
-        )}
-        ListEmptyComponent={() => (
+      >
+        {renderHeader()}
+        {transactions.length === 0 ? (
           <Card>
             <ListItem>
               <Footnote color="secondary">
@@ -201,8 +169,44 @@ export default function TransactionsScreen() {
               </Footnote>
             </ListItem>
           </Card>
+        ) : (
+          <Card>
+            {transactions.map((item, index) => (
+              <ListItem
+                key={item.id}
+                onPress={() => {
+                  impact('light');
+                  console.log('Transaction tapped:', item.id);
+                }}
+                showDisclosure
+                isFirst={index === 0}
+                isLast={index === transactions.length - 1}
+              >
+                <View style={styles.transactionRow}>
+                  <View style={styles.transactionInfo}>
+                    <Headline>{item.payeeName}</Headline>
+                    <Footnote color="secondary">
+                      {[item.categoryName ?? 'Uncategorized', item.accountName, new Date(item.date).toLocaleDateString()]
+                        .filter(Boolean)
+                        .join(' • ')}
+                    </Footnote>
+                  </View>
+                  <Headline
+                    style={
+                      item.amount < 0
+                        ? styles.amountNegative
+                        : styles.amountPositive
+                    }
+                  >
+                    {currencyFormatter.format(Math.abs(item.amount) / 1000)}
+                  </Headline>
+                </View>
+              </ListItem>
+            ))}
+          </Card>
         )}
-      />
+        <View style={styles.footer} />
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -213,15 +217,16 @@ const styles = StyleSheet.create({
     backgroundColor: semanticColors.systemGroupedBackground,
   },
   listContent: {
-    padding: 16,
+    paddingHorizontal: 20,
+    paddingTop: 16,
   },
   noticeContainer: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 0,
     paddingBottom: 12,
     gap: 4,
   },
-  separator: {
-    height: 12,
+  footer: {
+    height: 16,
   },
   transactionRow: {
     flexDirection: 'row',

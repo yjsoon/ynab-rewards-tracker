@@ -47,7 +47,7 @@ export default function RecommendationsScreen() {
     React.useCallback(() => {
       const parent = navigation.getParent();
       parent?.setOptions({
-        headerLargeTitle: true,
+        headerLargeTitle: false,
         headerTitle: 'Tips',
         title: 'Tips',
         headerRight: undefined,
