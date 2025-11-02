@@ -223,7 +223,7 @@ export default function TransactionsScreen() {
           </Card>
         )}
         ListFooterComponent={() => <View style={styles.footer} />}
-        ItemSeparatorComponent={null}
+        ItemSeparatorComponent={undefined}
       />
     </SafeAreaView>
   );
