@@ -9,7 +9,6 @@ interface ListItemProps {
   onPress?: () => void;
   showDisclosure?: boolean;
   isFirst?: boolean;
-  isLast?: boolean;
   style?: ViewStyle;
   accessibilityLabel?: string;
   accessibilityHint?: string;
@@ -119,4 +118,4 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: semanticColors.separator,
   },
-});
+}););

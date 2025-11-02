@@ -154,12 +154,43 @@ export default function TransactionsScreen() {
   }, [infoMessage, isLoading, transactions.length]);
 
 
+  const renderTransaction = React.useCallback(
+    ({ item, index }: { item: DisplayTransaction; index: number }) => (
+      <ListItem
+        onPress={() => {
+          impact('light');
+          console.log('Transaction tapped:', item.id);
+        }}
+        showDisclosure
+        isFirst={index === 0}
+      >
+        <View style={styles.transactionRow}>
+          <View style={styles.transactionInfo}>
+            <Headline>{item.payeeName}</Headline>
+            <Footnote color="secondary">
+              {[item.categoryName ?? 'Uncategorized', item.accountName, new Date(item.date).toLocaleDateString()]
+                .filter(Boolean)
+                .join(' • ')}
+            </Footnote>
+          </View>
+          <Headline
+            style={
+              item.amount < 0
+                ? styles.amountNegative
+                : styles.amountPositive
+            }
+          >
+            {currencyFormatter.format(Math.abs(item.amount) / 1000)}
+          </Headline>
+        </View>
+      </ListItem>
+    ),
+    [transactions.length, currencyFormatter, impact]
+  );
+
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
-      <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={styles.listContent}
-      >
+      <View style={styles.listContent}>
         {renderHeader()}
         {transactions.length === 0 ? (
           <Card>
@@ -171,42 +202,17 @@ export default function TransactionsScreen() {
           </Card>
         ) : (
           <Card>
-            {transactions.map((item, index) => (
-              <ListItem
-                key={item.id}
-                onPress={() => {
-                  impact('light');
-                  console.log('Transaction tapped:', item.id);
-                }}
-                showDisclosure
-                isFirst={index === 0}
-                isLast={index === transactions.length - 1}
-              >
-                <View style={styles.transactionRow}>
-                  <View style={styles.transactionInfo}>
-                    <Headline>{item.payeeName}</Headline>
-                    <Footnote color="secondary">
-                      {[item.categoryName ?? 'Uncategorized', item.accountName, new Date(item.date).toLocaleDateString()]
-                        .filter(Boolean)
-                        .join(' • ')}
-                    </Footnote>
-                  </View>
-                  <Headline
-                    style={
-                      item.amount < 0
-                        ? styles.amountNegative
-                        : styles.amountPositive
-                    }
-                  >
-                    {currencyFormatter.format(Math.abs(item.amount) / 1000)}
-                  </Headline>
-                </View>
-              </ListItem>
-            ))}
+            <FlatList
+              data={transactions}
+              keyExtractor={(item) => item.id}
+              scrollEnabled={false}
+              renderItem={({ item, index }) => renderTransaction({ item, index })}
+              ItemSeparatorComponent={null}
+            />
           </Card>
         )}
         <View style={styles.footer} />
-      </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
@@ -219,6 +225,7 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: 20,
     paddingTop: 16,
+    flexGrow: 1,
   },
   noticeContainer: {
     paddingHorizontal: 0,
