@@ -1,16 +1,18 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   useYnabPAT,
   useCreditCards,
   useSelectedBudget,
-  useTrackedAccountIds
+  useTrackedAccountIds,
+  useSettings
 } from "@/hooks/useLocalStorage";
 import { useTrackedTransactions } from "@/hooks/useTrackedTransactions";
 import { DashboardLanding } from "@/components/dashboard/DashboardLanding";
 import { SetupProgressAlert } from "@/components/dashboard/SetupProgressAlert";
-import { RecentTransactionsTable } from "@/components/dashboard/RecentTransactionsTable";
+import { EnhancedTransactionsTable } from "@/components/transactions/EnhancedTransactionsTable";
+import { YnabClient } from "@/lib/ynab-client";
 import {
   Card,
   CardContent,
@@ -18,6 +20,7 @@ import {
   CardHeader,
   CardTitle
 } from "@/components/ui/card";
+import type { YnabFlagColor } from "@/lib/ynab-constants";
 
 const TRANSACTION_LOOKBACK_DAYS = 60;
 const EXTENDED_TRANSACTIONS_LIMIT = 100;
@@ -34,6 +37,8 @@ export default function TransactionsPage() {
   const { cards } = useCreditCards();
   const { selectedBudget } = useSelectedBudget();
   const { trackedAccountIds } = useTrackedAccountIds();
+  const { settings } = useSettings();
+  const [customFlagNames, setCustomFlagNames] = useState<Partial<Record<YnabFlagColor, string>>>({});
 
   const setupStatus: SetupStatus = useMemo(
     () => ({
@@ -60,7 +65,7 @@ export default function TransactionsPage() {
     [cards]
   );
 
-  const { recentTransactions, accountsMap, loading, error, hasCachedData, refreshing, lastUpdatedAt } = useTrackedTransactions({
+  const { recentTransactions, accountsMap, loading, error, hasCachedData, refreshing, lastUpdatedAt, refresh } = useTrackedTransactions({
     pat,
     selectedBudgetId: selectedBudget.id,
     trackedAccountIds,
@@ -70,6 +75,26 @@ export default function TransactionsPage() {
   });
 
   const tableLoading = loading && !hasCachedData;
+
+  // Fetch custom flag names
+  useEffect(() => {
+    const budgetId = selectedBudget.id;
+    if (!pat || !budgetId) {
+      return;
+    }
+
+    const fetchFlagNames = async () => {
+      try {
+        const client = new YnabClient(pat);
+        const names = await client.getCustomFlagNames(budgetId);
+        setCustomFlagNames(names);
+      } catch (err) {
+        console.warn("Failed to fetch custom flag names", err);
+      }
+    };
+
+    fetchFlagNames();
+  }, [pat, selectedBudget.id]);
 
   if (!setupStatus.pat) {
     return <DashboardLanding />;
@@ -97,17 +122,24 @@ export default function TransactionsPage() {
           <CardTitle>Recent Transactions</CardTitle>
           <CardDescription>
             Showing activity from the past {TRANSACTION_LOOKBACK_DAYS} days across your tracked accounts.
+            Expand any transaction to view details and edit its flag colour.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <RecentTransactionsTable
+          <EnhancedTransactionsTable
             loading={tableLoading}
             error={error}
             transactions={recentTransactions}
             accountsMap={accountsMap}
+            cards={cards}
+            settings={settings}
             lookbackDays={TRANSACTION_LOOKBACK_DAYS}
             refreshing={refreshing}
             lastUpdatedAt={lastUpdatedAt}
+            customFlagNames={customFlagNames}
+            selectedBudgetId={selectedBudget.id}
+            pat={pat}
+            onTransactionUpdated={refresh}
           />
         </CardContent>
       </Card>

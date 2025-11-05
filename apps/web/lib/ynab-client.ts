@@ -220,6 +220,23 @@ export class YnabClient {
     return result.data.transaction;
   }
 
+  async updateTransaction(
+    budgetId: string,
+    transactionId: string,
+    updates: { transaction: Partial<Transaction> },
+    init?: RequestInit
+  ) {
+    const result = await this.request<YnabResponse<{ transaction: Transaction }>>(
+      `budgets/${budgetId}/transactions/${transactionId}`,
+      {
+        ...init,
+        method: 'PATCH',
+        body: JSON.stringify(updates),
+      }
+    );
+    return result.data.transaction;
+  }
+
   // Payees
   async getPayees(budgetId: string, init?: RequestInit) {
     const result = await this.request<YnabResponse<{ payees: YnabPayee[] }>>(`budgets/${budgetId}/payees`, init);
