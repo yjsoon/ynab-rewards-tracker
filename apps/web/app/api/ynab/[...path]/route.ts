@@ -59,7 +59,7 @@ export async function POST(
   { params }: { params: { path: string[] } }
 ) {
   const authHeader = req.headers.get('authorization');
-  
+
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return NextResponse.json(
       { error: 'Missing authorization header' },
@@ -70,7 +70,7 @@ export async function POST(
   const token = authHeader.substring(7);
   const path = params.path.join('/');
   const body = await req.json();
-  
+
   try {
     const url = `${YNAB_API_BASE}/${path}`;
     const response = await fetch(url, {
@@ -86,10 +86,63 @@ export async function POST(
     if (!response.ok) {
       const errorText = await response.text();
       return NextResponse.json(
-        { 
-          error: 'YNAB API error', 
+        {
+          error: 'YNAB API error',
           status: response.status,
-          message: errorText 
+          message: errorText
+        },
+        { status: response.status }
+      );
+    }
+
+    const data = await response.json();
+    return NextResponse.json(data);
+  } catch (error) {
+    console.error('Proxy error:', error);
+    return NextResponse.json(
+      { error: 'Failed to proxy request' },
+      { status: 500 }
+    );
+  }
+}
+
+// Support PATCH for updating
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: { path: string[] } }
+) {
+  const authHeader = req.headers.get('authorization');
+
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return NextResponse.json(
+      { error: 'Missing authorization header' },
+      { status: 401 }
+    );
+  }
+
+  const token = authHeader.substring(7);
+  const path = params.path.join('/');
+  const body = await req.json();
+
+  try {
+    const url = `${YNAB_API_BASE}/${path}`;
+    const response = await fetch(url, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return NextResponse.json(
+        {
+          error: 'YNAB API error',
+          status: response.status,
+          message: errorText
         },
         { status: response.status }
       );
