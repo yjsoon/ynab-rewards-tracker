@@ -207,6 +207,8 @@ export interface AppSettings {
   dashboardViewMode?: DashboardViewMode;
   cloudSyncKeyId?: string;
   cloudSyncLastSyncedAt?: string;
+  cloudSyncMnemonic?: string;
+  rememberCloudSyncCode?: boolean;
   cardOrdering?: Partial<Record<'cashback' | 'miles', string[]>>;
   collapsedCardGroups?: Partial<Record<'cashback' | 'miles', boolean>>;
 }

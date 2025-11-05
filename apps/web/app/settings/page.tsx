@@ -45,6 +45,11 @@ import {
   Copy,
   CloudOff,
   KeyRound,
+  Cloud,
+  ChevronDown,
+  ChevronUp,
+  Info,
+  Check,
 } from 'lucide-react';
 import { DashboardQuickStats } from '@/components/dashboard/DashboardQuickStats';
 
@@ -177,7 +182,8 @@ export default function SettingsPage() {
   const [generatedCloudPhrase, setGeneratedCloudPhrase] = useState<string | null>(null);
   const [cloudSyncMessage, setCloudSyncMessage] = useState('');
   const [cloudSyncError, setCloudSyncError] = useState('');
-  const [cloudSyncAction, setCloudSyncAction] = useState<'idle' | 'generate' | 'upload' | 'download' | 'delete'>('idle');
+  const [cloudSyncAction, setCloudSyncAction] = useState<'idle' | 'generate' | 'upload' | 'download' | 'delete' | 'sync'>('idle');
+  const [showAdvancedSync, setShowAdvancedSync] = useState(false);
 
   // Budget and account selection state
   const [budgets, setBudgets] = useState<YnabBudget[]>([]);
@@ -203,12 +209,22 @@ export default function SettingsPage() {
   const isUploadingCloudSync = cloudSyncAction === 'upload';
   const isDownloadingCloudSync = cloudSyncAction === 'download';
   const isDeletingCloudSync = cloudSyncAction === 'delete';
+  const isSyncingNow = cloudSyncAction === 'sync';
+  const isCodeRemembered = settings.rememberCloudSyncCode && Boolean(settings.cloudSyncMnemonic);
+  const storedMnemonic = settings.cloudSyncMnemonic || '';
 
   useEffect(() => {
     if (typeof settings.milesValuation === 'number') {
       setMilesValuation(settings.milesValuation);
     }
   }, [settings.milesValuation]);
+
+  // Initialize cloud sync phrase from stored mnemonic
+  useEffect(() => {
+    if (isCodeRemembered && storedMnemonic && !cloudSyncPhrase) {
+      setCloudSyncPhrase(storedMnemonic);
+    }
+  }, [isCodeRemembered, storedMnemonic, cloudSyncPhrase]);
 
   const cardsByAccountId = useMemo(() => {
     const entries = cards
@@ -550,6 +566,65 @@ export default function SettingsPage() {
     }
   }
 
+  function handleRememberCodeToggle(checked: boolean) {
+    if (checked && cloudSyncPhrase.trim()) {
+      // User wants to remember the code
+      const normalised = normaliseMnemonic(cloudSyncPhrase);
+      if (!isValidMnemonic(normalised)) {
+        setCloudSyncError('Cannot remember an invalid sync code. Check the words and try again.');
+        return;
+      }
+      updateSettings({
+        cloudSyncMnemonic: normalised,
+        rememberCloudSyncCode: true,
+      });
+      setCloudSyncPhrase(normalised);
+      setCloudSyncMessage('Sync code saved to this device.');
+    } else {
+      // User wants to stop remembering
+      updateSettings({
+        cloudSyncMnemonic: undefined,
+        rememberCloudSyncCode: false,
+      });
+      setCloudSyncMessage('Sync code removed from this device.');
+    }
+  }
+
+  async function handleSyncNow() {
+    setCloudSyncError('');
+    setCloudSyncMessage('');
+    setCloudSyncAction('sync');
+    try {
+      const phraseToUse = storedMnemonic || cloudSyncPhrase;
+      if (!phraseToUse.trim()) {
+        throw new Error('No sync code available.');
+      }
+      await uploadWithPhrase(phraseToUse);
+
+      // If code is remembered, save the potentially normalized version
+      if (settings.rememberCloudSyncCode) {
+        const normalised = normaliseMnemonic(phraseToUse);
+        updateSettings({ cloudSyncMnemonic: normalised });
+      }
+    } catch (error) {
+      setCloudSyncError(getErrorMessage(error));
+    } finally {
+      setCloudSyncAction('idle');
+    }
+  }
+
+  function handleForgetCode() {
+    updateSettings({
+      cloudSyncMnemonic: undefined,
+      rememberCloudSyncCode: false,
+      cloudSyncKeyId: undefined,
+      cloudSyncLastSyncedAt: undefined,
+    });
+    setCloudSyncPhrase('');
+    setGeneratedCloudPhrase(null);
+    setCloudSyncMessage('Sync code forgotten. Cloud backup not deleted.');
+  }
+
   if (patLoading || cardsLoading) {
     return <div className="p-5">Loading settings...</div>;
   }
@@ -780,93 +855,185 @@ export default function SettingsPage() {
         <CardHeader>
           <CardTitle>Cloud Sync (optional)</CardTitle>
           <CardDescription>
-            Encrypt your settings with a 12-word sync code and store them in Cloudflare KV via Netlify functions. No sign-in required.
+            Encrypt your settings with a 12-word sync code and store them in Cloudflare KV. No sign-in required.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {generatedCloudPhrase && (
-              <div className="rounded-md border bg-muted/30 p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <KeyRound className="h-4 w-4 text-primary" aria-hidden="true" />
-                    <span className="text-sm font-medium">New sync code</span>
+            {/* Simple Mode: Code is remembered */}
+            {isCodeRemembered && !showAdvancedSync ? (
+              <>
+                <div className="flex items-center justify-between rounded-lg border bg-muted/30 p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+                      <Check className="h-5 w-5 text-primary" aria-hidden="true" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">Sync code saved on this device</p>
+                      {cloudSyncLastSynced && (
+                        <p className="text-xs text-muted-foreground">
+                          Last synced: {cloudSyncLastSynced}
+                        </p>
+                      )}
+                    </div>
                   </div>
+                  <Button
+                    type="button"
+                    onClick={handleSyncNow}
+                    disabled={isCloudSyncBusy}
+                  >
+                    <Cloud className="mr-2 h-4 w-4" aria-hidden="true" />
+                    {isSyncingNow ? 'Syncing…' : 'Sync Now'}
+                  </Button>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowAdvancedSync(true)}
+                  >
+                    <ChevronDown className="mr-2 h-3 w-3" aria-hidden="true" />
+                    Advanced options
+                  </Button>
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
-                    onClick={handleCopyGeneratedPhrase}
+                    onClick={handleForgetCode}
+                    disabled={isCloudSyncBusy}
                   >
-                    <Copy className="mr-2 h-4 w-4" aria-hidden="true" />
-                    Copy
+                    <CloudOff className="mr-2 h-3 w-3" aria-hidden="true" />
+                    Forget sync code
                   </Button>
                 </div>
-                <p className="mt-3 whitespace-pre-wrap break-words font-mono text-sm">
-                  {generatedCloudPhrase}
-                </p>
-              </div>
-            )}
+              </>
+            ) : (
+              <>
+                {/* Advanced/Manual Mode */}
+                {generatedCloudPhrase && (
+                  <div className="rounded-md border bg-muted/30 p-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <KeyRound className="h-4 w-4 text-primary" aria-hidden="true" />
+                        <span className="text-sm font-medium">New sync code</span>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleCopyGeneratedPhrase}
+                      >
+                        <Copy className="mr-2 h-4 w-4" aria-hidden="true" />
+                        Copy
+                      </Button>
+                    </div>
+                    <p className="mt-3 whitespace-pre-wrap break-words font-mono text-sm">
+                      {generatedCloudPhrase}
+                    </p>
+                  </div>
+                )}
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium" htmlFor="cloud-sync-phrase">
-                Sync code
-              </label>
-              <textarea
-                id="cloud-sync-phrase"
-                className="w-full rounded-md border px-3 py-2 font-mono text-sm"
-                rows={2}
-                value={cloudSyncPhrase}
-                onChange={(event) => setCloudSyncPhrase(event.target.value)}
-                placeholder="twelve lowercase words separated by spaces"
-              />
-              <p className="text-xs text-muted-foreground">
-                Paste your existing code or generate a new one. Keep it private — anyone with the code can import your settings.
-              </p>
-            </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium" htmlFor="cloud-sync-phrase">
+                    Sync code
+                  </label>
+                  <textarea
+                    id="cloud-sync-phrase"
+                    className="w-full rounded-md border px-3 py-2 font-mono text-sm"
+                    rows={2}
+                    value={cloudSyncPhrase}
+                    onChange={(event) => setCloudSyncPhrase(event.target.value)}
+                    placeholder="twelve lowercase words separated by spaces"
+                  />
+                  <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/50 dark:bg-amber-950/20">
+                    <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600 dark:text-amber-500" aria-hidden="true" />
+                    <p className="text-xs text-amber-800 dark:text-amber-200">
+                      Keep this code private. Anyone with it can download and decrypt your settings. Your YNAB token is never synced.
+                    </p>
+                  </div>
+                </div>
 
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                onClick={handleGenerateCloudSync}
-                disabled={isCloudSyncBusy}
-              >
-                <KeyRound className="mr-2 h-4 w-4" aria-hidden="true" />
-                {isGeneratingCloudSync ? 'Generating…' : 'Generate & upload'}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleCloudUpload}
-                disabled={isCloudSyncBusy}
-              >
-                <CloudUpload className="mr-2 h-4 w-4" aria-hidden="true" />
-                {isUploadingCloudSync ? 'Uploading…' : 'Upload with code'}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleCloudDownload}
-                disabled={isCloudSyncBusy}
-              >
-                <CloudDownload className="mr-2 h-4 w-4" aria-hidden="true" />
-                {isDownloadingCloudSync ? 'Downloading…' : 'Download & apply'}
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={handleCloudDelete}
-                disabled={isCloudSyncBusy}
-              >
-                <CloudOff className="mr-2 h-4 w-4" aria-hidden="true" />
-                {isDeletingCloudSync ? 'Deleting…' : 'Delete cloud backup'}
-              </Button>
-            </div>
+                {/* Remember Code Toggle */}
+                {cloudSyncPhrase.trim() && !generatedCloudPhrase && (
+                  <div className="flex items-center justify-between rounded-lg border p-3">
+                    <div className="flex items-start gap-3">
+                      <KeyRound className="mt-0.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                      <div>
+                        <p className="text-sm font-medium">Remember sync code on this device</p>
+                        <p className="text-xs text-muted-foreground">
+                          Store encrypted code locally for one-click syncing
+                        </p>
+                      </div>
+                    </div>
+                    <Switch
+                      id="remember-sync-code"
+                      checked={Boolean(settings.rememberCloudSyncCode)}
+                      onCheckedChange={handleRememberCodeToggle}
+                      aria-label="Remember sync code on this device"
+                    />
+                  </div>
+                )}
 
-            {cloudSyncLastSynced && (
-              <p className="text-xs text-muted-foreground">
-                Last synced: {cloudSyncLastSynced}
-              </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    onClick={handleGenerateCloudSync}
+                    disabled={isCloudSyncBusy}
+                  >
+                    <KeyRound className="mr-2 h-4 w-4" aria-hidden="true" />
+                    {isGeneratingCloudSync ? 'Generating…' : 'Generate & upload'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleCloudUpload}
+                    disabled={isCloudSyncBusy || !cloudSyncPhrase.trim()}
+                  >
+                    <CloudUpload className="mr-2 h-4 w-4" aria-hidden="true" />
+                    {isUploadingCloudSync ? 'Uploading…' : 'Upload with code'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleCloudDownload}
+                    disabled={isCloudSyncBusy || !cloudSyncPhrase.trim()}
+                  >
+                    <CloudDownload className="mr-2 h-4 w-4" aria-hidden="true" />
+                    {isDownloadingCloudSync ? 'Downloading…' : 'Download & apply'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={handleCloudDelete}
+                    disabled={isCloudSyncBusy}
+                  >
+                    <CloudOff className="mr-2 h-4 w-4" aria-hidden="true" />
+                    {isDeletingCloudSync ? 'Deleting…' : 'Delete cloud backup'}
+                  </Button>
+                </div>
+
+                {isCodeRemembered && showAdvancedSync && (
+                  <div className="flex justify-start">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowAdvancedSync(false)}
+                    >
+                      <ChevronUp className="mr-2 h-3 w-3" aria-hidden="true" />
+                      Show simple mode
+                    </Button>
+                  </div>
+                )}
+
+                {cloudSyncLastSynced && (
+                  <p className="text-xs text-muted-foreground">
+                    Last synced: {cloudSyncLastSynced}
+                  </p>
+                )}
+              </>
             )}
 
             {cloudSyncMessage && (
