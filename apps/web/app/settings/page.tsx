@@ -184,6 +184,7 @@ export default function SettingsPage() {
   const [cloudSyncError, setCloudSyncError] = useState('');
   const [cloudSyncAction, setCloudSyncAction] = useState<'idle' | 'generate' | 'upload' | 'download' | 'delete' | 'sync'>('idle');
   const [showAdvancedSync, setShowAdvancedSync] = useState(false);
+  const [showGenerateDialog, setShowGenerateDialog] = useState(false);
 
   // Budget and account selection state
   const [budgets, setBudgets] = useState<YnabBudget[]>([]);
@@ -451,7 +452,19 @@ export default function SettingsPage() {
     setCloudSyncMessage('Settings uploaded to Cloudflare KV. Copy your sync code to keep it safe.');
   }
 
-  async function handleGenerateCloudSync() {
+  function handleGenerateCloudSync() {
+    // Check if user already has a sync code set up
+    if (settings.cloudSyncKeyId) {
+      setShowGenerateDialog(true);
+      return;
+    }
+
+    // No existing code, proceed directly
+    confirmGenerateNewCode();
+  }
+
+  async function confirmGenerateNewCode() {
+    setShowGenerateDialog(false);
     setCloudSyncError('');
     setCloudSyncMessage('');
     const phrase = createMnemonic();
@@ -1103,6 +1116,16 @@ export default function SettingsPage() {
         cancelText="Cancel"
         onConfirm={handleClearAll}
         onCancel={() => setShowClearDialog(false)}
+      />
+
+      <ConfirmDialog
+        isOpen={showGenerateDialog}
+        title="Generate New Sync Code?"
+        message="You already have a sync code set up. Generating a new code will create a separate cloud backup and won't affect your existing backup. You'll need to update the code on other devices to keep them in sync."
+        confirmText="Generate New Code"
+        cancelText="Cancel"
+        onConfirm={confirmGenerateNewCode}
+        onCancel={() => setShowGenerateDialog(false)}
       />
 
     </div>
