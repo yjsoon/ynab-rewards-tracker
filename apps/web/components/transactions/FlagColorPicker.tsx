@@ -16,15 +16,17 @@ interface FlagColorPickerProps {
   onChange: (color: YnabFlagColor | null) => void;
   disabled?: boolean;
   customNames?: Partial<Record<YnabFlagColor, string>>;
+  rewardCategories?: Map<string, string>; // Card-specific tag mappings: flagColor -> rewardCategory
 }
 
-export function FlagColorPicker({ value, onChange, disabled, customNames }: FlagColorPickerProps) {
+export function FlagColorPicker({ value, onChange, disabled, customNames, rewardCategories }: FlagColorPickerProps) {
   const allFlags = [UNFLAGGED_FLAG, ...YNAB_FLAG_COLORS];
 
   const normalizedValue = value || UNFLAGGED_FLAG.value;
 
   const getDisplayName = (flagValue: YnabFlagColor) => {
-    return customNames?.[flagValue] || allFlags.find(f => f.value === flagValue)?.label || flagValue;
+    // Priority: reward category (card-specific) > custom flag name (budget-level) > default color name
+    return rewardCategories?.get(flagValue) || customNames?.[flagValue] || allFlags.find(f => f.value === flagValue)?.label || flagValue;
   };
 
   return (

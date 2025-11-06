@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback } from "react";
 import { AlertCircle, Loader2, ChevronDown, ChevronUp, Save, X, Search, ArrowUpDown } from "lucide-react";
 import type { Transaction } from "@/types/transaction";
-import type { CreditCard, AppSettings } from "@/lib/storage";
+import type { CreditCard, AppSettings, TagMapping } from "@/lib/storage";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +33,7 @@ interface EnhancedTransactionsTableProps {
   refreshing?: boolean;
   lastUpdatedAt?: string | null;
   customFlagNames?: Partial<Record<YnabFlagColor, string>>;
+  tagMappings: TagMapping[];
   selectedBudgetId?: string;
   pat?: string;
   onTransactionUpdated?: () => void;
@@ -52,6 +53,7 @@ export function EnhancedTransactionsTable({
   refreshing,
   lastUpdatedAt,
   customFlagNames,
+  tagMappings,
   selectedBudgetId,
   pat,
   onTransactionUpdated,
@@ -75,6 +77,18 @@ export function EnhancedTransactionsTable({
     });
     return map;
   }, [cards]);
+
+  // Build tag mappings lookup: cardId -> (flagColor -> rewardCategory)
+  const tagMappingsByCard = useMemo(() => {
+    const map = new Map<string, Map<string, string>>();
+    tagMappings.forEach((mapping) => {
+      if (!map.has(mapping.cardId)) {
+        map.set(mapping.cardId, new Map());
+      }
+      map.get(mapping.cardId)!.set(mapping.ynabTag, mapping.rewardCategory);
+    });
+    return map;
+  }, [tagMappings]);
 
   // Filter transactions
   const filteredTransactions = useMemo(() => {
@@ -504,6 +518,7 @@ export function EnhancedTransactionsTable({
                                   }}
                                   disabled={isSaving}
                                   customNames={customFlagNames}
+                                  rewardCategories={card ? tagMappingsByCard.get(card.id) : undefined}
                                 />
                               </div>
 
