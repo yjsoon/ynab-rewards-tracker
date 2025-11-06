@@ -1,6 +1,5 @@
 "use client";
 
-import { Check } from "lucide-react";
 import { YNAB_FLAG_COLORS, UNFLAGGED_FLAG, type YnabFlagColor } from "@/lib/ynab-constants";
 import {
   Select,
@@ -9,7 +8,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
 
 interface FlagColorPickerProps {
   value: YnabFlagColor | null | undefined;
@@ -26,7 +24,17 @@ export function FlagColorPicker({ value, onChange, disabled, customNames, reward
 
   const getDisplayName = (flagValue: YnabFlagColor) => {
     // Priority: reward category (card-specific) > custom flag name (budget-level) > default color name
-    return rewardCategories?.get(flagValue) || customNames?.[flagValue] || allFlags.find(f => f.value === flagValue)?.label || flagValue;
+    const categoryName = rewardCategories?.get(flagValue);
+    const customName = customNames?.[flagValue];
+    const defaultLabel = allFlags.find(f => f.value === flagValue)?.label;
+
+    // Debug logging
+    if (rewardCategories && rewardCategories.size > 0) {
+      console.log(`FlagColorPicker - flagValue: ${flagValue}, categoryName: ${categoryName}, customName: ${customName}, defaultLabel: ${defaultLabel}`);
+      console.log('rewardCategories keys:', Array.from(rewardCategories.keys()));
+    }
+
+    return categoryName || customName || defaultLabel || flagValue;
   };
 
   return (
@@ -55,9 +63,6 @@ export function FlagColorPicker({ value, onChange, disabled, customNames, reward
                 style={{ backgroundColor: flag.color }}
               />
               <span>{getDisplayName(flag.value)}</span>
-              {flag.value === normalizedValue && (
-                <Check className="h-4 w-4 ml-auto" />
-              )}
             </div>
           </SelectItem>
         ))}
