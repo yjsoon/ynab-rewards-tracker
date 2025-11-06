@@ -7,7 +7,6 @@ import type { CreditCard, AppSettings } from "@/lib/storage";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -58,6 +57,7 @@ export function EnhancedTransactionsTable({
 }: EnhancedTransactionsTableProps) {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [savingTransaction, setSavingTransaction] = useState<string | null>(null);
+  const [updateError, setUpdateError] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedAccountFilter, setSelectedAccountFilter] = useState<string>("all");
   const [sortField, setSortField] = useState<SortField>("date");
@@ -177,6 +177,7 @@ export function EnhancedTransactionsTable({
       }
 
       setSavingTransaction(transactionId);
+      setUpdateError(""); // Clear any previous errors
 
       try {
         const response = await fetch(`/api/ynab/budgets/${selectedBudgetId}/transactions/${transactionId}`, {
@@ -201,7 +202,7 @@ export function EnhancedTransactionsTable({
         onTransactionUpdated?.();
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        alert(`Failed to update transaction: ${message}`);
+        setUpdateError(`Failed to update transaction: ${message}`);
       } finally {
         setSavingTransaction(null);
       }
@@ -299,6 +300,14 @@ export function EnhancedTransactionsTable({
           <Loader2 className="h-4 w-4 animate-spin" />
           <span>Refreshing…</span>
         </div>
+      )}
+
+      {/* Update error alert */}
+      {updateError && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" aria-hidden="true" />
+          <AlertDescription>{updateError}</AlertDescription>
+        </Alert>
       )}
 
       {/* Results count */}
