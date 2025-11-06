@@ -43,14 +43,14 @@ export function FlagColorPicker({ value, onChange, disabled, customNames, reward
       onValueChange={(val) => onChange(val === UNFLAGGED_FLAG.value ? null : val as YnabFlagColor)}
       disabled={disabled}
     >
-      <SelectTrigger className="w-full">
+      <SelectTrigger className="w-full text-left justify-start">
         <SelectValue>
           <div className="flex items-center gap-2">
             <div
-              className="w-3 h-3 rounded-full border"
+              className="w-3 h-3 rounded-full border flex-shrink-0"
               style={{ backgroundColor: allFlags.find(f => f.value === normalizedValue)?.color }}
             />
-            <span>{getDisplayName(normalizedValue)}</span>
+            <span className="truncate">{getDisplayName(normalizedValue)}</span>
           </div>
         </SelectValue>
       </SelectTrigger>
