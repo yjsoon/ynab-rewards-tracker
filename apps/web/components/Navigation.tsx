@@ -1,14 +1,16 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Home, Settings, CreditCard, SlidersHorizontal, Sparkles, ReceiptText } from 'lucide-react';
+import { Home, Settings, CreditCard, SlidersHorizontal, Sparkles, ReceiptText, Menu, X } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { cn } from '@/lib/utils';
 
 export function Navigation() {
   const pathname = usePathname();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navLinks = [
     { href: '/', label: 'Dashboard', icon: Home },
@@ -18,6 +20,8 @@ export function Navigation() {
   ];
 
   const isSettings = pathname.startsWith('/settings');
+
+  const closeMobileMenu = () => setMobileMenuOpen(false);
 
   return (
     <nav className="border-b bg-gradient-to-r from-primary/5 via-background to-primary/3 backdrop-blur-md sticky top-0 z-50 shadow-sm">
@@ -54,7 +58,7 @@ export function Navigation() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="hidden md:flex items-center gap-2">
             <ThemeToggle />
             <Button
               variant={isSettings ? 'secondary' : 'ghost'}
@@ -72,30 +76,80 @@ export function Navigation() {
             </Button>
           </div>
 
-          {/* Mobile navigation */}
-          <div className="flex md:hidden items-center gap-1">
-            {navLinks.map((link) => {
-              const Icon = link.icon;
-              const isActive = pathname === link.href;
-              return (
-                <Button
-                  key={link.href}
-                  variant={isActive ? "secondary" : "ghost"}
-                  size="icon"
-                  asChild
-                  className={cn(
-                    isActive && "bg-secondary"
-                  )}
-                >
-                  <Link href={link.href}>
-                    <Icon className="h-4 w-4" />
-                    <span className="sr-only">{link.label}</span>
-                  </Link>
-                </Button>
-              );
-            })}
+          {/* Mobile menu button */}
+          <div className="flex md:hidden items-center gap-2">
+            <ThemeToggle />
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label="Toggle menu"
+              aria-expanded={mobileMenuOpen}
+            >
+              {mobileMenuOpen ? (
+                <X className="h-5 w-5" />
+              ) : (
+                <Menu className="h-5 w-5" />
+              )}
+            </Button>
           </div>
         </div>
+
+        {/* Mobile slide-out menu */}
+        {mobileMenuOpen && (
+          <div
+            className="md:hidden fixed inset-0 top-14 bg-black/20 backdrop-blur-sm z-40"
+            onClick={closeMobileMenu}
+          >
+            <div
+              className="absolute right-0 top-0 h-full w-64 bg-background border-l shadow-xl animate-in slide-in-from-right duration-300"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex flex-col p-4 gap-2">
+                {navLinks.map((link) => {
+                  const Icon = link.icon;
+                  const isActive = pathname === link.href;
+                  return (
+                    <Button
+                      key={link.href}
+                      variant={isActive ? "secondary" : "ghost"}
+                      size="lg"
+                      asChild
+                      className={cn(
+                        "justify-start gap-3 w-full",
+                        isActive && "bg-secondary"
+                      )}
+                      onClick={closeMobileMenu}
+                    >
+                      <Link href={link.href}>
+                        <Icon className="h-5 w-5" />
+                        <span className="text-base">{link.label}</span>
+                      </Link>
+                    </Button>
+                  );
+                })}
+
+                <div className="border-t my-2" />
+
+                <Button
+                  variant={isSettings ? 'secondary' : 'ghost'}
+                  size="lg"
+                  asChild
+                  className={cn(
+                    "justify-start gap-3 w-full",
+                    isSettings && 'bg-secondary'
+                  )}
+                  onClick={closeMobileMenu}
+                >
+                  <Link href="/settings">
+                    <Settings className="h-5 w-5" />
+                    <span className="text-base">Settings</span>
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </nav>
   );
