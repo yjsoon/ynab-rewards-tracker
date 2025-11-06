@@ -14,7 +14,7 @@ interface FlagColorPickerProps {
   onChange: (color: YnabFlagColor | null) => void;
   disabled?: boolean;
   customNames?: Partial<Record<YnabFlagColor, string>>;
-  rewardCategories?: Map<string, string>; // Card-specific tag mappings: flagColor -> rewardCategory
+  rewardCategories?: Map<string, string>; // Card-specific subcategories: flagColor -> subcategoryName
 }
 
 export function FlagColorPicker({ value, onChange, disabled, customNames, rewardCategories }: FlagColorPickerProps) {
@@ -27,12 +27,6 @@ export function FlagColorPicker({ value, onChange, disabled, customNames, reward
     const categoryName = rewardCategories?.get(flagValue);
     const customName = customNames?.[flagValue];
     const defaultLabel = allFlags.find(f => f.value === flagValue)?.label;
-
-    // Debug logging
-    if (rewardCategories && rewardCategories.size > 0) {
-      console.log(`FlagColorPicker - flagValue: ${flagValue}, categoryName: ${categoryName}, customName: ${customName}, defaultLabel: ${defaultLabel}`);
-      console.log('rewardCategories keys:', Array.from(rewardCategories.keys()));
-    }
 
     return categoryName || customName || defaultLabel || flagValue;
   };
