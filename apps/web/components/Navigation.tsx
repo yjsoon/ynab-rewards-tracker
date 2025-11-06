@@ -112,7 +112,7 @@ export function Navigation() {
                   return (
                     <Button
                       key={link.href}
-                      variant={isActive ? "secondary" : "ghost"}
+                      variant={isActive ? "secondary" : "outline"}
                       size="lg"
                       asChild
                       className={cn(
@@ -132,7 +132,7 @@ export function Navigation() {
                 <div className="border-t my-2" />
 
                 <Button
-                  variant={isSettings ? 'secondary' : 'ghost'}
+                  variant={isSettings ? 'secondary' : 'outline'}
                   size="lg"
                   asChild
                   className={cn(
