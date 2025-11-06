@@ -45,6 +45,11 @@ import {
   Copy,
   CloudOff,
   KeyRound,
+  Cloud,
+  ChevronDown,
+  ChevronUp,
+  Info,
+  Check,
 } from 'lucide-react';
 import { DashboardQuickStats } from '@/components/dashboard/DashboardQuickStats';
 
@@ -170,6 +175,7 @@ export default function SettingsPage() {
   const [testingConnection, setTestingConnection] = useState(false);
   const [connectionMessage, setConnectionMessage] = useState('');
   const [showClearDialog, setShowClearDialog] = useState(false);
+  const [showClearTokenDialog, setShowClearTokenDialog] = useState(false);
   const hasRequestedBudgetsRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -177,7 +183,16 @@ export default function SettingsPage() {
   const [generatedCloudPhrase, setGeneratedCloudPhrase] = useState<string | null>(null);
   const [cloudSyncMessage, setCloudSyncMessage] = useState('');
   const [cloudSyncError, setCloudSyncError] = useState('');
-  const [cloudSyncAction, setCloudSyncAction] = useState<'idle' | 'generate' | 'upload' | 'download' | 'delete'>('idle');
+  const [cloudSyncAction, setCloudSyncAction] = useState<'idle' | 'generate' | 'upload' | 'download' | 'delete' | 'sync'>('idle');
+  const [showAdvancedSync, setShowAdvancedSync] = useState(false);
+  const [showGenerateDialog, setShowGenerateDialog] = useState(false);
+  const hasInitializedPhraseRef = useRef(false);
+  const orphanedMessageTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Orphaned cards state
+  const [orphanedCardMessage, setOrphanedCardMessage] = useState('');
+  const [showClearOrphanedDialog, setShowClearOrphanedDialog] = useState(false);
+  const [clearingOrphanedCards, setClearingOrphanedCards] = useState(false);
 
   // Budget and account selection state
   const [budgets, setBudgets] = useState<YnabBudget[]>([]);
@@ -203,6 +218,9 @@ export default function SettingsPage() {
   const isUploadingCloudSync = cloudSyncAction === 'upload';
   const isDownloadingCloudSync = cloudSyncAction === 'download';
   const isDeletingCloudSync = cloudSyncAction === 'delete';
+  const isSyncingNow = cloudSyncAction === 'sync';
+  const isCodeRemembered = settings.rememberCloudSyncCode && Boolean(settings.cloudSyncMnemonic);
+  const storedMnemonic = settings.cloudSyncMnemonic || '';
 
   useEffect(() => {
     if (typeof settings.milesValuation === 'number') {
@@ -210,12 +228,53 @@ export default function SettingsPage() {
     }
   }, [settings.milesValuation]);
 
+  // Initialize cloud sync phrase from stored mnemonic (Fix #8: cleaner dependency array)
+  useEffect(() => {
+    if (isCodeRemembered && storedMnemonic && !hasInitializedPhraseRef.current) {
+      setCloudSyncPhrase(storedMnemonic);
+      hasInitializedPhraseRef.current = true;
+    }
+  }, [isCodeRemembered, storedMnemonic]);
+
+  // Cleanup orphaned message timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (orphanedMessageTimeoutRef.current) {
+        clearTimeout(orphanedMessageTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const cardsByAccountId = useMemo(() => {
     const entries = cards
       .filter((card): card is CreditCard & { ynabAccountId: string } => Boolean(card.ynabAccountId))
       .map(card => [card.ynabAccountId, card] as const);
     return new Map(entries);
   }, [cards]);
+
+  // Detect orphaned cards (cards with ynabAccountId that no longer exist in current YNAB connection)
+  const orphanedCards = useMemo(() => {
+    if (!pat) {
+      // No PAT: all cards with ynabAccountId are orphaned (no YNAB connection)
+      return cards.filter(card => !!card.ynabAccountId);
+    }
+    if (accounts.length === 0) {
+      // Accounts not loaded yet - can't determine orphaned state
+      return [];
+    }
+    const currentAccountIds = new Set(accounts.map(a => a.id));
+    return cards.filter(
+      card => card.ynabAccountId && !currentAccountIds.has(card.ynabAccountId)
+    );
+  }, [cards, accounts, pat]);
+
+  // Fix #4: Detect timing issue where cards exist but accounts haven't loaded yet
+  // Returns true when: PAT is connected AND cards with ynabAccountId exist AND accounts haven't loaded
+  // yet because no budget is selected. This prompts the user to select a budget to verify card compatibility.
+  const hasCardsWithoutAccountsLoaded = useMemo(() => {
+    const hasYnabLinkedCards = cards.some(card => card.ynabAccountId);
+    return pat && hasYnabLinkedCards && accounts.length === 0 && !selectedBudget.id;
+  }, [cards, pat, accounts.length, selectedBudget.id]);
 
   const syncCardsWithAccounts = useCallback((ynabAccounts: YnabAccount[]) => {
     ynabAccounts.forEach((account) => {
@@ -408,6 +467,15 @@ export default function SettingsPage() {
     setShowClearDialog(false);
   }
 
+  function handleClearToken() {
+    setPAT('');
+    setBudgets([]);
+    persistSelectedBudget('', '');
+    setAccounts([]);
+    persistTrackedAccountIds([]);
+    setShowClearTokenDialog(false);
+  }
+
   function parseExportedSettings(): unknown {
     try {
       return JSON.parse(exportSettings());
@@ -415,6 +483,34 @@ export default function SettingsPage() {
       const baseMessage = 'Failed to prepare settings for cloud sync';
       const details = error instanceof Error ? error.message : 'Unknown error';
       throw new Error(`${baseMessage}: ${details}`);
+    }
+  }
+
+  // Fix #3: Validate decrypted data structure before importing
+  function validateImportedSettings(data: unknown): void {
+    if (!data || typeof data !== 'object') {
+      throw new Error('Invalid settings data: not an object');
+    }
+
+    const obj = data as Record<string, unknown>;
+
+    // Check for expected top-level keys
+    const requiredKeys = ['cards', 'rules', 'settings'];
+    const missingKeys = requiredKeys.filter(key => !(key in obj));
+
+    if (missingKeys.length > 0) {
+      throw new Error(`Invalid settings data: missing required fields (${missingKeys.join(', ')})`);
+    }
+
+    // Validate that cards and rules are arrays
+    if (!Array.isArray(obj.cards)) {
+      throw new Error('Invalid settings data: cards must be an array');
+    }
+    if (!Array.isArray(obj.rules)) {
+      throw new Error('Invalid settings data: rules must be an array');
+    }
+    if (!obj.settings || typeof obj.settings !== 'object') {
+      throw new Error('Invalid settings data: settings must be an object');
     }
   }
 
@@ -435,7 +531,19 @@ export default function SettingsPage() {
     setCloudSyncMessage('Settings uploaded to Cloudflare KV. Copy your sync code to keep it safe.');
   }
 
-  async function handleGenerateCloudSync() {
+  function handleGenerateCloudSync() {
+    // Check if user already has a sync code set up
+    if (settings.cloudSyncKeyId) {
+      setShowGenerateDialog(true);
+      return;
+    }
+
+    // No existing code, proceed directly
+    confirmGenerateNewCode();
+  }
+
+  async function confirmGenerateNewCode() {
+    setShowGenerateDialog(false);
     setCloudSyncError('');
     setCloudSyncMessage('');
     const phrase = createMnemonic();
@@ -491,11 +599,21 @@ export default function SettingsPage() {
       }
 
       const decrypted = await decryptJson<unknown>(normalised, stored.ciphertext, stored.iv);
+
+      // Fix #3: Validate before importing
+      validateImportedSettings(decrypted);
+
       importSettings(JSON.stringify(decrypted, null, 2));
       updateSettings({ cloudSyncKeyId: keyId, cloudSyncLastSyncedAt: stored.updatedAt });
       setCloudSyncPhrase(normalised);
       setGeneratedCloudPhrase(null);
-      setCloudSyncMessage('Settings downloaded and applied.');
+
+      // Warn if no PAT is connected yet
+      if (!pat) {
+        setCloudSyncMessage('Settings downloaded. Note: You haven\'t connected a YNAB account yet. Downloaded cards may not work until you add your Personal Access Token above.');
+      } else {
+        setCloudSyncMessage('Settings downloaded and applied.');
+      }
     } catch (error) {
       setCloudSyncError(getErrorMessage(error));
     } finally {
@@ -550,6 +668,101 @@ export default function SettingsPage() {
     }
   }
 
+  function handleRememberCodeToggle(checked: boolean) {
+    if (checked && cloudSyncPhrase.trim()) {
+      // User wants to remember the code
+      const normalised = normaliseMnemonic(cloudSyncPhrase);
+      if (!isValidMnemonic(normalised)) {
+        setCloudSyncError('Cannot remember an invalid sync code. Check the words and try again.');
+        return;
+      }
+      updateSettings({
+        cloudSyncMnemonic: normalised,
+        rememberCloudSyncCode: true,
+      });
+      setCloudSyncPhrase(normalised);
+      setCloudSyncMessage('Sync code saved to this device.');
+    } else {
+      // User wants to stop remembering
+      updateSettings({
+        cloudSyncMnemonic: undefined,
+        rememberCloudSyncCode: false,
+      });
+      setCloudSyncMessage('Sync code removed from this device.');
+    }
+  }
+
+  async function handleSyncNow() {
+    setCloudSyncError('');
+    setCloudSyncMessage('');
+    setCloudSyncAction('sync');
+    try {
+      const phraseToUse = storedMnemonic || cloudSyncPhrase;
+      if (!phraseToUse.trim()) {
+        throw new Error('No sync code available.');
+      }
+      await uploadWithPhrase(phraseToUse);
+
+      // If code is remembered, save the potentially normalized version
+      if (settings.rememberCloudSyncCode) {
+        const normalised = normaliseMnemonic(phraseToUse);
+        updateSettings({ cloudSyncMnemonic: normalised });
+      }
+    } catch (error) {
+      setCloudSyncError(getErrorMessage(error));
+    } finally {
+      setCloudSyncAction('idle');
+    }
+  }
+
+  // Fix #7: Less aggressive - keep sync history (keyId, lastSyncedAt)
+  function handleForgetCode() {
+    updateSettings({
+      cloudSyncMnemonic: undefined,
+      rememberCloudSyncCode: false,
+      // Keep cloudSyncKeyId and cloudSyncLastSyncedAt for history
+    });
+    setCloudSyncPhrase('');
+    setGeneratedCloudPhrase(null);
+    setCloudSyncMessage('Sync code removed from this device. Cloud backup and sync history preserved.');
+  }
+
+  // Fix #1: Show confirmation before clearing
+  function handleClearOrphanedCardsClick() {
+    setShowClearOrphanedDialog(true);
+  }
+
+  // Fix #2, #6: Separate state, loading indicator
+  function confirmClearOrphanedCards() {
+    setShowClearOrphanedDialog(false);
+    setClearingOrphanedCards(true);
+
+    // Clear any existing timeout
+    if (orphanedMessageTimeoutRef.current) {
+      clearTimeout(orphanedMessageTimeoutRef.current);
+      orphanedMessageTimeoutRef.current = null;
+    }
+
+    try {
+      const count = orphanedCards.length;
+      // deleteCard is synchronous, but we're being defensive
+      orphanedCards.forEach(card => {
+        deleteCard(card.id);
+      });
+      setOrphanedCardMessage(`Removed ${count} orphaned card${count === 1 ? '' : 's'}.`);
+
+      // Clear message after 5 seconds, storing timeout ref for cleanup
+      orphanedMessageTimeoutRef.current = setTimeout(() => {
+        setOrphanedCardMessage('');
+        orphanedMessageTimeoutRef.current = null;
+      }, 5000);
+    } catch (error) {
+      setOrphanedCardMessage(`Failed to clear orphaned cards: ${getErrorMessage(error)}`);
+    } finally {
+      setClearingOrphanedCards(false);
+    }
+  }
+
   if (patLoading || cardsLoading) {
     return <div className="p-5">Loading settings...</div>;
   }
@@ -562,6 +775,48 @@ export default function SettingsPage() {
         selectedBudget={selectedBudget}
         trackedAccountCount={trackedAccountIds.length}
       />
+
+      {/* Fix #4: Timing issue warning - cards exist but accounts not loaded */}
+      {hasCardsWithoutAccountsLoaded && (
+        <Alert>
+          <Info className="h-4 w-4" aria-hidden="true" />
+          <AlertDescription>
+            You have cards configured but no budget selected. Select a budget below to verify your cards are still connected to valid YNAB accounts.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Orphaned Cards Warning */}
+      {orphanedCards.length > 0 && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" aria-hidden="true" />
+          <AlertDescription className="flex items-center justify-between gap-4">
+            <span>
+              {orphanedCards.length} card{orphanedCards.length === 1 ? '' : 's'} reference{orphanedCards.length === 1 ? 's' : ''} YNAB account{orphanedCards.length === 1 ? '' : 's'} that {orphanedCards.length === 1 ? 'is' : 'are'} no longer connected.
+              {orphanedCards.length === 1
+                ? ` "${orphanedCards[0].name}" won't track rewards until reconnected.`
+                : ' These cards won\'t track rewards until reconnected.'}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleClearOrphanedCardsClick}
+              disabled={clearingOrphanedCards}
+              className="flex-shrink-0"
+            >
+              {clearingOrphanedCards ? 'Clearing...' : 'Clear Orphaned Cards'}
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Fix #2: Separate success message for orphaned cards */}
+      {orphanedCardMessage && (
+        <Alert>
+          <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+          <AlertDescription>{orphanedCardMessage}</AlertDescription>
+        </Alert>
+      )}
 
       {/* YNAB Connection */}
       <Card id="settings-budget">
@@ -682,15 +937,9 @@ export default function SettingsPage() {
                     'Test Connection'
                   )}
                 </Button>
-                <Button 
+                <Button
                   variant="destructive"
-                  onClick={() => {
-                    setPAT('');
-                    setBudgets([]);
-                    persistSelectedBudget('', '');
-                    setAccounts([]);
-                    persistTrackedAccountIds([]);
-                  }}
+                  onClick={() => setShowClearTokenDialog(true)}
                 >
                   Clear Token
                 </Button>
@@ -780,93 +1029,186 @@ export default function SettingsPage() {
         <CardHeader>
           <CardTitle>Cloud Sync (optional)</CardTitle>
           <CardDescription>
-            Encrypt your settings with a 12-word sync code and store them in Cloudflare KV via Netlify functions. No sign-in required.
+            Encrypt your settings with a 12-word sync code and store them in Cloudflare KV. No sign-in required.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {generatedCloudPhrase && (
-              <div className="rounded-md border bg-muted/30 p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <KeyRound className="h-4 w-4 text-primary" aria-hidden="true" />
-                    <span className="text-sm font-medium">New sync code</span>
+            {/* Simple Mode: Code is remembered */}
+            {isCodeRemembered && !showAdvancedSync ? (
+              <>
+                <div className="flex items-center justify-between rounded-lg border bg-muted/30 p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+                      <Check className="h-5 w-5 text-primary" aria-hidden="true" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">Sync code saved on this device</p>
+                      {cloudSyncLastSynced && (
+                        <p className="text-xs text-muted-foreground">
+                          Last synced: {cloudSyncLastSynced}
+                        </p>
+                      )}
+                    </div>
                   </div>
+                  <Button
+                    type="button"
+                    onClick={handleSyncNow}
+                    disabled={isCloudSyncBusy}
+                  >
+                    <Cloud className="mr-2 h-4 w-4" aria-hidden="true" />
+                    {isSyncingNow ? 'Syncing…' : 'Sync Now'}
+                  </Button>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowAdvancedSync(true)}
+                  >
+                    <ChevronDown className="mr-2 h-3 w-3" aria-hidden="true" />
+                    Advanced options
+                  </Button>
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
-                    onClick={handleCopyGeneratedPhrase}
+                    onClick={handleForgetCode}
+                    disabled={isCloudSyncBusy}
                   >
-                    <Copy className="mr-2 h-4 w-4" aria-hidden="true" />
-                    Copy
+                    <CloudOff className="mr-2 h-3 w-3" aria-hidden="true" />
+                    Forget sync code
                   </Button>
                 </div>
-                <p className="mt-3 whitespace-pre-wrap break-words font-mono text-sm">
-                  {generatedCloudPhrase}
-                </p>
-              </div>
-            )}
+              </>
+            ) : (
+              <>
+                {/* Advanced/Manual Mode */}
+                {generatedCloudPhrase && (
+                  <div className="rounded-md border bg-muted/30 p-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <KeyRound className="h-4 w-4 text-primary" aria-hidden="true" />
+                        <span className="text-sm font-medium">New sync code</span>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleCopyGeneratedPhrase}
+                      >
+                        <Copy className="mr-2 h-4 w-4" aria-hidden="true" />
+                        Copy
+                      </Button>
+                    </div>
+                    <p className="mt-3 whitespace-pre-wrap break-words font-mono text-sm">
+                      {generatedCloudPhrase}
+                    </p>
+                  </div>
+                )}
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium" htmlFor="cloud-sync-phrase">
-                Sync code
-              </label>
-              <textarea
-                id="cloud-sync-phrase"
-                className="w-full rounded-md border px-3 py-2 font-mono text-sm"
-                rows={2}
-                value={cloudSyncPhrase}
-                onChange={(event) => setCloudSyncPhrase(event.target.value)}
-                placeholder="twelve lowercase words separated by spaces"
-              />
-              <p className="text-xs text-muted-foreground">
-                Paste your existing code or generate a new one. Keep it private — anyone with the code can import your settings.
-              </p>
-            </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium" htmlFor="cloud-sync-phrase">
+                    Sync code
+                  </label>
+                  <textarea
+                    id="cloud-sync-phrase"
+                    className="w-full rounded-md border px-3 py-2 font-mono text-sm"
+                    rows={2}
+                    value={cloudSyncPhrase}
+                    onChange={(event) => setCloudSyncPhrase(event.target.value)}
+                    placeholder="twelve lowercase words separated by spaces"
+                  />
+                  <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/50 dark:bg-amber-950/20">
+                    <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600 dark:text-amber-500" aria-hidden="true" />
+                    <p className="text-xs text-amber-800 dark:text-amber-200">
+                      Keep this code private. Anyone with it can download and decrypt your settings. Your YNAB token is never synced.
+                    </p>
+                  </div>
+                </div>
 
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                onClick={handleGenerateCloudSync}
-                disabled={isCloudSyncBusy}
-              >
-                <KeyRound className="mr-2 h-4 w-4" aria-hidden="true" />
-                {isGeneratingCloudSync ? 'Generating…' : 'Generate & upload'}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleCloudUpload}
-                disabled={isCloudSyncBusy}
-              >
-                <CloudUpload className="mr-2 h-4 w-4" aria-hidden="true" />
-                {isUploadingCloudSync ? 'Uploading…' : 'Upload with code'}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleCloudDownload}
-                disabled={isCloudSyncBusy}
-              >
-                <CloudDownload className="mr-2 h-4 w-4" aria-hidden="true" />
-                {isDownloadingCloudSync ? 'Downloading…' : 'Download & apply'}
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={handleCloudDelete}
-                disabled={isCloudSyncBusy}
-              >
-                <CloudOff className="mr-2 h-4 w-4" aria-hidden="true" />
-                {isDeletingCloudSync ? 'Deleting…' : 'Delete cloud backup'}
-              </Button>
-            </div>
+                {/* Remember Code Toggle */}
+                {cloudSyncPhrase.trim() && !generatedCloudPhrase && (
+                  <div className="flex items-center justify-between rounded-lg border p-3">
+                    <div className="flex items-start gap-3">
+                      <KeyRound className="mt-0.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                      <div>
+                        <p className="text-sm font-medium">Remember sync code on this device</p>
+                        <p className="text-xs text-muted-foreground">
+                          Store encrypted code locally for one-click syncing
+                        </p>
+                      </div>
+                    </div>
+                    <Switch
+                      id="remember-sync-code"
+                      checked={Boolean(settings.rememberCloudSyncCode)}
+                      onCheckedChange={handleRememberCodeToggle}
+                      aria-label="Remember sync code on this device"
+                    />
+                  </div>
+                )}
 
-            {cloudSyncLastSynced && (
-              <p className="text-xs text-muted-foreground">
-                Last synced: {cloudSyncLastSynced}
-              </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant={settings.cloudSyncKeyId ? "outline" : "default"}
+                    onClick={handleGenerateCloudSync}
+                    disabled={isCloudSyncBusy}
+                  >
+                    <KeyRound className="mr-2 h-4 w-4" aria-hidden="true" />
+                    {isGeneratingCloudSync ? 'Generating…' : 'Generate & upload'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={settings.cloudSyncKeyId ? "default" : "outline"}
+                    onClick={handleCloudUpload}
+                    disabled={isCloudSyncBusy || !cloudSyncPhrase.trim()}
+                  >
+                    <CloudUpload className="mr-2 h-4 w-4" aria-hidden="true" />
+                    {isUploadingCloudSync ? 'Uploading…' : 'Upload with code'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleCloudDownload}
+                    disabled={isCloudSyncBusy || !cloudSyncPhrase.trim()}
+                  >
+                    <CloudDownload className="mr-2 h-4 w-4" aria-hidden="true" />
+                    {isDownloadingCloudSync ? 'Downloading…' : 'Download & apply'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={handleCloudDelete}
+                    disabled={isCloudSyncBusy}
+                  >
+                    <CloudOff className="mr-2 h-4 w-4" aria-hidden="true" />
+                    {isDeletingCloudSync ? 'Deleting…' : 'Delete cloud backup'}
+                  </Button>
+                </div>
+
+                {isCodeRemembered && showAdvancedSync && (
+                  <div className="flex justify-start">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowAdvancedSync(false)}
+                    >
+                      <ChevronUp className="mr-2 h-3 w-3" aria-hidden="true" />
+                      Show simple mode
+                    </Button>
+                  </div>
+                )}
+
+                {cloudSyncLastSynced && (
+                  <p className="text-xs text-muted-foreground">
+                    Last synced: {cloudSyncLastSynced}
+                  </p>
+                )}
+              </>
             )}
 
             {cloudSyncMessage && (
@@ -935,6 +1277,36 @@ export default function SettingsPage() {
         cancelText="Cancel"
         onConfirm={handleClearAll}
         onCancel={() => setShowClearDialog(false)}
+      />
+
+      <ConfirmDialog
+        isOpen={showClearTokenDialog}
+        title="Clear YNAB Token?"
+        message="This will remove your Personal Access Token and clear your budget and account selections. You'll need to reconnect to YNAB. Your card configurations and rules will not be affected."
+        confirmText="Clear Token"
+        cancelText="Cancel"
+        onConfirm={handleClearToken}
+        onCancel={() => setShowClearTokenDialog(false)}
+      />
+
+      <ConfirmDialog
+        isOpen={showGenerateDialog}
+        title="Generate New Sync Code?"
+        message="You already have a sync code set up. Generating a new code will create a separate cloud backup and won't affect your existing backup. You'll need to update the code on other devices to keep them in sync."
+        confirmText="Generate New Code"
+        cancelText="Cancel"
+        onConfirm={confirmGenerateNewCode}
+        onCancel={() => setShowGenerateDialog(false)}
+      />
+
+      <ConfirmDialog
+        isOpen={showClearOrphanedDialog}
+        title="Clear Orphaned Cards?"
+        message={`This will permanently delete ${orphanedCards.length} card${orphanedCards.length === 1 ? '' : 's'} that ${orphanedCards.length === 1 ? 'is' : 'are'} no longer connected to YNAB accounts. All associated rules and settings will also be removed. This action cannot be undone.`}
+        confirmText="Clear Orphaned Cards"
+        cancelText="Cancel"
+        onConfirm={confirmClearOrphanedCards}
+        onCancel={() => setShowClearOrphanedDialog(false)}
       />
 
     </div>

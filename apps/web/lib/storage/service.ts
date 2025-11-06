@@ -588,6 +588,11 @@ export class StorageService {
     const exportData = {
       ...storage,
       ynab: { ...storage.ynab, pat: undefined },
+      settings: {
+        ...storage.settings,
+        cloudSyncMnemonic: undefined,
+        rememberCloudSyncCode: undefined,
+      },
     };
     return JSON.stringify(exportData, null, 2);
   }
@@ -597,10 +602,26 @@ export class StorageService {
       const imported = JSON.parse(jsonString);
       const storage = this.getStorage() as MutableStorageData;
 
+      // Fix #5: Preserve sensitive local-only data (more explicit checks with optional chaining)
       const pat = storage.ynab.pat;
+      const cloudSyncMnemonic = storage.settings?.cloudSyncMnemonic;
+      const rememberCloudSyncCode = storage.settings?.rememberCloudSyncCode;
+
       Object.assign(storage, imported);
-      if (pat) {
+
+      // Restore PAT if it exists (non-empty string)
+      if (pat && typeof pat === 'string') {
         storage.ynab.pat = pat;
+      }
+
+      // Restore cloudSyncMnemonic if it exists and is a valid string
+      if (cloudSyncMnemonic && typeof cloudSyncMnemonic === 'string') {
+        storage.settings.cloudSyncMnemonic = cloudSyncMnemonic;
+      }
+
+      // Restore rememberCloudSyncCode preference (boolean type check)
+      if (typeof rememberCloudSyncCode === 'boolean') {
+        storage.settings.rememberCloudSyncCode = rememberCloudSyncCode;
       }
 
       pruneThemeGroups(storage);
