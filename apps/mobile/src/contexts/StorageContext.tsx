@@ -113,10 +113,23 @@ const STORAGE_REFRESH_ERROR = 'Failed to refresh storage';
 const LOAD_ERROR_MESSAGE = 'Failed to load storage';
 const AUTO_CREATED_CARD_ISSUER = 'Unknown';
 
-function getStartOfCurrentMonthISO(): string {
+/**
+ * Calculate the earliest period start date across all cards to ensure
+ * we fetch all necessary transactions for cards with non-calendar billing cycles
+ */
+function getEarliestPeriodStart(cards: CreditCard[]): string {
   const now = new Date();
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  return startOfMonth.toISOString().split('T')[0];
+  let earliestStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  cards.forEach(card => {
+    const period = SimpleRewardsCalculator.calculatePeriod(card);
+    const periodStart = new Date(period.start);
+    if (periodStart < earliestStart) {
+      earliestStart = periodStart;
+    }
+  });
+
+  return earliestStart.toISOString().split('T')[0];
 }
 
 const defaultState: StorageState = {
@@ -822,7 +835,9 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         // If setup just completed, fetch transactions now
         if (wasSetupMode && nextBudget.id && nextTrackedIds.length > 0) {
           console.log('[StorageContext] applyPendingChanges: setup completed, fetching transactions');
-          await performSync({ skipTransactions: false, sinceDate: getStartOfCurrentMonthISO() }, {
+          // Get the newly created cards to calculate earliest period start
+          const cards = await storage.getCards();
+          await performSync({ skipTransactions: false, sinceDate: getEarliestPeriodStart(cards) }, {
             pat,
             selectedBudgetId: nextBudget.id,
             trackedAccountIds: nextTrackedIds,

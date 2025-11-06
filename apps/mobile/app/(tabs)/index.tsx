@@ -273,10 +273,23 @@ const clampPercent = (value: number | undefined) => {
   return Math.max(0, Math.min(100, value));
 };
 
-function getStartOfCurrentMonthISO(): string {
+/**
+ * Calculate the earliest period start date across all cards to ensure
+ * we fetch all necessary transactions for cards with non-calendar billing cycles
+ */
+function getEarliestPeriodStart(cards: CreditCard[]): string {
   const now = new Date();
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  return startOfMonth.toISOString().split('T')[0];
+  let earliestStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  cards.forEach(card => {
+    const period = SimpleRewardsCalculator.calculatePeriod(card);
+    const periodStart = new Date(period.start);
+    if (periodStart < earliestStart) {
+      earliestStart = periodStart;
+    }
+  });
+
+  return earliestStart.toISOString().split('T')[0];
 }
 
 export default function HomeScreen() {
@@ -324,7 +337,7 @@ export default function HomeScreen() {
       (async () => {
         try {
           await actions.refresh();
-          await actions.syncBudgetsAndAccounts({ skipTransactions: false, sinceDate: getStartOfCurrentMonthISO() });
+          await actions.syncBudgetsAndAccounts({ skipTransactions: false, sinceDate: getEarliestPeriodStart(state.cards) });
         } catch (error) {
           console.error('[HomeScreen] Auto-refresh failed', error);
         }
@@ -368,7 +381,7 @@ export default function HomeScreen() {
                 try {
                   // Refresh storage first, then fetch transactions
                   await actions.refresh();
-                  await actions.syncBudgetsAndAccounts({ skipTransactions: false, sinceDate: getStartOfCurrentMonthISO() });
+                  await actions.syncBudgetsAndAccounts({ skipTransactions: false, sinceDate: getEarliestPeriodStart(state.cards) });
                 } catch (error) {
                   console.error('[HomeScreen] Refresh failed', error);
                 }
