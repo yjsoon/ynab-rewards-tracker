@@ -979,6 +979,7 @@ export default function SettingsPage() {
                 <div className="flex flex-wrap gap-2">
                   <Button
                     type="button"
+                    variant={settings.cloudSyncKeyId ? "outline" : "default"}
                     onClick={handleGenerateCloudSync}
                     disabled={isCloudSyncBusy}
                   >
@@ -987,7 +988,7 @@ export default function SettingsPage() {
                   </Button>
                   <Button
                     type="button"
-                    variant="outline"
+                    variant={settings.cloudSyncKeyId ? "default" : "outline"}
                     onClick={handleCloudUpload}
                     disabled={isCloudSyncBusy || !cloudSyncPhrase.trim()}
                   >
