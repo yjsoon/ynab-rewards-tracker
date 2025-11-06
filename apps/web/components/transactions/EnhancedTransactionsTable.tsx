@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback } from "react";
 import { AlertCircle, Loader2, ChevronDown, ChevronUp, Search, ArrowUpDown } from "lucide-react";
 import type { Transaction } from "@/types/transaction";
-import type { CreditCard, AppSettings, TagMapping } from "@/lib/storage";
+import type { CreditCard, AppSettings } from "@/lib/storage";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -33,7 +33,6 @@ interface EnhancedTransactionsTableProps {
   refreshing?: boolean;
   lastUpdatedAt?: string | null;
   customFlagNames?: Partial<Record<YnabFlagColor, string>>;
-  tagMappings: TagMapping[];
   selectedBudgetId?: string;
   pat?: string;
   onTransactionUpdated?: () => void;
@@ -53,7 +52,6 @@ export function EnhancedTransactionsTable({
   refreshing,
   lastUpdatedAt,
   customFlagNames,
-  tagMappings,
   selectedBudgetId,
   pat,
   onTransactionUpdated,
@@ -76,17 +74,20 @@ export function EnhancedTransactionsTable({
     return map;
   }, [cards]);
 
-  // Build tag mappings lookup: cardId -> (flagColor -> rewardCategory)
-  const tagMappingsByCard = useMemo(() => {
+  // Build subcategory mappings lookup: cardId -> (flagColor -> subcategoryName)
+  const subcategoryMappingsByCard = useMemo(() => {
     const map = new Map<string, Map<string, string>>();
-    tagMappings.forEach((mapping) => {
-      if (!map.has(mapping.cardId)) {
-        map.set(mapping.cardId, new Map());
+    cards.forEach((card) => {
+      if (card.subcategoriesEnabled && card.subcategories && card.subcategories.length > 0) {
+        const flagMap = new Map<string, string>();
+        card.subcategories.forEach((subcat) => {
+          flagMap.set(subcat.flagColor, subcat.name);
+        });
+        map.set(card.id, flagMap);
       }
-      map.get(mapping.cardId)!.set(mapping.ynabTag, mapping.rewardCategory);
     });
     return map;
-  }, [tagMappings]);
+  }, [cards]);
 
   // Filter transactions
   const filteredTransactions = useMemo(() => {
@@ -408,7 +409,7 @@ export function EnhancedTransactionsTable({
                         onChange={(newColor) => updateTransactionFlag(txn.id, newColor)}
                         disabled={isSaving}
                         customNames={customFlagNames}
-                        rewardCategories={card ? tagMappingsByCard.get(card.id) : undefined}
+                        rewardCategories={card ? subcategoryMappingsByCard.get(card.id) : undefined}
                       />
                     </td>
                     <td className="p-2 text-sm">{txn.category_name || "Uncategorised"}</td>
@@ -417,13 +418,19 @@ export function EnhancedTransactionsTable({
                     </td>
                     <td className="p-2 text-sm text-right">
                       {card ? (
-                        <Badge variant="secondary" className="text-xs">
-                          {card.type === "cashback" ? (
-                            <CurrencyAmount value={reward} currency={settings.currency} showPlus />
-                          ) : (
-                            `+${Math.round(reward)} miles`
-                          )}
-                        </Badge>
+                        reward > 0 ? (
+                          <Badge className="text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100">
+                            {card.type === "cashback" ? (
+                              <CurrencyAmount value={reward} currency={settings.currency} showPlus />
+                            ) : (
+                              `+${Math.round(reward)} miles`
+                            )}
+                          </Badge>
+                        ) : (
+                          <Badge className="text-xs bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-100">
+                            No reward
+                          </Badge>
+                        )
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}
