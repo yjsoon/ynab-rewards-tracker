@@ -235,6 +235,18 @@ export default function SettingsPage() {
     return new Map(entries);
   }, [cards]);
 
+  // Detect orphaned cards (cards with ynabAccountId that no longer exist in current YNAB connection)
+  const orphanedCards = useMemo(() => {
+    if (!pat || accounts.length === 0) {
+      // No PAT or accounts loaded yet - can't determine orphaned state
+      return [];
+    }
+    const currentAccountIds = new Set(accounts.map(a => a.id));
+    return cards.filter(
+      card => card.ynabAccountId && !currentAccountIds.has(card.ynabAccountId)
+    );
+  }, [cards, accounts, pat]);
+
   const syncCardsWithAccounts = useCallback((ynabAccounts: YnabAccount[]) => {
     ynabAccounts.forEach((account) => {
       if (!trackedAccountIds.includes(account.id)) {
@@ -534,7 +546,13 @@ export default function SettingsPage() {
       updateSettings({ cloudSyncKeyId: keyId, cloudSyncLastSyncedAt: stored.updatedAt });
       setCloudSyncPhrase(normalised);
       setGeneratedCloudPhrase(null);
-      setCloudSyncMessage('Settings downloaded and applied.');
+
+      // Warn if no PAT is connected yet
+      if (!pat) {
+        setCloudSyncMessage('Settings downloaded. Note: You haven\'t connected a YNAB account yet. Downloaded cards may not work until you add your Personal Access Token above.');
+      } else {
+        setCloudSyncMessage('Settings downloaded and applied.');
+      }
     } catch (error) {
       setCloudSyncError(getErrorMessage(error));
     } finally {
@@ -648,6 +666,13 @@ export default function SettingsPage() {
     setCloudSyncMessage('Sync code forgotten. Cloud backup not deleted.');
   }
 
+  function handleClearOrphanedCards() {
+    orphanedCards.forEach(card => {
+      deleteCard(card.id);
+    });
+    setConnectionMessage(`Removed ${orphanedCards.length} orphaned card${orphanedCards.length === 1 ? '' : 's'}.`);
+  }
+
   if (patLoading || cardsLoading) {
     return <div className="p-5">Loading settings...</div>;
   }
@@ -660,6 +685,29 @@ export default function SettingsPage() {
         selectedBudget={selectedBudget}
         trackedAccountCount={trackedAccountIds.length}
       />
+
+      {/* Orphaned Cards Warning */}
+      {orphanedCards.length > 0 && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" aria-hidden="true" />
+          <AlertDescription className="flex items-center justify-between gap-4">
+            <span>
+              {orphanedCards.length} card{orphanedCards.length === 1 ? '' : 's'} reference{orphanedCards.length === 1 ? 's' : ''} YNAB account{orphanedCards.length === 1 ? 's' : ''} that {orphanedCards.length === 1 ? 'is' : 'are'} no longer connected.
+              {orphanedCards.length === 1
+                ? ` "${orphanedCards[0].name}" won't track rewards until reconnected.`
+                : ' These cards won\'t track rewards until reconnected.'}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleClearOrphanedCards}
+              className="flex-shrink-0"
+            >
+              Clear Orphaned Cards
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* YNAB Connection */}
       <Card id="settings-budget">
