@@ -407,13 +407,17 @@ export function EnhancedTransactionsTable({
                     </td>
                     <td className="p-2 text-sm">{txn.payee_name}</td>
                     <td className="p-2">
-                      <FlagColorPicker
-                        value={txn.flag_color as YnabFlagColor}
-                        onChange={(newColor) => updateTransactionFlag(txn.id, newColor)}
-                        disabled={isSaving}
-                        customNames={customFlagNames}
-                        rewardCategories={card ? subcategoryMappingsByCard.get(card.id) : undefined}
-                      />
+                      {isIncoming ? (
+                        <span className="text-sm text-muted-foreground">—</span>
+                      ) : (
+                        <FlagColorPicker
+                          value={txn.flag_color as YnabFlagColor}
+                          onChange={(newColor) => updateTransactionFlag(txn.id, newColor)}
+                          disabled={isSaving}
+                          customNames={customFlagNames}
+                          rewardCategories={card ? subcategoryMappingsByCard.get(card.id) : undefined}
+                        />
+                      )}
                     </td>
                     <td className="p-2 text-sm">{txn.category_name || "Uncategorised"}</td>
                     <td className="p-2 text-sm text-right font-mono">
@@ -425,7 +429,7 @@ export function EnhancedTransactionsTable({
                     <td className="p-2 text-sm text-right">
                       {isIncoming ? (
                         <Badge className="text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100 hover:bg-blue-100 dark:hover:bg-blue-900">
-                          Payment/Refund
+                          Incoming
                         </Badge>
                       ) : card ? (
                         reward > 0 ? (
@@ -471,7 +475,7 @@ export function EnhancedTransactionsTable({
                                 Type
                               </Label>
                               <p className="text-sm">
-                                {isIncoming ? "Incoming (Payment/Refund)" : "Spending"}
+                                {isIncoming ? "Incoming" : "Spending"}
                               </p>
                             </div>
 
