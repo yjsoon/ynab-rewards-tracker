@@ -470,15 +470,6 @@ export function EnhancedTransactionsTable({
                               <p className="text-sm font-mono">{txn.id}</p>
                             </div>
 
-                            <div>
-                              <Label className="text-xs font-medium text-muted-foreground">
-                                Type
-                              </Label>
-                              <p className="text-sm">
-                                {isIncoming ? "Incoming" : "Spending"}
-                              </p>
-                            </div>
-
                             {txn.memo && (
                               <div>
                                 <Label className="text-xs font-medium text-muted-foreground">Memo</Label>
