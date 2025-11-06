@@ -13,8 +13,6 @@ import { DashboardLanding } from "@/components/dashboard/DashboardLanding";
 import { SetupProgressAlert } from "@/components/dashboard/SetupProgressAlert";
 import { EnhancedTransactionsTable } from "@/components/transactions/EnhancedTransactionsTable";
 import { YnabClient } from "@/lib/ynab-client";
-import { storage } from "@/lib/storage";
-import type { TagMapping } from "@/lib/storage";
 import {
   Card,
   CardContent,
@@ -41,7 +39,6 @@ export default function TransactionsPage() {
   const { trackedAccountIds } = useTrackedAccountIds();
   const { settings } = useSettings();
   const [customFlagNames, setCustomFlagNames] = useState<Partial<Record<YnabFlagColor, string>>>({});
-  const [tagMappings, setTagMappings] = useState<TagMapping[]>([]);
 
   const setupStatus: SetupStatus = useMemo(
     () => ({
@@ -99,16 +96,6 @@ export default function TransactionsPage() {
     fetchFlagNames();
   }, [pat, selectedBudget.id]);
 
-  // Fetch tag mappings from storage
-  useEffect(() => {
-    try {
-      const mappings = storage.getTagMappings();
-      setTagMappings(mappings);
-    } catch (err) {
-      console.warn("Failed to fetch tag mappings", err);
-    }
-  }, [cards]); // Re-fetch when cards change in case mappings were updated
-
   if (!setupStatus.pat) {
     return <DashboardLanding />;
   }
@@ -150,7 +137,6 @@ export default function TransactionsPage() {
             refreshing={refreshing}
             lastUpdatedAt={lastUpdatedAt}
             customFlagNames={customFlagNames}
-            tagMappings={tagMappings}
             selectedBudgetId={selectedBudget.id}
             pat={pat}
             onTransactionUpdated={refresh}
