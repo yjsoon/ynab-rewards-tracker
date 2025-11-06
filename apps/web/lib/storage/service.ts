@@ -619,8 +619,8 @@ export class StorageService {
         storage.settings.cloudSyncMnemonic = cloudSyncMnemonic;
       }
 
-      // Restore rememberCloudSyncCode preference (boolean or undefined)
-      if (rememberCloudSyncCode !== undefined && typeof rememberCloudSyncCode === 'boolean') {
+      // Restore rememberCloudSyncCode preference (boolean type check)
+      if (typeof rememberCloudSyncCode === 'boolean') {
         storage.settings.rememberCloudSyncCode = rememberCloudSyncCode;
       }
 

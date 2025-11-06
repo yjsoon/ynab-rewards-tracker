@@ -187,6 +187,7 @@ export default function SettingsPage() {
   const [showAdvancedSync, setShowAdvancedSync] = useState(false);
   const [showGenerateDialog, setShowGenerateDialog] = useState(false);
   const hasInitializedPhraseRef = useRef(false);
+  const orphanedMessageTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Orphaned cards state
   const [orphanedCardMessage, setOrphanedCardMessage] = useState('');
@@ -235,6 +236,15 @@ export default function SettingsPage() {
     }
   }, [isCodeRemembered, storedMnemonic]);
 
+  // Cleanup orphaned message timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (orphanedMessageTimeoutRef.current) {
+        clearTimeout(orphanedMessageTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const cardsByAccountId = useMemo(() => {
     const entries = cards
       .filter((card): card is CreditCard & { ynabAccountId: string } => Boolean(card.ynabAccountId))
@@ -244,8 +254,12 @@ export default function SettingsPage() {
 
   // Detect orphaned cards (cards with ynabAccountId that no longer exist in current YNAB connection)
   const orphanedCards = useMemo(() => {
-    if (!pat || accounts.length === 0) {
-      // No PAT or accounts loaded yet - can't determine orphaned state
+    if (!pat) {
+      // No PAT: all cards with ynabAccountId are orphaned (no YNAB connection)
+      return cards.filter(card => !!card.ynabAccountId);
+    }
+    if (accounts.length === 0) {
+      // Accounts not loaded yet - can't determine orphaned state
       return [];
     }
     const currentAccountIds = new Set(accounts.map(a => a.id));
@@ -721,15 +735,25 @@ export default function SettingsPage() {
     setShowClearOrphanedDialog(false);
     setClearingOrphanedCards(true);
 
+    // Clear any existing timeout
+    if (orphanedMessageTimeoutRef.current) {
+      clearTimeout(orphanedMessageTimeoutRef.current);
+      orphanedMessageTimeoutRef.current = null;
+    }
+
     try {
       const count = orphanedCards.length;
+      // deleteCard is synchronous, but we're being defensive
       orphanedCards.forEach(card => {
         deleteCard(card.id);
       });
       setOrphanedCardMessage(`Removed ${count} orphaned card${count === 1 ? '' : 's'}.`);
 
-      // Clear message after 5 seconds
-      setTimeout(() => setOrphanedCardMessage(''), 5000);
+      // Clear message after 5 seconds, storing timeout ref for cleanup
+      orphanedMessageTimeoutRef.current = setTimeout(() => {
+        setOrphanedCardMessage('');
+        orphanedMessageTimeoutRef.current = null;
+      }, 5000);
     } catch (error) {
       setOrphanedCardMessage(`Failed to clear orphaned cards: ${getErrorMessage(error)}`);
     } finally {
