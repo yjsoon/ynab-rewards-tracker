@@ -186,6 +186,12 @@ export default function SettingsPage() {
   const [cloudSyncAction, setCloudSyncAction] = useState<'idle' | 'generate' | 'upload' | 'download' | 'delete' | 'sync'>('idle');
   const [showAdvancedSync, setShowAdvancedSync] = useState(false);
   const [showGenerateDialog, setShowGenerateDialog] = useState(false);
+  const hasInitializedPhraseRef = useRef(false);
+
+  // Orphaned cards state
+  const [orphanedCardMessage, setOrphanedCardMessage] = useState('');
+  const [showClearOrphanedDialog, setShowClearOrphanedDialog] = useState(false);
+  const [clearingOrphanedCards, setClearingOrphanedCards] = useState(false);
 
   // Budget and account selection state
   const [budgets, setBudgets] = useState<YnabBudget[]>([]);
@@ -221,12 +227,13 @@ export default function SettingsPage() {
     }
   }, [settings.milesValuation]);
 
-  // Initialize cloud sync phrase from stored mnemonic
+  // Initialize cloud sync phrase from stored mnemonic (Fix #8: cleaner dependency array)
   useEffect(() => {
-    if (isCodeRemembered && storedMnemonic && !cloudSyncPhrase) {
+    if (isCodeRemembered && storedMnemonic && !hasInitializedPhraseRef.current) {
       setCloudSyncPhrase(storedMnemonic);
+      hasInitializedPhraseRef.current = true;
     }
-  }, [isCodeRemembered, storedMnemonic, cloudSyncPhrase]);
+  }, [isCodeRemembered, storedMnemonic]);
 
   const cardsByAccountId = useMemo(() => {
     const entries = cards
@@ -246,6 +253,12 @@ export default function SettingsPage() {
       card => card.ynabAccountId && !currentAccountIds.has(card.ynabAccountId)
     );
   }, [cards, accounts, pat]);
+
+  // Fix #4: Detect timing issue where cards exist but accounts haven't loaded yet
+  const hasCardsWithoutAccountsLoaded = useMemo(() => {
+    const hasYnabLinkedCards = cards.some(card => card.ynabAccountId);
+    return pat && hasYnabLinkedCards && accounts.length === 0 && !selectedBudget.id;
+  }, [cards, pat, accounts.length, selectedBudget.id]);
 
   const syncCardsWithAccounts = useCallback((ynabAccounts: YnabAccount[]) => {
     ynabAccounts.forEach((account) => {
@@ -457,6 +470,34 @@ export default function SettingsPage() {
     }
   }
 
+  // Fix #3: Validate decrypted data structure before importing
+  function validateImportedSettings(data: unknown): void {
+    if (!data || typeof data !== 'object') {
+      throw new Error('Invalid settings data: not an object');
+    }
+
+    const obj = data as Record<string, unknown>;
+
+    // Check for expected top-level keys
+    const requiredKeys = ['cards', 'rules', 'settings'];
+    const missingKeys = requiredKeys.filter(key => !(key in obj));
+
+    if (missingKeys.length > 0) {
+      throw new Error(`Invalid settings data: missing required fields (${missingKeys.join(', ')})`);
+    }
+
+    // Validate that cards and rules are arrays
+    if (!Array.isArray(obj.cards)) {
+      throw new Error('Invalid settings data: cards must be an array');
+    }
+    if (!Array.isArray(obj.rules)) {
+      throw new Error('Invalid settings data: rules must be an array');
+    }
+    if (!obj.settings || typeof obj.settings !== 'object') {
+      throw new Error('Invalid settings data: settings must be an object');
+    }
+  }
+
   async function uploadWithPhrase(phrase: string, options: { generated?: boolean } = {}) {
     const normalised = normaliseMnemonic(phrase);
     if (!isValidMnemonic(normalised)) {
@@ -542,6 +583,10 @@ export default function SettingsPage() {
       }
 
       const decrypted = await decryptJson<unknown>(normalised, stored.ciphertext, stored.iv);
+
+      // Fix #3: Validate before importing
+      validateImportedSettings(decrypted);
+
       importSettings(JSON.stringify(decrypted, null, 2));
       updateSettings({ cloudSyncKeyId: keyId, cloudSyncLastSyncedAt: stored.updatedAt });
       setCloudSyncPhrase(normalised);
@@ -654,23 +699,42 @@ export default function SettingsPage() {
     }
   }
 
+  // Fix #7: Less aggressive - keep sync history (keyId, lastSyncedAt)
   function handleForgetCode() {
     updateSettings({
       cloudSyncMnemonic: undefined,
       rememberCloudSyncCode: false,
-      cloudSyncKeyId: undefined,
-      cloudSyncLastSyncedAt: undefined,
+      // Keep cloudSyncKeyId and cloudSyncLastSyncedAt for history
     });
     setCloudSyncPhrase('');
     setGeneratedCloudPhrase(null);
-    setCloudSyncMessage('Sync code forgotten. Cloud backup not deleted.');
+    setCloudSyncMessage('Sync code removed from this device. Cloud backup and sync history preserved.');
   }
 
-  function handleClearOrphanedCards() {
-    orphanedCards.forEach(card => {
-      deleteCard(card.id);
-    });
-    setConnectionMessage(`Removed ${orphanedCards.length} orphaned card${orphanedCards.length === 1 ? '' : 's'}.`);
+  // Fix #1: Show confirmation before clearing
+  function handleClearOrphanedCardsClick() {
+    setShowClearOrphanedDialog(true);
+  }
+
+  // Fix #2, #6: Separate state, loading indicator
+  function confirmClearOrphanedCards() {
+    setShowClearOrphanedDialog(false);
+    setClearingOrphanedCards(true);
+
+    try {
+      const count = orphanedCards.length;
+      orphanedCards.forEach(card => {
+        deleteCard(card.id);
+      });
+      setOrphanedCardMessage(`Removed ${count} orphaned card${count === 1 ? '' : 's'}.`);
+
+      // Clear message after 5 seconds
+      setTimeout(() => setOrphanedCardMessage(''), 5000);
+    } catch (error) {
+      setOrphanedCardMessage(`Failed to clear orphaned cards: ${getErrorMessage(error)}`);
+    } finally {
+      setClearingOrphanedCards(false);
+    }
   }
 
   if (patLoading || cardsLoading) {
@@ -686,6 +750,16 @@ export default function SettingsPage() {
         trackedAccountCount={trackedAccountIds.length}
       />
 
+      {/* Fix #4: Timing issue warning - cards exist but accounts not loaded */}
+      {hasCardsWithoutAccountsLoaded && (
+        <Alert>
+          <Info className="h-4 w-4" aria-hidden="true" />
+          <AlertDescription>
+            You have cards configured but no budget selected. Select a budget below to verify your cards are still connected to valid YNAB accounts.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Orphaned Cards Warning */}
       {orphanedCards.length > 0 && (
         <Alert variant="destructive">
@@ -700,12 +774,21 @@ export default function SettingsPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={handleClearOrphanedCards}
+              onClick={handleClearOrphanedCardsClick}
+              disabled={clearingOrphanedCards}
               className="flex-shrink-0"
             >
-              Clear Orphaned Cards
+              {clearingOrphanedCards ? 'Clearing...' : 'Clear Orphaned Cards'}
             </Button>
           </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Fix #2: Separate success message for orphaned cards */}
+      {orphanedCardMessage && (
+        <Alert>
+          <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+          <AlertDescription>{orphanedCardMessage}</AlertDescription>
         </Alert>
       )}
 
@@ -1188,6 +1271,16 @@ export default function SettingsPage() {
         cancelText="Cancel"
         onConfirm={confirmGenerateNewCode}
         onCancel={() => setShowGenerateDialog(false)}
+      />
+
+      <ConfirmDialog
+        isOpen={showClearOrphanedDialog}
+        title="Clear Orphaned Cards?"
+        message={`This will permanently delete ${orphanedCards.length} card${orphanedCards.length === 1 ? '' : 's'} that ${orphanedCards.length === 1 ? 'is' : 'are'} no longer connected to YNAB accounts. All associated rules and settings will also be removed. This action cannot be undone.`}
+        confirmText="Clear Orphaned Cards"
+        cancelText="Cancel"
+        onConfirm={confirmClearOrphanedCards}
+        onCancel={() => setShowClearOrphanedDialog(false)}
       />
 
     </div>

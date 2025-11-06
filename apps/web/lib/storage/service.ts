@@ -602,20 +602,25 @@ export class StorageService {
       const imported = JSON.parse(jsonString);
       const storage = this.getStorage() as MutableStorageData;
 
-      // Preserve sensitive local-only data
+      // Fix #5: Preserve sensitive local-only data (more explicit checks)
       const pat = storage.ynab.pat;
       const cloudSyncMnemonic = storage.settings.cloudSyncMnemonic;
       const rememberCloudSyncCode = storage.settings.rememberCloudSyncCode;
 
       Object.assign(storage, imported);
 
-      if (pat) {
+      // Restore PAT if it exists (non-empty string)
+      if (pat && typeof pat === 'string') {
         storage.ynab.pat = pat;
       }
-      if (cloudSyncMnemonic !== undefined) {
+
+      // Restore cloudSyncMnemonic if it exists and is a valid string
+      if (cloudSyncMnemonic && typeof cloudSyncMnemonic === 'string') {
         storage.settings.cloudSyncMnemonic = cloudSyncMnemonic;
       }
-      if (rememberCloudSyncCode !== undefined) {
+
+      // Restore rememberCloudSyncCode preference (boolean or undefined)
+      if (rememberCloudSyncCode !== undefined && typeof rememberCloudSyncCode === 'boolean') {
         storage.settings.rememberCloudSyncCode = rememberCloudSyncCode;
       }
 
