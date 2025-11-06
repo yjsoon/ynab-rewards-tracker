@@ -33,13 +33,6 @@ function useHasHydrated() {
 
   useEffect(() => {
     setHasHydrated(true);
-
-    // Safety timeout: force hydration after 2 seconds if not already hydrated
-    const timeout = setTimeout(() => {
-      setHasHydrated(true);
-    }, 2000);
-
-    return () => clearTimeout(timeout);
   }, []);
 
   return hasHydrated;
