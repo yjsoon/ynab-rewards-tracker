@@ -269,6 +269,8 @@ export default function SettingsPage() {
   }, [cards, accounts, pat]);
 
   // Fix #4: Detect timing issue where cards exist but accounts haven't loaded yet
+  // Returns true when: PAT is connected AND cards with ynabAccountId exist AND accounts haven't loaded
+  // yet because no budget is selected. This prompts the user to select a budget to verify card compatibility.
   const hasCardsWithoutAccountsLoaded = useMemo(() => {
     const hasYnabLinkedCards = cards.some(card => card.ynabAccountId);
     return pat && hasYnabLinkedCards && accounts.length === 0 && !selectedBudget.id;
@@ -790,7 +792,7 @@ export default function SettingsPage() {
           <AlertCircle className="h-4 w-4" aria-hidden="true" />
           <AlertDescription className="flex items-center justify-between gap-4">
             <span>
-              {orphanedCards.length} card{orphanedCards.length === 1 ? '' : 's'} reference{orphanedCards.length === 1 ? 's' : ''} YNAB account{orphanedCards.length === 1 ? 's' : ''} that {orphanedCards.length === 1 ? 'is' : 'are'} no longer connected.
+              {orphanedCards.length} card{orphanedCards.length === 1 ? '' : 's'} reference{orphanedCards.length === 1 ? 's' : ''} YNAB account{orphanedCards.length === 1 ? '' : 's'} that {orphanedCards.length === 1 ? 'is' : 'are'} no longer connected.
               {orphanedCards.length === 1
                 ? ` "${orphanedCards[0].name}" won't track rewards until reconnected.`
                 : ' These cards won\'t track rewards until reconnected.'}
