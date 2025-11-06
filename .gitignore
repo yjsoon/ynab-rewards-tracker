@@ -42,3 +42,6 @@ build/
 
 # Tamagui
 apps/mobile/.tamagui/
+
+# Local Netlify folder
+.netlify
