@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useCallback } from "react";
-import { AlertCircle, Loader2, ChevronDown, ChevronUp, Save, X, Search, ArrowUpDown } from "lucide-react";
+import { AlertCircle, Loader2, ChevronDown, ChevronUp, Search, ArrowUpDown } from "lucide-react";
 import type { Transaction } from "@/types/transaction";
 import type { CreditCard, AppSettings, TagMapping } from "@/lib/storage";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
@@ -59,8 +59,6 @@ export function EnhancedTransactionsTable({
   onTransactionUpdated,
 }: EnhancedTransactionsTableProps) {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-  const [editingRow, setEditingRow] = useState<string | null>(null);
-  const [editingFlagColor, setEditingFlagColor] = useState<YnabFlagColor | null>(null);
   const [savingTransaction, setSavingTransaction] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedAccountFilter, setSelectedAccountFilter] = useState<string>("all");
@@ -169,30 +167,18 @@ export function EnhancedTransactionsTable({
     });
   }, []);
 
-  // Start editing a transaction
-  const startEditing = useCallback((transaction: Transaction) => {
-    setEditingRow(transaction.id);
-    setEditingFlagColor((transaction.flag_color as YnabFlagColor) || null);
-  }, []);
-
-  // Cancel editing
-  const cancelEditing = useCallback(() => {
-    setEditingRow(null);
-    setEditingFlagColor(null);
-  }, []);
-
-  // Save transaction update
-  const saveTransaction = useCallback(
-    async (transaction: Transaction) => {
+  // Update transaction flag (auto-save)
+  const updateTransactionFlag = useCallback(
+    async (transactionId: string, newFlagColor: YnabFlagColor | null) => {
       if (!selectedBudgetId || !pat) {
-        alert("Cannot save: Missing budget or PAT");
+        console.error("Cannot save: Missing budget or PAT");
         return;
       }
 
-      setSavingTransaction(transaction.id);
+      setSavingTransaction(transactionId);
 
       try {
-        const response = await fetch(`/api/ynab/budgets/${selectedBudgetId}/transactions/${transaction.id}`, {
+        const response = await fetch(`/api/ynab/budgets/${selectedBudgetId}/transactions/${transactionId}`, {
           method: "PATCH",
           headers: {
             Authorization: `Bearer ${pat}`,
@@ -200,7 +186,7 @@ export function EnhancedTransactionsTable({
           },
           body: JSON.stringify({
             transaction: {
-              flag_color: editingFlagColor || null,
+              flag_color: newFlagColor || null,
             },
           }),
         });
@@ -209,15 +195,6 @@ export function EnhancedTransactionsTable({
           const errorData = await response.json().catch(() => ({}));
           throw new Error(errorData.message || "Failed to update transaction");
         }
-
-        // Success - close editor and trigger refresh
-        setEditingRow(null);
-        setEditingFlagColor(null);
-        setExpandedRows((prev) => {
-          const next = new Set(prev);
-          next.delete(transaction.id);
-          return next;
-        });
 
         // Trigger parent refresh to fetch updated data
         onTransactionUpdated?.();
@@ -228,7 +205,7 @@ export function EnhancedTransactionsTable({
         setSavingTransaction(null);
       }
     },
-    [selectedBudgetId, pat, editingFlagColor, onTransactionUpdated]
+    [selectedBudgetId, pat, onTransactionUpdated]
   );
 
   // Toggle sort
@@ -386,13 +363,12 @@ export function EnhancedTransactionsTable({
           <tbody>
             {sortedTransactions.map((txn, index) => {
               const isExpanded = expandedRows.has(txn.id);
-              const isEditing = editingRow === txn.id;
               const isSaving = savingTransaction === txn.id;
               const card = cardsByAccountId.get(txn.account_id);
               const amount = absFromMilliFn(txn.amount);
               const { reward, blockInfo } = card
                 ? SimpleRewardsCalculator.calculateTransactionReward(amount, card, settings, {
-                    flagColor: isEditing ? editingFlagColor : txn.flag_color,
+                    flagColor: txn.flag_color,
                   })
                 : { reward: 0, blockInfo: null };
 
@@ -426,12 +402,14 @@ export function EnhancedTransactionsTable({
                       {accountsMap.get(txn.account_id) || "Unknown"}
                     </td>
                     <td className="p-2 text-sm">{txn.payee_name}</td>
-                    <td className="p-2 text-sm">
-                      {txn.flag_color && (
-                        <Badge variant="outline" className="text-xs">
-                          {customFlagNames?.[txn.flag_color as YnabFlagColor] || txn.flag_name || txn.flag_color}
-                        </Badge>
-                      )}
+                    <td className="p-2">
+                      <FlagColorPicker
+                        value={txn.flag_color as YnabFlagColor}
+                        onChange={(newColor) => updateTransactionFlag(txn.id, newColor)}
+                        disabled={isSaving}
+                        customNames={customFlagNames}
+                        rewardCategories={card ? tagMappingsByCard.get(card.id) : undefined}
+                      />
                     </td>
                     <td className="p-2 text-sm">{txn.category_name || "Uncategorised"}</td>
                     <td className="p-2 text-sm text-right font-mono">
@@ -500,69 +478,6 @@ export function EnhancedTransactionsTable({
                                     : `${card.earningRate} miles per dollar`}
                                 </p>
                               </div>
-                            )}
-                          </div>
-
-                          {/* Flag Editor */}
-                          <div className="border-t pt-4">
-                            <Label className="text-sm font-medium mb-2 block">Edit Flag Color</Label>
-                            <div className="flex items-center gap-2">
-                              <div className="flex-1 max-w-xs">
-                                <FlagColorPicker
-                                  value={isEditing ? editingFlagColor : (txn.flag_color as YnabFlagColor)}
-                                  onChange={(color) => {
-                                    if (!isEditing) {
-                                      startEditing(txn);
-                                    }
-                                    setEditingFlagColor(color);
-                                  }}
-                                  disabled={isSaving}
-                                  customNames={customFlagNames}
-                                  rewardCategories={card ? tagMappingsByCard.get(card.id) : undefined}
-                                />
-                              </div>
-
-                              {isEditing && (
-                                <>
-                                  <Button
-                                    size="sm"
-                                    onClick={() => saveTransaction(txn)}
-                                    disabled={isSaving || !selectedBudgetId || !pat}
-                                  >
-                                    {isSaving ? (
-                                      <>
-                                        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                                        Saving...
-                                      </>
-                                    ) : (
-                                      <>
-                                        <Save className="h-4 w-4 mr-1" />
-                                        Save
-                                      </>
-                                    )}
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={cancelEditing}
-                                    disabled={isSaving}
-                                  >
-                                    <X className="h-4 w-4 mr-1" />
-                                    Cancel
-                                  </Button>
-                                </>
-                              )}
-                            </div>
-
-                            {isEditing && card && (
-                              <p className="text-xs text-muted-foreground mt-2">
-                                Changing flag will update the earning rate. New reward:{" "}
-                                {card.type === "cashback" ? (
-                                  <CurrencyAmount value={reward} currency={settings.currency} showPlus />
-                                ) : (
-                                  `+${Math.round(reward)} miles`
-                                )}
-                              </p>
                             )}
                           </div>
                         </div>
