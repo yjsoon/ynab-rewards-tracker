@@ -424,12 +424,12 @@ export function EnhancedTransactionsTable({
                     </td>
                     <td className="p-2 text-sm text-right">
                       {isIncoming ? (
-                        <Badge className="text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100">
+                        <Badge className="text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100 hover:bg-blue-100 dark:hover:bg-blue-900">
                           Payment/Refund
                         </Badge>
                       ) : card ? (
                         reward > 0 ? (
-                          <Badge className="text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100">
+                          <Badge className="text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100 hover:bg-green-100 dark:hover:bg-green-900">
                             {card.type === "cashback" ? (
                               <CurrencyAmount value={reward} currency={settings.currency} showPlus />
                             ) : (
@@ -437,7 +437,7 @@ export function EnhancedTransactionsTable({
                             )}
                           </Badge>
                         ) : (
-                          <Badge className="text-xs bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-100">
+                          <Badge className="text-xs bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-100 hover:bg-red-100 dark:hover:bg-red-900">
                             No reward
                           </Badge>
                         )
