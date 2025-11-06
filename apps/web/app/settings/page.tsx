@@ -175,6 +175,7 @@ export default function SettingsPage() {
   const [testingConnection, setTestingConnection] = useState(false);
   const [connectionMessage, setConnectionMessage] = useState('');
   const [showClearDialog, setShowClearDialog] = useState(false);
+  const [showClearTokenDialog, setShowClearTokenDialog] = useState(false);
   const hasRequestedBudgetsRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -423,6 +424,15 @@ export default function SettingsPage() {
     setAccounts([]);
     persistTrackedAccountIds([]);
     setShowClearDialog(false);
+  }
+
+  function handleClearToken() {
+    setPAT('');
+    setBudgets([]);
+    persistSelectedBudget('', '');
+    setAccounts([]);
+    persistTrackedAccountIds([]);
+    setShowClearTokenDialog(false);
   }
 
   function parseExportedSettings(): unknown {
@@ -770,15 +780,9 @@ export default function SettingsPage() {
                     'Test Connection'
                   )}
                 </Button>
-                <Button 
+                <Button
                   variant="destructive"
-                  onClick={() => {
-                    setPAT('');
-                    setBudgets([]);
-                    persistSelectedBudget('', '');
-                    setAccounts([]);
-                    persistTrackedAccountIds([]);
-                  }}
+                  onClick={() => setShowClearTokenDialog(true)}
                 >
                   Clear Token
                 </Button>
@@ -1116,6 +1120,16 @@ export default function SettingsPage() {
         cancelText="Cancel"
         onConfirm={handleClearAll}
         onCancel={() => setShowClearDialog(false)}
+      />
+
+      <ConfirmDialog
+        isOpen={showClearTokenDialog}
+        title="Clear YNAB Token?"
+        message="This will remove your Personal Access Token and clear your budget and account selections. You'll need to reconnect to YNAB. Your card configurations and rules will not be affected."
+        confirmText="Clear Token"
+        cancelText="Cancel"
+        onConfirm={handleClearToken}
+        onCancel={() => setShowClearTokenDialog(false)}
       />
 
       <ConfirmDialog
