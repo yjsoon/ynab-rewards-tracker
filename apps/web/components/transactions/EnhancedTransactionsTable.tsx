@@ -367,7 +367,10 @@ export function EnhancedTransactionsTable({
               const isSaving = savingTransaction === txn.id;
               const card = cardsByAccountId.get(txn.account_id);
               const amount = absFromMilliFn(txn.amount);
-              const { reward, blockInfo } = card
+              const isIncoming = txn.amount > 0; // Positive amount = incoming (payment, refund, etc.)
+
+              // Only calculate rewards for spending transactions (negative amounts)
+              const { reward, blockInfo } = !isIncoming && card
                 ? SimpleRewardsCalculator.calculateTransactionReward(amount, card, settings, {
                     flagColor: txn.flag_color,
                   })
@@ -414,10 +417,17 @@ export function EnhancedTransactionsTable({
                     </td>
                     <td className="p-2 text-sm">{txn.category_name || "Uncategorised"}</td>
                     <td className="p-2 text-sm text-right font-mono">
-                      <CurrencyAmount value={amount} currency={settings.currency} />
+                      <span className={cn(isIncoming && "text-green-600 dark:text-green-400")}>
+                        {isIncoming && "+"}
+                        <CurrencyAmount value={amount} currency={settings.currency} />
+                      </span>
                     </td>
                     <td className="p-2 text-sm text-right">
-                      {card ? (
+                      {isIncoming ? (
+                        <Badge className="text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100">
+                          Payment/Refund
+                        </Badge>
+                      ) : card ? (
                         reward > 0 ? (
                           <Badge className="text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100">
                             {card.type === "cashback" ? (
@@ -456,6 +466,15 @@ export function EnhancedTransactionsTable({
                               <p className="text-sm font-mono">{txn.id}</p>
                             </div>
 
+                            <div>
+                              <Label className="text-xs font-medium text-muted-foreground">
+                                Type
+                              </Label>
+                              <p className="text-sm">
+                                {isIncoming ? "Incoming (Payment/Refund)" : "Spending"}
+                              </p>
+                            </div>
+
                             {txn.memo && (
                               <div>
                                 <Label className="text-xs font-medium text-muted-foreground">Memo</Label>
@@ -463,7 +482,8 @@ export function EnhancedTransactionsTable({
                               </div>
                             )}
 
-                            {card && blockInfo && (
+                            {/* Only show reward info for spending transactions */}
+                            {!isIncoming && card && blockInfo && (
                               <div>
                                 <Label className="text-xs font-medium text-muted-foreground">
                                   Reward Calculation
@@ -472,7 +492,7 @@ export function EnhancedTransactionsTable({
                               </div>
                             )}
 
-                            {card && (
+                            {!isIncoming && card && (
                               <div>
                                 <Label className="text-xs font-medium text-muted-foreground">
                                   Earning Rate
