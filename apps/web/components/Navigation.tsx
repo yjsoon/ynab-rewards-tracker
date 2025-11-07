@@ -105,7 +105,7 @@ export function Navigation() {
               className="absolute right-0 top-0 h-full w-64 bg-background border-l shadow-xl animate-in slide-in-from-right duration-300"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex flex-col p-4">
+              <div className="flex flex-col p-4 gap-2">
                 {navLinks.map((link) => {
                   const Icon = link.icon;
                   const isActive = pathname === link.href;
