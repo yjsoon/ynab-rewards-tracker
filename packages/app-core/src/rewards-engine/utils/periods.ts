@@ -108,3 +108,26 @@ export function periodOverlapsWindow(
 
   return true;
 }
+
+/**
+ * Calculate the earliest period start date across all cards.
+ * Useful for fetching transactions that cover all billing cycles,
+ * including cards with non-calendar billing cycles that extend into the previous month.
+ *
+ * @param cards - Array of credit cards to check
+ * @param targetDate - Optional date to calculate periods for (defaults to now)
+ * @returns ISO date string (YYYY-MM-DD) of the earliest period start
+ */
+export function getEarliestPeriodStart(cards: CreditCard[], targetDate: Date = new Date()): string {
+  const now = targetDate;
+  let earliestStart = new Date(now.getFullYear(), now.getMonth(), 1); // Default to start of current month
+
+  cards.forEach(card => {
+    const period = calculateCardPeriod(card, targetDate);
+    if (period.startDate < earliestStart) {
+      earliestStart = period.startDate;
+    }
+  });
+
+  return formatLocalDate(earliestStart);
+}

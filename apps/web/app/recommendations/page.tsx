@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { CardSpendingSummary } from '@/components/CardSpendingSummary';
 import { RealTimeRecommendations, type CardOption } from '@/lib/real-time-recommendations';
-import { SimpleRewardsCalculator } from '@/lib/rewards-engine';
+import { getEarliestPeriodStart } from '@ynab-counter/app-core/rewards-engine/utils/periods';
 import { useThemeGroups, useCreditCards, useSettings, useYnabPAT, useSelectedBudget } from '@/hooks/useLocalStorage';
 import type { Transaction } from '@/types/transaction';
 
@@ -56,18 +56,7 @@ export default function RecommendationsPage() {
 
       // Get earliest period start across all cards to ensure we fetch all transactions
       // for cards with billing cycles that extend into the previous month
-      const now = new Date();
-      let earliestStart = new Date(now.getFullYear(), now.getMonth(), 1); // Default to start of month
-
-      cards.forEach(card => {
-        const period = SimpleRewardsCalculator.calculatePeriod(card);
-        const periodStart = new Date(period.start);
-        if (periodStart < earliestStart) {
-          earliestStart = periodStart;
-        }
-      });
-
-      const sinceDate = earliestStart.toISOString().split('T')[0];
+      const sinceDate = getEarliestPeriodStart(cards);
 
       const response = await fetch(
         `/api/ynab/budgets/${selectedBudget.id}/transactions?since_date=${sinceDate}`,

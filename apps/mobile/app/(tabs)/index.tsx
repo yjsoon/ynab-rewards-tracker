@@ -35,6 +35,7 @@ import {
   type TransactionWithRewards,
 } from '@ynab-counter/app-core/rewards-engine';
 import { createRewardCalculationFromSimple } from '@ynab-counter/app-core/rewards-engine/utils/reward-calculation';
+import { getEarliestPeriodStart } from '@ynab-counter/app-core/rewards-engine/utils/periods';
 import type { CreditCard, RewardCalculation, SubcategoryBreakdown } from '@ynab-counter/app-core/storage/types';
 import { findBestDashboardEntry } from '@/lib/dashboardCache';
 
@@ -273,25 +274,6 @@ const clampPercent = (value: number | undefined) => {
   return Math.max(0, Math.min(100, value));
 };
 
-/**
- * Calculate the earliest period start date across all cards to ensure
- * we fetch all necessary transactions for cards with non-calendar billing cycles
- */
-function getEarliestPeriodStart(cards: CreditCard[]): string {
-  const now = new Date();
-  let earliestStart = new Date(now.getFullYear(), now.getMonth(), 1);
-
-  cards.forEach(card => {
-    const period = SimpleRewardsCalculator.calculatePeriod(card);
-    const periodStart = new Date(period.start);
-    if (periodStart < earliestStart) {
-      earliestStart = periodStart;
-    }
-  });
-
-  return earliestStart.toISOString().split('T')[0];
-}
-
 export default function HomeScreen() {
   const navigation = useNavigation();
   const router = useRouter();
@@ -310,6 +292,12 @@ export default function HomeScreen() {
       cards: state.cards.map(c => ({ id: c.id, name: c.name })),
     });
   }, [status.isHydrated, isLoading, isEmpty, state.cards.length, summaries.length]);
+
+  // Memoize the earliest period start to avoid recalculating on every render
+  // Only recalculates when cards array content changes
+  const earliestPeriodStart = useMemo(() => {
+    return getEarliestPeriodStart(state.cards);
+  }, [state.cards]);
 
   // Automatically refresh and fetch transactions when page first loads
   // This ensures we get the latest data instead of showing ESTIMATE badges
@@ -337,12 +325,12 @@ export default function HomeScreen() {
       (async () => {
         try {
           await actions.refresh();
-          await actions.syncBudgetsAndAccounts({ skipTransactions: false, sinceDate: getEarliestPeriodStart(state.cards) });
+          await actions.syncBudgetsAndAccounts({ skipTransactions: false, sinceDate: earliestPeriodStart });
         } catch (error) {
           console.error('[HomeScreen] Auto-refresh failed', error);
         }
       })();
-    }, [status.isHydrated, state.pat, state.selectedBudget.id, state.trackedAccountIds.length, state.cards, state.isSyncing, actions])
+    }, [status.isHydrated, state.pat, state.selectedBudget.id, state.trackedAccountIds.length, state.cards.length, earliestPeriodStart, state.isSyncing, actions])
   );
 
   const navigateToSettings = React.useCallback(() => {
@@ -381,7 +369,7 @@ export default function HomeScreen() {
                 try {
                   // Refresh storage first, then fetch transactions
                   await actions.refresh();
-                  await actions.syncBudgetsAndAccounts({ skipTransactions: false, sinceDate: getEarliestPeriodStart(state.cards) });
+                  await actions.syncBudgetsAndAccounts({ skipTransactions: false, sinceDate: earliestPeriodStart });
                 } catch (error) {
                   console.error('[HomeScreen] Refresh failed', error);
                 }

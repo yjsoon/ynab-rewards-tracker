@@ -13,6 +13,7 @@ import { ynabSync } from '@/lib/sync';
 import { fetchBudgets } from '@/lib/ynab-api';
 import { SimpleRewardsCalculator } from '@ynab-counter/app-core/rewards-engine';
 import { createRewardCalculationFromSimple } from '@ynab-counter/app-core/rewards-engine/utils/reward-calculation';
+import { getEarliestPeriodStart } from '@ynab-counter/app-core/rewards-engine/utils/periods';
 import type {
   AppSettings,
   CreditCard,
@@ -112,25 +113,6 @@ type StorageContextValue = {
 const STORAGE_REFRESH_ERROR = 'Failed to refresh storage';
 const LOAD_ERROR_MESSAGE = 'Failed to load storage';
 const AUTO_CREATED_CARD_ISSUER = 'Unknown';
-
-/**
- * Calculate the earliest period start date across all cards to ensure
- * we fetch all necessary transactions for cards with non-calendar billing cycles
- */
-function getEarliestPeriodStart(cards: CreditCard[]): string {
-  const now = new Date();
-  let earliestStart = new Date(now.getFullYear(), now.getMonth(), 1);
-
-  cards.forEach(card => {
-    const period = SimpleRewardsCalculator.calculatePeriod(card);
-    const periodStart = new Date(period.start);
-    if (periodStart < earliestStart) {
-      earliestStart = periodStart;
-    }
-  });
-
-  return earliestStart.toISOString().split('T')[0];
-}
 
 const defaultState: StorageState = {
   connectionStatus: 'disconnected',
