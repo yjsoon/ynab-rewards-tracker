@@ -342,7 +342,7 @@ export default function HomeScreen() {
           console.error('[HomeScreen] Auto-refresh failed', error);
         }
       })();
-    }, [status.isHydrated, state.pat, state.selectedBudget.id, state.trackedAccountIds.length, state.cards.length, state.isSyncing, actions])
+    }, [status.isHydrated, state.pat, state.selectedBudget.id, state.trackedAccountIds.length, state.cards, state.isSyncing, actions])
   );
 
   const navigateToSettings = React.useCallback(() => {
