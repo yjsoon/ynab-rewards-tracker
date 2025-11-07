@@ -1,12 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Home, Settings, CreditCard, SlidersHorizontal, Sparkles, ReceiptText, Menu, X } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { cn } from '@/lib/utils';
+
+// Navigation height constant - used for nav bar and mobile menu positioning
+const NAV_HEIGHT_CLASS = 'h-14'; // 56px
 
 export function Navigation() {
   const pathname = usePathname();
@@ -23,10 +26,22 @@ export function Navigation() {
 
   const closeMobileMenu = () => setMobileMenuOpen(false);
 
+  // Close mobile menu on Escape key press for keyboard accessibility
+  useEffect(() => {
+    const handleEscapeKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && mobileMenuOpen) {
+        closeMobileMenu();
+      }
+    };
+
+    document.addEventListener('keydown', handleEscapeKey);
+    return () => document.removeEventListener('keydown', handleEscapeKey);
+  }, [mobileMenuOpen]);
+
   return (
     <nav className="border-b bg-gradient-to-r from-primary/5 via-background to-primary/3 backdrop-blur-md sticky top-0 z-50 shadow-sm">
       <div className="max-w-6xl mx-auto px-6">
-        <div className="flex h-14 items-center justify-between">
+        <div className={cn("flex items-center justify-between", NAV_HEIGHT_CLASS)}>
           <div className="flex items-center gap-6">
             <Link href="/" className="flex items-center space-x-2 font-bold text-lg">
               <CreditCard className="h-6 w-6" />
@@ -98,7 +113,7 @@ export function Navigation() {
         {/* Mobile slide-out menu */}
         {mobileMenuOpen && (
           <div
-            className="md:hidden fixed inset-0 top-14 bg-black/20 backdrop-blur-sm z-40"
+            className="md:hidden fixed inset-0 top-14 bg-black/20 backdrop-blur-sm z-40" // top-14 matches NAV_HEIGHT_CLASS (56px)
             onClick={closeMobileMenu}
           >
             <div
