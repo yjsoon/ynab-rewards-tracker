@@ -30,13 +30,14 @@ export function useAutoBackup() {
     }
 
     // Debounce: wait 2 seconds after last save
-    return new Promise<void>((resolve) => {
+    return new Promise<void>((resolve, reject) => {
       debounceTimerRef.current = setTimeout(async () => {
         try {
           const normalised = normaliseMnemonic(settings.cloudSyncMnemonic!);
           if (!isValidMnemonic(normalised)) {
-            console.error('Auto-backup: Invalid stored mnemonic');
-            resolve();
+            const error = new Error('Invalid stored mnemonic');
+            console.error('Auto-backup:', error);
+            reject(error);
             return;
           }
 
@@ -54,10 +55,9 @@ export function useAutoBackup() {
           console.log('Auto-backup: Settings backed up to cloud');
           resolve();
         } catch (error) {
-          // Silent failure - don't interrupt user experience
+          // Reject so caller can show error toast
           console.error('Auto-backup failed:', error);
-          resolve();
-          throw error; // Re-throw so caller can show toast
+          reject(error);
         }
       }, 2000); // 2 second debounce
     });
