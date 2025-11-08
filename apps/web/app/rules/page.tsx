@@ -268,7 +268,12 @@ function RulesPageContent() {
       setTimeout(() => setSaveSuccess(false), 3000);
 
       // Auto-backup to cloud after save
-      await autoBackup();
+      try {
+        await autoBackup();
+      } catch (backupErr) {
+        // Silent failure for backup - main save succeeded
+        console.error('Auto-backup failed:', backupErr);
+      }
     } catch (error) {
       console.error('Failed to save changes:', error);
     } finally {

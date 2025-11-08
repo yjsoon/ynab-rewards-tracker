@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useYnabPAT, useCreditCards, useSettings, useSelectedBudget, useTrackedAccountIds } from '@/hooks/useLocalStorage';
+import { useAutoBackup } from '@/hooks/useAutoBackup';
 import {
   createMnemonic,
   encryptJson,
@@ -170,6 +171,7 @@ export default function SettingsPage() {
   const { pat, setPAT, isLoading: patLoading } = useYnabPAT();
   const { cards, saveCard, deleteCard, isLoading: cardsLoading } = useCreditCards();
   const { settings, updateSettings, exportSettings, importSettings, clearAll } = useSettings();
+  const { autoBackup } = useAutoBackup();
   
   const [tokenInput, setTokenInput] = useState('');
   const [testingConnection, setTestingConnection] = useState(false);
@@ -194,8 +196,8 @@ export default function SettingsPage() {
   const [showClearOrphanedDialog, setShowClearOrphanedDialog] = useState(false);
   const [clearingOrphanedCards, setClearingOrphanedCards] = useState(false);
 
-  // Auto-sync state
-  const [autoSyncAttempted, setAutoSyncAttempted] = useState(false);
+  // Auto-backup state
+  const [autoBackupError, setAutoBackupError] = useState('');
 
   // Budget and account selection state
   const [budgets, setBudgets] = useState<YnabBudget[]>([]);
@@ -351,13 +353,11 @@ export default function SettingsPage() {
     return () => clearTimeout(timeout);
   }, [cloudSyncMessage, cloudSyncError]);
 
-  // Auto-sync: Download latest settings from cloud on page load
   useEffect(() => {
-    if (!autoSyncAttempted && isCodeRemembered && storedMnemonic) {
-      setAutoSyncAttempted(true);
-      autoDownloadOnLoad();
-    }
-  }, [autoSyncAttempted, isCodeRemembered, storedMnemonic]);
+    if (!autoBackupError) return;
+    const timeout = setTimeout(() => setAutoBackupError(''), 5000);
+    return () => clearTimeout(timeout);
+  }, [autoBackupError]);
 
   // Kick off initial account/budget fetch based on stored selection
   useEffect(() => {
@@ -468,7 +468,11 @@ export default function SettingsPage() {
     setValuationMessage('Saved valuations. Recommendations will use normalised dollars.');
 
     // Auto-backup to cloud after save
-    await autoUploadAfterSave();
+    try {
+      await autoBackup();
+    } catch (error) {
+      setAutoBackupError('Cloud backup failed. Your changes are saved locally.');
+    }
   }
 
   function handleClearAll() {
@@ -632,71 +636,6 @@ export default function SettingsPage() {
       setCloudSyncError(getErrorMessage(error));
     } finally {
       setCloudSyncAction('idle');
-    }
-  }
-
-  async function autoDownloadOnLoad() {
-    // Silent auto-download using stored mnemonic
-    if (!storedMnemonic || !isCodeRemembered) {
-      return;
-    }
-
-    try {
-      const normalised = normaliseMnemonic(storedMnemonic);
-      if (!isValidMnemonic(normalised)) {
-        console.error('Auto-sync: Invalid stored mnemonic');
-        return;
-      }
-
-      const keyId = await computeKeyId(normalised);
-      const stored = await fetchEncryptedSettings(keyId);
-
-      if (!stored) {
-        // No cloud backup exists yet - this is fine for first-time users
-        console.log('Auto-sync: No cloud backup found yet');
-        return;
-      }
-
-      const decrypted = await decryptJson<unknown>(normalised, stored.ciphertext, stored.iv);
-
-      // Validate before importing
-      validateImportedSettings(decrypted);
-
-      // Apply settings silently
-      importSettings(JSON.stringify(decrypted, null, 2));
-      updateSettings({ cloudSyncKeyId: keyId, cloudSyncLastSyncedAt: stored.updatedAt });
-
-      console.log('Auto-sync: Settings synced from cloud');
-    } catch (error) {
-      // Silent failure - don't interrupt user experience
-      console.error('Auto-sync failed on page load:', error);
-    }
-  }
-
-  async function autoUploadAfterSave() {
-    // Silent auto-upload using stored mnemonic after save action
-    if (!storedMnemonic || !isCodeRemembered) {
-      return;
-    }
-
-    try {
-      const normalised = normaliseMnemonic(storedMnemonic);
-      if (!isValidMnemonic(normalised)) {
-        console.error('Auto-backup: Invalid stored mnemonic');
-        return;
-      }
-
-      const payload = parseExportedSettings();
-      const keyId = await computeKeyId(normalised);
-      const { ciphertext, iv } = await encryptJson(normalised, payload);
-      const { updatedAt } = await uploadEncryptedSettings({ keyId, ciphertext, iv });
-
-      updateSettings({ cloudSyncKeyId: keyId, cloudSyncLastSyncedAt: updatedAt });
-
-      console.log('Auto-backup: Settings backed up to cloud');
-    } catch (error) {
-      // Silent failure - don't interrupt user experience
-      console.error('Auto-backup failed after save:', error);
     }
   }
 
@@ -1104,6 +1043,14 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
+      {/* Auto-backup error notification */}
+      {autoBackupError && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" aria-hidden="true" />
+          <AlertDescription>{autoBackupError}</AlertDescription>
+        </Alert>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>Cloud Sync (optional)</CardTitle>
@@ -1122,10 +1069,14 @@ export default function SettingsPage() {
                       <Check className="h-5 w-5 text-primary" aria-hidden="true" />
                     </div>
                     <div>
-                      <p className="text-sm font-medium">Sync code saved on this device</p>
-                      {cloudSyncLastSynced && (
+                      <p className="text-sm font-medium">Auto-backup enabled</p>
+                      {cloudSyncLastSynced ? (
                         <p className="text-xs text-muted-foreground">
-                          Last synced: {cloudSyncLastSynced}
+                          Last backup: {cloudSyncLastSynced}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          Settings will auto-backup on save
                         </p>
                       )}
                     </div>

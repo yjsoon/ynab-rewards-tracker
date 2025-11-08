@@ -157,7 +157,12 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
       setEditing(false);
 
       // Auto-backup to cloud after save
-      await autoBackup();
+      try {
+        await autoBackup();
+      } catch (backupErr) {
+        // Silent failure for backup - main save succeeded
+        console.error('Auto-backup failed:', backupErr);
+      }
     } catch (err) {
       setError('Failed to save changes');
     } finally {
