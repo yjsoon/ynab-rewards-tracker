@@ -13,6 +13,7 @@ import { ynabSync } from '@/lib/sync';
 import { fetchBudgets } from '@/lib/ynab-api';
 import { SimpleRewardsCalculator } from '@ynab-counter/app-core/rewards-engine';
 import { createRewardCalculationFromSimple } from '@ynab-counter/app-core/rewards-engine/utils/reward-calculation';
+import { getEarliestPeriodStart } from '@ynab-counter/app-core/rewards-engine/utils/periods';
 import type {
   AppSettings,
   CreditCard,
@@ -112,12 +113,6 @@ type StorageContextValue = {
 const STORAGE_REFRESH_ERROR = 'Failed to refresh storage';
 const LOAD_ERROR_MESSAGE = 'Failed to load storage';
 const AUTO_CREATED_CARD_ISSUER = 'Unknown';
-
-function getStartOfCurrentMonthISO(): string {
-  const now = new Date();
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  return startOfMonth.toISOString().split('T')[0];
-}
 
 const defaultState: StorageState = {
   connectionStatus: 'disconnected',
@@ -822,7 +817,9 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         // If setup just completed, fetch transactions now
         if (wasSetupMode && nextBudget.id && nextTrackedIds.length > 0) {
           console.log('[StorageContext] applyPendingChanges: setup completed, fetching transactions');
-          await performSync({ skipTransactions: false, sinceDate: getStartOfCurrentMonthISO() }, {
+          // Get the newly created cards to calculate earliest period start
+          const cards = await storage.getCards();
+          await performSync({ skipTransactions: false, sinceDate: getEarliestPeriodStart(cards) }, {
             pat,
             selectedBudgetId: nextBudget.id,
             trackedAccountIds: nextTrackedIds,
