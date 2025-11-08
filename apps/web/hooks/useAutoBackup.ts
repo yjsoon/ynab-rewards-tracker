@@ -15,7 +15,7 @@ import { storage } from '@/lib/storage';
  */
 export function useAutoBackup() {
   const { settings, updateSettings } = useSettings();
-  const debounceTimerRef = useRef<NodeJS.Timeout>();
+  const debounceTimerRef = useRef<NodeJS.Timeout | undefined>(undefined);
 
   const autoBackup = useCallback(async () => {
     // Only auto-backup if sync is enabled
