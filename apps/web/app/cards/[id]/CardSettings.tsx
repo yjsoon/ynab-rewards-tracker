@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Save, AlertCircle } from 'lucide-react';
 import { useCreditCards } from '@/hooks/useLocalStorage';
+import { useAutoBackup } from '@/hooks/useAutoBackup';
 import { storage, type CardSubcategory, type CreditCard } from '@/lib/storage';
 import { validateIssuer, sanitizeInput } from '@/lib/validation';
 import { CardSettingsEditor, computeCardFieldDiff, type CardEditState } from '@/components/CardSettingsEditor';
@@ -49,6 +50,7 @@ const createFormState = (nextCard: CreditCard): CardEditState => ({
 
 export default function CardSettings({ card, onUpdate, initialEditing = false }: CardSettingsProps) {
   const { updateCard } = useCreditCards();
+  const { autoBackup } = useAutoBackup();
   const [editing, setEditing] = useState(initialEditing);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -153,6 +155,9 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
         setFormData(createFormState(updatedCard));
       }
       setEditing(false);
+
+      // Auto-backup to cloud after save
+      await autoBackup();
     } catch (err) {
       setError('Failed to save changes');
     } finally {

@@ -194,6 +194,9 @@ export default function SettingsPage() {
   const [showClearOrphanedDialog, setShowClearOrphanedDialog] = useState(false);
   const [clearingOrphanedCards, setClearingOrphanedCards] = useState(false);
 
+  // Auto-sync state
+  const [autoSyncAttempted, setAutoSyncAttempted] = useState(false);
+
   // Budget and account selection state
   const [budgets, setBudgets] = useState<YnabBudget[]>([]);
   const { selectedBudget, setSelectedBudget: persistSelectedBudget } = useSelectedBudget();
@@ -348,6 +351,14 @@ export default function SettingsPage() {
     return () => clearTimeout(timeout);
   }, [cloudSyncMessage, cloudSyncError]);
 
+  // Auto-sync: Download latest settings from cloud on page load
+  useEffect(() => {
+    if (!autoSyncAttempted && isCodeRemembered && storedMnemonic) {
+      setAutoSyncAttempted(true);
+      autoDownloadOnLoad();
+    }
+  }, [autoSyncAttempted, isCodeRemembered, storedMnemonic]);
+
   // Kick off initial account/budget fetch based on stored selection
   useEffect(() => {
     if (!pat) {
@@ -450,11 +461,14 @@ export default function SettingsPage() {
     reader.readAsText(file);
   }
 
-  function handleSaveValuations(e: React.FormEvent) {
+  async function handleSaveValuations(e: React.FormEvent) {
     e.preventDefault();
     const mv = isFinite(milesValuation) && milesValuation >= 0 ? milesValuation : 0.01;
     updateSettings({ milesValuation: mv });
     setValuationMessage('Saved valuations. Recommendations will use normalised dollars.');
+
+    // Auto-backup to cloud after save
+    await autoUploadAfterSave();
   }
 
   function handleClearAll() {
@@ -618,6 +632,71 @@ export default function SettingsPage() {
       setCloudSyncError(getErrorMessage(error));
     } finally {
       setCloudSyncAction('idle');
+    }
+  }
+
+  async function autoDownloadOnLoad() {
+    // Silent auto-download using stored mnemonic
+    if (!storedMnemonic || !isCodeRemembered) {
+      return;
+    }
+
+    try {
+      const normalised = normaliseMnemonic(storedMnemonic);
+      if (!isValidMnemonic(normalised)) {
+        console.error('Auto-sync: Invalid stored mnemonic');
+        return;
+      }
+
+      const keyId = await computeKeyId(normalised);
+      const stored = await fetchEncryptedSettings(keyId);
+
+      if (!stored) {
+        // No cloud backup exists yet - this is fine for first-time users
+        console.log('Auto-sync: No cloud backup found yet');
+        return;
+      }
+
+      const decrypted = await decryptJson<unknown>(normalised, stored.ciphertext, stored.iv);
+
+      // Validate before importing
+      validateImportedSettings(decrypted);
+
+      // Apply settings silently
+      importSettings(JSON.stringify(decrypted, null, 2));
+      updateSettings({ cloudSyncKeyId: keyId, cloudSyncLastSyncedAt: stored.updatedAt });
+
+      console.log('Auto-sync: Settings synced from cloud');
+    } catch (error) {
+      // Silent failure - don't interrupt user experience
+      console.error('Auto-sync failed on page load:', error);
+    }
+  }
+
+  async function autoUploadAfterSave() {
+    // Silent auto-upload using stored mnemonic after save action
+    if (!storedMnemonic || !isCodeRemembered) {
+      return;
+    }
+
+    try {
+      const normalised = normaliseMnemonic(storedMnemonic);
+      if (!isValidMnemonic(normalised)) {
+        console.error('Auto-backup: Invalid stored mnemonic');
+        return;
+      }
+
+      const payload = parseExportedSettings();
+      const keyId = await computeKeyId(normalised);
+      const { ciphertext, iv } = await encryptJson(normalised, payload);
+      const { updatedAt } = await uploadEncryptedSettings({ keyId, ciphertext, iv });
+
+      updateSettings({ cloudSyncKeyId: keyId, cloudSyncLastSyncedAt: updatedAt });
+
+      console.log('Auto-backup: Settings backed up to cloud');
+    } catch (error) {
+      // Silent failure - don't interrupt user experience
+      console.error('Auto-backup failed after save:', error);
     }
   }
 

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, Suspense } from 'react';
 import { useThemeGroups, useCreditCards, useSettings } from '@/hooks/useLocalStorage';
+import { useAutoBackup } from '@/hooks/useAutoBackup';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -28,6 +29,7 @@ interface CardEditState {
 
 function RulesPageContent() {
   const { cards, updateCard } = useCreditCards();
+  const { autoBackup } = useAutoBackup();
   const { themeGroups, saveThemeGroup, deleteThemeGroup } = useThemeGroups();
   const { settings } = useSettings();
   const router = useRouter();
@@ -264,6 +266,9 @@ function RulesPageContent() {
       setChangedCards(new Set());
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
+
+      // Auto-backup to cloud after save
+      await autoBackup();
     } catch (error) {
       console.error('Failed to save changes:', error);
     } finally {
