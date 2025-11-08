@@ -58,7 +58,6 @@ export function useAutoSync() {
       }
 
       // Apply settings silently
-      const exportedSettings = storage.exportSettings();
       importSettings(JSON.stringify(decrypted, null, 2));
       updateSettings({ cloudSyncKeyId: keyId, cloudSyncLastSyncedAt: stored.updatedAt });
 
