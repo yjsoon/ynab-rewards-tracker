@@ -11,6 +11,7 @@ import {
   useDashboardViewMode,
   useSettings
 } from "@/hooks/useLocalStorage";
+import { useAutoSync } from "@/hooks/useAutoSync";
 import { SimpleRewardsCalculator } from "@/lib/rewards-engine";
 import { clampDaysLeft } from "@/lib/date";
 import type { CreditCard, DashboardViewMode } from "@/lib/storage";
@@ -48,6 +49,9 @@ export default function DashboardPage() {
     isLoading: isViewModeLoading
   } = useDashboardViewMode();
   const { settings, updateSettings } = useSettings();
+
+  // Auto-sync settings from cloud on page load (once per 30 minutes)
+  useAutoSync();
 
   const viewMode: DashboardViewMode = isViewModeLoading ? 'summary' : storedViewMode;
 

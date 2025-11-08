@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useYnabPAT, useCreditCards, useSettings, useSelectedBudget, useTrackedAccountIds } from '@/hooks/useLocalStorage';
+import { useAutoBackup } from '@/hooks/useAutoBackup';
 import {
   createMnemonic,
   encryptJson,
@@ -170,6 +171,7 @@ export default function SettingsPage() {
   const { pat, setPAT, isLoading: patLoading } = useYnabPAT();
   const { cards, saveCard, deleteCard, isLoading: cardsLoading } = useCreditCards();
   const { settings, updateSettings, exportSettings, importSettings, clearAll } = useSettings();
+  const { autoBackup } = useAutoBackup();
   
   const [tokenInput, setTokenInput] = useState('');
   const [testingConnection, setTestingConnection] = useState(false);
@@ -193,6 +195,9 @@ export default function SettingsPage() {
   const [orphanedCardMessage, setOrphanedCardMessage] = useState('');
   const [showClearOrphanedDialog, setShowClearOrphanedDialog] = useState(false);
   const [clearingOrphanedCards, setClearingOrphanedCards] = useState(false);
+
+  // Auto-backup state
+  const [autoBackupError, setAutoBackupError] = useState('');
 
   // Budget and account selection state
   const [budgets, setBudgets] = useState<YnabBudget[]>([]);
@@ -348,6 +353,12 @@ export default function SettingsPage() {
     return () => clearTimeout(timeout);
   }, [cloudSyncMessage, cloudSyncError]);
 
+  useEffect(() => {
+    if (!autoBackupError) return;
+    const timeout = setTimeout(() => setAutoBackupError(''), 5000);
+    return () => clearTimeout(timeout);
+  }, [autoBackupError]);
+
   // Kick off initial account/budget fetch based on stored selection
   useEffect(() => {
     if (!pat) {
@@ -450,11 +461,18 @@ export default function SettingsPage() {
     reader.readAsText(file);
   }
 
-  function handleSaveValuations(e: React.FormEvent) {
+  async function handleSaveValuations(e: React.FormEvent) {
     e.preventDefault();
     const mv = isFinite(milesValuation) && milesValuation >= 0 ? milesValuation : 0.01;
     updateSettings({ milesValuation: mv });
     setValuationMessage('Saved valuations. Recommendations will use normalised dollars.');
+
+    // Auto-backup to cloud after save
+    try {
+      await autoBackup();
+    } catch (error) {
+      setAutoBackupError('Cloud backup failed. Your changes are saved locally.');
+    }
   }
 
   function handleClearAll() {
@@ -1025,6 +1043,14 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
+      {/* Auto-backup error notification */}
+      {autoBackupError && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" aria-hidden="true" />
+          <AlertDescription>{autoBackupError}</AlertDescription>
+        </Alert>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>Cloud Sync (optional)</CardTitle>
@@ -1043,10 +1069,14 @@ export default function SettingsPage() {
                       <Check className="h-5 w-5 text-primary" aria-hidden="true" />
                     </div>
                     <div>
-                      <p className="text-sm font-medium">Sync code saved on this device</p>
-                      {cloudSyncLastSynced && (
+                      <p className="text-sm font-medium">Auto-backup enabled</p>
+                      {cloudSyncLastSynced ? (
                         <p className="text-xs text-muted-foreground">
-                          Last synced: {cloudSyncLastSynced}
+                          Last backup: {cloudSyncLastSynced}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          Settings will auto-backup on save
                         </p>
                       )}
                     </div>
