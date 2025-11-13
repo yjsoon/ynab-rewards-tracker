@@ -84,10 +84,19 @@ export function TransactionTable({ transactions, onChange, onDownload }: Transac
                 {['Date', 'Payee', 'Memo', 'Outflow', 'Inflow', ''].map((header) => (
                   <th
                     key={header || 'actions'}
-                    className={`px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider ${
-                      header === 'Outflow' || header === 'Inflow' ? 'text-right' : ''
+                    className={`px-3 py-3 text-xs font-semibold uppercase tracking-wider align-top ${
+                      header === 'Outflow' || header === 'Inflow' ? 'text-right' : 'text-left'
                     }`}
-                    style={{ minWidth: header ? '140px' : '48px' }}
+                    style={{
+                      width:
+                        header === 'Outflow' || header === 'Inflow'
+                          ? '12%'
+                          : header === 'Memo' || header === 'Payee'
+                            ? '26%'
+                            : header === 'Date'
+                              ? '16%'
+                              : '8%'
+                    }}
                   >
                     {header}
                   </th>
@@ -96,7 +105,7 @@ export function TransactionTable({ transactions, onChange, onDownload }: Transac
             </thead>
             <tbody className="divide-y">
               {rows.map((row, index) => (
-                <tr key={`txn-${index}`} className="hover:bg-muted/20 transition-colors group">
+                <tr key={`txn-${index}`} className="hover:bg-muted/20 transition-colors group align-top">
                   <td className="px-3 py-2">
                     <input
                       type="text"
@@ -126,7 +135,8 @@ export function TransactionTable({ transactions, onChange, onDownload }: Transac
                       type="text"
                       value={row.outflow}
                       onChange={(event) => handleEdit(index, 'outflow', event.target.value)}
-                      className="w-full rounded border border-transparent bg-transparent px-2 py-1 text-sm font-mono focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                      className="w-full rounded border border-transparent bg-transparent px-2 py-1 text-sm font-mono focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary text-right tabular-nums"
+                      style={{ minWidth: '80px' }}
                     />
                   </td>
                   <td className="px-3 py-2 text-right">
@@ -134,7 +144,8 @@ export function TransactionTable({ transactions, onChange, onDownload }: Transac
                       type="text"
                       value={row.inflow}
                       onChange={(event) => handleEdit(index, 'inflow', event.target.value)}
-                      className="w-full rounded border border-transparent bg-transparent px-2 py-1 text-sm font-mono focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                      className="w-full rounded border border-transparent bg-transparent px-2 py-1 text-sm font-mono focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary text-right tabular-nums"
+                      style={{ minWidth: '80px' }}
                     />
                   </td>
                   <td className="px-3 py-2 text-center">
@@ -159,12 +170,20 @@ export function TransactionTable({ transactions, onChange, onDownload }: Transac
         )}
       </CardContent>
       {rows.length > 0 && (
-        <div className="border-t p-4">
+        <div className="border-t p-4 space-y-3">
           <Alert>
             <AlertDescription className="text-sm">
-              Tip: click any cell to edit, delete rows you do not need, then download the CSV — every edit is included in the export.
+              Tip: click any cell to edit, delete rows you do not need, then download the CSV. Every edit is included in the export.
             </AlertDescription>
           </Alert>
+          {rows.length > 15 && (
+            <div className="flex justify-end">
+              <Button onClick={handleDownload} className="cursor-pointer">
+                <Download className="mr-2 h-4 w-4" />
+                Download CSV
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </Card>

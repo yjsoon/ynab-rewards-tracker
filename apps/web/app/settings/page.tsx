@@ -1054,8 +1054,9 @@ export default function SettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Cloud Sync (optional)</CardTitle>
-          <CardDescription>
-            Encrypt your settings with a 12-word sync code and store them in Cloudflare KV. No sign-in required.
+          <CardDescription className="space-y-1">
+            <span>Encrypt your settings with a 12-word sync code and store them in Cloudflare KV. No sign-in required.</span>
+            <span className="block">API keys (YNAB PATs, formatter keys, etc.) are never synced.</span>
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -1292,8 +1293,9 @@ export default function SettingsPage() {
             className="hidden"
             aria-label="Import settings file"
           />
-          <p className="text-sm text-muted-foreground mt-3">
-            Export saves your cards and rules (but not your PAT). Import merges with existing data.
+          <p className="text-sm text-muted-foreground mt-3 space-y-1">
+            <span className="block">Export saves your cards and rules (but not your PAT). Import merges with existing data.</span>
+            <span className="block">API keys (YNAB PATs, formatter keys, etc.) are never included in exports.</span>
           </p>
         </CardContent>
       </Card>

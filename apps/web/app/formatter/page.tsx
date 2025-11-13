@@ -41,6 +41,7 @@ export default function FormatterPage() {
   const [hasGeneratedResults, setHasGeneratedResults] = useState(false);
   const [fileDecisionOpen, setFileDecisionOpen] = useState(false);
   const fileDecisionResolver = useRef<((value: 'append' | 'replace' | 'cancel') => void) | null>(null);
+  const cancelProcessingRef = useRef(false);
 
   const provider: StatementFormatterProvider = settings.provider || 'gemini';
   const model = settings.modelByProvider?.[provider] || DEFAULT_MODEL[provider];
@@ -119,6 +120,7 @@ export default function FormatterPage() {
         return;
       }
 
+      cancelProcessingRef.current = false;
       setIsProcessing(true);
       setError(null);
       setWarning(null);
@@ -127,8 +129,14 @@ export default function FormatterPage() {
 
       const aggregated: StatementFormatterTransaction[] = [];
       const errors: string[] = [];
+      let cancelled = false;
 
       for (let index = 0; index < files.length; index += 1) {
+        if (cancelProcessingRef.current) {
+          cancelled = true;
+          break;
+        }
+
         const file = files[index];
         setProgressMessage(`Processing ${file.name} (${index + 1}/${files.length})`);
         const body = new FormData();
@@ -157,21 +165,42 @@ export default function FormatterPage() {
           const message = processingError instanceof Error ? processingError.message : 'Unknown error';
           errors.push(`${file.name}: ${message}`);
         }
+
+        if (cancelProcessingRef.current) {
+          cancelled = true;
+          break;
+        }
       }
 
       setProgressMessage('');
       setTransactions(sortTransactions(aggregated));
       setHasGeneratedResults(aggregated.length > 0);
+      setIsProcessing(false);
+
+      if (cancelled) {
+        cancelProcessingRef.current = false;
+        setWarning('Processing cancelled.');
+        return;
+      }
+
+      cancelProcessingRef.current = false;
+
       if (errors.length > 0) {
         setWarning(errors.join('\n'));
       }
       if (aggregated.length === 0 && errors.length === 0) {
         setWarning('No transactions returned. Try another model or adjust your instructions.');
       }
-      setIsProcessing(false);
     },
     [apiKey, model, provider]
   );
+
+  const handleClearAll = useCallback(() => {
+    if (isProcessing) {
+      cancelProcessingRef.current = true;
+      setProgressMessage('Cancelling…');
+    }
+  }, [isProcessing]);
 
   return (
     <>
@@ -193,6 +222,7 @@ export default function FormatterPage() {
             customPrompt={customPrompt}
             onCustomPromptChange={handlePromptChange}
             onBeforeFileAdd={handleBeforeFileAdd}
+            onClearAll={handleClearAll}
           />
 
           {error && (
@@ -217,13 +247,6 @@ export default function FormatterPage() {
               <AlertDescription>{progressMessage}</AlertDescription>
             </Alert>
           )}
-
-          {transactions.length > 0 && (
-            <TransactionTable
-              transactions={transactions}
-              onChange={handleTransactionsChange}
-            />
-          )}
         </div>
 
         <div className="space-y-6">
@@ -237,6 +260,15 @@ export default function FormatterPage() {
           />
         </div>
       </div>
+
+      {transactions.length > 0 && (
+        <div>
+          <TransactionTable
+            transactions={transactions}
+            onChange={handleTransactionsChange}
+          />
+        </div>
+      )}
     </div>
 
     <Dialog open={fileDecisionOpen} onOpenChange={(open) => {

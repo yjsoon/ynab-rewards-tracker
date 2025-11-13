@@ -1,12 +1,13 @@
 'use client';
 
-import { ChangeEvent, useRef, useState } from 'react';
-import { Upload, ChevronDown, ChevronUp, FileImage, Loader2, Plus, X } from 'lucide-react';
+import { ChangeEvent, useEffect, useRef, useState } from 'react';
+import { Upload, ChevronDown, ChevronUp, FileImage, Loader2, Plus, X, Eye } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 type FileAddAction = 'append' | 'replace' | 'cancel';
 
@@ -16,6 +17,7 @@ interface FileUploaderProps {
   customPrompt: string;
   onCustomPromptChange: (value: string) => void;
   onBeforeFileAdd?: () => Promise<FileAddAction> | FileAddAction;
+  onClearAll?: () => void;
 }
 
 interface ExamplePrompt {
@@ -38,11 +40,21 @@ const EXAMPLE_PROMPTS: ExamplePrompt[] = [
   },
 ];
 
-export function FileUploader({ onFileProcess, isLoading, customPrompt, onCustomPromptChange, onBeforeFileAdd }: FileUploaderProps) {
+export function FileUploader({ onFileProcess, isLoading, customPrompt, onCustomPromptChange, onBeforeFileAdd, onClearAll }: FileUploaderProps) {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [showCustom, setShowCustom] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [previewFile, setPreviewFile] = useState<{ name: string; url: string } | null>(null);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      if (previewFile?.url) {
+        URL.revokeObjectURL(previewFile.url);
+      }
+    };
+  }, [previewFile]);
 
   const handleFiles = async (files: File[]) => {
     if (files.length === 0) {
@@ -90,6 +102,28 @@ export function FileUploader({ onFileProcess, isLoading, customPrompt, onCustomP
     setSelectedFiles((prev) => prev.filter((_, idx) => idx !== index));
   };
 
+  const handleClear = () => {
+    setSelectedFiles([]);
+    onClearAll?.();
+  };
+
+  const openPreview = (file: File) => {
+    if (previewFile?.url) {
+      URL.revokeObjectURL(previewFile.url);
+    }
+    const url = URL.createObjectURL(file);
+    setPreviewFile({ name: file.name, url });
+    setIsPreviewOpen(true);
+  };
+
+  const closePreview = () => {
+    if (previewFile?.url) {
+      URL.revokeObjectURL(previewFile.url);
+    }
+    setPreviewFile(null);
+    setIsPreviewOpen(false);
+  };
+
   const handleProcess = async () => {
     if (selectedFiles.length === 0 || isLoading) {
       return;
@@ -122,17 +156,25 @@ export function FileUploader({ onFileProcess, isLoading, customPrompt, onCustomP
       <div
         className={cn(
           'relative rounded-lg border-2 border-dashed transition-colors bg-card',
-          isDragging ? 'border-primary/70 bg-primary/5' : 'border-muted-foreground/30'
+          isDragging ? 'border-primary/70 bg-primary/5' : 'border-muted-foreground/30',
+          isLoading && 'opacity-70 cursor-not-allowed'
         )}
         onDragOver={(event) => {
+          if (isLoading) return;
           event.preventDefault();
           setIsDragging(true);
         }}
         onDragLeave={(event) => {
+          if (isLoading) return;
           event.preventDefault();
           setIsDragging(false);
         }}
-        onDrop={handleDrop}
+        onDrop={async (event) => {
+          if (isLoading) {
+            return;
+          }
+          await handleDrop(event);
+        }}
       >
         <input
           ref={fileInputRef}
@@ -140,7 +182,14 @@ export function FileUploader({ onFileProcess, isLoading, customPrompt, onCustomP
           accept="image/*,.png,.jpg,.jpeg,.webp"
           className="hidden"
           multiple
-          onChange={handleFileSelect}
+          onChange={async (event) => {
+            if (isLoading) {
+              event.target.value = '';
+              return;
+            }
+            await handleFileSelect(event);
+          }}
+          disabled={isLoading}
         />
         <div className="flex flex-col items-center justify-center p-12 text-center">
           <Upload className="h-12 w-12 text-muted-foreground mb-4" />
@@ -178,9 +227,8 @@ export function FileUploader({ onFileProcess, isLoading, customPrompt, onCustomP
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setSelectedFiles([])}
+                  onClick={handleClear}
                   type="button"
-                  disabled={isLoading}
                 >
                   {isLoading ? 'Clear all and cancel' : 'Clear all'}
                 </Button>
@@ -204,9 +252,21 @@ export function FileUploader({ onFileProcess, isLoading, customPrompt, onCustomP
                   {formatBytes(file.size)} · {file.type || 'unknown type'}
                 </p>
               </div>
-              <button type="button" onClick={() => removeFile(index)} aria-label={`Remove ${file.name}`}>
-                <X className="h-4 w-4 text-muted-foreground hover:text-destructive" />
-              </button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  type="button"
+                  onClick={() => openPreview(file)}
+                  aria-label={`Preview ${file.name}`}
+                  className="h-8 w-8"
+                >
+                  <Eye className="h-4 w-4" />
+                </Button>
+                <button type="button" onClick={() => removeFile(index)} aria-label={`Remove ${file.name}`}>
+                  <X className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                </button>
+              </div>
             </li>
           ))}
         </ul>
@@ -248,6 +308,25 @@ export function FileUploader({ onFileProcess, isLoading, customPrompt, onCustomP
           </div>
         )}
       </div>
+      <Dialog open={isPreviewOpen && !!previewFile} onOpenChange={(open) => {
+        if (!open) {
+          closePreview();
+        } else if (previewFile) {
+          setIsPreviewOpen(true);
+        }
+      }}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>{previewFile?.name}</DialogTitle>
+            <DialogDescription>Uploaded statement preview</DialogDescription>
+          </DialogHeader>
+          {previewFile && (
+            <div className="mt-4">
+              <img src={previewFile.url} alt={previewFile.name} className="w-full rounded border" />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
