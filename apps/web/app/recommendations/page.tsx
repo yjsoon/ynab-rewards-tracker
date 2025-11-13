@@ -1,10 +1,10 @@
 /**
- * Recommendations Page - Currently Hidden
+ * Recommendations Page - Feature Flagged
  *
- * This page is temporarily hidden from the navigation (see components/Navigation.tsx)
- * as the recommendations feature is not quite ready for production.
- * The implementation is complete but needs further testing and refinement.
- * Users can still access this page directly via URL if needed.
+ * This page is controlled by the `featureFlags.recommendations` flag
+ * (see packages/app-core/src/config/featureFlags.ts and components/Navigation.tsx).
+ * Currently disabled as the feature needs further testing and refinement.
+ * Users can still access this page directly via URL even when hidden from navigation.
  */
 
 'use client';

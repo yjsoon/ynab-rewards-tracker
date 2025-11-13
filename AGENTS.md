@@ -252,16 +252,29 @@ Roadmaps and priorities are maintained in bd. Use the CLI (`bd ready`, `bd list`
 - US spelling in code identifiers
 
 ### Feature Management
-For temporarily hiding features (not ready for production):
-- **Current approach**: Use comments in navigation/routing code with clear notes explaining why and where to re-enable
-  - Example: Recommendations page/tab currently hidden via comments in `apps/web/components/Navigation.tsx` and `apps/mobile/app/(tabs)/_layout.tsx`
-  - Implementation files kept intact with header comments noting they're hidden
-  - Routes remain accessible via direct URL for testing
-- **Future consideration**: For more complex scenarios (multiple developers, gradual rollouts, A/B testing), consider implementing a static feature flag system
-  - Create `packages/app-core/src/config/featureFlags.ts` with typed boolean flags
-  - Use conditional rendering/spread operators instead of comments
-  - Benefit: Single source of truth, easier to track all feature states
-  - Trade-off: Requires rebuild to toggle (acceptable for this project)
+This project uses a static feature flag system for managing incomplete or experimental features:
+
+- **Location**: `packages/app-core/src/config/featureFlags.ts`
+- **Usage**: Import and use in conditional rendering
+  ```typescript
+  import { featureFlags } from '@ynab-counter/app-core/config/featureFlags';
+
+  // In arrays (web Navigation):
+  ...(featureFlags.recommendations ? [{ href: '/recommendations', ... }] : [])
+
+  // In JSX (mobile tabs):
+  {featureFlags.recommendations && <RecommendationsTab />}
+  ```
+- **Current flags**:
+  - `recommendations`: Smart card suggestions (currently `false` - not ready for production)
+- **Benefits**:
+  - Single source of truth for all feature toggles
+  - Type-safe with TypeScript autocomplete
+  - Easy to see all feature states at a glance
+  - Cleaner than comments, no unused code paths
+- **Trade-off**: Requires rebuild to toggle (acceptable for this single-developer project)
+- **Implementation files**: Keep intact with header comments noting they're behind a flag
+- **Routes**: Remain accessible via direct URL for testing even when hidden from navigation
 
 ## What NOT to Do
 - ❌ Store PAT in exports or backups

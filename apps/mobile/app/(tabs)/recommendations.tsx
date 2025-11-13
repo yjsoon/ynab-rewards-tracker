@@ -1,9 +1,9 @@
 /**
- * Recommendations Tab - Currently Hidden
+ * Recommendations Tab - Feature Flagged
  *
- * This tab is temporarily hidden from the navigation (see (tabs)/_layout.tsx)
- * as the recommendations feature is not quite ready for production.
- * The implementation is complete but needs further testing and refinement.
+ * This tab is controlled by the `featureFlags.recommendations` flag
+ * (see packages/app-core/src/config/featureFlags.ts and (tabs)/_layout.tsx).
+ * Currently disabled as the feature needs further testing and refinement.
  */
 
 import React, { useMemo } from 'react';
