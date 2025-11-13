@@ -7,10 +7,11 @@ export default function TabsLayout() {
         <Icon sf="house.fill" />
         <Label>YJAB</Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="recommendations">
+      {/* Recommendations tab temporarily hidden - not ready for production */}
+      {/* <NativeTabs.Trigger name="recommendations">
         <Icon sf="lightbulb.fill" />
         <Label>Tips</Label>
-      </NativeTabs.Trigger>
+      </NativeTabs.Trigger> */}
       <NativeTabs.Trigger name="transactions">
         <Icon sf="chart.line.uptrend.xyaxis" />
         <Label>Activity</Label>

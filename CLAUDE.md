@@ -5,7 +5,7 @@ A client-side rewards tracker spanning a production-ready web app and an in-prog
 ## Platforms Overview
 
 - **Web App (`apps/web`)**: Fully featured, production-ready experience with complete YNAB integration, rewards calculation engine, storage persistence, and dashboard analytics.
-- **Mobile App (`apps/mobile`)**: Expo-based companion app currently wiring up live YNAB integration, AsyncStorage persistence, and rewards calculations. Home and Settings screens are mid-integration; card management UI and remaining tab screens still need implementation.
+- **Mobile App (`apps/mobile`)**: Expo-based companion app currently wiring up live YNAB integration, AsyncStorage persistence, and rewards calculations. Home and Settings screens are mid-integration; card management UI and remaining tab screens still need implementation. The Recommendations tab is temporarily hidden (not ready for production).
 - **Shared Foundation (`packages/app-core`)**: Cross-platform rewards engine, storage types, and utilities consumed by both apps.
 
 ## Tech Stack
@@ -41,7 +41,7 @@ A client-side rewards tracker spanning a production-ready web app and an in-prog
 | Rewards Calculation Engine | Production usage | Shares engine, but mobile still mixes demo data with partial live wiring |
 | Storage Persistence | Browser localStorage service | AsyncStorage + SecureStore integration in progress |
 | Card & Rule Management | Complete CRUD | UI missing; tracked in bd |
-| Transactions & Analytics | Full parity | Transactions/Recommendations tabs pending live wiring |
+| Transactions & Analytics | Full parity | Transactions tab pending live wiring; Recommendations tab temporarily hidden |
 
 All actionable work should be tracked in **bd**. This document is an architectural reference—do not maintain TODOs here. When new tasks arise, log or update a bd issue instead.
 

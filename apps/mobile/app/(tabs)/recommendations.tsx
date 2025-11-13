@@ -1,3 +1,11 @@
+/**
+ * Recommendations Tab - Currently Hidden
+ *
+ * This tab is temporarily hidden from the navigation (see (tabs)/_layout.tsx)
+ * as the recommendations feature is not quite ready for production.
+ * The implementation is complete but needs further testing and refinement.
+ */
+
 import React, { useMemo } from 'react';
 import { ScrollView, View, StyleSheet, type ColorValue } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
