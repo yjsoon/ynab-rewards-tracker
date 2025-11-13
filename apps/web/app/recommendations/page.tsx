@@ -1,3 +1,12 @@
+/**
+ * Recommendations Page - Currently Hidden
+ *
+ * This page is temporarily hidden from the navigation (see components/Navigation.tsx)
+ * as the recommendations feature is not quite ready for production.
+ * The implementation is complete but needs further testing and refinement.
+ * Users can still access this page directly via URL if needed.
+ */
+
 'use client';
 
 import Link from 'next/link';

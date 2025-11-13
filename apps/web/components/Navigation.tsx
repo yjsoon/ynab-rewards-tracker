@@ -17,7 +17,8 @@ export function Navigation() {
 
   const navLinks = [
     { href: '/', label: 'Dashboard', icon: Home },
-    { href: '/recommendations', label: 'Recommendations', icon: Sparkles },
+    // Recommendations temporarily hidden - not ready for production
+    // { href: '/recommendations', label: 'Recommendations', icon: Sparkles },
     { href: '/rules', label: 'Rules', icon: SlidersHorizontal },
     { href: '/transactions', label: 'Transactions', icon: ReceiptText },
     { href: '/formatter', label: 'Formatter', icon: ScanText },
