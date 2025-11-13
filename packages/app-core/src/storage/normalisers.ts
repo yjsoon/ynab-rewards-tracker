@@ -385,6 +385,7 @@ export function createDefaultStorage(): StorageData {
       dashboardViewMode: 'summary',
       cardOrdering: {},
       collapsedCardGroups: {},
+      statementFormatter: {},
     },
   };
 }

@@ -25,6 +25,7 @@ import type {
   DashboardTransactionsCachePayload,
   CachedTransaction,
   Transaction,
+  StatementFormatterSettings,
 } from '@ynab-counter/app-core/storage';
 import type {
   MutableCard,
@@ -114,6 +115,31 @@ export class StorageService {
       ...storage.settings,
       ...settings,
     };
+    this.setStorage(storage);
+  }
+
+  getStatementFormatterSettings(): StatementFormatterSettings {
+    const settings = this.getSettings();
+    return settings.statementFormatter || {};
+  }
+
+  updateStatementFormatterSettings(settings: Partial<StatementFormatterSettings>): void {
+    const storage = this.getStorage();
+    storage.settings = storage.settings || {};
+    const existing = storage.settings.statementFormatter || {};
+    const next: StatementFormatterSettings = {
+      ...existing,
+      ...settings,
+      apiKeys: {
+        ...(existing.apiKeys || {}),
+        ...(settings.apiKeys || {}),
+      },
+      modelByProvider: {
+        ...(existing.modelByProvider || {}),
+        ...(settings.modelByProvider || {}),
+      },
+    };
+    storage.settings.statementFormatter = next;
     this.setStorage(storage);
   }
 
@@ -585,6 +611,12 @@ export class StorageService {
 
   exportSettings(): string {
     const storage = this.getStorage();
+    const formatterSettings = storage.settings?.statementFormatter
+      ? {
+          ...storage.settings.statementFormatter,
+          apiKeys: undefined,
+        }
+      : undefined;
     const exportData = {
       ...storage,
       ynab: { ...storage.ynab, pat: undefined },
@@ -592,6 +624,7 @@ export class StorageService {
         ...storage.settings,
         cloudSyncMnemonic: undefined,
         rememberCloudSyncCode: undefined,
+        statementFormatter: formatterSettings,
       },
     };
     return JSON.stringify(exportData, null, 2);
@@ -606,6 +639,7 @@ export class StorageService {
       const pat = storage.ynab.pat;
       const cloudSyncMnemonic = storage.settings?.cloudSyncMnemonic;
       const rememberCloudSyncCode = storage.settings?.rememberCloudSyncCode;
+      const formatterApiKeys = storage.settings?.statementFormatter?.apiKeys;
 
       Object.assign(storage, imported);
 
@@ -622,6 +656,11 @@ export class StorageService {
       // Restore rememberCloudSyncCode preference (boolean type check)
       if (typeof rememberCloudSyncCode === 'boolean') {
         storage.settings.rememberCloudSyncCode = rememberCloudSyncCode;
+      }
+
+      if (formatterApiKeys) {
+        storage.settings.statementFormatter = storage.settings.statementFormatter || {};
+        storage.settings.statementFormatter.apiKeys = formatterApiKeys;
       }
 
       pruneThemeGroups(storage);

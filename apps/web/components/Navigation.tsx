@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Home, Settings, CreditCard, SlidersHorizontal, Sparkles, ReceiptText, Menu, X } from 'lucide-react';
+import { Home, Settings, CreditCard, SlidersHorizontal, Sparkles, ReceiptText, Menu, X, ScanText } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { cn } from '@/lib/utils';
 
@@ -20,6 +20,7 @@ export function Navigation() {
     { href: '/recommendations', label: 'Recommendations', icon: Sparkles },
     { href: '/rules', label: 'Rules', icon: SlidersHorizontal },
     { href: '/transactions', label: 'Transactions', icon: ReceiptText },
+    { href: '/formatter', label: 'Formatter', icon: ScanText },
   ];
 
   const isSettings = pathname.startsWith('/settings');
