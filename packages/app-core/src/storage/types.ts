@@ -200,6 +200,15 @@ export interface YnabConnection {
   trackedAccountIds?: string[];
 }
 
+export type StatementFormatterProvider = 'openai' | 'gemini' | 'openrouter';
+
+export interface StatementFormatterSettings {
+  provider?: StatementFormatterProvider;
+  modelByProvider?: Partial<Record<StatementFormatterProvider, string>>;
+  apiKeys?: Partial<Record<StatementFormatterProvider, string>>;
+  customPrompt?: string;
+}
+
 export interface AppSettings {
   theme?: 'light' | 'dark' | 'auto';
   currency?: string;
@@ -211,6 +220,7 @@ export interface AppSettings {
   rememberCloudSyncCode?: boolean;
   cardOrdering?: Partial<Record<'cashback' | 'miles', string[]>>;
   collapsedCardGroups?: Partial<Record<'cashback' | 'miles', boolean>>;
+  statementFormatter?: StatementFormatterSettings;
 }
 
 export interface DashboardTransactionsCacheEntry {

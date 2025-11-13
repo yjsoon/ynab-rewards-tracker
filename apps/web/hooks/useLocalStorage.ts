@@ -7,6 +7,7 @@ import type {
   ThemeGroup,
   HiddenCard,
   DashboardViewMode,
+  StatementFormatterSettings,
 } from '@/lib/storage';
 import { storage } from '@/lib/storage';
 import { useStorageContext } from '@/contexts/StorageContext';
@@ -18,6 +19,7 @@ const EMPTY_CALCULATION_LIST: RewardCalculation[] = [];
 const EMPTY_SELECTED_BUDGET: { id?: string; name?: string } = {};
 const EMPTY_THEME_GROUP_LIST: ThemeGroup[] = [];
 const EMPTY_HIDDEN_CARD_LIST: HiddenCard[] = [];
+const EMPTY_STATEMENT_FORMATTER_SETTINGS: StatementFormatterSettings = {};
 const DEFAULT_SETTINGS: AppSettings = {
   theme: 'light',
   currency: 'USD',
@@ -26,6 +28,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   cloudSyncLastSyncedAt: undefined,
   cardOrdering: {},
   collapsedCardGroups: {},
+  statementFormatter: {},
 };
 
 function useHasHydrated() {
@@ -256,4 +259,19 @@ export function useSettings() {
   }, [triggerRefresh]);
 
   return { settings, updateSettings, exportSettings, importSettings, clearAll, isLoading };
+}
+
+export function useStatementFormatterSettings() {
+  const {
+    value: formatterSettings,
+    triggerRefresh,
+    isLoading,
+  } = useStorageResource(() => storage.getStatementFormatterSettings(), EMPTY_STATEMENT_FORMATTER_SETTINGS);
+
+  const updateStatementFormatterSettings = useCallback((updates: Partial<StatementFormatterSettings>) => {
+    storage.updateStatementFormatterSettings(updates);
+    triggerRefresh();
+  }, [triggerRefresh]);
+
+  return { settings: formatterSettings, updateSettings: updateStatementFormatterSettings, isLoading };
 }
