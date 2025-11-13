@@ -231,6 +231,7 @@ async function callOpenRouter(model: string, apiKey: string, prompt: string, ima
 }
 
 export async function POST(request: NextRequest) {
+  let provider: StatementFormatterProvider = 'gemini';
   try {
     const formData = await request.formData();
     const file = formData.get('file');
@@ -251,7 +252,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Please add an API key for the selected provider' }, { status: 400 });
     }
 
-    const provider: StatementFormatterProvider = isValidProvider(typeof providerParam === 'string' ? providerParam : null)
+    provider = isValidProvider(typeof providerParam === 'string' ? providerParam : null)
       ? (providerParam as StatementFormatterProvider)
       : 'gemini';
     const model = typeof modelParam === 'string' && modelParam.trim() ? modelParam : PROVIDER_DEFAULT_MODEL[provider];
@@ -291,11 +292,7 @@ export async function POST(request: NextRequest) {
     const message = error instanceof Error ? error.message : 'Unexpected error';
     console.error('[formatter] Failed to process statement', error);
     const status = /unauthorized|api key/i.test(message) ? 401 : 500;
-    const providerName = /gemini/i.test(message)
-      ? PROVIDER_LABEL.gemini
-      : /openrouter/i.test(message)
-        ? PROVIDER_LABEL.openrouter
-        : PROVIDER_LABEL.openai;
+    const providerName = PROVIDER_LABEL[provider] ?? PROVIDER_LABEL.gemini;
     const details = status === 401 ? `Invalid ${providerName} API key` : `Failed to process statement: ${message}`;
     return NextResponse.json({ error: details }, { status });
   }

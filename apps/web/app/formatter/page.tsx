@@ -125,9 +125,9 @@ export default function FormatterPage() {
       setError(null);
       setWarning(null);
       setProgressMessage('Uploading files…');
-      setTransactions([]);
-
-      const aggregated: StatementFormatterTransaction[] = [];
+      const isAppending = hasGeneratedResults && transactions.length > 0;
+      const baseRows = isAppending ? [...transactions] : [];
+      const aggregated: StatementFormatterTransaction[] = [...baseRows];
       const errors: string[] = [];
       let cancelled = false;
 
@@ -192,7 +192,7 @@ export default function FormatterPage() {
         setWarning('No transactions returned. Try another model or adjust your instructions.');
       }
     },
-    [apiKey, model, provider]
+    [apiKey, hasGeneratedResults, model, provider, transactions]
   );
 
   const handleClearAll = useCallback(() => {
@@ -209,7 +209,7 @@ export default function FormatterPage() {
         <div className="space-y-3">
           <h1 className="text-3xl font-semibold">Statement formatter</h1>
           <p className="text-muted-foreground">
-            Convert scanned or downloaded card statements into YNAB-ready CSVs using your own Gemini, OpenAI, or OpenRouter key. Uploads never leave your browser except the direct call to your chosen model.
+            Convert scanned or downloaded card statements into YNAB-ready CSVs using your own Gemini, OpenAI, or OpenRouter key. Files and keys stay in local storage until you process them, then travel through YJAB&apos;s formatter API before reaching your selected model.
           </p>
         </div>
       </section>
