@@ -1,4 +1,4 @@
-export type StatementFormatterProvider = 'openai' | 'gemini' | 'openrouter';
+export type { StatementFormatterProvider } from '@ynab-counter/app-core/storage';
 
 export interface StatementFormatterTransaction {
   date: string;

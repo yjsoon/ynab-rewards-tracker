@@ -7,7 +7,6 @@ import { FileUploader } from '@/components/formatter/FileUploader';
 import { TransactionTable } from '@/components/formatter/TransactionTable';
 import { ProviderConfigCard } from '@/components/formatter/ProviderConfigCard';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { useStatementFormatterSettings } from '@/hooks/useLocalStorage';
@@ -26,7 +25,7 @@ function sortTransactions(transactions: StatementFormatterTransaction[]) {
     if (Number.isNaN(aTime) && Number.isNaN(bTime)) return 0;
     if (Number.isNaN(aTime)) return 1;
     if (Number.isNaN(bTime)) return -1;
-    return bTime - aTime;
+    return aTime - bTime;
   });
 }
 

@@ -12,10 +12,9 @@ import type { StatementFormatterTransaction } from '@/types/statement-formatter'
 interface TransactionTableProps {
   transactions: StatementFormatterTransaction[];
   onChange?: (transactions: StatementFormatterTransaction[]) => void;
-  onDownload?: (transactions: StatementFormatterTransaction[]) => void;
 }
 
-export function TransactionTable({ transactions, onChange, onDownload }: TransactionTableProps) {
+export function TransactionTable({ transactions, onChange }: TransactionTableProps) {
   const [rows, setRows] = useState<StatementFormatterTransaction[]>(transactions);
 
   useEffect(() => {
@@ -52,7 +51,6 @@ export function TransactionTable({ transactions, onChange, onDownload }: Transac
     link.click();
     URL.revokeObjectURL(link.href);
 
-    onDownload?.(rows);
   };
 
   const totalTransactions = rows.length;
