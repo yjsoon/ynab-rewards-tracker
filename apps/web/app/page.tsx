@@ -76,11 +76,6 @@ export default function DashboardPage() {
     [persistDashboardViewMode]
   );
 
-  const handleViewChange = useCallback(
-    (mode: DashboardViewMode) => () => handleViewModeChange(mode),
-    [handleViewModeChange]
-  );
-
   const handleHideCard = useCallback(
     (cardId: string, hiddenUntil: string) => {
       hideCard(cardId, hiddenUntil);
@@ -277,7 +272,7 @@ export default function DashboardPage() {
                   ? "shadow-sm"
                   : "text-muted-foreground hover:text-primary-foreground hover:bg-primary/80"
               )}
-              onClick={handleViewChange("summary")}
+              onClick={() => handleViewModeChange("summary")}
             >
               Summary
             </Button>
@@ -291,7 +286,7 @@ export default function DashboardPage() {
                   ? "shadow-sm"
                   : "text-muted-foreground hover:text-primary-foreground hover:bg-primary/80"
               )}
-              onClick={handleViewChange("detailed")}
+              onClick={() => handleViewModeChange("detailed")}
             >
               Detailed
             </Button>
