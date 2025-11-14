@@ -40,10 +40,29 @@ export function SubcategoryBreakdownCompact({
 
   // Calculate percentages for stacked bar
   const totalSpend = breakdowns.reduce((sum, b) => sum + b.totalSpend, 0);
-  const segments = sortedBreakdowns.map(b => ({
-    ...b,
-    percentage: totalSpend > 0 ? (b.totalSpend / totalSpend) * 100 : 0,
-  }));
+  const segments = sortedBreakdowns.map(b => {
+    // Calculate cap progress percentage if there's a maximum spend limit
+    const capProgress = b.maximumSpend && b.maximumSpend > 0
+      ? (b.totalSpend / b.maximumSpend) * 100
+      : null;
+
+    // Determine pill colour based on cap progress
+    const pillBg = 'rgba(255, 255, 255, 0.5)'; // 50% white background
+    let pillText = 'rgba(17, 24, 39, 0.95)'; // nearly black (gray-900)
+
+    if (capProgress !== null && capProgress >= 90) {
+      // Red zone: 90%+ of cap
+      pillText = 'rgba(220, 38, 38, 1)'; // red-600
+    }
+
+    return {
+      ...b,
+      spendSharePercentage: totalSpend > 0 ? (b.totalSpend / totalSpend) * 100 : 0,
+      capProgress,
+      pillBg,
+      pillText,
+    };
+  });
 
   return (
     <div className="space-y-1.5 rounded-md border border-border/60 bg-muted/5 p-2">
@@ -78,11 +97,19 @@ export function SubcategoryBreakdownCompact({
       <div className="space-y-1">
         <div className="flex h-6 w-full overflow-hidden rounded-md bg-muted/30 border border-border/40">
           {segments.map((segment, index) => {
-            const isCapped = segment.maximumSpendExceeded;
-            const color = isCapped ? '#ef4444' : getFlagHex(segment.flagColor);
-            const width = segment.percentage;
+            const color = getFlagHex(segment.flagColor);
+            const width = segment.spendSharePercentage;
 
             if (width < 0.5) return null; // Skip tiny segments
+
+            // Determine what to display
+            const displayText = segment.capProgress !== null
+              ? `${Math.round(segment.capProgress)}%`
+              : `$${Math.round(segment.totalSpend)}`;
+
+            const tooltipText = segment.capProgress !== null
+              ? `${segment.name}: ${Math.round(segment.capProgress)}% of $${segment.maximumSpend?.toFixed(2)} cap (spent $${segment.totalSpend.toFixed(2)})`
+              : `${segment.name}: $${segment.totalSpend.toFixed(2)} spent (no cap)`;
 
             return (
               <div
@@ -91,26 +118,20 @@ export function SubcategoryBreakdownCompact({
                 style={{
                   width: `${width}%`,
                   backgroundColor: color,
-                  opacity: segment.rewardEarned === 0 ? 0.3 : 0.8,
+                  opacity: 0.9,
                 }}
-                title={`${segment.name}: ${currency}${segment.totalSpend.toFixed(2)}${isCapped ? ' (Capped)' : ''}`}
+                title={tooltipText}
               >
-                {width > 15 && (
-                  isCapped ? (
-                    segment.flagColor === 'red' ? (
-                      <span className="px-0.5 py-0 bg-white text-red-600 text-[9px] font-bold rounded">
-                        {Math.round(width)}%
-                      </span>
-                    ) : (
-                      <span className="px-0.5 py-0 bg-red-600 text-white text-[9px] font-bold rounded">
-                        {Math.round(width)}%
-                      </span>
-                    )
-                  ) : (
-                    <span className="text-[10px] font-medium text-white drop-shadow">
-                      {Math.round(width)}%
-                    </span>
-                  )
+                {width > 12 && (
+                  <span
+                    className="px-1 py-0 rounded text-[11px] font-bold leading-tight"
+                    style={{
+                      backgroundColor: segment.pillBg,
+                      color: segment.pillText,
+                    }}
+                  >
+                    {displayText}
+                  </span>
                 )}
               </div>
             );
