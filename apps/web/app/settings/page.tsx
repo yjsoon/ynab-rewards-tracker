@@ -475,7 +475,7 @@ export default function SettingsPage() {
     const mv = isFinite(milesValuation) && milesValuation >= 0 ? milesValuation : 0.01;
     const curr = currency.trim() || '$';
     updateSettings({ milesValuation: mv, currency: curr });
-    setValuationMessage('Saved valuations. Recommendations will use normalised dollars.');
+    setValuationMessage('Saved valuations. Recommendations will use normalised values for comparison.');
 
     // Auto-backup to cloud after save
     try {
@@ -1040,8 +1040,9 @@ export default function SettingsPage() {
                 className="w-full px-3 py-2 border rounded-md mt-1"
                 placeholder="$"
                 aria-label="Currency symbol or code"
+                maxLength={4}
               />
-              <p className="text-xs text-muted-foreground mt-1">Use $ for dollars, £ for pounds, € for euros, or any ISO code. Defaults to $.</p>
+              <p className="text-xs text-muted-foreground mt-1">Use $ for US dollars, £ for British pounds, € for euros, or 3-letter ISO codes (USD, GBP, EUR). Defaults to $.</p>
             </div>
             <div>
               <label className="text-sm font-medium">Dollars per mile</label>

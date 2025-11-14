@@ -37,36 +37,13 @@ import {
 import { createRewardCalculationFromSimple } from '@ynab-counter/app-core/rewards-engine/utils/reward-calculation';
 import { getEarliestPeriodStart } from '@ynab-counter/app-core/rewards-engine/utils/periods';
 import type { CreditCard, RewardCalculation, SubcategoryBreakdown } from '@ynab-counter/app-core/storage/types';
+import { normalizeCurrencyCode } from '@ynab-counter/app-core/utils/currency';
 import { findBestDashboardEntry } from '@/lib/dashboardCache';
 
 export const options = {
   title: 'YJAB',
   headerLargeTitle: true,
 };
-
-/**
- * Normalize currency symbols to valid ISO 4217 codes for Intl.NumberFormat.
- * Maps common symbols ($, £, €) to ISO codes (USD, GBP, EUR).
- * Falls back to USD for invalid input.
- */
-function normalizeCurrency(input: string): string {
-  const symbolMap: Record<string, string> = {
-    '$': 'USD',
-    '£': 'GBP',
-    '€': 'EUR',
-    '¥': 'JPY',
-    '₹': 'INR',
-    '₽': 'RUB',
-    '₩': 'KRW',
-    'A$': 'AUD',
-    'C$': 'CAD',
-    'CHF': 'CHF',
-  };
-  const trimmed = input.trim();
-  if (symbolMap[trimmed]) return symbolMap[trimmed];
-  if (/^[a-zA-Z]{3}$/.test(trimmed)) return trimmed.toUpperCase();
-  return 'USD';
-}
 
 export type CardSummary = {
   card: CreditCard;
@@ -305,7 +282,7 @@ export default function HomeScreen() {
     const currencyInput = state.settings?.currency || '$';
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: normalizeCurrency(currencyInput),
+      currency: normalizeCurrencyCode(currencyInput),
     });
   }, [state.settings?.currency]);
 

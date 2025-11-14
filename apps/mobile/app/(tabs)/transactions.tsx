@@ -7,30 +7,7 @@ import { useStorage } from '@/contexts/StorageContext';
 import { findBestDashboardEntry, buildAccountsMap } from '@/lib/dashboardCache';
 import { Card, ListItem, Headline, Footnote } from '@/components/ios';
 import { semanticColors } from '@/theme/semanticColors';
-
-/**
- * Normalize currency symbols to valid ISO 4217 codes for Intl.NumberFormat.
- * Maps common symbols ($, £, €) to ISO codes (USD, GBP, EUR).
- * Falls back to USD for invalid input.
- */
-function normalizeCurrency(input: string): string {
-  const symbolMap: Record<string, string> = {
-    '$': 'USD',
-    '£': 'GBP',
-    '€': 'EUR',
-    '¥': 'JPY',
-    '₹': 'INR',
-    '₽': 'RUB',
-    '₩': 'KRW',
-    'A$': 'AUD',
-    'C$': 'CAD',
-    'CHF': 'CHF',
-  };
-  const trimmed = input.trim();
-  if (symbolMap[trimmed]) return symbolMap[trimmed];
-  if (/^[a-zA-Z]{3}$/.test(trimmed)) return trimmed.toUpperCase();
-  return 'USD';
-}
+import { normalizeCurrencyCode } from '@ynab-counter/app-core/utils/currency';
 
 type DisplayTransaction = {
   id: string;
@@ -139,7 +116,7 @@ export default function TransactionsScreen() {
     const currencyInput = state.settings?.currency || '$';
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: normalizeCurrency(currencyInput),
+      currency: normalizeCurrencyCode(currencyInput),
     });
   }, [state.settings?.currency]);
 
