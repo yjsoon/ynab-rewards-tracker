@@ -1042,7 +1042,7 @@ export default function SettingsPage() {
                 aria-label="Currency symbol or code"
                 maxLength={4}
               />
-              <p className="text-xs text-muted-foreground mt-1">Use $ for US dollars, £ for British pounds, € for euros, or 3-letter ISO codes (USD, GBP, EUR). Defaults to $.</p>
+              <p className="text-xs text-muted-foreground mt-1">Use $ for dollars, £ for pounds, € for euros, or 3-letter ISO codes (USD, GBP, EUR). Defaults to $.</p>
             </div>
             <div>
               <label className="text-sm font-medium">Dollars per mile</label>
