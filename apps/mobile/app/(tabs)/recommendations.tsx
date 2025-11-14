@@ -1,3 +1,11 @@
+/**
+ * Recommendations Tab - Feature Flagged
+ *
+ * This tab is controlled by the `featureFlags.recommendations` flag
+ * (see packages/app-core/src/config/featureFlags.ts and (tabs)/_layout.tsx).
+ * Currently disabled as the feature needs further testing and refinement.
+ */
+
 import React, { useMemo } from 'react';
 import { ScrollView, View, StyleSheet, type ColorValue } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

@@ -1,4 +1,5 @@
 import { NativeTabs, Icon, Label } from 'expo-router/unstable-native-tabs';
+import { featureFlags } from '@ynab-counter/app-core/config/featureFlags';
 
 export default function TabsLayout() {
   return (
@@ -7,10 +8,12 @@ export default function TabsLayout() {
         <Icon sf="house.fill" />
         <Label>YJAB</Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="recommendations">
-        <Icon sf="lightbulb.fill" />
-        <Label>Tips</Label>
-      </NativeTabs.Trigger>
+      {featureFlags.recommendations && (
+        <NativeTabs.Trigger name="recommendations">
+          <Icon sf="lightbulb.fill" />
+          <Label>Tips</Label>
+        </NativeTabs.Trigger>
+      )}
       <NativeTabs.Trigger name="transactions">
         <Icon sf="chart.line.uptrend.xyaxis" />
         <Label>Activity</Label>

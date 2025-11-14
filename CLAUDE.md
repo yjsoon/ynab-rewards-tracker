@@ -4,8 +4,8 @@ A client-side rewards tracker spanning a production-ready web app and an in-prog
 
 ## Platforms Overview
 
-- **Web App (`apps/web`)**: Fully featured, production-ready experience with complete YNAB integration, rewards calculation engine, storage persistence, and dashboard analytics.
-- **Mobile App (`apps/mobile`)**: Expo-based companion app currently wiring up live YNAB integration, AsyncStorage persistence, and rewards calculations. Home and Settings screens are mid-integration; card management UI and remaining tab screens still need implementation.
+- **Web App (`apps/web`)**: Fully featured, production-ready experience with complete YNAB integration, rewards calculation engine, storage persistence, and dashboard analytics. The Recommendations page is temporarily hidden from navigation (not ready for production).
+- **Mobile App (`apps/mobile`)**: Expo-based companion app currently wiring up live YNAB integration, AsyncStorage persistence, and rewards calculations. Home and Settings screens are mid-integration; card management UI and remaining tab screens still need implementation. The Recommendations tab is temporarily hidden (not ready for production).
 - **Shared Foundation (`packages/app-core`)**: Cross-platform rewards engine, storage types, and utilities consumed by both apps.
 
 ## Tech Stack
@@ -36,12 +36,12 @@ A client-side rewards tracker spanning a production-ready web app and an in-prog
 
 | Area | Web (apps/web) | Mobile (apps/mobile) |
 | --- | --- | --- |
-| UI Screens & Navigation | Stable and production-ready | Core tabs scaffolded; several flows incomplete |
+| UI Screens & Navigation | Stable and production-ready; Recommendations hidden | Core tabs scaffolded; several flows incomplete |
 | YNAB Authentication & Sync | Fully functional | StorageContext and PAT flows under active development; live sync not yet validated end-to-end |
 | Rewards Calculation Engine | Production usage | Shares engine, but mobile still mixes demo data with partial live wiring |
 | Storage Persistence | Browser localStorage service | AsyncStorage + SecureStore integration in progress |
 | Card & Rule Management | Complete CRUD | UI missing; tracked in bd |
-| Transactions & Analytics | Full parity | Transactions/Recommendations tabs pending live wiring |
+| Transactions & Analytics | Full parity; Recommendations hidden | Transactions tab pending live wiring; Recommendations tab temporarily hidden |
 
 All actionable work should be tracked in **bd**. This document is an architectural reference—do not maintain TODOs here. When new tasks arise, log or update a bd issue instead.
 
@@ -250,6 +250,31 @@ Roadmaps and priorities are maintained in bd. Use the CLI (`bd ready`, `bd list`
 - Keep commits atomic and descriptive
 - British spelling in user-facing copy
 - US spelling in code identifiers
+
+### Feature Management
+This project uses a static feature flag system for managing incomplete or experimental features:
+
+- **Location**: `packages/app-core/src/config/featureFlags.ts`
+- **Usage**: Import and use in conditional rendering
+  ```typescript
+  import { featureFlags } from '@ynab-counter/app-core/config/featureFlags';
+
+  // In arrays (web Navigation):
+  ...(featureFlags.recommendations ? [{ href: '/recommendations', ... }] : [])
+
+  // In JSX (mobile tabs):
+  {featureFlags.recommendations && <RecommendationsTab />}
+  ```
+- **Current flags**:
+  - `recommendations`: Smart card suggestions (currently `false` - not ready for production)
+- **Benefits**:
+  - Single source of truth for all feature toggles
+  - Type-safe with TypeScript autocomplete
+  - Easy to see all feature states at a glance
+  - Cleaner than comments, no unused code paths
+- **Trade-off**: Requires rebuild to toggle (acceptable for this single-developer project)
+- **Implementation files**: Keep intact with header comments noting they're behind a flag
+- **Routes**: Remain accessible via direct URL for testing even when hidden from navigation
 
 ## What NOT to Do
 - ❌ Store PAT in exports or backups

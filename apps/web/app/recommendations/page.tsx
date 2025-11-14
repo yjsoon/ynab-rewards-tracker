@@ -1,3 +1,12 @@
+/**
+ * Recommendations Page - Feature Flagged
+ *
+ * This page is controlled by the `featureFlags.recommendations` flag
+ * (see packages/app-core/src/config/featureFlags.ts and components/Navigation.tsx).
+ * Currently disabled as the feature needs further testing and refinement.
+ * Users can still access this page directly via URL even when hidden from navigation.
+ */
+
 'use client';
 
 import Link from 'next/link';

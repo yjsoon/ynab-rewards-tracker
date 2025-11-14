@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Home, Settings, CreditCard, SlidersHorizontal, Sparkles, ReceiptText, Menu, X, ScanText } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { cn } from '@/lib/utils';
+import { featureFlags } from '@ynab-counter/app-core/config/featureFlags';
 
 // Navigation height constant - used for nav bar and mobile menu positioning
 const NAV_HEIGHT_CLASS = 'h-14'; // 56px
@@ -17,7 +18,7 @@ export function Navigation() {
 
   const navLinks = [
     { href: '/', label: 'Dashboard', icon: Home },
-    { href: '/recommendations', label: 'Recommendations', icon: Sparkles },
+    ...(featureFlags.recommendations ? [{ href: '/recommendations', label: 'Recommendations', icon: Sparkles }] : []),
     { href: '/rules', label: 'Rules', icon: SlidersHorizontal },
     { href: '/transactions', label: 'Transactions', icon: ReceiptText },
     { href: '/formatter', label: 'Formatter', icon: ScanText },
