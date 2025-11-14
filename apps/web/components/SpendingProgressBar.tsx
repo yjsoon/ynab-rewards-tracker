@@ -1,6 +1,6 @@
 'use client';
 
-import { cn } from '@/lib/utils';
+import { cn, formatDollars } from '@/lib/utils';
 import { CurrencyAmount } from '@/components/CurrencyAmount';
 import { AlertCircle, CheckCircle2, XCircle } from 'lucide-react';
 
@@ -154,10 +154,7 @@ export function SpendingProgressBar({
           <div
             className="absolute top-0 h-3 w-0.5 bg-foreground/40"
             style={{ left: `${minimumPosition}%` }}
-            title={`Minimum: ${new Intl.NumberFormat('en-US', {
-              style: 'currency',
-              currency: currency || 'USD'
-            }).format(minimumSpend)}`}
+            title={`Minimum: ${formatDollars(minimumSpend, { currency })}`}
           />
         )}
 
@@ -166,10 +163,7 @@ export function SpendingProgressBar({
           <div
             className="absolute top-0 h-3 w-0.5 bg-red-600 dark:bg-red-500"
             style={{ left: `${maximumPosition}%` }}
-            title={`Maximum: ${new Intl.NumberFormat('en-US', {
-              style: 'currency',
-              currency: currency || 'USD'
-            }).format(maximumSpend)}`}
+            title={`Maximum: ${formatDollars(maximumSpend, { currency })}`}
           />
         )}
       </div>

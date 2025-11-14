@@ -19,6 +19,7 @@ import { SimpleRewardsCalculator } from '@/lib/rewards-engine';
 import { YnabClient } from '@/lib/ynab-client';
 import { useSelectedBudget, useSettings } from '@/hooks/useLocalStorage';
 import { CurrencyAmount } from '@/components/CurrencyAmount';
+import { formatDollars } from '@/lib/utils';
 import type { CreditCard } from '@/lib/storage';
 import type { Transaction } from '@/types/transaction';
 
@@ -276,7 +277,7 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
                 <Alert className="border-emerald-200/60 bg-emerald-50/60 dark:border-emerald-900/40 dark:bg-emerald-950/20">
                   <CheckCircle2 className="h-4 w-4 text-emerald-500/80 dark:text-emerald-300/80" />
                   <AlertDescription className="text-emerald-700/80 dark:text-emerald-200/90">
-                    <strong className="font-semibold">You&apos;re earning rewards!</strong> {hasMaximum && !maximumSpendExceeded && `You have ${new Intl.NumberFormat('en-US', { style: 'currency', currency: currency || 'USD' }).format((maximumSpend ?? 0) - totalSpend)} left before reaching the maximum spend limit.`}
+                    <strong className="font-semibold">You&apos;re earning rewards!</strong> {hasMaximum && !maximumSpendExceeded && `You have ${formatDollars((maximumSpend ?? 0) - totalSpend, { currency })} left before reaching the maximum spend limit.`}
                   </AlertDescription>
                 </Alert>
               ) : null}
