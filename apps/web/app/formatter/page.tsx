@@ -203,15 +203,13 @@ export default function FormatterPage() {
 
   return (
     <>
-    <div className="mx-auto max-w-6xl px-6 py-10 space-y-8">
-      <section className="space-y-4">
-        <div className="space-y-3">
-          <h1 className="text-3xl font-semibold">Statement formatter</h1>
-          <p className="text-muted-foreground">
-            Convert scanned or downloaded card statements into YNAB-ready CSVs using your own Gemini, OpenAI, or OpenRouter key. Files and keys stay in local storage until you process them, then travel through YJAB&apos;s formatter API before reaching your selected model.
-          </p>
-        </div>
-      </section>
+    <div className="max-w-6xl mx-auto px-6 py-8">
+      <div className="space-y-2 mb-6">
+        <h1 className="text-3xl font-bold">Formatter</h1>
+        <p className="text-muted-foreground">
+          Convert scanned or downloaded card statements into YNAB-ready CSVs using your own Gemini, OpenAI, or OpenRouter key. Files and keys stay in local storage until you process them, then travel through YJAB&apos;s formatter API before reaching your selected model.
+        </p>
+      </div>
 
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
         <div className="space-y-6">
