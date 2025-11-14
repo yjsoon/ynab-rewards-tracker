@@ -12,13 +12,61 @@ export type CurrencyFormatOptions = {
   currency?: string;
 };
 
+/**
+ * Normalize currency input to a valid ISO 4217 currency code.
+ * Maps common symbols to ISO codes, validates 3-letter codes, and falls back to USD.
+ */
+function normalizeCurrencyCode(input: string | undefined): string {
+  if (!input || typeof input !== 'string') {
+    return 'USD';
+  }
+
+  const trimmed = input.trim();
+
+  // Map common currency symbols to ISO codes
+  const symbolMap: Record<string, string> = {
+    '$': 'USD',
+    '£': 'GBP',
+    '€': 'EUR',
+    '¥': 'JPY',
+    '₹': 'INR',
+    '₽': 'RUB',
+    '₩': 'KRW',
+    '¢': 'USD',
+    'A$': 'AUD',
+    'C$': 'CAD',
+    'NZ$': 'NZD',
+    'HK$': 'HKD',
+    'S$': 'SGD',
+    'CHF': 'CHF',
+    'kr': 'SEK',
+    'zł': 'PLN',
+    'R$': 'BRL',
+    '元': 'CNY',
+  };
+
+  // Check if it's a known symbol
+  if (symbolMap[trimmed]) {
+    return symbolMap[trimmed];
+  }
+
+  // If it's already a 3-letter ISO code, normalize to uppercase
+  if (/^[a-zA-Z]{3}$/.test(trimmed)) {
+    return trimmed.toUpperCase();
+  }
+
+  // Fallback to USD for invalid input
+  console.warn(`Invalid currency code "${trimmed}", falling back to USD`);
+  return 'USD';
+}
+
 function resolveCurrencyFormattingOptions(options: CurrencyFormatOptions = {}) {
   const locale = options.locale ?? (typeof navigator !== 'undefined' ? navigator.language : 'en-US');
 
   if (options.currency) {
     return {
       locale,
-      currency: options.currency
+      currency: normalizeCurrencyCode(options.currency)
     };
   }
 
@@ -36,7 +84,7 @@ function resolveCurrencyFormattingOptions(options: CurrencyFormatOptions = {}) {
 
   return {
     locale,
-    currency: settingsCurrency ?? '$'
+    currency: normalizeCurrencyCode(settingsCurrency ?? '$')
   };
 }
 
