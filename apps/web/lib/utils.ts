@@ -36,7 +36,7 @@ function resolveCurrencyFormattingOptions(options: CurrencyFormatOptions = {}) {
 
   return {
     locale,
-    currency: settingsCurrency ?? 'USD'
+    currency: settingsCurrency ?? '$'
   };
 }
 

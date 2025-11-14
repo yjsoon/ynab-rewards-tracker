@@ -381,7 +381,7 @@ export function createDefaultStorage(): StorageData {
     hiddenCards: [],
     settings: {
       theme: 'light',
-      currency: 'USD',
+      currency: '$',
       dashboardViewMode: 'summary',
       cardOrdering: {},
       collapsedCardGroups: {},

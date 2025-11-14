@@ -44,11 +44,6 @@ export const options = {
   headerLargeTitle: true,
 };
 
-const currencyFormatter = new Intl.NumberFormat('en-US', {
-  style: 'currency',
-  currency: 'USD',
-});
-
 export type CardSummary = {
   card: CreditCard;
   period: string;
@@ -280,6 +275,15 @@ export default function HomeScreen() {
   const { impact } = useHaptics();
   const { state, status, actions } = useStorage();
   const { summaries, isEmpty, isLoading } = useCardSummaries();
+
+  // Create currency formatter from settings
+  const currencyFormatter = useMemo(() => {
+    const currency = state.settings?.currency || '$';
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency,
+    });
+  }, [state.settings?.currency]);
 
   // Debug logging
   useEffect(() => {

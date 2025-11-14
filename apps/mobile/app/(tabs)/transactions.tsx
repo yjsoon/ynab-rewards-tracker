@@ -108,16 +108,16 @@ function useTransactionsContent(): TransactionsContent {
 export default function TransactionsScreen() {
   const navigation = useNavigation();
   const { impact } = useHaptics();
+  const { state } = useStorage();
   const { transactions, isLoading, statusMessage, infoMessage } = useTransactionsContent();
 
-  const currencyFormatter = useMemo(
-    () =>
-      new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: 'USD',
-      }),
-    []
-  );
+  const currencyFormatter = useMemo(() => {
+    const currency = state.settings?.currency || '$';
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency,
+    });
+  }, [state.settings?.currency]);
 
   useFocusEffect(
     React.useCallback(() => {

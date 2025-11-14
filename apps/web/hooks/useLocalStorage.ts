@@ -22,7 +22,7 @@ const EMPTY_HIDDEN_CARD_LIST: HiddenCard[] = [];
 const EMPTY_STATEMENT_FORMATTER_SETTINGS: StatementFormatterSettings = {};
 const DEFAULT_SETTINGS: AppSettings = {
   theme: 'light',
-  currency: 'USD',
+  currency: '$',
   dashboardViewMode: 'summary',
   cloudSyncKeyId: undefined,
   cloudSyncLastSyncedAt: undefined,
