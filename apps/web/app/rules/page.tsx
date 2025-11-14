@@ -22,6 +22,7 @@ import { CardSettingsEditor, type CardEditState as SingleCardEditState } from '@
 import { ThemeGroupingManager } from '@/components/ThemeGroupingManager';
 import { prepareSubcategoriesForSave } from '@/lib/subcategory-utils';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { featureFlags } from '@ynab-counter/app-core/config/featureFlags';
 
 interface CardEditState {
   [cardId: string]: SingleCardEditState;
@@ -45,8 +46,11 @@ function RulesPageContent() {
 
   const initialTab = useMemo<'cashback' | 'miles' | 'themes'>(() => {
     const tabParam = searchParams?.get('tab');
-    if (tabParam === 'cashback' || tabParam === 'miles' || tabParam === 'themes') {
+    if (tabParam === 'cashback' || tabParam === 'miles') {
       return tabParam;
+    }
+    if (tabParam === 'themes' && featureFlags.recommendations) {
+      return 'themes';
     }
     return 'cashback';
   }, [searchParams]);
@@ -59,6 +63,9 @@ function RulesPageContent() {
 
   const handleTabChange = useCallback((value: string) => {
     if (value !== 'cashback' && value !== 'miles' && value !== 'themes') {
+      return;
+    }
+    if (value === 'themes' && !featureFlags.recommendations) {
       return;
     }
 
@@ -287,8 +294,10 @@ function RulesPageContent() {
 
   if (cards.length === 0) {
     return (
-      <div className="container mx-auto max-w-6xl px-4 py-8">
-        <h1 className="text-3xl font-bold mb-8">Card Rules & Settings</h1>
+      <div className="max-w-6xl mx-auto px-6 py-8">
+        <div className="space-y-2 mb-6">
+          <h1 className="text-3xl font-bold">Rules</h1>
+        </div>
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <CreditCardIcon className="h-12 w-12 text-muted-foreground mb-4" />
@@ -303,11 +312,11 @@ function RulesPageContent() {
   }
 
   return (
-    <div className="container mx-auto max-w-6xl px-4 py-8">
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
-        <div>
-          <h1 className="text-3xl font-bold">Card Rules & Settings</h1>
-          <p className="text-muted-foreground mt-1">
+    <div className="max-w-6xl mx-auto px-6 py-8">
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+        <div className="space-y-2">
+          <h1 className="text-3xl font-bold">Rules</h1>
+          <p className="text-muted-foreground">
             Configure earning rates, minimum spend, and billing cycles for all your cards
           </p>
         </div>
@@ -347,7 +356,7 @@ function RulesPageContent() {
         onValueChange={handleTabChange}
         className="space-y-6"
       >
-        <TabsList className="grid w-full max-w-md grid-cols-3">
+        <TabsList className={`grid w-full max-w-md ${featureFlags.recommendations ? 'grid-cols-3' : 'grid-cols-2'}`}>
           <TabsTrigger value="cashback" className="gap-2">
             <Percent className="h-4 w-4" />
             Cashback ({cashbackCards.length})
@@ -356,10 +365,12 @@ function RulesPageContent() {
             <CreditCardIcon className="h-4 w-4" />
             Miles ({milesCards.length})
           </TabsTrigger>
-          <TabsTrigger value="themes" className="gap-2">
-            <Layers className="h-4 w-4" />
-            Themes ({themeGroups.length})
-          </TabsTrigger>
+          {featureFlags.recommendations && (
+            <TabsTrigger value="themes" className="gap-2">
+              <Layers className="h-4 w-4" />
+              Themes ({themeGroups.length})
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="cashback" className="space-y-4">
@@ -464,14 +475,16 @@ function RulesPageContent() {
           )}
         </TabsContent>
 
-        <TabsContent value="themes" className="space-y-4">
-          <ThemeGroupingManager
-            cards={cards}
-            themeGroups={themeGroups}
-            onSaveGroup={saveThemeGroup}
-            onDeleteGroup={deleteThemeGroup}
-          />
-        </TabsContent>
+        {featureFlags.recommendations && (
+          <TabsContent value="themes" className="space-y-4">
+            <ThemeGroupingManager
+              cards={cards}
+              themeGroups={themeGroups}
+              onSaveGroup={saveThemeGroup}
+              onDeleteGroup={deleteThemeGroup}
+            />
+          </TabsContent>
+        )}
       </Tabs>
 
       {showStickyBar && (
