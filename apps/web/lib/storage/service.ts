@@ -15,7 +15,6 @@ import {
   findDashboardCacheEntry,
   applyCardDeletion,
   validateHiddenUntilDate,
-  normaliseNumber,
 } from '@ynab-counter/app-core/storage';
 import type {
   AppSettings,

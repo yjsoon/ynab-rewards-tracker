@@ -167,15 +167,16 @@ export function normalizePeriod(period: string): {
 
 /**
  * Normalizes a number value, returning null for invalid inputs.
+ * Only accepts finite numbers - rejects Infinity, NaN, and invalid strings.
  * Useful for form inputs where empty strings should become null.
  *
  * @param value - Number or string to normalize
- * @returns Number or null
+ * @returns Finite number or null
  */
 export function normaliseNumber(value: number | string | null | undefined): number | null {
   if (value === null || value === undefined || value === '') {
     return null;
   }
   const num = typeof value === 'string' ? parseFloat(value) : value;
-  return Number.isNaN(num) ? null : num;
+  return Number.isFinite(num) ? num : null;
 }
