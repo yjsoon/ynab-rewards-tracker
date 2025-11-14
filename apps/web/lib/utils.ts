@@ -2,6 +2,7 @@ import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
 
 import { storage } from '@/lib/storage'
+import { normalizeCurrencyCode } from '@ynab-counter/app-core/utils/currency'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -18,7 +19,7 @@ function resolveCurrencyFormattingOptions(options: CurrencyFormatOptions = {}) {
   if (options.currency) {
     return {
       locale,
-      currency: options.currency
+      currency: normalizeCurrencyCode(options.currency)
     };
   }
 
@@ -36,7 +37,7 @@ function resolveCurrencyFormattingOptions(options: CurrencyFormatOptions = {}) {
 
   return {
     locale,
-    currency: settingsCurrency ?? 'USD'
+    currency: normalizeCurrencyCode(settingsCurrency ?? '$')
   };
 }
 

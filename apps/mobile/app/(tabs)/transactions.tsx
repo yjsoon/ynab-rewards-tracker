@@ -7,6 +7,7 @@ import { useStorage } from '@/contexts/StorageContext';
 import { findBestDashboardEntry, buildAccountsMap } from '@/lib/dashboardCache';
 import { Card, ListItem, Headline, Footnote } from '@/components/ios';
 import { semanticColors } from '@/theme/semanticColors';
+import { normalizeCurrencyCode } from '@ynab-counter/app-core/utils/currency';
 
 type DisplayTransaction = {
   id: string;
@@ -108,16 +109,16 @@ function useTransactionsContent(): TransactionsContent {
 export default function TransactionsScreen() {
   const navigation = useNavigation();
   const { impact } = useHaptics();
+  const { state } = useStorage();
   const { transactions, isLoading, statusMessage, infoMessage } = useTransactionsContent();
 
-  const currencyFormatter = useMemo(
-    () =>
-      new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: 'USD',
-      }),
-    []
-  );
+  const currencyFormatter = useMemo(() => {
+    const currencyInput = state.settings?.currency || '$';
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: normalizeCurrencyCode(currencyInput),
+    });
+  }, [state.settings?.currency]);
 
   useFocusEffect(
     React.useCallback(() => {

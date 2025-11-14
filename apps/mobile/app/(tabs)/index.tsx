@@ -37,17 +37,13 @@ import {
 import { createRewardCalculationFromSimple } from '@ynab-counter/app-core/rewards-engine/utils/reward-calculation';
 import { getEarliestPeriodStart } from '@ynab-counter/app-core/rewards-engine/utils/periods';
 import type { CreditCard, RewardCalculation, SubcategoryBreakdown } from '@ynab-counter/app-core/storage/types';
+import { normalizeCurrencyCode } from '@ynab-counter/app-core/utils/currency';
 import { findBestDashboardEntry } from '@/lib/dashboardCache';
 
 export const options = {
   title: 'YJAB',
   headerLargeTitle: true,
 };
-
-const currencyFormatter = new Intl.NumberFormat('en-US', {
-  style: 'currency',
-  currency: 'USD',
-});
 
 export type CardSummary = {
   card: CreditCard;
@@ -280,6 +276,15 @@ export default function HomeScreen() {
   const { impact } = useHaptics();
   const { state, status, actions } = useStorage();
   const { summaries, isEmpty, isLoading } = useCardSummaries();
+
+  // Create currency formatter from settings
+  const currencyFormatter = useMemo(() => {
+    const currencyInput = state.settings?.currency || '$';
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: normalizeCurrencyCode(currencyInput),
+    });
+  }, [state.settings?.currency]);
 
   // Debug logging
   useEffect(() => {
