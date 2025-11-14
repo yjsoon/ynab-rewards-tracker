@@ -17,7 +17,6 @@ import { clampDaysLeft } from "@/lib/date";
 import type { CreditCard, DashboardViewMode } from "@/lib/storage";
 import { DashboardLanding } from "@/components/dashboard/DashboardLanding";
 import { SetupProgressAlert } from "@/components/dashboard/SetupProgressAlert";
-import { RulesReminderAlert } from "@/components/dashboard/RulesReminderAlert";
 import { DashboardCardOverview } from "@/components/dashboard/DashboardCardOverview";
 import { useTrackedTransactions } from "@/hooks/useTrackedTransactions";
 import { Button } from "@/components/ui/button";
@@ -301,10 +300,6 @@ export default function DashboardPage() {
           setupPercentage={setupPercentage}
         />
       )}
-
-      <RulesReminderAlert
-        show={isFullyConfigured && cards.length > 0 && rules.length === 0 && hasUnsetMinimumSpend}
-      />
 
       <DashboardCardOverview
         cards={cards}

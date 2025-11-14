@@ -124,7 +124,7 @@ export function SubcategoryBreakdownCompact({
               >
                 {width > 12 && (
                   <span
-                    className="px-1 py-0 rounded text-[11px] font-bold leading-tight"
+                    className="px-0.5 py-0 rounded text-[11px] font-bold leading-none"
                     style={{
                       backgroundColor: segment.pillBg,
                       color: segment.pillText,
