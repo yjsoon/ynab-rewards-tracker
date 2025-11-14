@@ -11,6 +11,13 @@ import {
   pruneThemeGroups,
   normaliseHiddenCards,
   areHiddenCardListsEqual,
+  sanitizeTransactionForCache,
+  upsertById,
+  createDashboardCacheKey,
+  findDashboardCacheEntry,
+  applyCardDeletion,
+  validateHiddenUntilDate,
+  normalizePeriod,
 } from '@ynab-counter/app-core/storage';
 import type {
   AppSettings,
@@ -35,14 +42,6 @@ import type {
 
 const PAT_SECURE_STORE_KEY = 'ynab_counter_pat';
 const LEGACY_PAT_SECURE_STORE_KEY = 'ynab_counter_pat_legacy';
-
-export function normalizePeriod(period: string) {
-  if (!period.includes(' → ')) {
-    return { start: period, end: period };
-  }
-  const [start, end] = period.split(' → ');
-  return { start, end };
-}
 
 class StorageService {
   private static readonly DASHBOARD_CACHE_LIMIT = 500;
@@ -260,23 +259,14 @@ class StorageService {
   async saveCard(card: CreditCard): Promise<void> {
     const storage = await this.load();
     const normalised = normaliseCard({ ...card } as MutableCard, storage.cachedData?.flagNames);
-    const index = storage.cards.findIndex((existing) => existing.id === card.id);
-
-    if (index >= 0) {
-      storage.cards[index] = normalised;
-    } else {
-      storage.cards.push(normalised);
-    }
-
+    upsertById(storage.cards, normalised);
     pruneThemeGroups(storage as MutableStorageData);
     await this.save(storage);
   }
 
   async deleteCard(cardId: string): Promise<void> {
     const storage = await this.load();
-    storage.cards = storage.cards.filter((card) => card.id !== cardId);
-    storage.rules = storage.rules.filter((rule) => rule.cardId !== cardId);
-    storage.tagMappings = storage.tagMappings.filter((mapping) => mapping.cardId !== cardId);
+    applyCardDeletion(storage, cardId);
     pruneThemeGroups(storage as MutableStorageData);
     await this.save(storage);
   }
@@ -291,14 +281,7 @@ class StorageService {
 
   async saveRule(rule: RewardRule): Promise<void> {
     const storage = await this.load();
-    const index = storage.rules.findIndex((existing) => existing.id === rule.id);
-
-    if (index >= 0) {
-      storage.rules[index] = rule;
-    } else {
-      storage.rules.push(rule);
-    }
-
+    upsertById(storage.rules, rule);
     await this.save(storage);
   }
 
@@ -361,14 +344,7 @@ class StorageService {
 
   async saveTagMapping(mapping: TagMapping): Promise<void> {
     const storage = await this.load();
-    const index = storage.tagMappings.findIndex((existing) => existing.id === mapping.id);
-
-    if (index >= 0) {
-      storage.tagMappings[index] = mapping;
-    } else {
-      storage.tagMappings.push(mapping);
-    }
-
+    upsertById(storage.tagMappings, mapping);
     await this.save(storage);
   }
 
@@ -495,11 +471,7 @@ class StorageService {
 
   async hideCard(cardId: string, hiddenUntil: string, reason: HiddenCard['reason'] = 'maximum_spend_reached'): Promise<void> {
     const storage = await this.load() as MutableStorageData;
-    const expiry = new Date(hiddenUntil);
-
-    if (Number.isNaN(expiry.getTime())) {
-      throw new Error('Invalid hiddenUntil date');
-    }
+    const expiry = validateHiddenUntilDate(hiddenUntil);
 
     const next = (storage.hiddenCards || []).filter((entry) => entry.cardId !== cardId);
     next.push({
@@ -530,30 +502,6 @@ class StorageService {
     return cleaned;
   }
 
-  private sanitizeTransactionForCache(txn: Transaction | CachedTransaction): CachedTransaction | null {
-    if (
-      typeof txn.id !== 'string' ||
-      typeof txn.date !== 'string' ||
-      typeof txn.amount !== 'number' ||
-      typeof txn.account_id !== 'string'
-    ) {
-      return null;
-    }
-
-    return {
-      id: txn.id,
-      date: txn.date,
-      amount: txn.amount,
-      account_id: txn.account_id,
-      payee_name: txn.payee_name ?? null,
-      category_name: txn.category_name ?? null,
-      flag_color: txn.flag_color ?? null,
-      flag_name: txn.flag_name ?? null,
-      cleared: txn.cleared ?? null,
-      approved: txn.approved,
-    };
-  }
-
   async getDashboardTransactionsCache(
     budgetId: string,
     sinceDate: string,
@@ -566,13 +514,8 @@ class StorageService {
       return null;
     }
 
-    const normalisedIds = [...trackedAccountIds].sort().join(',');
     const now = Date.now();
-
-    const match = entries.find((entry) => {
-      const entryIds = [...entry.trackedAccountIds].sort().join(',');
-      return entry.budgetId === budgetId && entry.sinceDate === sinceDate && entryIds === normalisedIds;
-    });
+    const match = findDashboardCacheEntry(entries, budgetId, sinceDate, trackedAccountIds);
 
     if (!match) {
       return null;
@@ -588,7 +531,7 @@ class StorageService {
     }
 
     const sanitized = match.transactions
-      .map((txn) => this.sanitizeTransactionForCache(txn))
+      .map((txn) => sanitizeTransactionForCache(txn))
       .filter((txn): txn is CachedTransaction => txn !== null)
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .slice(0, StorageService.DASHBOARD_CACHE_LIMIT);
@@ -605,7 +548,7 @@ class StorageService {
     const entries = storage.cachedData.dashboardTransactions || [];
 
     const sanitized = payload.transactions
-      .map((txn) => this.sanitizeTransactionForCache(txn))
+      .map((txn) => sanitizeTransactionForCache(txn))
       .filter((txn): txn is CachedTransaction => txn !== null)
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .slice(0, StorageService.DASHBOARD_CACHE_LIMIT);
@@ -619,9 +562,9 @@ class StorageService {
       accounts: payload.accounts,
     };
 
-    const normalizedKey = `${normalized.budgetId}::${normalized.sinceDate}::${normalized.trackedAccountIds.join(',')}`;
+    const normalizedKey = createDashboardCacheKey(normalized.budgetId, normalized.sinceDate, normalized.trackedAccountIds);
     const filtered = entries.filter((existing) => {
-      const existingKey = `${existing.budgetId}::${existing.sinceDate}::${[...existing.trackedAccountIds].sort().join(',')}`;
+      const existingKey = createDashboardCacheKey(existing.budgetId, existing.sinceDate, existing.trackedAccountIds);
       return existingKey !== normalizedKey;
     });
 
@@ -692,3 +635,6 @@ class StorageService {
 }
 
 export const storage = StorageService.getInstance();
+
+// Re-export for backward compatibility (was previously defined in this file)
+export { normalizePeriod } from '@ynab-counter/app-core/storage';

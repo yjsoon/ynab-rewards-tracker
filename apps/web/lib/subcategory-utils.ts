@@ -1,25 +1,6 @@
 import { UNFLAGGED_FLAG, YNAB_FLAG_COLORS, type YnabFlagColor } from './ynab-constants';
 import type { CardSubcategory } from './storage';
-
-/**
- * Generate a unique ID for a subcategory
- */
-const generateId = (): string => {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  return `subcat-${Math.random().toString(36).slice(2, 10)}`;
-};
-
-/**
- * Normalise a value to a number or return fallback
- */
-const normaliseNumber = (value: unknown, fallback: number | null = null): number | null => {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value;
-  }
-  return fallback;
-};
+import { createSubcategoryId, normaliseNumber } from '@ynab-counter/app-core/storage';
 
 /**
  * Prepare subcategories for saving, normalising values and ensuring consistency
@@ -43,13 +24,13 @@ export function prepareSubcategoriesForSave(
 
     return {
       ...sub,
-      id: sub.id || generateId(),
+      id: sub.id || createSubcategoryId(),
       flagColor: flagColour,
       name: sub.name?.trim() || fallbackName,
-      rewardValue: normaliseNumber(sub.rewardValue, rewardFallback) ?? rewardFallback,
-      milesBlockSize: normaliseNumber(sub.milesBlockSize, null),
-      minimumSpend: normaliseNumber(sub.minimumSpend, sub.minimumSpend === 0 ? 0 : null),
-      maximumSpend: normaliseNumber(sub.maximumSpend, sub.maximumSpend === 0 ? 0 : null),
+      rewardValue: normaliseNumber(sub.rewardValue) ?? rewardFallback,
+      milesBlockSize: normaliseNumber(sub.milesBlockSize),
+      minimumSpend: normaliseNumber(sub.minimumSpend === 0 ? 0 : sub.minimumSpend),
+      maximumSpend: normaliseNumber(sub.maximumSpend === 0 ? 0 : sub.maximumSpend),
       active: sub.active !== false,
       excludeFromRewards: sub.excludeFromRewards === true,
       priority: index,
