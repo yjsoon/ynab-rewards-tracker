@@ -316,7 +316,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions, onHideC
             )}
           </div>
         )}
-        <div className="flex items-center justify-between px-1 text-xs">
+        <div className="flex items-center justify-between px-1 pr-12 text-xs">
           <span className="text-muted-foreground">
             {new Date(period.start).toLocaleDateString()} - {new Date(period.end).toLocaleDateString()}
           </span>

@@ -43,26 +43,54 @@ export function SubcategoryBreakdownDetailed({
   const sortedBreakdowns = [...breakdowns].sort((a, b) => b.rewardEarned - a.rewardEarned);
 
   // Calculate percentages and effective rates
-  const enrichedBreakdowns = sortedBreakdowns.map(b => ({
-    ...b,
-    spendPercentage: totalCardSpend > 0 ? (b.totalSpend / totalCardSpend) * 100 : 0,
-    rewardPercentage: totalCardReward > 0 ? (b.rewardEarned / totalCardReward) * 100 : 0,
-    effectiveRate: b.eligibleSpend > 0
-      ? cardType === 'cashback'
-        ? (b.rewardEarned / b.eligibleSpend) * 100
-        : b.rewardEarned / b.eligibleSpend
-      : 0,
-  }));
+  const enrichedBreakdowns = sortedBreakdowns.map(b => {
+    // Calculate cap progress percentage if there's a maximum spend limit
+    const capProgress = b.maximumSpend && b.maximumSpend > 0
+      ? (b.totalSpend / b.maximumSpend) * 100
+      : null;
+
+    // Determine pill colour based on cap progress
+    const pillBg = 'rgba(255, 255, 255, 0.5)'; // 50% white background
+    let pillText = 'rgba(17, 24, 39, 0.95)'; // nearly black (gray-900)
+
+    if (capProgress !== null && capProgress >= 90) {
+      // Red zone: 90%+ of cap
+      pillText = 'rgba(220, 38, 38, 1)'; // red-600
+    }
+
+    return {
+      ...b,
+      spendPercentage: totalCardSpend > 0 ? (b.totalSpend / totalCardSpend) * 100 : 0,
+      rewardPercentage: totalCardReward > 0 ? (b.rewardEarned / totalCardReward) * 100 : 0,
+      effectiveRate: b.eligibleSpend > 0
+        ? cardType === 'cashback'
+          ? (b.rewardEarned / b.eligibleSpend) * 100
+          : b.rewardEarned / b.eligibleSpend
+        : 0,
+      capProgress,
+      pillBg,
+      pillText,
+    };
+  });
 
   return (
     <div className="space-y-4">
       {/* Visual Bar Chart */}
       <div className="flex h-8 w-full overflow-hidden rounded-lg bg-muted/30 border border-border/40">
           {enrichedBreakdowns.map((segment, index) => {
-            const color = segment.maximumSpendExceeded ? '#ef4444' : getFlagHex(segment.flagColor);
+            const color = getFlagHex(segment.flagColor);
             const width = segment.spendPercentage;
 
             if (width < 0.5) return null; // Skip tiny segments
+
+            // Determine what to display
+            const displayText = segment.capProgress !== null
+              ? `${Math.round(segment.capProgress)}%`
+              : `$${Math.round(segment.totalSpend)}`;
+
+            const tooltipText = segment.capProgress !== null
+              ? `${segment.name}: ${Math.round(segment.capProgress)}% of $${segment.maximumSpend?.toFixed(2)} cap (spent $${segment.totalSpend.toFixed(2)})`
+              : `${segment.name}: $${segment.totalSpend.toFixed(2)} spent (no cap)`;
 
             return (
               <div
@@ -71,13 +99,19 @@ export function SubcategoryBreakdownDetailed({
                 style={{
                   width: `${width}%`,
                   backgroundColor: color,
-                  opacity: segment.rewardEarned === 0 ? 0.3 : 0.9,
+                  opacity: 0.9,
                 }}
-                title={`${segment.name}: ${currency}${segment.totalSpend.toFixed(2)}${segment.maximumSpendExceeded ? ' (Maxed)' : ''}`}
+                title={tooltipText}
               >
                 {width > 10 && (
-                  <span className="text-[11px] font-bold text-white drop-shadow">
-                    {Math.round(width)}%
+                  <span
+                    className="px-0.5 py-0 rounded text-[14px] font-bold leading-none"
+                    style={{
+                      backgroundColor: segment.pillBg,
+                      color: segment.pillText,
+                    }}
+                  >
+                    {displayText}
                   </span>
                 )}
               </div>
