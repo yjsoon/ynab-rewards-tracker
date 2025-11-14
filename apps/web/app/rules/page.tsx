@@ -23,6 +23,7 @@ import { ThemeGroupingManager } from '@/components/ThemeGroupingManager';
 import { prepareSubcategoriesForSave } from '@/lib/subcategory-utils';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { featureFlags } from '@ynab-counter/app-core/config/featureFlags';
+import { cn } from '@/lib/utils';
 
 interface CardEditState {
   [cardId: string]: SingleCardEditState;
@@ -36,6 +37,7 @@ function RulesPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const flagNames = useMemo(() => storage.getFlagNames(), []);
+  const showThemes = featureFlags.recommendations;
   const [editState, setEditState] = useState<CardEditState>({});
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -49,11 +51,11 @@ function RulesPageContent() {
     if (tabParam === 'cashback' || tabParam === 'miles') {
       return tabParam;
     }
-    if (tabParam === 'themes' && featureFlags.recommendations) {
+    if (tabParam === 'themes' && showThemes) {
       return 'themes';
     }
     return 'cashback';
-  }, [searchParams]);
+  }, [searchParams, showThemes]);
 
   const [activeTab, setActiveTab] = useState<'cashback' | 'miles' | 'themes'>(initialTab);
 
@@ -65,7 +67,7 @@ function RulesPageContent() {
     if (value !== 'cashback' && value !== 'miles' && value !== 'themes') {
       return;
     }
-    if (value === 'themes' && !featureFlags.recommendations) {
+    if (value === 'themes' && !showThemes) {
       return;
     }
 
@@ -80,7 +82,7 @@ function RulesPageContent() {
     }
     const queryString = nextParams.toString();
     router.replace(`/rules${queryString ? `?${queryString}` : ''}`, { scroll: false });
-  }, [router, searchParams]);
+  }, [router, searchParams, showThemes]);
 
   // Group cards by type
   const cashbackCards = cards.filter(card => card.type === 'cashback');
@@ -356,7 +358,7 @@ function RulesPageContent() {
         onValueChange={handleTabChange}
         className="space-y-6"
       >
-        <TabsList className={`grid w-full max-w-md ${featureFlags.recommendations ? 'grid-cols-3' : 'grid-cols-2'}`}>
+        <TabsList className={cn('grid w-full max-w-md', showThemes ? 'grid-cols-3' : 'grid-cols-2')}>
           <TabsTrigger value="cashback" className="gap-2">
             <Percent className="h-4 w-4" />
             Cashback ({cashbackCards.length})
@@ -365,7 +367,7 @@ function RulesPageContent() {
             <CreditCardIcon className="h-4 w-4" />
             Miles ({milesCards.length})
           </TabsTrigger>
-          {featureFlags.recommendations && (
+          {showThemes && (
             <TabsTrigger value="themes" className="gap-2">
               <Layers className="h-4 w-4" />
               Themes ({themeGroups.length})
@@ -475,7 +477,7 @@ function RulesPageContent() {
           )}
         </TabsContent>
 
-        {featureFlags.recommendations && (
+        {showThemes && (
           <TabsContent value="themes" className="space-y-4">
             <ThemeGroupingManager
               cards={cards}
