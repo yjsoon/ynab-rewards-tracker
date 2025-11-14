@@ -19,9 +19,9 @@ export function Navigation() {
   const navLinks = [
     { href: '/', label: 'Dashboard', icon: Home },
     ...(featureFlags.recommendations ? [{ href: '/recommendations', label: 'Recommendations', icon: Sparkles }] : []),
-    { href: '/rules', label: 'Rules', icon: SlidersHorizontal },
-    { href: '/transactions', label: 'Transactions', icon: ReceiptText },
     { href: '/formatter', label: 'Formatter', icon: ScanText },
+    { href: '/transactions', label: 'Transactions', icon: ReceiptText },
+    { href: '/rules', label: 'Rules', icon: SlidersHorizontal },
   ];
 
   const isSettings = pathname.startsWith('/settings');

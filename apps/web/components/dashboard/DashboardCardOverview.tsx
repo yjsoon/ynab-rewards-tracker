@@ -149,11 +149,6 @@ export function DashboardCardOverview({
     onUnhideAll();
   }, [onUnhideAll]);
 
-  const handleViewChange = useCallback(
-    (mode: DashboardViewMode) => () => onViewModeChange(mode),
-    [onViewModeChange]
-  );
-
   const summaryContent = useMemo(() => {
     if (isInitialLoading && visibleFeaturedCards.length > 0) {
       const skeletonCount = Math.min(visibleFeaturedCards.length, 6);
@@ -280,52 +275,14 @@ export function DashboardCardOverview({
         </div>
       )}
 
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div className="flex items-center gap-3">
-          <h2 className="text-2xl font-bold">Your Cards</h2>
-          {hiddenCount > 0 && (
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary">{hiddenCount} hidden</Badge>
-              <Button variant="outline" size="sm" onClick={handleShowAll}>
-                Show all
-              </Button>
-            </div>
-          )}
+      {hiddenCount > 0 && (
+        <div className="flex items-center gap-2 mb-4">
+          <Badge variant="secondary">{hiddenCount} hidden</Badge>
+          <Button variant="outline" size="sm" onClick={handleShowAll}>
+            Show all
+          </Button>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-muted-foreground">View</span>
-          <div className="inline-flex items-center gap-1 rounded-full border border-border/50 bg-background/80 p-1 shadow-inner dark:border-border/40 dark:bg-muted/40">
-            <Button
-              type="button"
-              size="sm"
-              variant={viewMode === "summary" ? "default" : "ghost"}
-              className={cn(
-                "rounded-full px-3 transition-colors",
-                viewMode === "summary"
-                  ? "shadow-sm"
-                  : "text-muted-foreground hover:text-primary-foreground hover:bg-primary/80"
-              )}
-              onClick={handleViewChange("summary")}
-            >
-              Summary
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant={viewMode === "detailed" ? "default" : "ghost"}
-              className={cn(
-                "rounded-full px-3 transition-colors",
-                viewMode === "detailed"
-                  ? "shadow-sm"
-                  : "text-muted-foreground hover:text-primary-foreground hover:bg-primary/80"
-              )}
-              onClick={handleViewChange("detailed")}
-            >
-              Detailed
-            </Button>
-          </div>
-        </div>
-      </div>
+      )}
 
       {summaryContent}
     </div>

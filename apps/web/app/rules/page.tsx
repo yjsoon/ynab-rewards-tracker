@@ -22,6 +22,8 @@ import { CardSettingsEditor, type CardEditState as SingleCardEditState } from '@
 import { ThemeGroupingManager } from '@/components/ThemeGroupingManager';
 import { prepareSubcategoriesForSave } from '@/lib/subcategory-utils';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { featureFlags } from '@ynab-counter/app-core/config/featureFlags';
+import { cn } from '@/lib/utils';
 
 interface CardEditState {
   [cardId: string]: SingleCardEditState;
@@ -35,6 +37,7 @@ function RulesPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const flagNames = useMemo(() => storage.getFlagNames(), []);
+  const showThemes = featureFlags.recommendations;
   const [editState, setEditState] = useState<CardEditState>({});
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -45,11 +48,14 @@ function RulesPageContent() {
 
   const initialTab = useMemo<'cashback' | 'miles' | 'themes'>(() => {
     const tabParam = searchParams?.get('tab');
-    if (tabParam === 'cashback' || tabParam === 'miles' || tabParam === 'themes') {
+    if (tabParam === 'cashback' || tabParam === 'miles') {
       return tabParam;
     }
+    if (tabParam === 'themes' && showThemes) {
+      return 'themes';
+    }
     return 'cashback';
-  }, [searchParams]);
+  }, [searchParams, showThemes]);
 
   const [activeTab, setActiveTab] = useState<'cashback' | 'miles' | 'themes'>(initialTab);
 
@@ -59,6 +65,9 @@ function RulesPageContent() {
 
   const handleTabChange = useCallback((value: string) => {
     if (value !== 'cashback' && value !== 'miles' && value !== 'themes') {
+      return;
+    }
+    if (value === 'themes' && !showThemes) {
       return;
     }
 
@@ -73,7 +82,7 @@ function RulesPageContent() {
     }
     const queryString = nextParams.toString();
     router.replace(`/rules${queryString ? `?${queryString}` : ''}`, { scroll: false });
-  }, [router, searchParams]);
+  }, [router, searchParams, showThemes]);
 
   // Group cards by type
   const cashbackCards = cards.filter(card => card.type === 'cashback');
@@ -287,8 +296,10 @@ function RulesPageContent() {
 
   if (cards.length === 0) {
     return (
-      <div className="container mx-auto max-w-6xl px-4 py-8">
-        <h1 className="text-3xl font-bold mb-8">Card Rules & Settings</h1>
+      <div className="max-w-6xl mx-auto px-6 py-8">
+        <div className="space-y-2 mb-6">
+          <h1 className="text-3xl font-bold">Rules</h1>
+        </div>
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <CreditCardIcon className="h-12 w-12 text-muted-foreground mb-4" />
@@ -303,11 +314,11 @@ function RulesPageContent() {
   }
 
   return (
-    <div className="container mx-auto max-w-6xl px-4 py-8">
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
-        <div>
-          <h1 className="text-3xl font-bold">Card Rules & Settings</h1>
-          <p className="text-muted-foreground mt-1">
+    <div className="max-w-6xl mx-auto px-6 py-8">
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+        <div className="space-y-2">
+          <h1 className="text-3xl font-bold">Rules</h1>
+          <p className="text-muted-foreground">
             Configure earning rates, minimum spend, and billing cycles for all your cards
           </p>
         </div>
@@ -347,7 +358,7 @@ function RulesPageContent() {
         onValueChange={handleTabChange}
         className="space-y-6"
       >
-        <TabsList className="grid w-full max-w-md grid-cols-3">
+        <TabsList className={cn('grid w-full max-w-md', showThemes ? 'grid-cols-3' : 'grid-cols-2')}>
           <TabsTrigger value="cashback" className="gap-2">
             <Percent className="h-4 w-4" />
             Cashback ({cashbackCards.length})
@@ -356,10 +367,12 @@ function RulesPageContent() {
             <CreditCardIcon className="h-4 w-4" />
             Miles ({milesCards.length})
           </TabsTrigger>
-          <TabsTrigger value="themes" className="gap-2">
-            <Layers className="h-4 w-4" />
-            Themes ({themeGroups.length})
-          </TabsTrigger>
+          {showThemes && (
+            <TabsTrigger value="themes" className="gap-2">
+              <Layers className="h-4 w-4" />
+              Themes ({themeGroups.length})
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="cashback" className="space-y-4">
@@ -464,14 +477,16 @@ function RulesPageContent() {
           )}
         </TabsContent>
 
-        <TabsContent value="themes" className="space-y-4">
-          <ThemeGroupingManager
-            cards={cards}
-            themeGroups={themeGroups}
-            onSaveGroup={saveThemeGroup}
-            onDeleteGroup={deleteThemeGroup}
-          />
-        </TabsContent>
+        {showThemes && (
+          <TabsContent value="themes" className="space-y-4">
+            <ThemeGroupingManager
+              cards={cards}
+              themeGroups={themeGroups}
+              onSaveGroup={saveThemeGroup}
+              onDeleteGroup={deleteThemeGroup}
+            />
+          </TabsContent>
+        )}
       </Tabs>
 
       {showStickyBar && (

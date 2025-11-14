@@ -20,6 +20,8 @@ import { SetupProgressAlert } from "@/components/dashboard/SetupProgressAlert";
 import { RulesReminderAlert } from "@/components/dashboard/RulesReminderAlert";
 import { DashboardCardOverview } from "@/components/dashboard/DashboardCardOverview";
 import { useTrackedTransactions } from "@/hooks/useTrackedTransactions";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 // Constants
 const TRANSACTION_LOOKBACK_DAYS = 30;
@@ -254,7 +256,44 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto p-6">
+    <div className="max-w-6xl mx-auto px-6 py-8">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
+        <h1 className="text-3xl font-bold">Dashboard</h1>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-muted-foreground">View</span>
+          <div className="inline-flex items-center gap-1 rounded-full border border-border/50 bg-background/80 p-1 shadow-inner dark:border-border/40 dark:bg-muted/40">
+            <Button
+              type="button"
+              size="sm"
+              variant={viewMode === "summary" ? "default" : "ghost"}
+              className={cn(
+                "rounded-full px-3 transition-colors",
+                viewMode === "summary"
+                  ? "shadow-sm"
+                  : "text-muted-foreground hover:text-primary-foreground hover:bg-primary/80"
+              )}
+              onClick={() => handleViewModeChange("summary")}
+            >
+              Summary
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={viewMode === "detailed" ? "default" : "ghost"}
+              className={cn(
+                "rounded-full px-3 transition-colors",
+                viewMode === "detailed"
+                  ? "shadow-sm"
+                  : "text-muted-foreground hover:text-primary-foreground hover:bg-primary/80"
+              )}
+              onClick={() => handleViewModeChange("detailed")}
+            >
+              Detailed
+            </Button>
+          </div>
+        </div>
+      </div>
+
       {!isFullyConfigured && (
         <SetupProgressAlert
           setupStatus={setupStatus}

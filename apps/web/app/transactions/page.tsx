@@ -101,8 +101,8 @@ export default function TransactionsPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto p-6 space-y-6">
-      <div className="space-y-2">
+    <div className="max-w-6xl mx-auto px-6 py-8">
+      <div className="space-y-2 mb-6">
         <h1 className="text-3xl font-bold">Transactions</h1>
         <p className="text-muted-foreground">
           Review up to the last {EXTENDED_TRANSACTIONS_LIMIT} transactions from your tracked accounts.
