@@ -801,7 +801,8 @@ export default function SettingsPage() {
         <h1 className="text-3xl font-bold">Settings</h1>
       </div>
 
-      <DashboardQuickStats
+      <div className="space-y-6">
+        <DashboardQuickStats
         selectedBudget={selectedBudget}
         trackedAccountCount={trackedAccountIds.length}
       />
@@ -1365,6 +1366,7 @@ export default function SettingsPage() {
         onConfirm={confirmClearOrphanedCards}
         onCancel={() => setShowClearOrphanedDialog(false)}
       />
+      </div>
 
     </div>
   );
