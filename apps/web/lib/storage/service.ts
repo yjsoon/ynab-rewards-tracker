@@ -9,6 +9,12 @@ import {
   normaliseHiddenCards,
   normaliseThemeGroup,
   pruneThemeGroups,
+  sanitizeTransactionForCache,
+  upsertById,
+  createDashboardCacheKey,
+  findDashboardCacheEntry,
+  applyCardDeletion,
+  validateHiddenUntilDate,
 } from '@ynab-counter/app-core/storage';
 import type {
   AppSettings,
@@ -201,21 +207,14 @@ export class StorageService {
   saveCard(card: CreditCard): void {
     const storage = this.getStorage();
     const normalisedCard = normaliseCard({ ...card } as MutableCard, storage.cachedData?.flagNames);
-    const index = storage.cards.findIndex((c) => c.id === card.id);
-    if (index >= 0) {
-      storage.cards[index] = normalisedCard;
-    } else {
-      storage.cards.push(normalisedCard);
-    }
+    upsertById(storage.cards, normalisedCard);
     pruneThemeGroups(storage as MutableStorageData);
     this.setStorage(storage);
   }
 
   deleteCard(cardId: string): void {
     const storage = this.getStorage();
-    storage.cards = storage.cards.filter((c) => c.id !== cardId);
-    storage.rules = storage.rules.filter((r) => r.cardId !== cardId);
-    storage.tagMappings = storage.tagMappings.filter((m) => m.cardId !== cardId);
+    applyCardDeletion(storage, cardId);
     pruneThemeGroups(storage as MutableStorageData);
     this.setStorage(storage);
   }
@@ -230,12 +229,7 @@ export class StorageService {
 
   saveRule(rule: RewardRule): void {
     const storage = this.getStorage();
-    const index = storage.rules.findIndex((r) => r.id === rule.id);
-    if (index >= 0) {
-      storage.rules[index] = rule;
-    } else {
-      storage.rules.push(rule);
-    }
+    upsertById(storage.rules, rule);
     this.setStorage(storage);
   }
 
@@ -300,12 +294,7 @@ export class StorageService {
 
   saveTagMapping(mapping: TagMapping): void {
     const storage = this.getStorage();
-    const index = storage.tagMappings.findIndex((m) => m.id === mapping.id);
-    if (index >= 0) {
-      storage.tagMappings[index] = mapping;
-    } else {
-      storage.tagMappings.push(mapping);
-    }
+    upsertById(storage.tagMappings, mapping);
     this.setStorage(storage);
   }
 
@@ -418,11 +407,7 @@ export class StorageService {
   hideCard(cardId: string, hiddenUntil: string, reason: HiddenCardReason = 'maximum_spend_reached'): void {
     const storage = this.getStorage() as MutableStorageData;
     const existing = storage.hiddenCards || [];
-    const expiry = new Date(hiddenUntil);
-
-    if (Number.isNaN(expiry.getTime())) {
-      throw new Error('Invalid hiddenUntil date');
-    }
+    const expiry = validateHiddenUntilDate(hiddenUntil);
 
     const next = existing.filter((entry) => entry.cardId !== cardId);
     next.push({
@@ -455,36 +440,6 @@ export class StorageService {
     return cleaned;
   }
 
-  /**
-   * Sanitizes a transaction for cache storage by keeping only essential fields
-   * and normalizing optional properties.
-   * Returns null if required fields are missing or invalid.
-   */
-  private sanitizeTransactionForCache(txn: Transaction | CachedTransaction): CachedTransaction | null {
-    // Validate required fields
-    if (
-      typeof txn.id !== 'string' ||
-      typeof txn.date !== 'string' ||
-      typeof txn.amount !== 'number' ||
-      typeof txn.account_id !== 'string'
-    ) {
-      return null;
-    }
-
-    return {
-      id: txn.id,
-      date: txn.date,
-      amount: txn.amount,
-      account_id: txn.account_id,
-      payee_name: txn.payee_name ?? null,
-      category_name: txn.category_name ?? null,
-      flag_color: txn.flag_color ?? null,
-      flag_name: txn.flag_name ?? null,
-      cleared: txn.cleared ?? null,
-      approved: txn.approved,
-    };
-  }
-
   getDashboardTransactionsCache(
     budgetId: string,
     sinceDate: string,
@@ -498,18 +453,8 @@ export class StorageService {
     const storage = this.getStorage();
     const entries = storage.cachedData?.dashboardTransactions || [];
 
-    // Normalize tracked account IDs for consistent matching
-    const normalizedIds = [...trackedAccountIds].sort().join(',');
-
     const now = Date.now();
-    const match = entries.find((entry) => {
-      const entryIds = [...entry.trackedAccountIds].sort().join(',');
-      return (
-        entry.budgetId === budgetId &&
-        entry.sinceDate === sinceDate &&
-        entryIds === normalizedIds
-      );
-    });
+    const match = findDashboardCacheEntry(entries, budgetId, sinceDate, trackedAccountIds);
 
     if (!match) {
       return null;
@@ -525,7 +470,7 @@ export class StorageService {
       return null;
     }
     const sanitized = match.transactions
-      .map(txn => this.sanitizeTransactionForCache(txn))
+      .map(txn => sanitizeTransactionForCache(txn))
       .filter((txn): txn is CachedTransaction => txn !== null)
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .slice(0, StorageService.DASHBOARD_CACHE_LIMIT);
@@ -547,7 +492,7 @@ export class StorageService {
 
     // Sort transactions by date (newest first), sanitize, and limit to most recent
     const sanitized = [...payload.transactions]
-      .map(txn => this.sanitizeTransactionForCache(txn))
+      .map(txn => sanitizeTransactionForCache(txn))
       .filter((txn): txn is CachedTransaction => txn !== null)
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .slice(0, StorageService.DASHBOARD_CACHE_LIMIT);
@@ -562,11 +507,11 @@ export class StorageService {
       accounts: payload.accounts,
     };
 
-    const normalizedKey = `${normalized.budgetId}::${normalized.sinceDate}::${normalized.trackedAccountIds.join(',')}`;
+    const normalizedKey = createDashboardCacheKey(normalized.budgetId, normalized.sinceDate, normalized.trackedAccountIds);
 
     // Remove existing entry with same key
     const filtered = entries.filter((existing) => {
-      const existingKey = `${existing.budgetId}::${existing.sinceDate}::${[...existing.trackedAccountIds].sort().join(',')}`;
+      const existingKey = createDashboardCacheKey(existing.budgetId, existing.sinceDate, existing.trackedAccountIds);
       return existingKey !== normalizedKey;
     });
 
