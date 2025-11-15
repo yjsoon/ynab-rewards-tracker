@@ -6,9 +6,11 @@ export default defineConfig({
     environment: 'node',
   },
   resolve: {
-    alias: {
-      '@': path.resolve(__dirname, '.'),
-    },
+    alias: [
+      { find: '@', replacement: path.resolve(__dirname, '.') },
+      { find: /^@ynab-counter\/app-core\/(.*)$/, replacement: path.resolve(__dirname, '../../packages/app-core/src/$1') },
+      { find: '@ynab-counter/app-core', replacement: path.resolve(__dirname, '../../packages/app-core/src') },
+    ],
   },
 });
 

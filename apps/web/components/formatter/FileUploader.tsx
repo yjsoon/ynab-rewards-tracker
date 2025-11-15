@@ -1,6 +1,7 @@
 'use client';
 
-import { ChangeEvent, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { ChangeEvent } from 'react';
 import { Upload, ChevronDown, ChevronUp, FileImage, Loader2, Plus, X, Eye } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';

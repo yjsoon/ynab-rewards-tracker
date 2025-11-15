@@ -1,17 +1,30 @@
 import type { ComponentType, ReactNode } from 'react';
 
 declare module 'tamagui' {
-  export const TamaguiProvider: ComponentType<{ config: any; children?: ReactNode }>;
-  export const Theme: ComponentType<{ name?: string; children?: ReactNode }>;
-  export const Button: ComponentType<any>;
-  export const Card: any;
-  export const H1: ComponentType<any>;
-  export const H2: ComponentType<any>;
-  export const Paragraph: ComponentType<any>;
-  export const ScrollView: ComponentType<any>;
-  export const Separator: ComponentType<any>;
-  export const Text: ComponentType<any>;
-  export const XStack: ComponentType<any>;
-  export const YStack: ComponentType<any>;
-  export function createTamagui(config: any): any;
+  type TamaguiConfig = Record<string, unknown>;
+  type TamaguiComponentProps = Record<string, unknown>;
+
+  interface TamaguiProviderProps {
+    config: TamaguiConfig;
+    children?: ReactNode;
+  }
+
+  interface ThemeProps {
+    name?: string;
+    children?: ReactNode;
+  }
+
+  export const TamaguiProvider: ComponentType<TamaguiProviderProps>;
+  export const Theme: ComponentType<ThemeProps>;
+  export const Button: ComponentType<TamaguiComponentProps>;
+  export const Card: ComponentType<TamaguiComponentProps>;
+  export const H1: ComponentType<TamaguiComponentProps>;
+  export const H2: ComponentType<TamaguiComponentProps>;
+  export const Paragraph: ComponentType<TamaguiComponentProps>;
+  export const ScrollView: ComponentType<TamaguiComponentProps>;
+  export const Separator: ComponentType<TamaguiComponentProps>;
+  export const Text: ComponentType<TamaguiComponentProps>;
+  export const XStack: ComponentType<TamaguiComponentProps>;
+  export const YStack: ComponentType<TamaguiComponentProps>;
+  export function createTamagui(config: TamaguiConfig): TamaguiConfig;
 }

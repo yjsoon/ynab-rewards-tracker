@@ -38,27 +38,6 @@ export function validateYnabToken(token: string): { valid: boolean; error?: stri
 }
 
 /**
- * Validates card name input
- */
-export function validateCardName(name: string): { valid: boolean; error?: string } {
-  const sanitized = sanitizeInput(name);
-  
-  if (!sanitized) {
-    return { valid: false, error: 'Card name is required' };
-  }
-
-  if (sanitized.length < 2) {
-    return { valid: false, error: 'Card name must be at least 2 characters' };
-  }
-
-  if (sanitized.length > 100) {
-    return { valid: false, error: 'Card name must be less than 100 characters' };
-  }
-
-  return { valid: true };
-}
-
-/**
  * Validates issuer input
  */
 export function validateIssuer(issuer: string): { valid: boolean; error?: string } {
@@ -73,27 +52,4 @@ export function validateIssuer(issuer: string): { valid: boolean; error?: string
     return { valid: false, error: 'Issuer must be 100 characters or less' };
   }
   return { valid: true };
-}
-
-/**
- * Validates URL for safe external linking
- */
-export function validateUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    // Only allow http and https protocols
-    return ['http:', 'https:'].includes(parsed.protocol);
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Sanitizes file name for safe storage
- */
-export function sanitizeFileName(fileName: string): string {
-  return fileName
-    .replace(/[^a-zA-Z0-9.-]/g, '_')
-    .replace(/_{2,}/g, '_')
-    .substring(0, 255);
 }
