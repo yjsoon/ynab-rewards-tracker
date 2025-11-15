@@ -721,6 +721,7 @@ export default function SettingsPage() {
       setCloudSyncPhrase(normalised);
       setCloudSyncMessage('Sync code saved to this device.');
       setJustToggledRemember(true);
+      setShowAdvancedSync(true); // Ensure user can access "Show simple mode" button
     } else {
       // User wants to stop remembering
       updateSettings({
@@ -744,8 +745,15 @@ export default function SettingsPage() {
                       !('rules' in exportedSettings) ||
                       (Array.isArray(exportedSettings.rules) && exportedSettings.rules.length === 0);
 
-    // If settings are empty and there's a previous cloud backup, warn user
-    if (hasNoCards && hasNoRules && settings.cloudSyncLastSyncedAt) {
+    // If settings are empty and there's likely a cloud backup, warn user
+    // Detect cloud backup via:
+    // 1. cloudSyncKeyId exists (uploaded before on this or another device)
+    // 2. OR user has a sync code but no keyId yet (likely entered code from another device)
+    const hasSyncKeyId = Boolean(settings.cloudSyncKeyId);
+    const hasCodeButNoKeyId = (storedMnemonic || cloudSyncPhrase.trim()) && !settings.cloudSyncKeyId;
+    const likelyHasCloudBackup = hasSyncKeyId || hasCodeButNoKeyId;
+
+    if (hasNoCards && hasNoRules && likelyHasCloudBackup) {
       setShowEmptySyncWarningDialog(true);
       return;
     }
