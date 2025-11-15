@@ -209,6 +209,8 @@ export interface StatementFormatterSettings {
   customPrompt?: string;
 }
 
+export type SummaryViewSubcategoriesPreference = boolean | Record<string, boolean>;
+
 export interface AppSettings {
   theme?: 'light' | 'dark' | 'auto';
   currency?: string;
@@ -220,6 +222,7 @@ export interface AppSettings {
   rememberCloudSyncCode?: boolean;
   cardOrdering?: Partial<Record<'cashback' | 'miles', string[]>>;
   collapsedCardGroups?: Partial<Record<'cashback' | 'miles', boolean>>;
+  summaryViewSubcategoriesExpanded?: SummaryViewSubcategoriesPreference;
   statementFormatter?: StatementFormatterSettings;
 }
 

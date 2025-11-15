@@ -7,11 +7,16 @@ import { useSelectedBudget, useSettings } from "@/hooks/useLocalStorage";
 import { hasMinimumSpendRequirement } from "@/lib/minimum-spend-helpers";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
 import { SpendingProgressBar } from "@/components/SpendingProgressBar";
+import { SubcategoryBreakdownCompact } from "@/components/SubcategoryBreakdownCompact";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { RefreshBadge } from "@/components/RefreshBadge";
+import { storage } from "@/lib/storage";
 import type { CreditCard } from "@/lib/storage";
 import type { Transaction } from "@/types/transaction";
+
+const isExpansionMap = (value: unknown): value is Record<string, boolean> =>
+  value !== undefined && typeof value === "object" && value !== null && !Array.isArray(value);
 
 interface CardSummaryCompactProps {
   card: CreditCard;
@@ -22,7 +27,7 @@ interface CardSummaryCompactProps {
 }
 
 export function CardSummaryCompact({ card, pat, prefetchedTransactions, onHideCard, isRefreshing }: CardSummaryCompactProps) {
-  const { settings } = useSettings();
+  const { settings, updateSettings } = useSettings();
   const { selectedBudget } = useSelectedBudget();
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -30,6 +35,7 @@ export function CardSummaryCompact({ card, pat, prefetchedTransactions, onHideCa
   const abortRef = useRef<AbortController | null>(null);
 
   const period = useMemo(() => SimpleRewardsCalculator.calculatePeriod(card), [card]);
+  const flagNames = useMemo(() => storage.getFlagNames(), []);
 
   const loadTransactions = useCallback(async () => {
     if (prefetchedTransactions) {
@@ -108,8 +114,31 @@ export function CardSummaryCompact({ card, pat, prefetchedTransactions, onHideCa
       maximumSpend: calculation.maximumSpend,
       maximumSpendExceeded: calculation.maximumSpendExceeded,
       daysRemaining,
+      subcategoryBreakdowns: calculation.subcategoryBreakdowns ?? [],
     };
   }, [card, transactions, period, settings]);
+
+  const summaryViewExpansionSetting = settings?.summaryViewSubcategoriesExpanded;
+
+  const handleToggleSubcategories = useCallback(() => {
+    const currentSetting = summaryViewExpansionSetting;
+    const currentValue = isExpansionMap(currentSetting)
+      ? currentSetting[card.id] ?? false
+      : Boolean(currentSetting);
+
+    const nextValue = !currentValue;
+    const nextSetting = isExpansionMap(currentSetting)
+      ? { ...currentSetting, [card.id]: nextValue }
+      : { [card.id]: nextValue };
+
+    updateSettings({
+      summaryViewSubcategoriesExpanded: nextSetting,
+    });
+  }, [summaryViewExpansionSetting, card.id, updateSettings]);
+
+  const isSubcategoryExpanded = isExpansionMap(summaryViewExpansionSetting)
+    ? summaryViewExpansionSetting[card.id] ?? false
+    : Boolean(summaryViewExpansionSetting);
 
   if (loading) {
     return (
@@ -121,7 +150,7 @@ export function CardSummaryCompact({ card, pat, prefetchedTransactions, onHideCa
     );
   }
 
-  const { totalSpend, minimumSpend, minimumSpendMet, maximumSpend, maximumSpendExceeded, daysRemaining } = summary;
+  const { totalSpend, minimumSpend, minimumSpendMet, maximumSpend, maximumSpendExceeded, daysRemaining, subcategoryBreakdowns } = summary;
 
   const currency = settings?.currency;
   const hasMinimum = hasMinimumSpendRequirement(minimumSpend);
@@ -201,6 +230,17 @@ export function CardSummaryCompact({ card, pat, prefetchedTransactions, onHideCa
           </div>
         )}
       </div>
+
+        {card.subcategoriesEnabled && subcategoryBreakdowns.length > 0 && (
+          <SubcategoryBreakdownCompact
+            breakdowns={subcategoryBreakdowns}
+            cardType={card.type}
+            currency={currency || '$'}
+            flagNames={flagNames}
+            isExpanded={isSubcategoryExpanded}
+            onToggleExpanded={handleToggleSubcategories}
+          />
+        )}
 
       <div className="mt-auto flex flex-col gap-1.5">
         <div className="flex items-center justify-between text-xs text-muted-foreground">

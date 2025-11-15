@@ -24,14 +24,22 @@ interface SubcategoryBreakdownCompactProps {
   cardType: 'cashback' | 'miles';
   currency: string;
   flagNames: Record<string, string>;
+  isExpanded?: boolean;
+  onToggleExpanded?: () => void;
 }
 
 export function SubcategoryBreakdownCompact({
   breakdowns,
   cardType,
   currency,
+  isExpanded: controlledIsExpanded,
+  onToggleExpanded,
 }: SubcategoryBreakdownCompactProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [internalIsExpanded, setInternalIsExpanded] = useState(false);
+
+  // Use controlled state if provided, otherwise use internal state
+  const isExpanded = controlledIsExpanded !== undefined ? controlledIsExpanded : internalIsExpanded;
+  const handleToggle = onToggleExpanded || (() => setInternalIsExpanded(!internalIsExpanded));
 
   if (breakdowns.length === 0) return null;
 
@@ -68,7 +76,7 @@ export function SubcategoryBreakdownCompact({
     <div className="space-y-1.5 rounded-md border border-border/60 bg-muted/5 p-2">
       {/* Header with toggle */}
       <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-muted-foreground">Subcategory rewards</p>
+        <p className="text-sm font-semibold text-muted-foreground">Subcategories</p>
         <Button
           variant="ghost"
           size="sm"
@@ -76,7 +84,7 @@ export function SubcategoryBreakdownCompact({
           onClick={(e) => {
             e.stopPropagation();
             e.preventDefault();
-            setIsExpanded(!isExpanded);
+            handleToggle();
           }}
         >
           {isExpanded ? (
