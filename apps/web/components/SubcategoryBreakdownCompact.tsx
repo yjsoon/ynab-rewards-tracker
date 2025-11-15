@@ -24,14 +24,22 @@ interface SubcategoryBreakdownCompactProps {
   cardType: 'cashback' | 'miles';
   currency: string;
   flagNames: Record<string, string>;
+  isExpanded?: boolean;
+  onToggleExpanded?: () => void;
 }
 
 export function SubcategoryBreakdownCompact({
   breakdowns,
   cardType,
   currency,
+  isExpanded: controlledIsExpanded,
+  onToggleExpanded,
 }: SubcategoryBreakdownCompactProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [internalIsExpanded, setInternalIsExpanded] = useState(false);
+
+  // Use controlled state if provided, otherwise use internal state
+  const isExpanded = controlledIsExpanded !== undefined ? controlledIsExpanded : internalIsExpanded;
+  const handleToggle = onToggleExpanded || (() => setInternalIsExpanded(!internalIsExpanded));
 
   if (breakdowns.length === 0) return null;
 
@@ -76,7 +84,7 @@ export function SubcategoryBreakdownCompact({
           onClick={(e) => {
             e.stopPropagation();
             e.preventDefault();
-            setIsExpanded(!isExpanded);
+            handleToggle();
           }}
         >
           {isExpanded ? (

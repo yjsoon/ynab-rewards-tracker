@@ -220,6 +220,7 @@ export interface AppSettings {
   rememberCloudSyncCode?: boolean;
   cardOrdering?: Partial<Record<'cashback' | 'miles', string[]>>;
   collapsedCardGroups?: Partial<Record<'cashback' | 'miles', boolean>>;
+  summaryViewSubcategoriesExpanded?: boolean;
   statementFormatter?: StatementFormatterSettings;
 }
 
