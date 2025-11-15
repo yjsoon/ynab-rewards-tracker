@@ -740,22 +740,27 @@ export default function SettingsPage() {
 
   // Helper to check if uploading empty settings would overwrite cloud backup
   function shouldWarnAboutEmptyUpload(): boolean {
-    const exportedSettings = parseExportedSettings();
-    const hasNoCards = !exportedSettings || typeof exportedSettings !== 'object' ||
-                      !('cards' in exportedSettings) ||
-                      (Array.isArray(exportedSettings.cards) && exportedSettings.cards.length === 0);
-    const hasNoRules = !exportedSettings || typeof exportedSettings !== 'object' ||
-                      !('rules' in exportedSettings) ||
-                      (Array.isArray(exportedSettings.rules) && exportedSettings.rules.length === 0);
+    try {
+      const exportedSettings = parseExportedSettings() as {
+        cards?: unknown;
+        rules?: unknown;
+      };
 
-    // Detect cloud backup via:
-    // 1. cloudSyncKeyId exists (uploaded before on this or another device)
-    // 2. OR user has a sync code but no keyId yet (likely entered code from another device)
-    const hasSyncKeyId = Boolean(settings.cloudSyncKeyId);
-    const hasCodeButNoKeyId = Boolean(storedMnemonic || cloudSyncPhrase.trim()) && !settings.cloudSyncKeyId;
-    const likelyHasCloudBackup = hasSyncKeyId || hasCodeButNoKeyId;
+      const hasNoCards = !Array.isArray(exportedSettings?.cards) || exportedSettings.cards.length === 0;
+      const hasNoRules = !Array.isArray(exportedSettings?.rules) || exportedSettings.rules.length === 0;
 
-    return hasNoCards && hasNoRules && likelyHasCloudBackup;
+      // Detect cloud backup via:
+      // 1. cloudSyncKeyId exists (uploaded before on this or another device)
+      // 2. OR user has a sync code but no keyId yet (likely entered code from another device)
+      const hasSyncKeyId = Boolean(settings.cloudSyncKeyId);
+      const hasCodeButNoKeyId = Boolean((storedMnemonic || cloudSyncPhrase).trim()) && !settings.cloudSyncKeyId;
+      const likelyHasCloudBackup = hasSyncKeyId || hasCodeButNoKeyId;
+
+      return hasNoCards && hasNoRules && likelyHasCloudBackup;
+    } catch (error) {
+      // If we can't parse settings, assume they're not empty to avoid blocking uploads
+      return false;
+    }
   }
 
   async function handleSyncNow() {
