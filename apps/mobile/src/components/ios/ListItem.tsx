@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Pressable, StyleSheet, ViewStyle, AccessibilityRole, AccessibilityValue } from 'react-native';
+import { View, Pressable, StyleSheet } from 'react-native';
+import type { ViewStyle, AccessibilityRole, AccessibilityValue } from 'react-native';
 import { ChevronRight } from '@tamagui/lucide-icons';
 import { useHaptics } from '../../hooks/useHaptics';
 import { semanticColors, semanticHex } from '../../theme/semanticColors';

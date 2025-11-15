@@ -1,5 +1,6 @@
 import React, { type ReactNode } from 'react';
-import { Pressable, Text, StyleSheet, ViewStyle, TextStyle } from 'react-native';
+import { Pressable, Text, StyleSheet } from 'react-native';
+import type { ViewStyle, TextStyle } from 'react-native';
 import { useHaptics } from '../../hooks/useHaptics';
 import { semanticColors } from '../../theme/semanticColors';
 

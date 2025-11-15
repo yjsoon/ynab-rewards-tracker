@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, StyleSheet, ViewStyle, AccessibilityValue, type ColorValue } from 'react-native';
+import { View, StyleSheet } from 'react-native';
+import type { ViewStyle, AccessibilityValue, ColorValue } from 'react-native';
 import { semanticColors } from '../../theme/semanticColors';
 
 interface ProgressViewProps {

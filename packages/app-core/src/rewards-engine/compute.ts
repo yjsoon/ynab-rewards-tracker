@@ -14,11 +14,15 @@ import type {
   CreditCard,
   RewardCalculation,
   RewardRule,
+  TransactionWithRewards,
 } from '../storage/types';
 
 // The YNAB client interface that consuming apps must provide
 export interface YnabClientInterface {
-  getTransactions(budgetId: string, options?: { since_date?: string; signal?: AbortSignal }): Promise<any[]>;
+  getTransactions(
+    budgetId: string,
+    options?: { since_date?: string; signal?: AbortSignal }
+  ): Promise<TransactionWithRewards[]>;
 }
 
 export async function computeCurrentPeriod(
