@@ -24,6 +24,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -188,6 +196,8 @@ export default function SettingsPage() {
   const [cloudSyncAction, setCloudSyncAction] = useState<'idle' | 'generate' | 'upload' | 'download' | 'delete' | 'sync'>('idle');
   const [showAdvancedSync, setShowAdvancedSync] = useState(false);
   const [showGenerateDialog, setShowGenerateDialog] = useState(false);
+  const [justToggledRemember, setJustToggledRemember] = useState(false);
+  const [showEmptySyncWarningDialog, setShowEmptySyncWarningDialog] = useState(false);
   const hasInitializedPhraseRef = useRef(false);
   const orphanedMessageTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -222,6 +232,7 @@ export default function SettingsPage() {
   const cloudSyncLastSynced = settings.cloudSyncLastSyncedAt
     ? new Date(settings.cloudSyncLastSyncedAt).toLocaleString()
     : null;
+  const hasConfirmedCloudBackup = Boolean(settings.cloudSyncKeyId);
   const isGeneratingCloudSync = cloudSyncAction === 'generate';
   const isUploadingCloudSync = cloudSyncAction === 'upload';
   const isDownloadingCloudSync = cloudSyncAction === 'download';
@@ -586,14 +597,24 @@ export default function SettingsPage() {
     }
   }
 
+  function resetCloudSyncStatus() {
+    setCloudSyncError('');
+    setCloudSyncMessage('');
+  }
+
   async function handleCloudUpload() {
     if (!cloudSyncPhrase.trim()) {
       setCloudSyncError('Enter your sync code before uploading.');
       return;
     }
 
-    setCloudSyncError('');
-    setCloudSyncMessage('');
+    // Check for empty upload attempt
+    if (shouldWarnAboutEmptyUpload()) {
+      setShowEmptySyncWarningDialog(true);
+      return;
+    }
+
+    resetCloudSyncStatus();
     setCloudSyncAction('upload');
     try {
       await uploadWithPhrase(cloudSyncPhrase);
@@ -710,6 +731,8 @@ export default function SettingsPage() {
       });
       setCloudSyncPhrase(normalised);
       setCloudSyncMessage('Sync code saved to this device.');
+      setJustToggledRemember(true);
+      setShowAdvancedSync(true); // Ensure user can access "Show simple mode" button
     } else {
       // User wants to stop remembering
       updateSettings({
@@ -720,9 +743,44 @@ export default function SettingsPage() {
     }
   }
 
+  // Helper to check if uploading empty settings would overwrite cloud backup
+  function shouldWarnAboutEmptyUpload(): boolean {
+    try {
+      const exportedSettings = parseExportedSettings() as {
+        cards?: unknown;
+        rules?: unknown;
+      };
+
+      const hasNoCards = !Array.isArray(exportedSettings?.cards) || exportedSettings.cards.length === 0;
+      const hasNoRules = !Array.isArray(exportedSettings?.rules) || exportedSettings.rules.length === 0;
+
+      // Detect cloud backup via:
+      // 1. cloudSyncKeyId exists (uploaded before on this or another device)
+      // 2. OR user has a sync code but no keyId yet (likely entered code from another device)
+      const hasSyncKeyId = Boolean(settings.cloudSyncKeyId);
+      const hasCodeButNoKeyId = Boolean((storedMnemonic || cloudSyncPhrase).trim()) && !settings.cloudSyncKeyId;
+      const likelyHasCloudBackup = hasSyncKeyId || hasCodeButNoKeyId;
+
+      return hasNoCards && hasNoRules && likelyHasCloudBackup;
+    } catch (error) {
+      // If we can't parse settings, assume they're not empty to avoid blocking uploads
+      return false;
+    }
+  }
+
   async function handleSyncNow() {
-    setCloudSyncError('');
-    setCloudSyncMessage('');
+    resetCloudSyncStatus();
+
+    if (shouldWarnAboutEmptyUpload()) {
+      setShowEmptySyncWarningDialog(true);
+      return;
+    }
+
+    // Proceed with upload
+    await performSyncUpload();
+  }
+
+  async function performSyncUpload() {
     setCloudSyncAction('sync');
     try {
       const phraseToUse = storedMnemonic || cloudSyncPhrase;
@@ -741,6 +799,17 @@ export default function SettingsPage() {
     } finally {
       setCloudSyncAction('idle');
     }
+  }
+
+  async function handleDownloadInsteadOfUpload() {
+    setShowEmptySyncWarningDialog(false);
+    await handleCloudDownload();
+  }
+
+  async function handleUploadAnywayDespiteEmpty() {
+    setShowEmptySyncWarningDialog(false);
+    resetCloudSyncStatus();
+    await performSyncUpload();
   }
 
   // Fix #7: Less aggressive - keep sync history (keyId, lastSyncedAt)
@@ -1088,7 +1157,7 @@ export default function SettingsPage() {
         <CardContent>
           <div className="space-y-4">
             {/* Simple Mode: Code is remembered */}
-            {isCodeRemembered && !showAdvancedSync ? (
+            {isCodeRemembered && !showAdvancedSync && !justToggledRemember ? (
               <>
                 <div className="flex items-center justify-between rounded-lg border bg-muted/30 p-4">
                   <div className="flex items-center gap-3">
@@ -1252,7 +1321,10 @@ export default function SettingsPage() {
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={() => setShowAdvancedSync(false)}
+                      onClick={() => {
+                        setShowAdvancedSync(false);
+                        setJustToggledRemember(false);
+                      }}
                     >
                       <ChevronUp className="mr-2 h-3 w-3" aria-hidden="true" />
                       Show simple mode
@@ -1366,6 +1438,36 @@ export default function SettingsPage() {
         onConfirm={confirmClearOrphanedCards}
         onCancel={() => setShowClearOrphanedDialog(false)}
       />
+
+      {/* Empty Sync Warning Dialog - Custom 3-button variant */}
+      <Dialog open={showEmptySyncWarningDialog} onOpenChange={(open) => !open && setShowEmptySyncWarningDialog(false)}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Info className="h-5 w-5 text-primary" aria-hidden="true" />
+              Your local settings are empty
+            </DialogTitle>
+            <DialogDescription className="pt-2">
+              You have no cards or rules configured locally, but {hasConfirmedCloudBackup ? 'you have a cloud backup' : "there's likely a cloud backup"}{' '}
+              {cloudSyncLastSynced ? `from ${cloudSyncLastSynced}` : 'from another device'}. Uploading now would overwrite your cloud backup with empty settings.
+              <br /><br />
+              Would you like to download your settings from the cloud instead?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0 flex-col sm:flex-row">
+            <Button variant="outline" onClick={() => setShowEmptySyncWarningDialog(false)}>
+              Cancel
+            </Button>
+            <Button variant="outline" onClick={handleUploadAnywayDespiteEmpty}>
+              Upload Anyway
+            </Button>
+            <Button variant="default" onClick={handleDownloadInsteadOfUpload}>
+              <CloudDownload className="mr-2 h-4 w-4" aria-hidden="true" />
+              Download Instead
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       </div>
 
     </div>
