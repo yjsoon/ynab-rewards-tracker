@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import {
   cn,
@@ -210,8 +210,7 @@ describe('formatCurrencyParts', () => {
     const parts = formatCurrencyParts(-50, { currency: 'USD' });
     expect(Array.isArray(parts)).toBe(true);
     const hasMinusSign = parts.some(part => part.type === 'minusSign');
-    // Some locales use minusSign, others might format differently
-    expect(parts.length).toBeGreaterThan(0);
+    expect(hasMinusSign).toBe(true);
   });
 
   it('handles large numbers with group separators', () => {
