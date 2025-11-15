@@ -16,7 +16,7 @@ import type { CreditCard } from "@/lib/storage";
 import type { Transaction } from "@/types/transaction";
 
 const isExpansionMap = (value: unknown): value is Record<string, boolean> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
+  value !== undefined && typeof value === "object" && value !== null && !Array.isArray(value);
 
 interface CardSummaryCompactProps {
   card: CreditCard;
