@@ -232,6 +232,7 @@ export default function SettingsPage() {
   const cloudSyncLastSynced = settings.cloudSyncLastSyncedAt
     ? new Date(settings.cloudSyncLastSyncedAt).toLocaleString()
     : null;
+  const hasConfirmedCloudBackup = Boolean(settings.cloudSyncKeyId);
   const isGeneratingCloudSync = cloudSyncAction === 'generate';
   const isUploadingCloudSync = cloudSyncAction === 'upload';
   const isDownloadingCloudSync = cloudSyncAction === 'download';
@@ -596,6 +597,11 @@ export default function SettingsPage() {
     }
   }
 
+  function resetCloudSyncStatus() {
+    setCloudSyncError('');
+    setCloudSyncMessage('');
+  }
+
   async function handleCloudUpload() {
     if (!cloudSyncPhrase.trim()) {
       setCloudSyncError('Enter your sync code before uploading.');
@@ -608,8 +614,7 @@ export default function SettingsPage() {
       return;
     }
 
-    setCloudSyncError('');
-    setCloudSyncMessage('');
+    resetCloudSyncStatus();
     setCloudSyncAction('upload');
     try {
       await uploadWithPhrase(cloudSyncPhrase);
@@ -764,8 +769,7 @@ export default function SettingsPage() {
   }
 
   async function handleSyncNow() {
-    setCloudSyncError('');
-    setCloudSyncMessage('');
+    resetCloudSyncStatus();
 
     if (shouldWarnAboutEmptyUpload()) {
       setShowEmptySyncWarningDialog(true);
@@ -777,8 +781,6 @@ export default function SettingsPage() {
   }
 
   async function performSyncUpload() {
-    setCloudSyncError('');
-    setCloudSyncMessage('');
     setCloudSyncAction('sync');
     try {
       const phraseToUse = storedMnemonic || cloudSyncPhrase;
@@ -806,6 +808,7 @@ export default function SettingsPage() {
 
   async function handleUploadAnywayDespiteEmpty() {
     setShowEmptySyncWarningDialog(false);
+    resetCloudSyncStatus();
     await performSyncUpload();
   }
 
@@ -1445,7 +1448,7 @@ export default function SettingsPage() {
               Your local settings are empty
             </DialogTitle>
             <DialogDescription className="pt-2">
-              You have no cards or rules configured locally, but there's likely a cloud backup{' '}
+              You have no cards or rules configured locally, but {hasConfirmedCloudBackup ? 'you have a cloud backup' : "there's likely a cloud backup"}{' '}
               {cloudSyncLastSynced ? `from ${cloudSyncLastSynced}` : 'from another device'}. Uploading now would overwrite your cloud backup with empty settings.
               <br /><br />
               Would you like to download your settings from the cloud instead?
