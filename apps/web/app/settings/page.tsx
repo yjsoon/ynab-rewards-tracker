@@ -602,6 +602,12 @@ export default function SettingsPage() {
       return;
     }
 
+    // Check for empty upload attempt
+    if (shouldWarnAboutEmptyUpload()) {
+      setShowEmptySyncWarningDialog(true);
+      return;
+    }
+
     setCloudSyncError('');
     setCloudSyncMessage('');
     setCloudSyncAction('upload');
@@ -732,11 +738,8 @@ export default function SettingsPage() {
     }
   }
 
-  async function handleSyncNow() {
-    setCloudSyncError('');
-    setCloudSyncMessage('');
-
-    // Check if settings are essentially empty
+  // Helper to check if uploading empty settings would overwrite cloud backup
+  function shouldWarnAboutEmptyUpload(): boolean {
     const exportedSettings = parseExportedSettings();
     const hasNoCards = !exportedSettings || typeof exportedSettings !== 'object' ||
                       !('cards' in exportedSettings) ||
@@ -745,15 +748,21 @@ export default function SettingsPage() {
                       !('rules' in exportedSettings) ||
                       (Array.isArray(exportedSettings.rules) && exportedSettings.rules.length === 0);
 
-    // If settings are empty and there's likely a cloud backup, warn user
     // Detect cloud backup via:
     // 1. cloudSyncKeyId exists (uploaded before on this or another device)
     // 2. OR user has a sync code but no keyId yet (likely entered code from another device)
     const hasSyncKeyId = Boolean(settings.cloudSyncKeyId);
-    const hasCodeButNoKeyId = (storedMnemonic || cloudSyncPhrase.trim()) && !settings.cloudSyncKeyId;
+    const hasCodeButNoKeyId = Boolean(storedMnemonic || cloudSyncPhrase.trim()) && !settings.cloudSyncKeyId;
     const likelyHasCloudBackup = hasSyncKeyId || hasCodeButNoKeyId;
 
-    if (hasNoCards && hasNoRules && likelyHasCloudBackup) {
+    return hasNoCards && hasNoRules && likelyHasCloudBackup;
+  }
+
+  async function handleSyncNow() {
+    setCloudSyncError('');
+    setCloudSyncMessage('');
+
+    if (shouldWarnAboutEmptyUpload()) {
       setShowEmptySyncWarningDialog(true);
       return;
     }
@@ -1431,8 +1440,8 @@ export default function SettingsPage() {
               Your local settings are empty
             </DialogTitle>
             <DialogDescription className="pt-2">
-              You have no cards or rules configured locally, but there's a cloud backup from{' '}
-              {cloudSyncLastSynced}. Uploading now would overwrite your cloud backup with empty settings.
+              You have no cards or rules configured locally, but there's likely a cloud backup{' '}
+              {cloudSyncLastSynced ? `from ${cloudSyncLastSynced}` : 'from another device'}. Uploading now would overwrite your cloud backup with empty settings.
               <br /><br />
               Would you like to download your settings from the cloud instead?
             </DialogDescription>
