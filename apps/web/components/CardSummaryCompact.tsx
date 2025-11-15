@@ -15,6 +15,9 @@ import { storage } from "@/lib/storage";
 import type { CreditCard } from "@/lib/storage";
 import type { Transaction } from "@/types/transaction";
 
+const isExpansionMap = (value: unknown): value is Record<string, boolean> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
 interface CardSummaryCompactProps {
   card: CreditCard;
   pat?: string;
@@ -115,6 +118,28 @@ export function CardSummaryCompact({ card, pat, prefetchedTransactions, onHideCa
     };
   }, [card, transactions, period, settings]);
 
+  const summaryViewExpansionSetting = settings?.summaryViewSubcategoriesExpanded;
+
+  const handleToggleSubcategories = useCallback(() => {
+    const currentSetting = summaryViewExpansionSetting;
+    const currentValue = isExpansionMap(currentSetting)
+      ? currentSetting[card.id] ?? false
+      : Boolean(currentSetting);
+
+    const nextValue = !currentValue;
+    const nextSetting = isExpansionMap(currentSetting)
+      ? { ...currentSetting, [card.id]: nextValue }
+      : { [card.id]: nextValue };
+
+    updateSettings({
+      summaryViewSubcategoriesExpanded: nextSetting,
+    });
+  }, [summaryViewExpansionSetting, card.id, updateSettings]);
+
+  const isSubcategoryExpanded = isExpansionMap(summaryViewExpansionSetting)
+    ? summaryViewExpansionSetting[card.id] ?? false
+    : Boolean(summaryViewExpansionSetting);
+
   if (loading) {
     return (
       <div className="flex flex-col gap-2 opacity-60">
@@ -206,20 +231,16 @@ export function CardSummaryCompact({ card, pat, prefetchedTransactions, onHideCa
         )}
       </div>
 
-      {card.subcategoriesEnabled && subcategoryBreakdowns.length > 0 && (
-        <SubcategoryBreakdownCompact
-          breakdowns={subcategoryBreakdowns}
-          cardType={card.type}
-          currency={currency || '$'}
-          flagNames={flagNames}
-          isExpanded={settings?.summaryViewSubcategoriesExpanded ?? false}
-          onToggleExpanded={() => {
-            updateSettings({
-              summaryViewSubcategoriesExpanded: !(settings?.summaryViewSubcategoriesExpanded ?? false),
-            });
-          }}
-        />
-      )}
+        {card.subcategoriesEnabled && subcategoryBreakdowns.length > 0 && (
+          <SubcategoryBreakdownCompact
+            breakdowns={subcategoryBreakdowns}
+            cardType={card.type}
+            currency={currency || '$'}
+            flagNames={flagNames}
+            isExpanded={isSubcategoryExpanded}
+            onToggleExpanded={handleToggleSubcategories}
+          />
+        )}
 
       <div className="mt-auto flex flex-col gap-1.5">
         <div className="flex items-center justify-between text-xs text-muted-foreground">

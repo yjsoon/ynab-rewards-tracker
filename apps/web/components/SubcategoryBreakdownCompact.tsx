@@ -76,7 +76,7 @@ export function SubcategoryBreakdownCompact({
     <div className="space-y-1.5 rounded-md border border-border/60 bg-muted/5 p-2">
       {/* Header with toggle */}
       <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-muted-foreground">Subcategory rewards</p>
+        <p className="text-sm font-semibold text-muted-foreground">Subcategories</p>
         <Button
           variant="ghost"
           size="sm"

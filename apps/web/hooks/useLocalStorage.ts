@@ -28,6 +28,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   cloudSyncLastSyncedAt: undefined,
   cardOrdering: {},
   collapsedCardGroups: {},
+  summaryViewSubcategoriesExpanded: {},
   statementFormatter: {},
 };
 
