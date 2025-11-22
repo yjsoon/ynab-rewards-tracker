@@ -1,4 +1,4 @@
-import { redirect } from 'next/navigation';
+import { permanentRedirect } from 'next/navigation';
 
 type RulesRedirectProps = {
   searchParams: Record<string, string | string[] | undefined>;
@@ -25,5 +25,5 @@ export default function RulesRedirect({ searchParams }: RulesRedirectProps) {
   });
 
   const query = params.toString();
-  redirect(`/card-rules${query ? `?${query}` : ''}`);
+  permanentRedirect(`/card-rules${query ? `?${query}` : ''}`);
 }
