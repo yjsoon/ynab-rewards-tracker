@@ -15,6 +15,10 @@ import {
   isValidMnemonic,
   normaliseMnemonic,
 } from '@/lib/cloud-sync';
+import {
+  shouldWarnAboutEmptyUpload as checkEmptyUpload,
+  shouldWarnAboutOutdatedUpload as checkOutdatedUpload,
+} from '@/lib/cloud-sync/decision-helpers';
 import { YnabClient } from '@/lib/ynab-client';
 import type { CreditCard } from '@/lib/storage';
 import { validateYnabToken } from '@/lib/validation';
@@ -564,7 +568,22 @@ export default function SettingsPage() {
     const { ciphertext, iv } = await encryptJson(normalised, payload);
     const { updatedAt } = await uploadEncryptedSettings({ keyId, ciphertext, iv });
 
-    updateSettings({ cloudSyncKeyId: keyId, cloudSyncLastSyncedAt: updatedAt });
+    // Update settings with new keyId, timestamp, and mnemonic (if remember is enabled)
+    const settingsUpdate: {
+      cloudSyncKeyId: string;
+      cloudSyncLastSyncedAt: string;
+      cloudSyncMnemonic?: string;
+    } = {
+      cloudSyncKeyId: keyId,
+      cloudSyncLastSyncedAt: updatedAt,
+    };
+
+    // If remember is enabled, update the stored mnemonic to keep auto-backup in sync
+    if (settings.rememberCloudSyncCode) {
+      settingsUpdate.cloudSyncMnemonic = normalised;
+    }
+
+    updateSettings(settingsUpdate);
     setCloudSyncPhrase(normalised);
     setGeneratedCloudPhrase(options.generated ? normalised : null);
     setCloudSyncMessage('Settings uploaded to Cloudflare KV. Copy your sync code to keep it safe.');
@@ -752,21 +771,19 @@ export default function SettingsPage() {
   function shouldWarnAboutEmptyUpload(): boolean {
     try {
       const exportedSettings = parseExportedSettings() as {
-        cards?: unknown;
-        rules?: unknown;
+        cards?: unknown[];
+        rules?: unknown[];
       };
 
-      const hasNoCards = !Array.isArray(exportedSettings?.cards) || exportedSettings.cards.length === 0;
-      const hasNoRules = !Array.isArray(exportedSettings?.rules) || exportedSettings.rules.length === 0;
-
-      // Detect cloud backup via:
-      // 1. cloudSyncKeyId exists (uploaded before on this or another device)
-      // 2. OR user has a sync code but no keyId yet (likely entered code from another device)
       const hasSyncKeyId = Boolean(settings.cloudSyncKeyId);
       const hasCodeButNoKeyId = Boolean((storedMnemonic || cloudSyncPhrase).trim()) && !settings.cloudSyncKeyId;
-      const likelyHasCloudBackup = hasSyncKeyId || hasCodeButNoKeyId;
 
-      return hasNoCards && hasNoRules && likelyHasCloudBackup;
+      return checkEmptyUpload({
+        cards: exportedSettings?.cards || [],
+        rules: exportedSettings?.rules || [],
+        hasCloudKeyId: hasSyncKeyId,
+        hasEnteredCode: hasCodeButNoKeyId,
+      });
     } catch (error) {
       // If we can't parse settings, assume they're not empty to avoid blocking uploads
       return false;
@@ -791,25 +808,13 @@ export default function SettingsPage() {
       // Store cloud timestamp for dialog display
       setCloudTimestamp(stored.updatedAt);
 
-      // Case 1: No local timestamp (new device or never synced with this code)
-      // Cloud has data but we don't know if local is fresh - warn to prevent overwrite
-      if (!settings.cloudSyncLastSyncedAt) {
-        return true; // Unknown freshness - always warn
-      }
-
-      // Case 2: Local timestamp exists, but verify it's for the same keyId
-      // If keyIds don't match, we can't trust the timestamp comparison
-      if (settings.cloudSyncKeyId !== keyId) {
-        return true; // Different code - warn to prevent overwrite
-      }
-
-      // Case 3: Same keyId, compare timestamps
-      const cloudDate = new Date(stored.updatedAt);
-      const localDate = new Date(settings.cloudSyncLastSyncedAt);
-
-      // Warn if cloud is newer than local (with 1-minute tolerance for clock skew)
-      const timeDiff = cloudDate.getTime() - localDate.getTime();
-      return timeDiff > 60000; // 60 seconds tolerance
+      // Use extracted helper for decision logic
+      return checkOutdatedUpload({
+        cloudUpdatedAt: stored.updatedAt,
+        localLastSyncedAt: settings.cloudSyncLastSyncedAt,
+        localKeyId: settings.cloudSyncKeyId,
+        phraseKeyId: keyId,
+      });
     } catch (error) {
       // If we can't check, don't block the upload
       return false;
