@@ -24,8 +24,11 @@ export function calculateCardPeriod(card: CreditCard, targetDate: Date = new Dat
 
   // Check for promotional period override first
   if (card.promotionalPeriod) {
-    const promoStart = new Date(card.promotionalPeriod.startDate);
-    const promoEnd = new Date(card.promotionalPeriod.endDate);
+    // Parse dates as local time to avoid UTC timezone shifts
+    const [startYear, startMonth, startDay] = card.promotionalPeriod.startDate.split('-').map(Number);
+    const [endYear, endMonth, endDay] = card.promotionalPeriod.endDate.split('-').map(Number);
+    const promoStart = new Date(startYear, startMonth - 1, startDay);
+    const promoEnd = new Date(endYear, endMonth - 1, endDay);
 
     // If current date is within promotional period, return it
     if (reference >= promoStart && reference <= promoEnd) {

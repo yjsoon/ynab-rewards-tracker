@@ -10,7 +10,6 @@ import { CurrencyAmount } from "@/components/CurrencyAmount";
 import { SpendingProgressBar } from "@/components/SpendingProgressBar";
 import { SubcategoryBreakdownCompact } from "@/components/SubcategoryBreakdownCompact";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { RefreshBadge } from "@/components/RefreshBadge";
 import { storage } from "@/lib/storage";
