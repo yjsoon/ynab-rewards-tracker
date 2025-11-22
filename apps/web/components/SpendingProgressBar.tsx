@@ -60,9 +60,8 @@ export function SpendingProgressBar({
   // Get marker positions for min/max thresholds
   const getMarkerPosition = (threshold: number) => {
     if (!hasMaximum) {
-      // If no maximum, scale based on higher of threshold or totalSpend
-      const scale = Math.max(threshold, totalSpend) * 1.2;
-      return (threshold / scale) * 100;
+      // When no maximum, bar is scaled to minimum, so minimum marker is at 100%
+      return 100;
     }
     // Scale based on maximum
     return Math.min(100, (threshold / maximumSpend) * 100);
@@ -153,7 +152,10 @@ export function SpendingProgressBar({
         {hasMinimum && minimumPosition !== null && (
           <div
             className="absolute top-0 h-3 w-0.5 bg-foreground/40"
-            style={{ left: `${minimumPosition}%` }}
+            style={{
+              left: `${minimumPosition}%`,
+              transform: minimumPosition === 100 ? 'translateX(-100%)' : undefined
+            }}
             title={`Minimum: ${formatDollars(minimumSpend, { currency })}`}
           />
         )}
@@ -162,7 +164,10 @@ export function SpendingProgressBar({
         {hasMaximum && maximumPosition !== null && (
           <div
             className="absolute top-0 h-3 w-0.5 bg-red-600 dark:bg-red-500"
-            style={{ left: `${maximumPosition}%` }}
+            style={{
+              left: `${maximumPosition}%`,
+              transform: maximumPosition === 100 ? 'translateX(-100%)' : undefined
+            }}
             title={`Maximum: ${formatDollars(maximumSpend, { currency })}`}
           />
         )}
