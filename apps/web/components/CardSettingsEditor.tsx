@@ -377,9 +377,6 @@ export function CardSettingsEditor({
               <h3 className="text-base font-semibold leading-tight">
                 {cardName}
               </h3>
-              <Badge variant="secondary" className="capitalize">
-                {cardType === 'cashback' ? 'Cashback' : 'Miles'}
-              </Badge>
               {isChanged && (
                 <Badge variant="outline" className="border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-300">
                   Modified
