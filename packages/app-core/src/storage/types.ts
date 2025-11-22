@@ -83,6 +83,11 @@ export interface CreditCard {
     type: 'calendar' | 'billing';
     dayOfMonth?: number;
   };
+  promotionalPeriod?: {
+    startDate?: string;  // ISO 8601 date (YYYY-MM-DD), optional - defaults to current period start
+    endDate: string;     // ISO 8601 date (YYYY-MM-DD)
+    description?: string; // Optional description (e.g., "5x groceries Q4 2024")
+  };
   featured: boolean;
   earningRate?: number;
   earningBlockSize?: number | null;

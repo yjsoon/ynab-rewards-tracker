@@ -12,6 +12,7 @@ import {
   Loader2,
   Percent,
   Settings2,
+  Sparkles,
   TrendingUp,
 } from "lucide-react";
 import {
@@ -549,15 +550,27 @@ function SortableDashboardCard({ card, viewMode, pat, prefetchedTransactions, on
         </div>
 
         <CardHeader className="pb-3">
-          <CardTitle
-            title={card.name}
-            className={cn(
-              viewMode === "detailed" ? "text-lg" : "text-[0.95rem] sm:text-base",
-              "pr-12 truncate"
+          <div className="flex items-center gap-2 pr-12">
+            <CardTitle
+              title={card.name}
+              className={cn(
+                viewMode === "detailed" ? "text-lg" : "text-[0.95rem] sm:text-base",
+                "truncate"
+              )}
+            >
+              {card.name}
+            </CardTitle>
+            {card.promotionalPeriod && (
+              <Badge
+                variant="secondary"
+                className="shrink-0 h-5 px-1.5 gap-1 bg-purple-100 text-purple-700 hover:bg-purple-100 dark:bg-purple-950/50 dark:text-purple-300"
+                aria-label={`Promotional period${card.promotionalPeriod.startDate ? ` from ${card.promotionalPeriod.startDate}` : ''} until ${card.promotionalPeriod.endDate}`}
+              >
+                <Sparkles className="h-3 w-3" aria-hidden="true" />
+                <span className="text-[0.65rem] font-medium">Promo</span>
+              </Badge>
             )}
-          >
-            {card.name}
-          </CardTitle>
+          </div>
         </CardHeader>
         <CardContent className="flex-1 flex flex-col">
           {viewMode === "detailed" ? (

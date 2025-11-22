@@ -16,6 +16,7 @@ import {
   Target,
   ShieldCheck,
   CalendarClock,
+  Sparkles,
   Settings2
 } from 'lucide-react';
 import type { CreditCard } from '@/lib/storage';
@@ -34,6 +35,10 @@ export interface CardEditState {
   maximumSpend?: number | null;
   billingCycleType?: 'calendar' | 'billing';
   billingCycleDay?: number;
+  promotionalPeriodEnabled?: boolean;
+  promotionalPeriodStart?: string;
+  promotionalPeriodEnd?: string;
+  promotionalPeriodDescription?: string;
   featured?: boolean;
   name?: string;
   issuer?: string;
@@ -138,6 +143,11 @@ export function computeCardFieldDiff(
   const stateSubcategories = cloneSubcategories(state.subcategories ?? card.subcategories);
   const subcategoriesChanged = serialiseSubcategories(baselineSubcategories) !== serialiseSubcategories(stateSubcategories);
 
+  const promotionalPeriodEnabled = state.promotionalPeriodEnabled ?? Boolean(card.promotionalPeriod);
+  const promotionalPeriodStart = state.promotionalPeriodStart ?? card.promotionalPeriod?.startDate ?? '';
+  const promotionalPeriodEnd = state.promotionalPeriodEnd ?? card.promotionalPeriod?.endDate ?? '';
+  const promotionalPeriodDescription = state.promotionalPeriodDescription ?? card.promotionalPeriod?.description ?? '';
+
   return {
     name: cardName !== card.name,
     issuer: issuerName !== (card.issuer ?? ''),
@@ -151,6 +161,11 @@ export function computeCardFieldDiff(
     billingCycle:
       billingCycleType !== (card.billingCycle?.type ?? 'calendar') ||
       billingCycleDay !== (card.billingCycle?.dayOfMonth ?? 1),
+    promotionalPeriod:
+      promotionalPeriodEnabled !== Boolean(card.promotionalPeriod) ||
+      promotionalPeriodStart !== (card.promotionalPeriod?.startDate ?? '') ||
+      promotionalPeriodEnd !== (card.promotionalPeriod?.endDate ?? '') ||
+      promotionalPeriodDescription !== (card.promotionalPeriod?.description ?? ''),
     subcategoriesEnabled: subcategoriesEnabled !== Boolean(card.subcategoriesEnabled),
     subcategories: subcategoriesChanged,
   } as const;
@@ -288,6 +303,10 @@ export function CardSettingsEditor({
   const maximumSpend = state.maximumSpend ?? card.maximumSpend ?? null;
   const billingCycleType = state.billingCycleType ?? card.billingCycle?.type ?? 'calendar';
   const billingCycleDay = state.billingCycleDay ?? card.billingCycle?.dayOfMonth ?? 1;
+  const promotionalPeriodEnabled = state.promotionalPeriodEnabled ?? Boolean(card.promotionalPeriod);
+  const promotionalPeriodStart = state.promotionalPeriodStart ?? card.promotionalPeriod?.startDate ?? '';
+  const promotionalPeriodEnd = state.promotionalPeriodEnd ?? card.promotionalPeriod?.endDate ?? '';
+  const promotionalPeriodDescription = state.promotionalPeriodDescription ?? card.promotionalPeriod?.description ?? '';
   const isFeatured = state.featured ?? card.featured ?? true;
   const subcategoriesEnabled = state.subcategoriesEnabled ?? card.subcategoriesEnabled ?? false;
   const subcategoryDrafts = useMemo(
@@ -736,6 +755,75 @@ export function CardSettingsEditor({
                   className="h-9"
                 />
               </div>
+            )}
+          </div>
+        </SettingCapsule>
+
+        <SettingCapsule
+          label="Promotional period"
+          description="Override normal billing cycle with a fixed period"
+          value={
+            promotionalPeriodEnabled && promotionalPeriodEnd
+              ? promotionalPeriodStart
+                ? `${promotionalPeriodStart} to ${promotionalPeriodEnd}`
+                : `Until ${promotionalPeriodEnd}`
+              : 'Not active'
+          }
+          icon={<Sparkles className="h-4 w-4 text-muted-foreground" />}
+          isDirty={fieldDirty.promotionalPeriod}
+        >
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-medium">Enable promotional period</Label>
+              <Switch
+                checked={promotionalPeriodEnabled}
+                onCheckedChange={(checked) => {
+                  onFieldChange('promotionalPeriodEnabled', checked);
+                  if (!checked) {
+                    onFieldChange('promotionalPeriodStart', '');
+                    onFieldChange('promotionalPeriodEnd', '');
+                    onFieldChange('promotionalPeriodDescription', '');
+                  }
+                }}
+              />
+            </div>
+            {promotionalPeriodEnabled && (
+              <>
+                <div className="space-y-2">
+                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Start date (optional)
+                  </Label>
+                  <Input
+                    type="date"
+                    value={promotionalPeriodStart}
+                    onChange={(e) => onFieldChange('promotionalPeriodStart', e.target.value)}
+                    className="h-9"
+                  />
+                  <p className="text-xs text-muted-foreground">Leave blank to start from current billing cycle</p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">End date *</Label>
+                  <Input
+                    type="date"
+                    value={promotionalPeriodEnd}
+                    onChange={(e) => onFieldChange('promotionalPeriodEnd', e.target.value)}
+                    className="h-9"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Description (optional)
+                  </Label>
+                  <Input
+                    type="text"
+                    value={promotionalPeriodDescription}
+                    onChange={(e) => onFieldChange('promotionalPeriodDescription', e.target.value)}
+                    placeholder="e.g., 5x groceries Q4 2024"
+                    className="h-9"
+                  />
+                </div>
+              </>
             )}
           </div>
         </SettingCapsule>

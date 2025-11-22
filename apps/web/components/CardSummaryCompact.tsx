@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Sparkles } from "lucide-react";
 import { SimpleRewardsCalculator } from "@/lib/rewards-engine";
 import { YnabClient } from "@/lib/ynab-client";
 import { useSelectedBudget, useSettings } from "@/hooks/useLocalStorage";
@@ -241,6 +242,24 @@ export function CardSummaryCompact({ card, pat, prefetchedTransactions, onHideCa
             onToggleExpanded={handleToggleSubcategories}
           />
         )}
+
+      {card.promotionalPeriod && (
+        <div className="rounded-lg border border-purple-200 bg-purple-50/50 dark:border-purple-800/50 dark:bg-purple-950/20 px-3 py-2">
+          <div className="flex items-center gap-2 text-xs font-medium text-purple-900 dark:text-purple-100">
+            <Sparkles className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+            <span>
+              {card.promotionalPeriod.startDate
+                ? `${card.promotionalPeriod.startDate} to ${card.promotionalPeriod.endDate}`
+                : `Until ${card.promotionalPeriod.endDate}`}
+            </span>
+          </div>
+          {card.promotionalPeriod.description && (
+            <div className="mt-1 text-xs text-purple-600/80 dark:text-purple-400/80">
+              {card.promotionalPeriod.description}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="mt-auto flex flex-col gap-1.5">
         <div className="flex items-center justify-between text-xs text-muted-foreground">
