@@ -194,10 +194,10 @@ export default function SettingsPage() {
   const [cloudSyncMessage, setCloudSyncMessage] = useState('');
   const [cloudSyncError, setCloudSyncError] = useState('');
   const [cloudSyncAction, setCloudSyncAction] = useState<'idle' | 'generate' | 'upload' | 'download' | 'delete' | 'sync'>('idle');
-  const [showAdvancedSync, setShowAdvancedSync] = useState(false);
   const [showGenerateDialog, setShowGenerateDialog] = useState(false);
-  const [justToggledRemember, setJustToggledRemember] = useState(false);
   const [showEmptySyncWarningDialog, setShowEmptySyncWarningDialog] = useState(false);
+  const [showOutdatedUploadDialog, setShowOutdatedUploadDialog] = useState(false);
+  const [cloudTimestamp, setCloudTimestamp] = useState<string | null>(null);
   const hasInitializedPhraseRef = useRef(false);
   const orphanedMessageTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -237,7 +237,6 @@ export default function SettingsPage() {
   const isUploadingCloudSync = cloudSyncAction === 'upload';
   const isDownloadingCloudSync = cloudSyncAction === 'download';
   const isDeletingCloudSync = cloudSyncAction === 'delete';
-  const isSyncingNow = cloudSyncAction === 'sync';
   const isCodeRemembered = settings.rememberCloudSyncCode && Boolean(settings.cloudSyncMnemonic);
   const storedMnemonic = settings.cloudSyncMnemonic || '';
 
@@ -614,6 +613,13 @@ export default function SettingsPage() {
       return;
     }
 
+    // Check if we're uploading outdated data over newer cloud data
+    const isOutdated = await shouldWarnAboutOutdatedUpload(cloudSyncPhrase);
+    if (isOutdated) {
+      setShowOutdatedUploadDialog(true);
+      return;
+    }
+
     resetCloudSyncStatus();
     setCloudSyncAction('upload');
     try {
@@ -731,8 +737,6 @@ export default function SettingsPage() {
       });
       setCloudSyncPhrase(normalised);
       setCloudSyncMessage('Sync code saved to this device.');
-      setJustToggledRemember(true);
-      setShowAdvancedSync(true); // Ensure user can access "Show simple mode" button
     } else {
       // User wants to stop remembering
       updateSettings({
@@ -768,38 +772,41 @@ export default function SettingsPage() {
     }
   }
 
-  async function handleSyncNow() {
-    resetCloudSyncStatus();
-
-    if (shouldWarnAboutEmptyUpload()) {
-      setShowEmptySyncWarningDialog(true);
-      return;
-    }
-
-    // Proceed with upload
-    await performSyncUpload();
-  }
-
-  async function performSyncUpload() {
-    setCloudSyncAction('sync');
+  // Helper to check if uploading would overwrite newer cloud data
+  async function shouldWarnAboutOutdatedUpload(phrase: string): Promise<boolean> {
     try {
-      const phraseToUse = storedMnemonic || cloudSyncPhrase;
-      if (!phraseToUse.trim()) {
-        throw new Error('No sync code available.');
+      const normalised = normaliseMnemonic(phrase);
+      if (!isValidMnemonic(normalised)) {
+        return false;
       }
-      await uploadWithPhrase(phraseToUse);
 
-      // If code is remembered, save the potentially normalized version
-      if (settings.rememberCloudSyncCode) {
-        const normalised = normaliseMnemonic(phraseToUse);
-        updateSettings({ cloudSyncMnemonic: normalised });
+      const keyId = await computeKeyId(normalised);
+      const stored = await fetchEncryptedSettings(keyId);
+
+      if (!stored || !stored.updatedAt) {
+        return false; // No cloud backup or no timestamp
       }
+
+      // Store cloud timestamp for dialog display
+      setCloudTimestamp(stored.updatedAt);
+
+      // If we have a local sync timestamp, compare it
+      if (settings.cloudSyncLastSyncedAt) {
+        const cloudDate = new Date(stored.updatedAt);
+        const localDate = new Date(settings.cloudSyncLastSyncedAt);
+
+        // Warn if cloud is newer than local (with 1-minute tolerance for clock skew)
+        const timeDiff = cloudDate.getTime() - localDate.getTime();
+        return timeDiff > 60000; // 60 seconds tolerance
+      }
+
+      return false;
     } catch (error) {
-      setCloudSyncError(getErrorMessage(error));
-    } finally {
-      setCloudSyncAction('idle');
+      // If we can't check, don't block the upload
+      return false;
     }
   }
+
 
   async function handleDownloadInsteadOfUpload() {
     setShowEmptySyncWarningDialog(false);
@@ -809,7 +816,32 @@ export default function SettingsPage() {
   async function handleUploadAnywayDespiteEmpty() {
     setShowEmptySyncWarningDialog(false);
     resetCloudSyncStatus();
-    await performSyncUpload();
+    setCloudSyncAction('upload');
+    try {
+      await uploadWithPhrase(cloudSyncPhrase);
+    } catch (error) {
+      setCloudSyncError(getErrorMessage(error));
+    } finally {
+      setCloudSyncAction('idle');
+    }
+  }
+
+  async function handleDownloadInsteadOfOutdated() {
+    setShowOutdatedUploadDialog(false);
+    await handleCloudDownload();
+  }
+
+  async function handleUploadAnywayDespiteOutdated() {
+    setShowOutdatedUploadDialog(false);
+    resetCloudSyncStatus();
+    setCloudSyncAction('upload');
+    try {
+      await uploadWithPhrase(cloudSyncPhrase);
+    } catch (error) {
+      setCloudSyncError(getErrorMessage(error));
+    } finally {
+      setCloudSyncAction('idle');
+    }
   }
 
   // Fix #7: Less aggressive - keep sync history (keyId, lastSyncedAt)
@@ -1156,9 +1188,9 @@ export default function SettingsPage() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {/* Simple Mode: Code is remembered */}
-            {isCodeRemembered && !showAdvancedSync && !justToggledRemember ? (
-              <>
+            {/* Manual Mode - Always show full controls */}
+            <>
+              {isCodeRemembered && (
                 <div className="flex items-center justify-between rounded-lg border bg-muted/30 p-4">
                   <div className="flex items-center gap-3">
                     <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
@@ -1179,26 +1211,6 @@ export default function SettingsPage() {
                   </div>
                   <Button
                     type="button"
-                    onClick={handleSyncNow}
-                    disabled={isCloudSyncBusy}
-                  >
-                    <Cloud className="mr-2 h-4 w-4" aria-hidden="true" />
-                    {isSyncingNow ? 'Syncing…' : 'Sync Now'}
-                  </Button>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowAdvancedSync(true)}
-                  >
-                    <ChevronDown className="mr-2 h-3 w-3" aria-hidden="true" />
-                    Advanced options
-                  </Button>
-                  <Button
-                    type="button"
                     variant="ghost"
                     size="sm"
                     onClick={handleForgetCode}
@@ -1208,10 +1220,9 @@ export default function SettingsPage() {
                     Forget sync code
                   </Button>
                 </div>
-              </>
-            ) : (
-              <>
-                {/* Advanced/Manual Mode */}
+              )}
+
+              {/* Manual Controls */}
                 {generatedCloudPhrase && (
                   <div className="rounded-md border bg-muted/30 p-4">
                     <div className="flex items-center justify-between gap-2">
@@ -1279,7 +1290,7 @@ export default function SettingsPage() {
                 <div className="flex flex-wrap gap-2">
                   <Button
                     type="button"
-                    variant={settings.cloudSyncKeyId ? "outline" : "default"}
+                    variant="outline"
                     onClick={handleGenerateCloudSync}
                     disabled={isCloudSyncBusy}
                   >
@@ -1288,7 +1299,7 @@ export default function SettingsPage() {
                   </Button>
                   <Button
                     type="button"
-                    variant={settings.cloudSyncKeyId ? "default" : "outline"}
+                    variant="outline"
                     onClick={handleCloudUpload}
                     disabled={isCloudSyncBusy || !cloudSyncPhrase.trim()}
                   >
@@ -1315,30 +1326,12 @@ export default function SettingsPage() {
                   </Button>
                 </div>
 
-                {isCodeRemembered && showAdvancedSync && (
-                  <div className="flex justify-start">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setShowAdvancedSync(false);
-                        setJustToggledRemember(false);
-                      }}
-                    >
-                      <ChevronUp className="mr-2 h-3 w-3" aria-hidden="true" />
-                      Show simple mode
-                    </Button>
-                  </div>
-                )}
-
                 {cloudSyncLastSynced && (
                   <p className="text-xs text-muted-foreground">
                     Last synced: {cloudSyncLastSynced}
                   </p>
                 )}
               </>
-            )}
 
             {cloudSyncMessage && (
               <Alert>
@@ -1462,6 +1455,36 @@ export default function SettingsPage() {
               Upload Anyway
             </Button>
             <Button variant="default" onClick={handleDownloadInsteadOfUpload}>
+              <CloudDownload className="mr-2 h-4 w-4" aria-hidden="true" />
+              Download Instead
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Outdated Upload Warning Dialog - Warn when cloud is newer */}
+      <Dialog open={showOutdatedUploadDialog} onOpenChange={(open) => !open && setShowOutdatedUploadDialog(false)}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-amber-600" aria-hidden="true" />
+              Cloud backup is newer
+            </DialogTitle>
+            <DialogDescription className="pt-2">
+              The cloud backup was updated {cloudTimestamp ? `at ${new Date(cloudTimestamp).toLocaleString()}` : 'more recently'}, which is newer than your local data
+              {settings.cloudSyncLastSyncedAt ? ` (last synced ${new Date(settings.cloudSyncLastSyncedAt).toLocaleString()})` : ''}.
+              <br /><br />
+              Uploading now would overwrite the newer cloud data with your older local settings. Would you like to download the newer data instead?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0 flex-col sm:flex-row">
+            <Button variant="outline" onClick={() => setShowOutdatedUploadDialog(false)}>
+              Cancel
+            </Button>
+            <Button variant="outline" onClick={handleUploadAnywayDespiteOutdated}>
+              Upload Anyway
+            </Button>
+            <Button variant="default" onClick={handleDownloadInsteadOfOutdated}>
               <CloudDownload className="mr-2 h-4 w-4" aria-hidden="true" />
               Download Instead
             </Button>
