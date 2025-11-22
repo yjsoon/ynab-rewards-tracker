@@ -309,7 +309,7 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
                     const rewardValue = typeof subcategory.rewardValue === 'number' ? subcategory.rewardValue : 0;
                     const rateLabel = card.type === 'cashback'
                       ? `${rewardValue.toFixed(2)}% cashback`
-                      : `${rewardValue.toFixed(2)} miles per dollar`;
+                      : `${Number.isInteger(rewardValue) ? rewardValue : rewardValue.toFixed(2)} miles per dollar`;
                     const minLabel = typeof subcategory.minimumSpend === 'number'
                       ? subcategory.minimumSpend === 0
                         ? 'No minimum'

@@ -400,7 +400,7 @@ export function CardSettingsEditor({
             <span className="block text-xl font-semibold text-primary">
               {cardType === 'cashback'
                 ? `${earningRate.toFixed(2)}%`
-                : `${earningRate.toFixed(2)} miles/$1`}
+                : `${Number.isInteger(earningRate) ? earningRate : earningRate.toFixed(2)} miles/$1`}
             </span>
           </div>
           <div
@@ -418,8 +418,9 @@ export function CardSettingsEditor({
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-3">
-        {showNameAndIssuer && (
+      {/* Card Identity - shown conditionally */}
+      {showNameAndIssuer && (
+        <div className="mt-4">
           <SettingCapsule
             label="Card identity"
             description="Name, issuer and reward type"
@@ -463,370 +464,388 @@ export function CardSettingsEditor({
               )}
             </div>
           </SettingCapsule>
-        )}
+        </div>
+      )}
 
-        {!showNameAndIssuer && showCardType && (
+      {/* Rewards Configuration */}
+      <div className="mt-6 space-y-3">
+        <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Rewards Configuration</h4>
+        <div className="flex flex-wrap gap-3">
+          {!showNameAndIssuer && showCardType && (
+            <SettingCapsule
+              label="Reward type"
+              description="Switch between cashback or miles"
+              value={cardType === 'cashback' ? 'Cashback' : 'Miles / Points'}
+              icon={<Settings2 className="h-4 w-4 text-muted-foreground" />}
+              isDirty={fieldDirty.type}
+            >
+              <div className="space-y-1.5">
+                <Label className="text-xs uppercase tracking-wide text-muted-foreground">Reward type</Label>
+                <Select
+                  value={cardType}
+                  onValueChange={(value) => onFieldChange('type', value as 'cashback' | 'miles')}
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cashback">Cashback</SelectItem>
+                    <SelectItem value="miles">Miles / Points</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </SettingCapsule>
+          )}
+
           <SettingCapsule
-            label="Reward type"
-            description="Switch between cashback or miles"
-            value={cardType === 'cashback' ? 'Cashback' : 'Miles / Points'}
-            icon={<Settings2 className="h-4 w-4 text-muted-foreground" />}
-            isDirty={fieldDirty.type}
+            label={cardType === 'cashback' ? 'Cashback rate' : 'Miles rate'}
+            description={cardType === 'cashback' ? 'Percentage earned on spend' : 'Miles earned per dollar'}
+            value={cardType === 'cashback'
+              ? `${earningRate.toFixed(2)}%`
+              : `${Number.isInteger(earningRate) ? earningRate : earningRate.toFixed(2)} miles/$1`}
+            icon={<Percent className="h-4 w-4 text-muted-foreground" />}
+            isDirty={fieldDirty.earningRate}
           >
-            <div className="space-y-1.5">
-              <Label className="text-xs uppercase tracking-wide text-muted-foreground">Reward type</Label>
+            <div className="space-y-2">
+              <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                {cardType === 'cashback' ? 'Cashback percentage' : 'Miles per dollar'}
+              </Label>
+              <Input
+                type="number"
+                value={earningRate}
+                onChange={(e) => onFieldChange('earningRate', parseFloat(e.target.value) || 0)}
+                step="0.1"
+                min="0"
+                max="100"
+                className="h-9"
+              />
+            </div>
+          </SettingCapsule>
+
+          <SettingCapsule
+            label="Earning method"
+            description={earningBlockSize ? 'Earning in fixed blocks' : 'Earn on every dollar'}
+            value={earningBlockSize ? `$${earningBlockSize} blocks` : 'Exact amount'}
+            icon={<Layers className="h-4 w-4 text-muted-foreground" />}
+            isDirty={fieldDirty.earningBlockSize}
+          >
+            <div className="space-y-3">
               <Select
-                value={cardType}
-                onValueChange={(value) => onFieldChange('type', value as 'cashback' | 'miles')}
+                value={earningBlockSize && earningBlockSize > 0 ? 'blocks' : 'exact'}
+                onValueChange={(value) => {
+                  if (value === 'exact') {
+                    if (earningBlockSize && earningBlockSize > 0) {
+                      setBlockSizeSnapshot(earningBlockSize);
+                    }
+                    onFieldChange('earningBlockSize', null);
+                  } else {
+                    const nextSize = blockSizeSnapshot && blockSizeSnapshot > 0 ? blockSizeSnapshot : 1;
+                    onFieldChange('earningBlockSize', nextSize);
+                  }
+                }}
               >
                 <SelectTrigger className="h-9">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="cashback">Cashback</SelectItem>
-                  <SelectItem value="miles">Miles / Points</SelectItem>
+                  <SelectItem value="exact">Exact amount (down to the penny)</SelectItem>
+                  <SelectItem value="blocks">Fixed dollar blocks</SelectItem>
                 </SelectContent>
               </Select>
+              {earningBlockSize && earningBlockSize > 0 && (
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">Block size</Label>
+                  <div className="relative flex-1">
+                    <DollarSign className="absolute left-3 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      type="number"
+                      value={earningBlockSize}
+                      onChange={(e) => {
+                        const next = parseFloat(e.target.value);
+                        if (Number.isFinite(next) && next > 0) {
+                          setBlockSizeSnapshot(next);
+                          onFieldChange('earningBlockSize', next);
+                        } else {
+                          setBlockSizeSnapshot(1);
+                          onFieldChange('earningBlockSize', 1);
+                        }
+                      }}
+                      min="1"
+                      max="100"
+                      step="1"
+                      className="h-9 pl-8"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           </SettingCapsule>
-        )}
+        </div>
+      </div>
 
-        <SettingCapsule
-          label={cardType === 'cashback' ? 'Cashback rate' : 'Miles rate'}
-          description={cardType === 'cashback' ? 'Percentage earned on spend' : 'Miles earned per dollar'}
-          value={cardType === 'cashback'
-            ? `${earningRate.toFixed(2)}%`
-            : `${earningRate.toFixed(2)} miles/$1`}
-          icon={<Percent className="h-4 w-4 text-muted-foreground" />}
-          isDirty={fieldDirty.earningRate}
-        >
-          <div className="space-y-2">
-            <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-              {cardType === 'cashback' ? 'Cashback percentage' : 'Miles per dollar'}
-            </Label>
-            <Input
-              type="number"
-              value={earningRate}
-              onChange={(e) => onFieldChange('earningRate', parseFloat(e.target.value) || 0)}
-              step="0.1"
-              min="0"
-              max="100"
-              className="h-9"
-            />
-          </div>
-        </SettingCapsule>
-
-        <SettingCapsule
-          label="Earning method"
-          description={earningBlockSize ? 'Earning in fixed blocks' : 'Earn on every dollar'}
-          value={earningBlockSize ? `$${earningBlockSize} blocks` : 'Exact amount'}
-          icon={<Layers className="h-4 w-4 text-muted-foreground" />}
-          isDirty={fieldDirty.earningBlockSize}
-        >
-          <div className="space-y-3">
-            <Select
-              value={earningBlockSize && earningBlockSize > 0 ? 'blocks' : 'exact'}
-              onValueChange={(value) => {
-                if (value === 'exact') {
-                  if (earningBlockSize && earningBlockSize > 0) {
-                    setBlockSizeSnapshot(earningBlockSize);
+      {/* Spend Limits */}
+      <div className="mt-6 space-y-3">
+        <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Spend Limits</h4>
+        <div className="flex flex-wrap gap-3">
+          <SettingCapsule
+            label="Minimum spend"
+            description="Set the spend required before rewards unlock"
+            value={formatMinimumSpendText(minimumSpend)}
+            icon={<Target className="h-4 w-4 text-muted-foreground" />}
+            isDirty={fieldDirty.minimumSpend}
+            emphasise={shouldHighlightMinimum}
+          >
+            <div className="space-y-3">
+              <Select
+                value={minimumStatus}
+                onValueChange={(value) => {
+                  if (value === 'not-configured') {
+                    onFieldChange('minimumSpend', null);
+                    setMinimumInputValue('');
+                  } else if (value === 'no-minimum') {
+                    onFieldChange('minimumSpend', 0);
+                    setMinimumInputValue('0');
+                  } else {
+                    const nextValue = minimumSpend && minimumSpend > 0 ? minimumSpend : 1000;
+                    onFieldChange('minimumSpend', nextValue);
+                    setMinimumInputValue(String(nextValue));
                   }
-                  onFieldChange('earningBlockSize', null);
-                } else {
-                  const nextSize = blockSizeSnapshot && blockSizeSnapshot > 0 ? blockSizeSnapshot : 1;
-                  onFieldChange('earningBlockSize', nextSize);
-                }
-              }}
-            >
-              <SelectTrigger className="h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="exact">Exact amount (down to the penny)</SelectItem>
-                <SelectItem value="blocks">Fixed dollar blocks</SelectItem>
-              </SelectContent>
-            </Select>
-            {earningBlockSize && earningBlockSize > 0 && (
-              <div className="flex items-center gap-2">
-                <Label className="text-xs uppercase tracking-wide text-muted-foreground">Block size</Label>
-                <div className="relative flex-1">
+                }}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MINIMUM_PRESETS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {minimumStatus === 'has-minimum' && (
+                <div className="relative">
                   <DollarSign className="absolute left-3 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     type="number"
-                    value={earningBlockSize}
+                    value={minimumInputValue}
                     onChange={(e) => {
-                      const next = parseFloat(e.target.value);
-                      if (Number.isFinite(next) && next > 0) {
-                        setBlockSizeSnapshot(next);
-                        onFieldChange('earningBlockSize', next);
-                      } else {
-                        setBlockSizeSnapshot(1);
-                        onFieldChange('earningBlockSize', 1);
+                      const value = e.target.value;
+                      setMinimumInputValue(value);
+                      if (value === '') {
+                        return;
+                      }
+                      const parsed = Number(value);
+                      if (!isNaN(parsed) && parsed >= 0) {
+                        onFieldChange('minimumSpend', parsed);
                       }
                     }}
-                    min="1"
-                    max="100"
-                    step="1"
+                    onBlur={() => {
+                      if (minimumInputValue === '') {
+                        onFieldChange('minimumSpend', null);
+                      }
+                    }}
+                    step="50"
+                    min="0"
+                    max="100000"
                     className="h-9 pl-8"
                   />
                 </div>
-              </div>
-            )}
-          </div>
-        </SettingCapsule>
+              )}
+            </div>
+          </SettingCapsule>
 
-        <SettingCapsule
-          label="Minimum spend"
-          description="Set the spend required before rewards unlock"
-          value={formatMinimumSpendText(minimumSpend)}
-          icon={<Target className="h-4 w-4 text-muted-foreground" />}
-          isDirty={fieldDirty.minimumSpend}
-          emphasise={shouldHighlightMinimum}
-        >
-          <div className="space-y-3">
-            <Select
-              value={minimumStatus}
-              onValueChange={(value) => {
-                if (value === 'not-configured') {
-                  onFieldChange('minimumSpend', null);
-                  setMinimumInputValue('');
-                } else if (value === 'no-minimum') {
-                  onFieldChange('minimumSpend', 0);
-                  setMinimumInputValue('0');
-                } else {
-                  const nextValue = minimumSpend && minimumSpend > 0 ? minimumSpend : 1000;
-                  onFieldChange('minimumSpend', nextValue);
-                  setMinimumInputValue(String(nextValue));
-                }
-              }}
-            >
-              <SelectTrigger className="h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {MINIMUM_PRESETS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {minimumStatus === 'has-minimum' && (
-              <div className="relative">
-                <DollarSign className="absolute left-3 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  type="number"
-                  value={minimumInputValue}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setMinimumInputValue(value);
-                    if (value === '') {
-                      return;
-                    }
-                    const parsed = Number(value);
-                    if (!isNaN(parsed) && parsed >= 0) {
-                      onFieldChange('minimumSpend', parsed);
-                    }
-                  }}
-                  onBlur={() => {
-                    if (minimumInputValue === '') {
-                      onFieldChange('minimumSpend', null);
-                    }
-                  }}
-                  step="50"
-                  min="0"
-                  max="100000"
-                  className="h-9 pl-8"
-                />
-              </div>
-            )}
-          </div>
-        </SettingCapsule>
-
-        <SettingCapsule
-          label="Maximum spend"
-          description="Cap rewards after a given spend"
-          value={formatMaximumSpendText(maximumSpend)}
-          icon={<ShieldCheck className="h-4 w-4 text-muted-foreground" />}
-          isDirty={fieldDirty.maximumSpend}
-        >
-          <div className="space-y-3">
-            <Select
-              value={maximumStatus}
-              onValueChange={(value) => {
-                if (value === 'not-configured') {
-                  onFieldChange('maximumSpend', null);
-                  setMaximumInputValue('');
-                } else if (value === 'no-limit') {
-                  onFieldChange('maximumSpend', 0);
-                  setMaximumInputValue('0');
-                } else {
-                  const nextValue = maximumSpend && maximumSpend > 0 ? maximumSpend : 5000;
-                  onFieldChange('maximumSpend', nextValue);
-                  setMaximumInputValue(String(nextValue));
-                }
-              }}
-            >
-              <SelectTrigger className="h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {MAXIMUM_PRESETS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {maximumStatus === 'has-limit' && (
-              <div className="relative">
-                <DollarSign className="absolute left-3 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  type="number"
-                  value={maximumInputValue}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setMaximumInputValue(value);
-                    if (value === '') {
-                      return;
-                    }
-                    const parsed = Number(value);
-                    if (!isNaN(parsed) && parsed >= 0) {
-                      onFieldChange('maximumSpend', parsed);
-                    }
-                  }}
-                  onBlur={() => {
-                    if (maximumInputValue === '') {
-                      onFieldChange('maximumSpend', null);
-                    }
-                  }}
-                  step="50"
-                  min="0"
-                  max="100000"
-                  className="h-9 pl-8"
-                />
-              </div>
-            )}
-          </div>
-        </SettingCapsule>
-
-        <SettingCapsule
-          label="Billing cycle"
-          description="Choose calendar month or a billing day"
-          value={
-            billingCycleType === 'billing'
-              ? `Billing day ${billingCycleDay}`
-              : 'Calendar month'
-          }
-          icon={<CalendarClock className="h-4 w-4 text-muted-foreground" />}
-          isDirty={fieldDirty.billingCycle}
-        >
-          <div className="space-y-3">
-            <Select
-              value={billingCycleType}
-              onValueChange={(value: 'calendar' | 'billing') => {
-                onFieldChange('billingCycleType', value);
-                if (value === 'calendar') {
-                  onFieldChange('billingCycleDay', 1);
-                }
-              }}
-            >
-              <SelectTrigger className="h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="calendar">Calendar month</SelectItem>
-                <SelectItem value="billing">Billing statement cycle</SelectItem>
-              </SelectContent>
-            </Select>
-            {billingCycleType === 'billing' && (
-              <div className="space-y-2">
-                <Label className="text-xs uppercase tracking-wide text-muted-foreground">Statement day</Label>
-                <Input
-                  type="number"
-                  value={billingCycleDay}
-                  onChange={(e) => {
-                    const parsed = parseInt(e.target.value, 10);
-                    // Use 1 as default only if parsing fails (NaN), not for 0
-                    onFieldChange('billingCycleDay', Number.isNaN(parsed) ? 1 : Math.max(1, Math.min(31, parsed)));
-                  }}
-                  min="1"
-                  max="31"
-                  className="h-9"
-                />
-              </div>
-            )}
-          </div>
-        </SettingCapsule>
-
-        <SettingCapsule
-          label="Promotional period"
-          description="Override normal billing cycle with a fixed period"
-          value={
-            promotionalPeriodEnabled && promotionalPeriodEnd
-              ? promotionalPeriodStart
-                ? `${promotionalPeriodStart} to ${promotionalPeriodEnd}`
-                : `Until ${promotionalPeriodEnd}`
-              : 'Not active'
-          }
-          icon={<Sparkles className="h-4 w-4 text-muted-foreground" />}
-          isDirty={fieldDirty.promotionalPeriod}
-        >
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium">Enable promotional period</Label>
-              <Switch
-                checked={promotionalPeriodEnabled}
-                onCheckedChange={(checked) => {
-                  onFieldChange('promotionalPeriodEnabled', checked);
-                  if (!checked) {
-                    onFieldChange('promotionalPeriodStart', '');
-                    onFieldChange('promotionalPeriodEnd', '');
-                    onFieldChange('promotionalPeriodDescription', '');
+          <SettingCapsule
+            label="Maximum spend"
+            description="Cap rewards after a given spend"
+            value={formatMaximumSpendText(maximumSpend)}
+            icon={<ShieldCheck className="h-4 w-4 text-muted-foreground" />}
+            isDirty={fieldDirty.maximumSpend}
+          >
+            <div className="space-y-3">
+              <Select
+                value={maximumStatus}
+                onValueChange={(value) => {
+                  if (value === 'not-configured') {
+                    onFieldChange('maximumSpend', null);
+                    setMaximumInputValue('');
+                  } else if (value === 'no-limit') {
+                    onFieldChange('maximumSpend', 0);
+                    setMaximumInputValue('0');
+                  } else {
+                    const nextValue = maximumSpend && maximumSpend > 0 ? maximumSpend : 5000;
+                    onFieldChange('maximumSpend', nextValue);
+                    setMaximumInputValue(String(nextValue));
                   }
                 }}
-              />
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MAXIMUM_PRESETS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {maximumStatus === 'has-limit' && (
+                <div className="relative">
+                  <DollarSign className="absolute left-3 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    type="number"
+                    value={maximumInputValue}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setMaximumInputValue(value);
+                      if (value === '') {
+                        return;
+                      }
+                      const parsed = Number(value);
+                      if (!isNaN(parsed) && parsed >= 0) {
+                        onFieldChange('maximumSpend', parsed);
+                      }
+                    }}
+                    onBlur={() => {
+                      if (maximumInputValue === '') {
+                        onFieldChange('maximumSpend', null);
+                      }
+                    }}
+                    step="50"
+                    min="0"
+                    max="100000"
+                    className="h-9 pl-8"
+                  />
+                </div>
+              )}
             </div>
-            {promotionalPeriodEnabled && (
-              <>
+          </SettingCapsule>
+        </div>
+      </div>
+
+      {/* Billing & Periods */}
+      <div className="mt-6 space-y-3">
+        <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Billing & Periods</h4>
+        <div className="flex flex-wrap gap-3">
+          <SettingCapsule
+            label="Billing cycle"
+            description="Choose calendar month or a billing day"
+            value={
+              billingCycleType === 'billing'
+                ? `Billing day ${billingCycleDay}`
+                : 'Calendar month'
+            }
+            icon={<CalendarClock className="h-4 w-4 text-muted-foreground" />}
+            isDirty={fieldDirty.billingCycle}
+          >
+            <div className="space-y-3">
+              <Select
+                value={billingCycleType}
+                onValueChange={(value: 'calendar' | 'billing') => {
+                  onFieldChange('billingCycleType', value);
+                  if (value === 'calendar') {
+                    onFieldChange('billingCycleDay', 1);
+                  }
+                }}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="calendar">Calendar month</SelectItem>
+                  <SelectItem value="billing">Billing statement cycle</SelectItem>
+                </SelectContent>
+              </Select>
+              {billingCycleType === 'billing' && (
                 <div className="space-y-2">
-                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Start date (optional)
-                  </Label>
+                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">Statement day</Label>
                   <Input
-                    type="date"
-                    value={promotionalPeriodStart}
-                    onChange={(e) => onFieldChange('promotionalPeriodStart', e.target.value)}
+                    type="number"
+                    value={billingCycleDay}
+                    onChange={(e) => {
+                      const parsed = parseInt(e.target.value, 10);
+                      // Use 1 as default only if parsing fails (NaN), not for 0
+                      onFieldChange('billingCycleDay', Number.isNaN(parsed) ? 1 : Math.max(1, Math.min(31, parsed)));
+                    }}
+                    min="1"
+                    max="31"
                     className="h-9"
                   />
-                  <p className="text-xs text-muted-foreground">Leave blank to start from current billing cycle</p>
                 </div>
-                <div className="space-y-2">
-                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">End date *</Label>
-                  <Input
-                    type="date"
-                    value={promotionalPeriodEnd}
-                    onChange={(e) => onFieldChange('promotionalPeriodEnd', e.target.value)}
-                    className="h-9"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Description (optional)
-                  </Label>
-                  <Input
-                    type="text"
-                    value={promotionalPeriodDescription}
-                    onChange={(e) => onFieldChange('promotionalPeriodDescription', e.target.value)}
-                    placeholder="e.g., 5x groceries Q4 2024"
-                    className="h-9"
-                  />
-                </div>
-              </>
-            )}
-          </div>
-        </SettingCapsule>
+              )}
+            </div>
+          </SettingCapsule>
+
+          <SettingCapsule
+            label="Promotional period"
+            description="Override normal billing cycle with a fixed period"
+            value={
+              promotionalPeriodEnabled && promotionalPeriodEnd
+                ? promotionalPeriodStart
+                  ? `${promotionalPeriodStart} to ${promotionalPeriodEnd}`
+                  : `Until ${promotionalPeriodEnd}`
+                : 'Not active'
+            }
+            icon={<Sparkles className="h-4 w-4 text-muted-foreground" />}
+            isDirty={fieldDirty.promotionalPeriod}
+          >
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">Enable promotional period</Label>
+                <Switch
+                  checked={promotionalPeriodEnabled}
+                  onCheckedChange={(checked) => {
+                    onFieldChange('promotionalPeriodEnabled', checked);
+                    if (!checked) {
+                      onFieldChange('promotionalPeriodStart', '');
+                      onFieldChange('promotionalPeriodEnd', '');
+                      onFieldChange('promotionalPeriodDescription', '');
+                    }
+                  }}
+                />
+              </div>
+              {promotionalPeriodEnabled && (
+                <>
+                  <div className="space-y-2">
+                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Start date (optional)
+                    </Label>
+                    <Input
+                      type="date"
+                      value={promotionalPeriodStart}
+                      onChange={(e) => onFieldChange('promotionalPeriodStart', e.target.value)}
+                      className="h-9"
+                    />
+                    <p className="text-xs text-muted-foreground">Leave blank to start from current billing cycle</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">End date *</Label>
+                    <Input
+                      type="date"
+                      value={promotionalPeriodEnd}
+                      onChange={(e) => onFieldChange('promotionalPeriodEnd', e.target.value)}
+                      className="h-9"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Description (optional)
+                    </Label>
+                    <Input
+                      type="text"
+                      value={promotionalPeriodDescription}
+                      onChange={(e) => onFieldChange('promotionalPeriodDescription', e.target.value)}
+                      placeholder="e.g., 5x groceries Q4 2024"
+                      className="h-9"
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+          </SettingCapsule>
+        </div>
       </div>
 
       <div className={subcategoryContainerClass}>
