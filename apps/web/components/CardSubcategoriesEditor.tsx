@@ -505,19 +505,11 @@ function CardSubcategoriesEditorComponent({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h3 className="text-lg font-semibold">Subcategory rewards</h3>
-          <p className="text-sm text-muted-foreground">
-            Map YNAB flags to bespoke reward bands. Unflagged transactions fall back to the default rate.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Switch id="subcategories-enabled" checked={enabled} onCheckedChange={handleToggle} />
-          <Label htmlFor="subcategories-enabled" className="text-sm">
-            {enabled ? 'Enabled' : 'Disabled'}
-          </Label>
-        </div>
+      <div className="flex items-center gap-2">
+        <Switch id="subcategories-enabled" checked={enabled} onCheckedChange={handleToggle} />
+        <Label htmlFor="subcategories-enabled" className="text-sm">
+          {enabled ? 'Enabled' : 'Disabled'}
+        </Label>
       </div>
 
       {enabled ? (
