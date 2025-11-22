@@ -845,15 +845,12 @@ export function CardSettingsEditor({
       </div>
 
       {/* SUBCATEGORY REWARDS */}
-      <div className={`mt-6 space-y-3 rounded-lg border p-4 ${
+      <div className={`mt-6 space-y-3 ${
         subcategoriesDirty
-          ? 'border-amber-300 bg-amber-50/40 dark:border-amber-700 dark:bg-amber-900/20'
-          : 'border-transparent bg-transparent'
+          ? 'rounded-lg border p-4 border-amber-300 bg-amber-50/40 dark:border-amber-700 dark:bg-amber-900/20'
+          : ''
       }`}>
         <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">SUBCATEGORY REWARDS</h4>
-        <p className="text-sm text-muted-foreground">
-          Map YNAB flags to bespoke reward bands. Unflagged transactions fall back to the default rate.
-        </p>
         <CardSubcategoriesEditor
           cardType={cardType}
           enabled={subcategoriesEnabled}
