@@ -378,12 +378,6 @@ function CardRulesPageContent() {
         <TabsContent value="cashback" className="space-y-4">
           {cashbackCards.length > 0 ? (
             <>
-              <div className="mb-4">
-                <h2 className="text-xl font-semibold">Cashback Cards</h2>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Configure cashback percentages and spending requirements
-                </p>
-              </div>
               <div className="space-y-4">
                   {cashbackCards.map(card => (
                     <CardSettingsEditor
@@ -424,12 +418,6 @@ function CardRulesPageContent() {
         <TabsContent value="miles" className="space-y-4">
           {milesCards.length > 0 ? (
             <>
-              <div className="mb-4">
-                <h2 className="text-xl font-semibold">Miles & Points Cards</h2>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Configure miles earning rates and spending requirements
-                </p>
-              </div>
               <div className="space-y-4">
                   {milesCards.map(card => (
                     <CardSettingsEditor
