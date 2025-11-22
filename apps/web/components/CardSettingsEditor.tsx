@@ -763,8 +763,10 @@ export function CardSettingsEditor({
           label="Promotional period"
           description="Override normal billing cycle with a fixed period"
           value={
-            promotionalPeriodEnabled && promotionalPeriodStart && promotionalPeriodEnd
-              ? `${promotionalPeriodStart} to ${promotionalPeriodEnd}`
+            promotionalPeriodEnabled && promotionalPeriodEnd
+              ? promotionalPeriodStart
+                ? `${promotionalPeriodStart} to ${promotionalPeriodEnd}`
+                : `Until ${promotionalPeriodEnd}`
               : 'Not active'
           }
           icon={<Sparkles className="h-4 w-4 text-muted-foreground" />}
@@ -788,21 +790,25 @@ export function CardSettingsEditor({
             {promotionalPeriodEnabled && (
               <>
                 <div className="space-y-2">
-                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">Start date</Label>
+                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Start date (optional)
+                  </Label>
                   <Input
                     type="date"
                     value={promotionalPeriodStart}
                     onChange={(e) => onFieldChange('promotionalPeriodStart', e.target.value)}
                     className="h-9"
                   />
+                  <p className="text-xs text-muted-foreground">Leave blank to start from current billing cycle</p>
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">End date</Label>
+                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">End date *</Label>
                   <Input
                     type="date"
                     value={promotionalPeriodEnd}
                     onChange={(e) => onFieldChange('promotionalPeriodEnd', e.target.value)}
                     className="h-9"
+                    required
                   />
                 </div>
                 <div className="space-y-2">

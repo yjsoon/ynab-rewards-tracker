@@ -140,9 +140,9 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
         billingCycle: formData.billingCycleType === 'billing'
           ? { type: 'billing', dayOfMonth: formData.billingCycleDay || 1 }
           : { type: 'calendar' },
-        promotionalPeriod: formData.promotionalPeriodEnabled && formData.promotionalPeriodStart && formData.promotionalPeriodEnd
+        promotionalPeriod: formData.promotionalPeriodEnabled && formData.promotionalPeriodEnd
           ? {
-              startDate: formData.promotionalPeriodStart,
+              startDate: formData.promotionalPeriodStart || undefined,
               endDate: formData.promotionalPeriodEnd,
               description: formData.promotionalPeriodDescription || undefined,
             }

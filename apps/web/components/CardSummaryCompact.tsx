@@ -252,7 +252,9 @@ export function CardSummaryCompact({ card, pat, prefetchedTransactions, onHideCa
             </span>
           </div>
           <div className="text-xs text-purple-700 dark:text-purple-300">
-            Ends {card.promotionalPeriod.endDate}
+            {card.promotionalPeriod.startDate
+              ? `${card.promotionalPeriod.startDate} to ${card.promotionalPeriod.endDate}`
+              : `Until ${card.promotionalPeriod.endDate}`}
             {card.promotionalPeriod.description && (
               <span className="block mt-0.5 text-purple-600/80 dark:text-purple-400/80">
                 {card.promotionalPeriod.description}

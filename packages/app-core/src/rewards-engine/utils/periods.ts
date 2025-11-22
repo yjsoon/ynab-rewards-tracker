@@ -24,18 +24,42 @@ export function calculateCardPeriod(card: CreditCard, targetDate: Date = new Dat
 
   // Check for promotional period override first
   if (card.promotionalPeriod) {
-    // Parse dates as local time to avoid UTC timezone shifts
-    const [startYear, startMonth, startDay] = card.promotionalPeriod.startDate.split('-').map(Number);
+    // Parse end date as local time to avoid UTC timezone shifts
     const [endYear, endMonth, endDay] = card.promotionalPeriod.endDate.split('-').map(Number);
-    const promoStart = new Date(startYear, startMonth - 1, startDay);
     const promoEnd = new Date(endYear, endMonth - 1, endDay);
+
+    // Determine start date: use provided start or calculate from billing cycle
+    let promoStart: Date;
+    let startLabel: string;
+
+    if (card.promotionalPeriod.startDate) {
+      const [startYear, startMonth, startDay] = card.promotionalPeriod.startDate.split('-').map(Number);
+      promoStart = new Date(startYear, startMonth - 1, startDay);
+      startLabel = card.promotionalPeriod.startDate;
+    } else {
+      // No start date specified - calculate current period start based on billing cycle
+      if (card.billingCycle?.type === 'billing' && card.billingCycle.dayOfMonth) {
+        const requestedDay = card.billingCycle.dayOfMonth;
+        const year = reference.getFullYear();
+        const month = reference.getMonth();
+        const currentStart = createCycleStart(year, month, requestedDay);
+
+        promoStart = reference < currentStart
+          ? createCycleStart(year, month - 1, requestedDay)
+          : currentStart;
+      } else {
+        // Calendar month
+        promoStart = new Date(reference.getFullYear(), reference.getMonth(), 1);
+      }
+      startLabel = formatLocalDate(promoStart);
+    }
 
     // If current date is within promotional period, return it
     if (reference >= promoStart && reference <= promoEnd) {
       return {
         startDate: promoStart,
         endDate: promoEnd,
-        label: `${card.promotionalPeriod.startDate} to ${card.promotionalPeriod.endDate}`,
+        label: `${startLabel} to ${card.promotionalPeriod.endDate}`,
       };
     }
   }
