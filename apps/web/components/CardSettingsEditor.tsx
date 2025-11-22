@@ -841,13 +841,13 @@ export function CardSettingsEditor({
         </div>
       </div>
 
-      {/* SUBCATEGORY REWARDS */}
+      {/* Subcategory Rewards */}
       <div className={`mt-6 space-y-3 ${
         subcategoriesDirty
-          ? 'rounded-lg border p-4 border-amber-300 bg-amber-50/40 dark:border-amber-700 dark:bg-amber-900/20'
+          ? 'rounded-xl border p-4 border-amber-300/80 bg-amber-50/40 dark:border-amber-700/60 dark:bg-amber-900/15'
           : ''
       }`}>
-        <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">SUBCATEGORY REWARDS</h4>
+        <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Subcategory Rewards</h4>
         <CardSubcategoriesEditor
           cardType={cardType}
           enabled={subcategoriesEnabled}
