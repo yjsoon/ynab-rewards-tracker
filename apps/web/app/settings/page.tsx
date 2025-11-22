@@ -791,17 +791,25 @@ export default function SettingsPage() {
       // Store cloud timestamp for dialog display
       setCloudTimestamp(stored.updatedAt);
 
-      // If we have a local sync timestamp, compare it
-      if (settings.cloudSyncLastSyncedAt) {
-        const cloudDate = new Date(stored.updatedAt);
-        const localDate = new Date(settings.cloudSyncLastSyncedAt);
-
-        // Warn if cloud is newer than local (with 1-minute tolerance for clock skew)
-        const timeDiff = cloudDate.getTime() - localDate.getTime();
-        return timeDiff > 60000; // 60 seconds tolerance
+      // Case 1: No local timestamp (new device or never synced with this code)
+      // Cloud has data but we don't know if local is fresh - warn to prevent overwrite
+      if (!settings.cloudSyncLastSyncedAt) {
+        return true; // Unknown freshness - always warn
       }
 
-      return false;
+      // Case 2: Local timestamp exists, but verify it's for the same keyId
+      // If keyIds don't match, we can't trust the timestamp comparison
+      if (settings.cloudSyncKeyId !== keyId) {
+        return true; // Different code - warn to prevent overwrite
+      }
+
+      // Case 3: Same keyId, compare timestamps
+      const cloudDate = new Date(stored.updatedAt);
+      const localDate = new Date(settings.cloudSyncLastSyncedAt);
+
+      // Warn if cloud is newer than local (with 1-minute tolerance for clock skew)
+      const timeDiff = cloudDate.getTime() - localDate.getTime();
+      return timeDiff > 60000; // 60 seconds tolerance
     } catch (error) {
       // If we can't check, don't block the upload
       return false;
@@ -1476,19 +1484,28 @@ export default function SettingsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Outdated Upload Warning Dialog - Warn when cloud is newer */}
+      {/* Outdated Upload Warning Dialog - Warn when cloud might be newer */}
       <Dialog open={showOutdatedUploadDialog} onOpenChange={(open) => !open && setShowOutdatedUploadDialog(false)}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <AlertCircle className="h-5 w-5 text-amber-600" aria-hidden="true" />
-              Cloud backup is newer
+              Cloud backup exists
             </DialogTitle>
             <DialogDescription className="pt-2">
-              The cloud backup was updated {cloudTimestamp ? `at ${new Date(cloudTimestamp).toLocaleString()}` : 'more recently'}, which is newer than your local data
-              {settings.cloudSyncLastSyncedAt ? ` (last synced ${new Date(settings.cloudSyncLastSyncedAt).toLocaleString()})` : ''}.
-              <br /><br />
-              Uploading now would overwrite the newer cloud data with your older local settings. Would you like to download the newer data instead?
+              {!settings.cloudSyncLastSyncedAt ? (
+                <>
+                  A cloud backup exists for this sync code{cloudTimestamp ? ` (updated ${new Date(cloudTimestamp).toLocaleString()})` : ''}, but you haven&apos;t synced on this device yet.
+                  <br /><br />
+                  Uploading now would overwrite the cloud backup with your local settings. Would you like to download the cloud data first?
+                </>
+              ) : (
+                <>
+                  The cloud backup was updated {cloudTimestamp ? `at ${new Date(cloudTimestamp).toLocaleString()}` : 'more recently'}, which may be newer than your local data (last synced {new Date(settings.cloudSyncLastSyncedAt).toLocaleString()}).
+                  <br /><br />
+                  Uploading now would overwrite the cloud data with your local settings. Would you like to download the cloud data instead?
+                </>
+              )}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-0 flex-col sm:flex-row">
