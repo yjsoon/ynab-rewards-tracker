@@ -29,7 +29,7 @@ interface CardEditState {
   [cardId: string]: SingleCardEditState;
 }
 
-function RulesPageContent() {
+function CardRulesPageContent() {
   const { cards, updateCard } = useCreditCards();
   const { autoBackup } = useAutoBackup();
   const { themeGroups, saveThemeGroup, deleteThemeGroup } = useThemeGroups();
@@ -81,7 +81,7 @@ function RulesPageContent() {
       nextParams.set('tab', nextTab);
     }
     const queryString = nextParams.toString();
-    router.replace(`/rules${queryString ? `?${queryString}` : ''}`, { scroll: false });
+    router.replace(`/card-rules${queryString ? `?${queryString}` : ''}`, { scroll: false });
   }, [router, searchParams, showThemes]);
 
   // Group cards by type
@@ -298,14 +298,14 @@ function RulesPageContent() {
     return (
       <div className="max-w-6xl mx-auto px-6 py-8">
         <div className="space-y-2 mb-6">
-          <h1 className="text-3xl font-bold">Rules</h1>
+          <h1 className="text-3xl font-bold">Cards</h1>
         </div>
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <CreditCardIcon className="h-12 w-12 text-muted-foreground mb-4" />
             <p className="text-lg text-muted-foreground mb-4">No cards configured yet</p>
             <p className="text-sm text-muted-foreground">
-              Add cards in Settings to start managing their rules
+              Add cards in Settings to start managing them
             </p>
           </CardContent>
         </Card>
@@ -317,7 +317,7 @@ function RulesPageContent() {
     <div className="max-w-6xl mx-auto px-6 py-8">
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
         <div className="space-y-2">
-          <h1 className="text-3xl font-bold">Rules</h1>
+          <h1 className="text-3xl font-bold">Cards</h1>
           <p className="text-muted-foreground">
             Configure earning rates, minimum spend, and billing cycles for all your cards
           </p>
@@ -591,14 +591,14 @@ function RulesPageContent() {
 }
 
 // Wrap in Suspense for useSearchParams during static generation
-export default function RulesPage() {
+export default function CardRulesPage() {
   return (
     <Suspense fallback={
       <div className="flex items-center justify-center min-h-[200px]">
         <div className="text-muted-foreground">Loading...</div>
       </div>
     }>
-      <RulesPageContent />
+      <CardRulesPageContent />
     </Suspense>
   );
 }

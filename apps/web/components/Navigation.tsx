@@ -21,7 +21,7 @@ export function Navigation() {
     ...(featureFlags.recommendations ? [{ href: '/recommendations', label: 'Recommendations', icon: Sparkles }] : []),
     { href: '/formatter', label: 'Formatter', icon: ScanText },
     { href: '/transactions', label: 'Transactions', icon: ReceiptText },
-    { href: '/rules', label: 'Rules', icon: SlidersHorizontal },
+    { href: '/card-rules', label: 'Cards', icon: SlidersHorizontal },
   ];
 
   const isSettings = pathname.startsWith('/settings');

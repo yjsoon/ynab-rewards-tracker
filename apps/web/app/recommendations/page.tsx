@@ -192,10 +192,10 @@ export default function RecommendationsPage() {
           </CardHeader>
           <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-muted-foreground">
-              Visit Rules to create themes like Transport or Dining, then link your cards.
+              Visit Cards to create themes like Transport or Dining, then link your cards.
             </p>
             <Button asChild>
-              <Link href="/rules?tab=categories">Configure Themes</Link>
+              <Link href="/card-rules?tab=categories">Configure Themes</Link>
             </Button>
           </CardContent>
         </Card>
@@ -223,7 +223,7 @@ export default function RecommendationsPage() {
             {loading ? 'Refreshing...' : 'Refresh'}
           </Button>
           <Button variant="outline" size="sm" asChild>
-            <Link href="/rules?tab=categories">Manage Themes</Link>
+            <Link href="/card-rules?tab=categories">Manage Themes</Link>
           </Button>
         </div>
       </header>
