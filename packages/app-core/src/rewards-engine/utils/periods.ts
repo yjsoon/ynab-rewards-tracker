@@ -22,6 +22,21 @@ function createCycleStart(year: number, month: number, requestedDay: number): Da
 export function calculateCardPeriod(card: CreditCard, targetDate: Date = new Date()): CardPeriod {
   const reference = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
 
+  // Check for promotional period override first
+  if (card.promotionalPeriod) {
+    const promoStart = new Date(card.promotionalPeriod.startDate);
+    const promoEnd = new Date(card.promotionalPeriod.endDate);
+
+    // If current date is within promotional period, return it
+    if (reference >= promoStart && reference <= promoEnd) {
+      return {
+        startDate: promoStart,
+        endDate: promoEnd,
+        label: `${card.promotionalPeriod.startDate} to ${card.promotionalPeriod.endDate}`,
+      };
+    }
+  }
+
   if (card.billingCycle?.type === 'billing' && card.billingCycle.dayOfMonth) {
     const requestedDay = card.billingCycle.dayOfMonth;
     const year = reference.getFullYear();

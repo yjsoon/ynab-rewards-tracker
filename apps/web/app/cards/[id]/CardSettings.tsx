@@ -40,6 +40,10 @@ const createFormState = (nextCard: CreditCard): CardEditState => ({
   featured: nextCard.featured ?? true,
   billingCycleType: nextCard.billingCycle?.type || 'calendar',
   billingCycleDay: nextCard.billingCycle?.dayOfMonth || 1,
+  promotionalPeriodEnabled: Boolean(nextCard.promotionalPeriod),
+  promotionalPeriodStart: nextCard.promotionalPeriod?.startDate || '',
+  promotionalPeriodEnd: nextCard.promotionalPeriod?.endDate || '',
+  promotionalPeriodDescription: nextCard.promotionalPeriod?.description || '',
   earningRate: nextCard.earningRate || (nextCard.type === 'cashback' ? 1 : 1),
   earningBlockSize: nextCard.earningBlockSize,
   minimumSpend: nextCard.minimumSpend,
@@ -136,6 +140,13 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
         billingCycle: formData.billingCycleType === 'billing'
           ? { type: 'billing', dayOfMonth: formData.billingCycleDay || 1 }
           : { type: 'calendar' },
+        promotionalPeriod: formData.promotionalPeriodEnabled && formData.promotionalPeriodStart && formData.promotionalPeriodEnd
+          ? {
+              startDate: formData.promotionalPeriodStart,
+              endDate: formData.promotionalPeriodEnd,
+              description: formData.promotionalPeriodDescription || undefined,
+            }
+          : undefined,
         earningRate: formData.earningRate,
         earningBlockSize: formData.earningBlockSize,
         minimumSpend: formData.minimumSpend,
