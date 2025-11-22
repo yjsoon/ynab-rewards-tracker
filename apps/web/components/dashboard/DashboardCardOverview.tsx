@@ -564,8 +564,9 @@ function SortableDashboardCard({ card, viewMode, pat, prefetchedTransactions, on
               <Badge
                 variant="secondary"
                 className="shrink-0 h-5 px-1.5 gap-1 bg-purple-100 text-purple-700 hover:bg-purple-100 dark:bg-purple-950/50 dark:text-purple-300"
+                aria-label={`Promotional period${card.promotionalPeriod.startDate ? ` from ${card.promotionalPeriod.startDate}` : ''} until ${card.promotionalPeriod.endDate}`}
               >
-                <Sparkles className="h-3 w-3" />
+                <Sparkles className="h-3 w-3" aria-hidden="true" />
                 <span className="text-[0.65rem] font-medium">Promo</span>
               </Badge>
             )}

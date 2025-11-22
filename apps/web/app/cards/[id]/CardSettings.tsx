@@ -122,6 +122,27 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
       }
     }
 
+    // Validate promotional period if enabled
+    if (formData.promotionalPeriodEnabled) {
+      if (!formData.promotionalPeriodEnd) {
+        setError('Promotional period requires an end date');
+        setSaving(false);
+        return;
+      }
+
+      // Validate date range if both dates are provided
+      if (formData.promotionalPeriodStart && formData.promotionalPeriodEnd) {
+        const startDate = new Date(formData.promotionalPeriodStart);
+        const endDate = new Date(formData.promotionalPeriodEnd);
+
+        if (endDate <= startDate) {
+          setError('Promotional period end date must be after the start date');
+          setSaving(false);
+          return;
+        }
+      }
+    }
+
     try {
       const toggledOn = Boolean(formData.subcategoriesEnabled);
       const preparedSubcategories = toggledOn
