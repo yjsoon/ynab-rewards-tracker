@@ -2,8 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   shouldWarnAboutEmptyUpload,
   shouldWarnAboutOutdatedUpload,
-  type EmptyUploadCheckParams,
-  type OutdatedUploadCheckParams,
 } from './decision-helpers';
 
 /**

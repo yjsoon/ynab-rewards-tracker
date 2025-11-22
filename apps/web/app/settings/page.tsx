@@ -59,9 +59,6 @@ import {
   Copy,
   CloudOff,
   KeyRound,
-  Cloud,
-  ChevronDown,
-  ChevronUp,
   Info,
   Check,
 } from 'lucide-react';
