@@ -23,6 +23,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   Dialog,
   DialogContent,
@@ -1246,47 +1247,55 @@ export default function SettingsPage() {
                   </div>
                 )}
 
+                {/* Sync code input with inline controls */}
                 <div className="space-y-2">
-                  <label className="text-sm font-medium" htmlFor="cloud-sync-phrase">
-                    Sync code
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm font-medium" htmlFor="cloud-sync-phrase">
+                        Sync code
+                      </label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <button
+                            type="button"
+                            className="inline-flex items-center justify-center"
+                            aria-label="Sync code information"
+                          >
+                            <Info className="h-4 w-4 text-muted-foreground hover:text-foreground transition-colors" />
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-80" align="start">
+                          <p className="text-sm text-muted-foreground">
+                            Keep this code private. Anyone with it can download and decrypt your settings. Your YNAB token is never synced.
+                          </p>
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                    {cloudSyncPhrase.trim() && !generatedCloudPhrase && (
+                      <div className="flex items-center gap-2">
+                        <label htmlFor="remember-sync-code" className="text-xs text-muted-foreground cursor-pointer">
+                          Remember on this device
+                        </label>
+                        <Switch
+                          id="remember-sync-code"
+                          checked={Boolean(settings.rememberCloudSyncCode)}
+                          onCheckedChange={handleRememberCodeToggle}
+                          aria-label="Remember sync code on this device"
+                        />
+                      </div>
+                    )}
+                  </div>
                   <textarea
                     id="cloud-sync-phrase"
-                    className="w-full rounded-md border px-3 py-2 font-mono text-sm"
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     rows={2}
                     value={cloudSyncPhrase}
                     onChange={(event) => setCloudSyncPhrase(event.target.value)}
                     placeholder="twelve lowercase words separated by spaces"
                   />
-                  <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/50 dark:bg-amber-950/20">
-                    <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600 dark:text-amber-500" aria-hidden="true" />
-                    <p className="text-xs text-amber-800 dark:text-amber-200">
-                      Keep this code private. Anyone with it can download and decrypt your settings. Your YNAB token is never synced.
-                    </p>
-                  </div>
                 </div>
 
-                {/* Remember Code Toggle */}
-                {cloudSyncPhrase.trim() && !generatedCloudPhrase && (
-                  <div className="flex items-center justify-between rounded-lg border p-3">
-                    <div className="flex items-start gap-3">
-                      <KeyRound className="mt-0.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                      <div>
-                        <p className="text-sm font-medium">Remember sync code on this device</p>
-                        <p className="text-xs text-muted-foreground">
-                          Store encrypted code locally for one-click syncing
-                        </p>
-                      </div>
-                    </div>
-                    <Switch
-                      id="remember-sync-code"
-                      checked={Boolean(settings.rememberCloudSyncCode)}
-                      onCheckedChange={handleRememberCodeToggle}
-                      aria-label="Remember sync code on this device"
-                    />
-                  </div>
-                )}
-
+                {/* Action buttons - compact layout */}
                 <div className="flex flex-wrap gap-2">
                   <Button
                     type="button"
@@ -1315,22 +1324,27 @@ export default function SettingsPage() {
                     <CloudDownload className="mr-2 h-4 w-4" aria-hidden="true" />
                     {isDownloadingCloudSync ? 'Downloading…' : 'Download & apply'}
                   </Button>
+                </div>
+
+                {/* Secondary destructive action */}
+                <div className="flex items-center justify-between">
                   <Button
                     type="button"
                     variant="ghost"
+                    size="sm"
                     onClick={handleCloudDelete}
                     disabled={isCloudSyncBusy}
+                    className="text-destructive hover:text-destructive"
                   >
-                    <CloudOff className="mr-2 h-4 w-4" aria-hidden="true" />
+                    <CloudOff className="mr-2 h-3 w-3" aria-hidden="true" />
                     {isDeletingCloudSync ? 'Deleting…' : 'Delete cloud backup'}
                   </Button>
+                  {cloudSyncLastSynced && (
+                    <p className="text-xs text-muted-foreground">
+                      Last synced: {cloudSyncLastSynced}
+                    </p>
+                  )}
                 </div>
-
-                {cloudSyncLastSynced && (
-                  <p className="text-xs text-muted-foreground">
-                    Last synced: {cloudSyncLastSynced}
-                  </p>
-                )}
               </>
 
             {cloudSyncMessage && (
