@@ -103,6 +103,17 @@ describe('cloud sync decision helpers', () => {
 
       expect(result).toBe(false);
     });
+
+    it('warns when either timestamp is invalid', () => {
+      const result = shouldWarnAboutOutdatedUpload({
+        cloudUpdatedAt: 'not-a-date',
+        localLastSyncedAt: '2025-11-22T18:00:00Z',
+        localKeyId: 'keyId123',
+        phraseKeyId: 'keyId123',
+      });
+
+      expect(result).toBe(true);
+    });
   });
 
   describe('shouldWarnAboutEmptyUpload', () => {

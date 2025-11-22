@@ -19,6 +19,8 @@ export interface OutdatedUploadCheckParams {
   phraseKeyId: string;
 }
 
+const CLOCK_SKEW_TOLERANCE_MS = 60_000;
+
 /**
  * Determines if uploading empty settings would overwrite an existing cloud backup.
  *
@@ -65,10 +67,15 @@ export function shouldWarnAboutOutdatedUpload(params: OutdatedUploadCheckParams)
   }
 
   // Case 3: Same keyId - compare timestamps
-  const cloudDate = new Date(params.cloudUpdatedAt);
-  const localDate = new Date(params.localLastSyncedAt);
+  const cloudTime = new Date(params.cloudUpdatedAt).getTime();
+  const localTime = new Date(params.localLastSyncedAt).getTime();
+
+  // If either timestamp is invalid, err on the side of caution and warn
+  if (Number.isNaN(cloudTime) || Number.isNaN(localTime)) {
+    return true;
+  }
 
   // Warn if cloud is newer than local (with 1-minute tolerance for clock skew)
-  const timeDiff = cloudDate.getTime() - localDate.getTime();
-  return timeDiff > 60000; // 60 seconds tolerance
+  const timeDiff = cloudTime - localTime;
+  return timeDiff > CLOCK_SKEW_TOLERANCE_MS;
 }
