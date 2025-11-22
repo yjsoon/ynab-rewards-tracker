@@ -132,8 +132,12 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
 
       // Validate date range if both dates are provided
       if (formData.promotionalPeriodStart && formData.promotionalPeriodEnd) {
-        const startDate = new Date(formData.promotionalPeriodStart);
-        const endDate = new Date(formData.promotionalPeriodEnd);
+        // Parse dates as local time to ensure consistent validation
+        const [startYear, startMonth, startDay] = formData.promotionalPeriodStart.split('-').map(Number);
+        const [endYear, endMonth, endDay] = formData.promotionalPeriodEnd.split('-').map(Number);
+
+        const startDate = new Date(startYear, startMonth - 1, startDay);
+        const endDate = new Date(endYear, endMonth - 1, endDay);
 
         if (endDate <= startDate) {
           setError('Promotional period end date must be after the start date');
