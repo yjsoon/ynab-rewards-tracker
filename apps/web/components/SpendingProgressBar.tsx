@@ -60,9 +60,8 @@ export function SpendingProgressBar({
   // Get marker positions for min/max thresholds
   const getMarkerPosition = (threshold: number) => {
     if (!hasMaximum) {
-      // If no maximum, scale based on higher of threshold or totalSpend
-      const scale = Math.max(threshold, totalSpend) * 1.2;
-      return (threshold / scale) * 100;
+      // When no maximum, bar is scaled to minimum, so minimum marker is at 100%
+      return 100;
     }
     // Scale based on maximum
     return Math.min(100, (threshold / maximumSpend) * 100);
