@@ -790,7 +790,14 @@ export function CardSettingsEditor({
                   checked={promotionalPeriodEnabled}
                   onCheckedChange={(checked) => {
                     onFieldChange('promotionalPeriodEnabled', checked);
-                    if (!checked) {
+                    if (checked) {
+                      // Auto-populate start date to today if not already set
+                      if (!promotionalPeriodStart) {
+                        const today = new Date();
+                        const isoDate = today.toISOString().split('T')[0];
+                        onFieldChange('promotionalPeriodStart', isoDate);
+                      }
+                    } else {
                       onFieldChange('promotionalPeriodStart', '');
                       onFieldChange('promotionalPeriodEnd', '');
                       onFieldChange('promotionalPeriodDescription', '');
@@ -802,7 +809,7 @@ export function CardSettingsEditor({
                 <>
                   <div className="space-y-2">
                     <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-                      Start date (optional)
+                      Start date
                     </Label>
                     <Input
                       type="date"
@@ -810,7 +817,7 @@ export function CardSettingsEditor({
                       onChange={(e) => onFieldChange('promotionalPeriodStart', e.target.value)}
                       className="h-9"
                     />
-                    <p className="text-xs text-muted-foreground">Leave blank to start from current billing cycle</p>
+                    <p className="text-xs text-muted-foreground">Spend tracking runs from this date to the end date</p>
                   </div>
                   <div className="space-y-2">
                     <Label className="text-xs uppercase tracking-wide text-muted-foreground">End date *</Label>

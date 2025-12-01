@@ -50,6 +50,16 @@ export function applyStorageMigrations(data: MutableStorageData): void {
           const { milesBlockSize, ...cleanCard } = mutableCard;
           return cleanCard as CreditCard;
         }
+        // Migrate promotional periods without startDate: default to 1st of previous month
+        if (mutableCard.promotionalPeriod && !mutableCard.promotionalPeriod.startDate) {
+          const now = new Date();
+          const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+          const isoDate = prevMonth.toISOString().split('T')[0];
+          mutableCard.promotionalPeriod = {
+            ...mutableCard.promotionalPeriod,
+            startDate: isoDate,
+          };
+        }
         return mutableCard as CreditCard;
       });
     }
