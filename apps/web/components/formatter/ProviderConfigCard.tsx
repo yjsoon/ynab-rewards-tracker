@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Sparkles, CheckCircle2, Loader2, Info } from 'lucide-react';
+import { Sparkles, CheckCircle2, Loader2, Info, AlertTriangle } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -155,23 +156,37 @@ export function ProviderConfigCard({ provider, onProviderChange, model, onModelC
             value={apiKey}
             onChange={(event) => handleApiKeyChange(event.target.value)}
             autoComplete="off"
+            className={cn(!apiKey && 'border-destructive ring-destructive focus-visible:ring-destructive')}
           />
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            {saveState === 'saving' ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
-            ) : saveState === 'saved' ? (
-              <CheckCircle2 className="h-3 w-3 text-green-500" />
-            ) : (
-              <Info className="h-3 w-3" />
-            )}
-            <span>
-              {saveState === 'saving'
-                ? 'Saving locally…'
-                : saveState === 'saved'
-                  ? 'Key saved locally. Keys only leave your browser when you run an extraction.'
-                  : defaultKeyMessage}
-            </span>
-          </div>
+          {!apiKey ? (
+            <div className="flex items-center gap-2 text-xs text-destructive">
+              <AlertTriangle className="h-3 w-3" />
+              <span>
+                Add your API key to process statements.{' '}
+                <a className="underline" href={providerMeta.docsUrl} target="_blank" rel="noreferrer">
+                  Get one from {providerMeta.docsLabel}
+                </a>
+                .
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              {saveState === 'saving' ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : saveState === 'saved' ? (
+                <CheckCircle2 className="h-3 w-3 text-green-500" />
+              ) : (
+                <Info className="h-3 w-3" />
+              )}
+              <span>
+                {saveState === 'saving'
+                  ? 'Saving locally…'
+                  : saveState === 'saved'
+                    ? 'Key saved locally. Keys only leave your browser when you run an extraction.'
+                    : defaultKeyMessage}
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="rounded-md border border-dashed border-muted-foreground/30 p-3 text-xs text-muted-foreground space-y-1">
