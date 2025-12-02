@@ -75,12 +75,8 @@ function serialiseSubcategories(subcategories: CardSubcategoryDraft[] | CreditCa
 }
 
 function generateSubcategoryId(): string {
-  try {
-    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-      return crypto.randomUUID();
-    }
-  } catch {
-    // ignore and fall back below
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
   }
   return `subcat-${Math.random().toString(36).slice(2, 10)}`;
 }

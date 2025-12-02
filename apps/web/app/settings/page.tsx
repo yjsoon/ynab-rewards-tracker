@@ -885,7 +885,6 @@ export default function SettingsPage() {
 
     try {
       const count = orphanedCards.length;
-      // deleteCard is synchronous, but we're being defensive
       orphanedCards.forEach(card => {
         deleteCard(card.id);
       });

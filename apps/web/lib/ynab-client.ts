@@ -151,7 +151,7 @@ export class YnabClient {
         return {};
       }
 
-      const display = (settings as Record<string, unknown>)?.display ?? settings;
+      const display = settings?.display ?? settings;
       const candidates: Partial<Record<YnabFlagColor, string>> = {};
       const flagValues: YnabFlagColor[] = [UNFLAGGED_FLAG.value, ...YNAB_FLAG_COLORS.map((flag) => flag.value)];
 
