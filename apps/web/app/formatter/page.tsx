@@ -259,7 +259,7 @@ export default function FormatterPage() {
       </div>
 
       {transactions.length > 0 && (
-        <div>
+        <div className="mt-6">
           <TransactionTable
             transactions={transactions}
             onChange={handleTransactionsChange}

@@ -341,15 +341,17 @@ export async function POST(request: NextRequest) {
     const apiKeyParam = formData.get('apiKey');
     const customPrompt = formData.get('customPrompt');
 
-    if (!(file instanceof File)) {
+    // Duck-type check for File-like object (instanceof File fails in Node.js serverless)
+    if (!file || typeof file !== 'object' || !('arrayBuffer' in file) || !('type' in file)) {
       return NextResponse.json({ error: 'No statement image supplied' }, { status: 400 });
     }
+    const uploadedFile = file as { arrayBuffer: () => Promise<ArrayBuffer>; type: string; size: number; name?: string };
 
-    if (file.size > MAX_FILE_SIZE_BYTES) {
+    if (uploadedFile.size > MAX_FILE_SIZE_BYTES) {
       return NextResponse.json({ error: 'Files larger than 10MB are not supported' }, { status: 400 });
     }
 
-    if (!file.type || !ALLOWED_IMAGE_TYPES.includes(file.type as (typeof ALLOWED_IMAGE_TYPES)[number])) {
+    if (!uploadedFile.type || !ALLOWED_IMAGE_TYPES.includes(uploadedFile.type as (typeof ALLOWED_IMAGE_TYPES)[number])) {
       return NextResponse.json({ error: 'Only PNG, JPEG, JPG, or WEBP image files are supported right now' }, { status: 400 });
     }
 
@@ -364,9 +366,9 @@ export async function POST(request: NextRequest) {
     const model = typeof modelParam === 'string' && modelParam.trim() ? modelParam : PROVIDER_DEFAULT_MODEL[provider];
     const apiKey = apiKeyParam.trim();
 
-    const bytes = await file.arrayBuffer();
+    const bytes = await uploadedFile.arrayBuffer();
     const base64 = Buffer.from(bytes).toString('base64');
-    const mimeType = file.type || 'image/png';
+    const mimeType = uploadedFile.type || 'image/png';
     const imageData = `data:${mimeType};base64,${base64}`;
 
     const prompt = generatePrompt(new Date(), typeof customPrompt === 'string' ? customPrompt : undefined);
