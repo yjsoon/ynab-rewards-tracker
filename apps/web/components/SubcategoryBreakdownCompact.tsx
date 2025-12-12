@@ -80,7 +80,8 @@ export function SubcategoryBreakdownCompact({
         <Button
           variant="ghost"
           size="sm"
-          className="h-6 px-2 text-xs"
+          className="h-6 px-2 text-xs touch-action-manipulation"
+          style={{ touchAction: 'manipulation' }}
           onClick={(e) => {
             e.stopPropagation();
             e.preventDefault();
