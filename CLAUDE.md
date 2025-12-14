@@ -12,9 +12,11 @@ A client-side rewards tracker spanning a production-ready web app and an in-prog
 
 ### Web App (`apps/web`)
 - Next.js 14 (App Router) + TypeScript
+- Hosted on Cloudflare Workers via `@opennextjs/cloudflare`
 - Tailwind CSS + shadcn/ui + Radix UI primitives
 - `next-themes` for light/dark/system modes
 - Browser `localStorage` persistence via storage service
+- Cloud sync via Cloudflare KV (native bindings in production)
 - YNAB API proxied through `/api/ynab/*` routes (bearer PAT)
 - React hooks + Context API for state management
 
@@ -234,10 +236,16 @@ pnpm --filter ./apps/mobile android    # Launch Android emulator via Expo
 - Manual testing for edge cases
 
 ## Deployment
-- Vercel recommended for Next.js apps
-- Expo EAS or local builds planned for mobile once integrations land
-- No environment variables needed for the web app (fully client-side)
-- Static export possible with some limitations
+
+### Web App
+- Hosted on **Cloudflare Workers** via OpenNext adapter
+- Auto-deploys on push to `main` via GitHub Actions
+- Live at https://rewards.soon.sg
+- Cloud sync uses native Cloudflare KV bindings (no REST API overhead)
+- Manual deploy: `pnpm --filter ./apps/web deploy:cloudflare`
+
+### Mobile App
+- Expo EAS or local builds planned once integrations land
 
 ## Roadmap & Task Management
 
