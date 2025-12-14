@@ -1,0 +1,28 @@
+name = "yjab-web"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Custom domain
+routes = [
+  { pattern = "rewards.soon.sg", custom_domain = true }
+]
+
+# Main entrypoint for OpenNext
+main = ".open-next/worker.js"
+assets = { directory = ".open-next/assets", binding = "ASSETS" }
+
+# KV namespace for cloud sync
+# Create with: wrangler kv namespace create CLOUD_SYNC_KV
+# Then update the id below with the returned namespace ID
+[[kv_namespaces]]
+binding = "CLOUD_SYNC_KV"
+id = "4f5e97d2a1184897993e3a04a09eb200"
+preview_id = "daa5caf25fb14a9bbfd1f4be2a8eb69b"
+
+[vars]
+# Environment variables (non-secret)
+# OPENROUTER_REFERRER = "https://yj-ab.app"
+# OPENROUTER_TITLE = "YJAB Statement Formatter"
+
+# Secrets (set via `wrangler secret put <NAME>`):
+# - CLOUDFLARE_API_TOKEN (only needed if keeping REST API fallback)

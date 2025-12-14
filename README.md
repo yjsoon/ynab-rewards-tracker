@@ -2,6 +2,8 @@
 
 Client-side tracker that analyses YNAB transactions to monitor credit card rewards using configurable rules stored in browser `localStorage`.
 
+**Live at https://rewards.soon.sg**
+
 ## Features
 - Connect via YNAB personal access token and track linked credit card accounts.
 - Define per-card reward rules with minimum/maximum spend limits and category mapping.
@@ -30,9 +32,15 @@ pnpm mobile:ios             # launches iOS simulator
 pnpm mobile:android         # launches Android emulator
 ```
 
-### Production Build
+### Production Build & Deploy
 ```bash
-pnpm --filter ./apps/web build
+# Build for Cloudflare Workers
+pnpm --filter ./apps/web build:cloudflare
+
+# Deploy to Cloudflare (requires wrangler auth)
+pnpm --filter ./apps/web deploy:cloudflare
+
+# Or just push to main — GitHub Actions auto-deploys
 ```
 
 ## Scripts
