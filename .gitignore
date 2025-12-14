@@ -45,3 +45,7 @@ apps/mobile/.tamagui/
 
 # Local Netlify folder
 .netlify
+
+# OpenNext/Cloudflare build output
+.open-next/
+.wrangler/

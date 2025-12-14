@@ -5,6 +5,9 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:cloudflare": "npx @opennextjs/cloudflare build",
+    "preview:cloudflare": "pnpm build:cloudflare && wrangler dev",
+    "deploy:cloudflare": "pnpm build:cloudflare && wrangler deploy",
     "start": "next start",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
@@ -29,7 +32,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.544.0",
-    "next": "14.2.5",
+    "next": "14.2.35",
     "next-themes": "^0.4.6",
     "papaparse": "^5.5.3",
     "react": "18.3.1",
@@ -38,6 +41,7 @@
     "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
+    "@opennextjs/cloudflare": "^1.14.6",
     "@tailwindcss/typography": "^0.5.16",
     "@types/node": "^24.3.1",
     "@types/react": "^19.1.12",
@@ -46,6 +50,7 @@
     "postcss": "^8.5.6",
     "tailwindcss": "^3",
     "typescript": "5.6.2",
-    "vitest": "^2.1.9"
+    "vitest": "^2.1.9",
+    "wrangler": "^4.54.0"
   }
 }

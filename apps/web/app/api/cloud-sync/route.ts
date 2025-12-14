@@ -1,12 +1,10 @@
 import { NextResponse } from 'next/server';
+import { getCloudflareContext } from '@opennextjs/cloudflare';
 
+// REST API fallback config (for Netlify or local dev without wrangler)
 const CLOUDFLARE_ACCOUNT_ID = process.env.CLOUDFLARE_ACCOUNT_ID;
 const CLOUDFLARE_KV_NAMESPACE_ID = process.env.CLOUDFLARE_KV_NAMESPACE_ID;
 const CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN;
-
-if (!CLOUDFLARE_ACCOUNT_ID || !CLOUDFLARE_KV_NAMESPACE_ID || !CLOUDFLARE_API_TOKEN) {
-  console.warn('Cloud sync API environment variables are missing. Cloud sync will be disabled.');
-}
 
 const VERSION = 1;
 
@@ -23,6 +21,35 @@ class CloudflareKVError extends Error {
     this.status = status;
   }
 }
+
+// Type for Cloudflare KV namespace
+interface KVNamespace {
+  get(key: string): Promise<string | null>;
+  put(key: string, value: string): Promise<void>;
+  delete(key: string): Promise<void>;
+}
+
+/**
+ * Get native KV binding if running on Cloudflare, otherwise null.
+ */
+async function getNativeKV(): Promise<KVNamespace | null> {
+  try {
+    const ctx = await getCloudflareContext();
+    const env = ctx?.env as Record<string, unknown> | undefined;
+    const kv = env?.CLOUD_SYNC_KV;
+    if (kv && typeof kv === 'object' && 'get' in kv && 'put' in kv && 'delete' in kv) {
+      return kv as KVNamespace;
+    }
+    return null;
+  } catch {
+    // Not running on Cloudflare
+    return null;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REST API fallback (used on Netlify or local dev)
+// ─────────────────────────────────────────────────────────────────────────────
 
 async function requestCloudflareKV(key: string, init: RequestInit): Promise<Response> {
   if (!CLOUDFLARE_ACCOUNT_ID || !CLOUDFLARE_KV_NAMESPACE_ID || !CLOUDFLARE_API_TOKEN) {
@@ -56,7 +83,7 @@ async function requestCloudflareKV(key: string, init: RequestInit): Promise<Resp
   return response;
 }
 
-async function storeValue(key: string, value: string): Promise<void> {
+async function storeValueREST(key: string, value: string): Promise<void> {
   const response = await requestCloudflareKV(key, {
     method: 'PUT',
     body: value,
@@ -77,7 +104,7 @@ async function storeValue(key: string, value: string): Promise<void> {
   }
 }
 
-async function retrieveValue(key: string): Promise<string | null> {
+async function retrieveValueREST(key: string): Promise<string | null> {
   const response = await requestCloudflareKV(key, {
     method: 'GET',
   });
@@ -94,7 +121,7 @@ async function retrieveValue(key: string): Promise<string | null> {
   return response.text();
 }
 
-async function deleteValue(key: string): Promise<void> {
+async function deleteValueREST(key: string): Promise<void> {
   const response = await requestCloudflareKV(key, {
     method: 'DELETE',
   });
@@ -108,6 +135,40 @@ async function deleteValue(key: string): Promise<void> {
     throw new CloudflareKVError(`Cloudflare (${response.status}): ${body || 'Failed to delete cloud sync data'}`, response.status || 502);
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Unified KV operations (prefer native, fall back to REST)
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function storeValue(key: string, value: string): Promise<void> {
+  const kv = await getNativeKV();
+  if (kv) {
+    await kv.put(key, value);
+    return;
+  }
+  await storeValueREST(key, value);
+}
+
+async function retrieveValue(key: string): Promise<string | null> {
+  const kv = await getNativeKV();
+  if (kv) {
+    return kv.get(key);
+  }
+  return retrieveValueREST(key);
+}
+
+async function deleteValue(key: string): Promise<void> {
+  const kv = await getNativeKV();
+  if (kv) {
+    await kv.delete(key);
+    return;
+  }
+  await deleteValueREST(key);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Route handlers
+// ─────────────────────────────────────────────────────────────────────────────
 
 export async function POST(request: Request) {
   try {
