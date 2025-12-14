@@ -37,7 +37,13 @@ async function getNativeKV(): Promise<KVNamespace | null> {
     const ctx = await getCloudflareContext();
     const env = ctx?.env as Record<string, unknown> | undefined;
     const kv = env?.CLOUD_SYNC_KV;
-    if (kv && typeof kv === 'object' && 'get' in kv && 'put' in kv && 'delete' in kv) {
+    if (
+      kv &&
+      typeof kv === 'object' &&
+      'get' in kv && typeof (kv as Record<string, unknown>).get === 'function' &&
+      'put' in kv && typeof (kv as Record<string, unknown>).put === 'function' &&
+      'delete' in kv && typeof (kv as Record<string, unknown>).delete === 'function'
+    ) {
       return kv as KVNamespace;
     }
     return null;
@@ -143,8 +149,13 @@ async function deleteValueREST(key: string): Promise<void> {
 async function storeValue(key: string, value: string): Promise<void> {
   const kv = await getNativeKV();
   if (kv) {
-    await kv.put(key, value);
-    return;
+    try {
+      await kv.put(key, value);
+      return;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to store cloud sync data';
+      throw new CloudflareKVError(`KV error: ${message}`, 502);
+    }
   }
   await storeValueREST(key, value);
 }
@@ -152,7 +163,12 @@ async function storeValue(key: string, value: string): Promise<void> {
 async function retrieveValue(key: string): Promise<string | null> {
   const kv = await getNativeKV();
   if (kv) {
-    return kv.get(key);
+    try {
+      return kv.get(key);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to retrieve cloud sync data';
+      throw new CloudflareKVError(`KV error: ${message}`, 502);
+    }
   }
   return retrieveValueREST(key);
 }
@@ -160,8 +176,13 @@ async function retrieveValue(key: string): Promise<string | null> {
 async function deleteValue(key: string): Promise<void> {
   const kv = await getNativeKV();
   if (kv) {
-    await kv.delete(key);
-    return;
+    try {
+      await kv.delete(key);
+      return;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to delete cloud sync data';
+      throw new CloudflareKVError(`KV error: ${message}`, 502);
+    }
   }
   await deleteValueREST(key);
 }
