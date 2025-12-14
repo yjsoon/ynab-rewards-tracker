@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "build:cloudflare": "npx @opennextjs/cloudflare build",
+    "build:cloudflare": "pnpm exec opennextjs-cloudflare build",
     "preview:cloudflare": "pnpm build:cloudflare && wrangler dev",
     "deploy:cloudflare": "pnpm build:cloudflare && wrangler deploy",
     "start": "next start",

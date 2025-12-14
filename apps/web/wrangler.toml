@@ -17,10 +17,7 @@ assets = { directory = ".open-next/assets", binding = "ASSETS" }
 [[kv_namespaces]]
 binding = "CLOUD_SYNC_KV"
 id = "4f5e97d2a1184897993e3a04a09eb200"
-
-# For local development, use a preview namespace
-# Create with: wrangler kv namespace create CLOUD_SYNC_KV --preview
-# preview_id = "YOUR_PREVIEW_KV_NAMESPACE_ID"
+preview_id = "daa5caf25fb14a9bbfd1f4be2a8eb69b"
 
 [vars]
 # Environment variables (non-secret)
