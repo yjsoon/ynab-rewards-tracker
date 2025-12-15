@@ -6,7 +6,7 @@ export default function TabsLayout() {
     <NativeTabs>
       <NativeTabs.Trigger name="index">
         <Icon sf="house.fill" />
-        <Label>YJAB</Label>
+        <Label>Rewards</Label>
       </NativeTabs.Trigger>
       {featureFlags.recommendations && (
         <NativeTabs.Trigger name="recommendations">

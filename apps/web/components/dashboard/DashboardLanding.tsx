@@ -19,9 +19,9 @@ export function DashboardLanding() {
         <div className="text-center mb-12">
           <Wallet className="h-16 w-16 text-primary mx-auto mb-4" aria-hidden="true" />
           <h1 className="text-4xl font-bold mb-2">
-            <span>YJAB</span>
+            <span>Rewards Tracker</span>
             <span className="text-muted-foreground font-normal">
-              : YNAB Journal of Awards & Bonuses
+              {" "}for YNAB
             </span>
           </h1>
           <p className="text-xl text-muted-foreground">

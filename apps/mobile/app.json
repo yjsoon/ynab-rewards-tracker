@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "YNAB Counter Mobile",
-    "slug": "ynab-counter-mobile",
+    "name": "Rewards Tracker",
+    "slug": "rewards-tracker-ynab",
     "version": "0.1.0",
     "scheme": "ynabcounter",
     "orientation": "portrait",

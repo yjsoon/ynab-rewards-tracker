@@ -207,7 +207,7 @@ export default function FormatterPage() {
       <div className="space-y-2 mb-6">
         <h1 className="text-3xl font-bold">Formatter</h1>
         <p className="text-muted-foreground">
-          Convert scanned or downloaded card statements into YNAB-ready CSVs using your own Gemini, OpenAI, or OpenRouter key. Files and keys stay in local storage until you process them, then travel through YJAB&apos;s formatter API before reaching your selected model.
+          Convert scanned or downloaded card statements into YNAB-ready CSVs using your own Gemini, OpenAI, or OpenRouter key. Files and keys stay in local storage until you process them, then travel through Rewards Tracker&apos;s formatter API before reaching your selected model.
         </p>
       </div>
 

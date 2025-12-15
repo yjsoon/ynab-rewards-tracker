@@ -481,7 +481,7 @@ export default function SettingsScreen() {
                     onPress={handleDisconnect}
                     style={styles.connectButton}
                     accessibilityLabel="Disconnect YNAB"
-                    accessibilityHint="Disconnects your YNAB account from YJAB"
+                    accessibilityHint="Disconnects your YNAB account from Rewards Tracker"
                     disabled={!state.pat}
                   >
                     Disconnect

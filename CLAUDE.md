@@ -1,4 +1,4 @@
-# YJAB - YNAB Journal of Awards & Bonuses
+# Rewards Tracker for YNAB
 
 A client-side rewards tracker spanning a production-ready web app and an in-progress mobile companion. Both platforms analyse YNAB transactions to track credit card rewards with user-defined rules. All user data lives in browser or device storage — no server database is used. The mobile app is actively integrating live storage/sync flows and continues to rely on demo data until current work (tracked in bd) is completed.
 

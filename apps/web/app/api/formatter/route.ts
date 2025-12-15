@@ -16,7 +16,7 @@ const PROVIDER_LABEL: Record<StatementFormatterProvider, string> = {
 };
 
 const OPENROUTER_REFERRER = process.env.OPENROUTER_REFERRER || 'https://yj-ab.app';
-const OPENROUTER_TITLE = process.env.OPENROUTER_TITLE || 'YJAB Statement Formatter';
+const OPENROUTER_TITLE = process.env.OPENROUTER_TITLE || 'Rewards Tracker Statement Formatter';
 
 const PROVIDER_VALUES: StatementFormatterProvider[] = ['gemini', 'openai', 'openrouter'];
 const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'] as const;

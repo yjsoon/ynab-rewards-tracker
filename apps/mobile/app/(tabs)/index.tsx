@@ -41,7 +41,7 @@ import { normalizeCurrencyCode } from '@ynab-counter/app-core/utils/currency';
 import { findBestDashboardEntry } from '@/lib/dashboardCache';
 
 export const options = {
-  title: 'YJAB',
+  title: 'Rewards',
   headerLargeTitle: true,
 };
 
@@ -348,8 +348,8 @@ export default function HomeScreen() {
 
       parent?.setOptions({
         headerLargeTitle: false,
-        headerTitle: 'YJAB',
-        title: 'YJAB',
+        headerTitle: 'Rewards',
+        title: 'Rewards',
         headerSearchBarOptions: undefined,
         headerRight: () => (
           <View style={styles.headerButtons}>

@@ -22,7 +22,7 @@ preview_id = "daa5caf25fb14a9bbfd1f4be2a8eb69b"
 [vars]
 # Environment variables (non-secret)
 # OPENROUTER_REFERRER = "https://yj-ab.app"
-# OPENROUTER_TITLE = "YJAB Statement Formatter"
+# OPENROUTER_TITLE = "Rewards Tracker Statement Formatter"
 
 # Secrets (set via `wrangler secret put <NAME>`):
 # - CLOUDFLARE_API_TOKEN (only needed if keeping REST API fallback)

@@ -1,4 +1,4 @@
-# YJAB — YNAB Journal of Awards & Bonuses
+# Rewards Tracker for YNAB
 
 Client-side tracker that analyses YNAB transactions to monitor credit card rewards using configurable rules stored in browser `localStorage`.
 

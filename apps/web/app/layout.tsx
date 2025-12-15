@@ -21,7 +21,7 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata = {
-  title: "YJAB: YNAB Journal of Awards & Bonuses",
+  title: "Rewards Tracker for YNAB",
   description: "Track credit card rewards using your YNAB data."
 };
 

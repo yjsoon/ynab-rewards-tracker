@@ -39,7 +39,7 @@ export function Footer() {
             </span>
           </div>
           <p className="text-xs text-center text-muted-foreground">
-            YJAB is not affiliated with or endorsed by{" "}
+            Rewards Tracker for YNAB is not affiliated with or endorsed by{" "}
             <a
               href="https://www.ynab.com/"
               target="_blank"
