@@ -7,6 +7,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   scheme: 'rewardstracker',
   version: '0.1.0',
   orientation: 'portrait',
+  icon: './assets/icon.png',
   platforms: ['ios', 'android'],
   plugins: ['expo-router'],
   extra: {

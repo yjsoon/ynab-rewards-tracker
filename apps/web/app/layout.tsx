@@ -22,7 +22,23 @@ const plexMono = IBM_Plex_Mono({
 
 export const metadata = {
   title: "Rewards Tracker for YNAB",
-  description: "Track credit card rewards using your YNAB data."
+  description: "Track credit card rewards using your YNAB data.",
+  manifest: "/manifest.json",
+  themeColor: "#2a6478",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Rewards Tracker",
+  },
+  icons: {
+    icon: [
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [
+      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+  },
 };
 
 export default function RootLayout({

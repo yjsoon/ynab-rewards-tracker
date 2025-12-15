@@ -5,6 +5,7 @@
     "version": "0.1.0",
     "scheme": "ynabcounter",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
     "experiments": {
       "typedRoutes": true
     },
