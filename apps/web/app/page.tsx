@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback, useMemo } from "react";
+import { useEffect, useCallback, useMemo, useState } from "react";
 import {
   useYnabPAT,
   useCreditCards,
@@ -21,6 +21,7 @@ import { DashboardCardOverview } from "@/components/dashboard/DashboardCardOverv
 import { useTrackedTransactions } from "@/hooks/useTrackedTransactions";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { RefreshCw } from "lucide-react";
 
 // Constants
 const TRANSACTION_LOOKBACK_DAYS = 30;
@@ -133,7 +134,7 @@ export default function DashboardPage() {
     [settings.cardOrdering]
   );
 
-  const { allTransactions, loading, hasCachedData, refreshing, lastUpdatedAt } = useTrackedTransactions({
+  const { allTransactions, loading, hasCachedData, refreshing, lastUpdatedAt, refresh } = useTrackedTransactions({
     pat,
     selectedBudgetId: selectedBudget.id,
     trackedAccountIds,
@@ -249,6 +250,32 @@ export default function DashboardPage() {
     [cards, settings.cardOrdering, updateSettings]
   );
 
+  // Format relative time for last updated display
+  const formatLastUpdated = useCallback((isoString: string | null) => {
+    if (!isoString) return null;
+    const date = new Date(isoString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+
+    if (diffMins < 1) return "just now";
+    if (diffMins === 1) return "1 min ago";
+    if (diffMins < 60) return `${diffMins} mins ago`;
+
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours === 1) return "1 hour ago";
+    if (diffHours < 24) return `${diffHours} hours ago`;
+
+    return date.toLocaleDateString();
+  }, []);
+
+  // Re-render every minute to update relative time
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const interval = setInterval(() => setTick((t) => t + 1), 60000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Empty state when nothing is configured
   if (!pat) {
     return <DashboardLanding />;
@@ -289,6 +316,29 @@ export default function DashboardPage() {
             >
               Detailed
             </Button>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={refresh}
+              disabled={refreshing || loading}
+              className="rounded-full px-2.5"
+              title={lastUpdatedAt ? `Last updated: ${formatLastUpdated(lastUpdatedAt)}` : "Refresh data"}
+            >
+              <RefreshCw
+                className={cn(
+                  "h-4 w-4",
+                  (refreshing || loading) && "animate-spin"
+                )}
+              />
+            </Button>
+            {lastUpdatedAt && !refreshing && !loading && (
+              <span className="text-xs text-muted-foreground hidden sm:inline">
+                {formatLastUpdated(lastUpdatedAt)}
+              </span>
+            )}
           </div>
         </div>
       </div>
