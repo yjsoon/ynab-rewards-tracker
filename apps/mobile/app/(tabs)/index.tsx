@@ -27,6 +27,7 @@ import {
   Headline,
   Caption1,
   Caption2,
+  SubcategoryProgressRow,
 } from '@/components/ios';
 import {
   SimpleRewardsCalculator,
@@ -515,22 +516,17 @@ export default function HomeScreen() {
                         </ListItem>
 
                         {summary.calculation.subcategoryBreakdowns.slice(0, 3).map((entry) => (
-                          <View key={entry.id} style={styles.subcategoryItem}>
-                            <Separator inset={16} />
-                            <ListItem>
-                              <View style={styles.subcategoryContent}>
-                                <View style={styles.subcategoryInfo}>
-                                  <Body>{entry.name}</Body>
-                                  <Caption2 color="secondary">
-                                    {currencyFormatter.format(entry.totalSpend)} spent
-                                  </Caption2>
-                                </View>
-                                <Footnote color="primary">
-                                  {currencyFormatter.format(entry.rewardEarnedDollars ?? entry.rewardEarned ?? 0)}
-                                </Footnote>
-                              </View>
-                            </ListItem>
-                          </View>
+                          <SubcategoryProgressRow
+                            key={entry.id}
+                            name={entry.name}
+                            flagColor={entry.flagColor}
+                            totalSpend={entry.totalSpend}
+                            maximumSpend={entry.maximumSpend}
+                            rewardEarned={entry.rewardEarned}
+                            rewardEarnedDollars={entry.rewardEarnedDollars}
+                            maximumSpendExceeded={entry.maximumSpendExceeded}
+                            formatCurrency={currencyFormatter.format}
+                          />
                         ))}
                       </>
                     ) : null}

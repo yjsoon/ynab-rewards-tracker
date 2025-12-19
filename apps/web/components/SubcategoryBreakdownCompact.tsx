@@ -3,9 +3,8 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { ChevronDown, ChevronUp } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import { CurrencyAmount } from './CurrencyAmount';
-import { getFlagHex, getFlagClasses, getFlagBorderColor } from '@/lib/flag-colors';
+import { getFlagHex, getFlagBorderColor } from '@/lib/flag-colors';
 
 interface SubcategoryBreakdown {
   subcategoryId?: string;
@@ -153,53 +152,67 @@ export function SubcategoryBreakdownCompact({
         /* Expanded View - All Details */
         <div className="space-y-2">
           {sortedBreakdowns.map((entry) => {
-            const flagColours = getFlagClasses(entry.flagColor);
             const borderColor = getFlagBorderColor(entry.flagColor, 0.4);
+            const flagColor = getFlagHex(entry.flagColor);
+
+            // Calculate progress percentage for background fill
+            const progress = entry.maximumSpend && entry.maximumSpend > 0
+              ? Math.min(100, (entry.totalSpend / entry.maximumSpend) * 100)
+              : 0;
 
             return (
               <div
                 key={entry.subcategoryId || `${entry.flagColor}-${entry.name}`}
-                className={cn(
-                  "flex flex-col gap-1 rounded-lg border border-border p-2 sm:flex-row sm:items-center sm:justify-between",
-                  flagColours.bg
-                )}
+                className="relative overflow-hidden rounded-lg border p-2"
                 style={{ borderColor }}
               >
-                <div className="flex flex-1 items-center gap-3">
+                {/* Progress bar background fill */}
+                <div
+                  className="absolute inset-y-0 left-0 transition-all duration-300"
+                  style={{
+                    width: `${progress}%`,
+                    backgroundColor: flagColor,
+                    opacity: 0.15,
+                  }}
+                />
+                {/* Colored left border accent */}
+                <div
+                  className="absolute inset-y-0 left-0 w-1 rounded-l-lg"
+                  style={{ backgroundColor: flagColor }}
+                />
+                {/* Content */}
+                <div className="relative flex flex-1 items-center gap-3 pl-2">
                   <div
-                    className={cn(
-                      'h-3 w-3 rounded-full flex-shrink-0',
-                      entry.maximumSpendExceeded ? 'bg-red-500' : ''
-                    )}
-                    style={
-                      !entry.maximumSpendExceeded
-                        ? { backgroundColor: getFlagHex(entry.flagColor) }
-                        : undefined
-                    }
+                    className="h-3 w-3 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: flagColor }}
                   />
                   <div className="flex-1">
                     <div className="flex items-baseline gap-2">
                       <span className="text-sm font-medium">{entry.name}</span>
                       <span className="text-sm text-muted-foreground">•</span>
                       <span className="text-sm font-semibold">
-                        {cardType === 'cashback' ? (
-                          <CurrencyAmount value={entry.rewardEarned} currency={currency} />
-                        ) : (
-                          `${Math.round(entry.rewardEarned).toLocaleString()} miles`
-                        )}
+                        <CurrencyAmount value={entry.totalSpend} currency={currency} />
                       </span>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Spent <CurrencyAmount value={entry.totalSpend} currency={currency} />
-                      {entry.maximumSpend && entry.maximumSpend > 0 && (
+                      {entry.maximumSpend && entry.maximumSpend > 0 ? (
                         <>
-                          {' / '}
-                          <CurrencyAmount value={entry.maximumSpend} currency={currency} />
-                          {' cap'}
+                          Cap <CurrencyAmount value={entry.maximumSpend} currency={currency} />
+                          {' '}
+                          <span className={entry.maximumSpendExceeded ? 'text-red-600 font-medium' : ''}>
+                            ({Math.round(progress)}%)
+                          </span>
                         </>
-                      )}
-                      {entry.maximumSpendExceeded && (
-                        <span className="ml-1 text-red-600 font-medium">(maxed)</span>
+                      ) : null}
+                      {(entry.rewardEarned > 0 || !(entry.maximumSpend && entry.maximumSpend > 0)) && (
+                        <>
+                          {entry.maximumSpend && entry.maximumSpend > 0 ? ' · ' : ''}
+                          {cardType === 'cashback' ? (
+                            <><CurrencyAmount value={Math.round(entry.rewardEarned)} currency={currency} /> rebate</>
+                          ) : (
+                            <>{Math.round(entry.rewardEarned).toLocaleString()} miles</>
+                          )}
+                        </>
                       )}
                     </p>
                   </div>
