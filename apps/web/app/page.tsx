@@ -27,6 +27,31 @@ import { RefreshCw } from "lucide-react";
 const TRANSACTION_LOOKBACK_DAYS = 30;
 const RECENT_TRANSACTIONS_LIMIT = 10;
 
+// Format relative time for last updated display (standalone utility)
+function formatLastUpdated(isoString: string | null): string | null {
+  if (!isoString) return null;
+  const date = new Date(isoString);
+  const now = new Date();
+
+  // Guard against future timestamps to avoid negative time differences
+  if (date.getTime() > now.getTime()) {
+    return "just now";
+  }
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+
+  if (diffMins < 1) return "just now";
+  if (diffMins === 1) return "1 min ago";
+  if (diffMins < 60) return `${diffMins} mins ago`;
+
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours === 1) return "1 hour ago";
+  if (diffHours < 24) return `${diffHours} hours ago`;
+
+  // Use explicit locale and format for consistent output
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 // Types for better type safety
 
 interface SetupStatus {
@@ -250,31 +275,13 @@ export default function DashboardPage() {
     [cards, settings.cardOrdering, updateSettings]
   );
 
-  // Format relative time for last updated display
-  const formatLastUpdated = useCallback((isoString: string | null) => {
-    if (!isoString) return null;
-    const date = new Date(isoString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-
-    if (diffMins < 1) return "just now";
-    if (diffMins === 1) return "1 min ago";
-    if (diffMins < 60) return `${diffMins} mins ago`;
-
-    const diffHours = Math.floor(diffMins / 60);
-    if (diffHours === 1) return "1 hour ago";
-    if (diffHours < 24) return `${diffHours} hours ago`;
-
-    return date.toLocaleDateString();
-  }, []);
-
-  // Re-render every minute to update relative time
+  // Re-render every minute to update relative time (only when timestamp exists)
   const [, setTick] = useState(0);
   useEffect(() => {
+    if (!lastUpdatedAt) return;
     const interval = setInterval(() => setTick((t) => t + 1), 60000);
     return () => clearInterval(interval);
-  }, []);
+  }, [lastUpdatedAt]);
 
   // Empty state when nothing is configured
   if (!pat) {
@@ -326,6 +333,7 @@ export default function DashboardPage() {
               disabled={refreshing || loading}
               className="rounded-full px-2.5"
               title={lastUpdatedAt ? `Last updated: ${formatLastUpdated(lastUpdatedAt)}` : "Refresh data"}
+              aria-label="Refresh dashboard data"
             >
               <RefreshCw
                 className={cn(
