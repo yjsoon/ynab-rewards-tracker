@@ -4,6 +4,7 @@ export { Button } from './Button';
 export { ProgressView } from './ProgressView';
 export { SectionHeader } from './SectionHeader';
 export { Separator } from './Separator';
+export { SubcategoryProgressRow } from './SubcategoryProgressRow';
 export {
   Typography,
   LargeTitle,
