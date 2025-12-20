@@ -32,6 +32,11 @@ function formatLastUpdated(isoString: string | null): string | null {
   if (!isoString) return null;
   const date = new Date(isoString);
   const now = new Date();
+
+  // Guard against future timestamps to avoid negative time differences
+  if (date.getTime() > now.getTime()) {
+    return "just now";
+  }
   const diffMs = now.getTime() - date.getTime();
   const diffMins = Math.floor(diffMs / 60000);
 
