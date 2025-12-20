@@ -168,10 +168,10 @@ export function SubcategoryBreakdownDetailed({
                     <div
                       className={cn(
                         "h-4 w-4 rounded-full flex-shrink-0",
-                        isCapped ? "bg-red-500" : isDisabled ? "bg-gray-400" : ''
+                        isDisabled && "bg-gray-400"
                       )}
                       style={
-                        !isCapped && !isDisabled ? { backgroundColor: getFlagHex(entry.flagColor) } : undefined
+                        !isDisabled ? { backgroundColor: getFlagHex(entry.flagColor) } : undefined
                       }
                     />
                     <div>
@@ -238,11 +238,11 @@ export function SubcategoryBreakdownDetailed({
                     </div>
                     <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted/30">
                       <div
-                        className={cn(
-                          "h-full rounded-full transition-all",
-                          isCapped ? "bg-red-500" : isDisabled ? "bg-gray-400" : "bg-blue-500"
-                        )}
-                        style={{ width: `${Math.min(100, (entry.totalSpend / entry.maximumSpend) * 100)}%` }}
+                        className="h-full rounded-full transition-all"
+                        style={{
+                          width: `${Math.min(100, (entry.totalSpend / entry.maximumSpend) * 100)}%`,
+                          backgroundColor: isCapped ? '#ef4444' : isDisabled ? '#9ca3af' : getFlagHex(entry.flagColor),
+                        }}
                       />
                     </div>
                   </div>

@@ -25,6 +25,8 @@ interface SubcategoryBreakdownCompactProps {
   flagNames: Record<string, string>;
   isExpanded?: boolean;
   onToggleExpanded?: () => void;
+  /** When true, show compact one-liner "Cap $X • Avail $Z". When false, show full detail. */
+  compactSubtitles?: boolean;
 }
 
 export function SubcategoryBreakdownCompact({
@@ -33,6 +35,7 @@ export function SubcategoryBreakdownCompact({
   currency,
   isExpanded: controlledIsExpanded,
   onToggleExpanded,
+  compactSubtitles = false,
 }: SubcategoryBreakdownCompactProps) {
   const [internalIsExpanded, setInternalIsExpanded] = useState(false);
 
@@ -191,30 +194,55 @@ export function SubcategoryBreakdownCompact({
                       <span className="text-sm font-medium">{entry.name}</span>
                       <span className="text-sm text-muted-foreground">•</span>
                       <span className="text-sm font-semibold">
-                        <CurrencyAmount value={entry.totalSpend} currency={currency} />
+                        <CurrencyAmount value={entry.totalSpend} currency={currency} decimals={0} />
                       </span>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      {entry.maximumSpend && entry.maximumSpend > 0 ? (
-                        <>
-                          Cap <CurrencyAmount value={entry.maximumSpend} currency={currency} />
-                          {' '}
-                          <span className={entry.maximumSpendExceeded ? 'text-red-600 font-medium' : ''}>
-                            ({Math.round(progress)}%)
-                          </span>
-                        </>
-                      ) : null}
-                      {(entry.rewardEarned > 0 || !(entry.maximumSpend && entry.maximumSpend > 0)) && (
-                        <>
-                          {entry.maximumSpend && entry.maximumSpend > 0 ? ' · ' : ''}
-                          {cardType === 'cashback' ? (
-                            <><CurrencyAmount value={Math.round(entry.rewardEarned)} currency={currency} /> rebate</>
-                          ) : (
-                            <>{Math.round(entry.rewardEarned).toLocaleString()} miles</>
-                          )}
-                        </>
-                      )}
-                    </p>
+                    {compactSubtitles ? (
+                      /* Summary mode: single line "Cap $X • Avail $Z" */
+                      entry.maximumSpend && entry.maximumSpend > 0 ? (
+                        <p className="text-xs text-muted-foreground">
+                          Cap <CurrencyAmount value={entry.maximumSpend} currency={currency} decimals={0} />
+                          {' • '}
+                          Avail <CurrencyAmount value={Math.max(0, entry.maximumSpend - entry.totalSpend)} currency={currency} decimals={0} />
+                        </p>
+                      ) : null
+                    ) : (
+                      /* Detailed mode: two lines */
+                      <div className="text-xs text-muted-foreground">
+                        {entry.maximumSpend && entry.maximumSpend > 0 ? (
+                          <p>
+                            Cap <CurrencyAmount value={entry.maximumSpend} currency={currency} decimals={0} />
+                            {' '}
+                            <span className={entry.maximumSpendExceeded ? 'text-red-600 font-medium' : ''}>
+                              ({Math.round(progress)}%)
+                            </span>
+                          </p>
+                        ) : null}
+                        {entry.maximumSpend && entry.maximumSpend > 0 ? (
+                          <p>
+                            Avail <CurrencyAmount value={Math.max(0, entry.maximumSpend - entry.totalSpend)} currency={currency} decimals={0} />
+                            {entry.rewardEarned > 0 && (
+                              <>
+                                {' • '}
+                                {cardType === 'cashback' ? (
+                                  <><CurrencyAmount value={Math.round(entry.rewardEarned)} currency={currency} decimals={0} /> rebate</>
+                                ) : (
+                                  <>{Math.round(entry.rewardEarned).toLocaleString()} miles</>
+                                )}
+                              </>
+                            )}
+                          </p>
+                        ) : entry.rewardEarned > 0 ? (
+                          <p>
+                            {cardType === 'cashback' ? (
+                              <><CurrencyAmount value={Math.round(entry.rewardEarned)} currency={currency} decimals={0} /> rebate</>
+                            ) : (
+                              <>{Math.round(entry.rewardEarned).toLocaleString()} miles</>
+                            )}
+                          </p>
+                        ) : null}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
