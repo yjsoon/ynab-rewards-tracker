@@ -11,6 +11,7 @@ export function cn(...inputs: ClassValue[]) {
 export type CurrencyFormatOptions = {
   locale?: string;
   currency?: string;
+  decimals?: number;
 };
 
 function resolveCurrencyFormattingOptions(options: CurrencyFormatOptions = {}) {
@@ -43,13 +44,14 @@ function resolveCurrencyFormattingOptions(options: CurrencyFormatOptions = {}) {
 
 function createCurrencyFormatter(options: CurrencyFormatOptions = {}) {
   const { locale, currency } = resolveCurrencyFormattingOptions(options);
+  const decimals = options.decimals ?? 2;
 
   return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency,
     currencyDisplay: 'narrowSymbol', // Use $ instead of US$
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
   });
 }
 

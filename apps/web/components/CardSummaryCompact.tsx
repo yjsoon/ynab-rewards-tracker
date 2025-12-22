@@ -240,6 +240,7 @@ export function CardSummaryCompact({ card, pat, prefetchedTransactions, onHideCa
             flagNames={flagNames}
             isExpanded={isSubcategoryExpanded}
             onToggleExpanded={handleToggleSubcategories}
+            compactSubtitles
           />
         )}
 
