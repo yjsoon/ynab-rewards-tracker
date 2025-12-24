@@ -103,26 +103,13 @@ export async function requestJson<T>(options: RequestOptions): Promise<T> {
       return json as T;
 
     } catch (error) {
-      // Already a YnabApiError - check if retryable
-      if (error instanceof YnabApiError) {
-        lastError = error;
-        
-        // Only retry network errors
-        if (error.code === 'network_error' && attempt < maxRetries) {
-          const waitMs = backoffMs(attempt, { code: 'network_error' });
-          await sleep(waitMs);
-          continue;
-        }
-        
-        throw error;
-      }
-
-      // Classify other errors
-      const classified = classifyError(error);
+      // Classify the error if not already a YnabApiError
+      const classified = error instanceof YnabApiError ? error : classifyError(error);
       lastError = classified;
 
-      // Retry network errors and timeouts
-      if ((classified.code === 'network_error' || classified.code === 'timeout') && attempt < maxRetries) {
+      // Retry transient errors (network errors and timeouts)
+      const isRetryable = classified.code === 'network_error' || classified.code === 'timeout';
+      if (isRetryable && attempt < maxRetries) {
         const waitMs = backoffMs(attempt, { code: classified.code });
         await sleep(waitMs);
         continue;
@@ -164,6 +151,10 @@ async function executeRequest(options: ExecuteRequestOptions): Promise<Response>
       signal: mergedSignal,
     });
   } catch (error) {
+    // Check if abort was due to our timeout (signal.reason will be our TimeoutError)
+    if (mergedSignal?.aborted && (mergedSignal.reason as Error)?.name === 'TimeoutError') {
+      throw createYnabError('timeout');
+    }
     throw classifyError(error);
   }
 }
@@ -175,7 +166,11 @@ function mergeAbortSignals(externalSignal: AbortSignal | undefined, timeoutMs: n
   const controller = new AbortController();
 
   const timeoutId = setTimeout(() => {
-    controller.abort(new DOMException('Request timed out', 'TimeoutError'));
+    // Use a plain Error with a marker for React Native compatibility
+    // (DOMException is not available in Hermes)
+    const timeoutError = new Error('Request timed out');
+    timeoutError.name = 'TimeoutError';
+    controller.abort(timeoutError);
   }, timeoutMs);
 
   // Clean up timeout if external signal aborts first
@@ -207,26 +202,29 @@ function classifyError(error: unknown): YnabApiError {
     return error;
   }
 
-  // Check for abort/timeout
-  if (error instanceof DOMException) {
-    if (error.name === 'AbortError' || error.name === 'TimeoutError') {
-      // Check if it's specifically a timeout
-      if (error.message?.includes('timed out') || error.name === 'TimeoutError') {
-        return createYnabError('timeout');
-      }
-      // Otherwise it's a user cancellation - treat as network error
+  // Check for abort/timeout errors (works in both browser and React Native)
+  // DOMException may not exist in React Native/Hermes, so check by name
+  if (error instanceof Error) {
+    const errorName = error.name;
+    
+    // Timeout errors (our custom TimeoutError or browser's)
+    if (errorName === 'TimeoutError' || error.message?.includes('timed out')) {
+      return createYnabError('timeout');
+    }
+    
+    // Abort errors (user cancellation)
+    if (errorName === 'AbortError') {
       return createYnabError('network_error', undefined, 'Request was cancelled');
+    }
+    
+    // Network errors in React Native
+    if (error.message?.includes('Network request failed')) {
+      return createYnabError('network_error', undefined, error.message);
     }
   }
 
-  // Check for network errors
+  // TypeError is thrown for network failures in fetch (browser)
   if (error instanceof TypeError) {
-    // TypeError is thrown for network failures in fetch
-    return createYnabError('network_error', undefined, error.message);
-  }
-
-  // Check for "Network request failed" (React Native)
-  if (error instanceof Error && error.message?.includes('Network request failed')) {
     return createYnabError('network_error', undefined, error.message);
   }
 

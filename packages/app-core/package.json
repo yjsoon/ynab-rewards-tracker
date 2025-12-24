@@ -11,6 +11,8 @@
     "./*": "./src/*"
   },
   "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
     "typecheck": "tsc --project tsconfig.json --noEmit"
   },
   "devDependencies": {
