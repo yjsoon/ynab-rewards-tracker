@@ -10,7 +10,9 @@
     "paths": {
       "@/*": ["./*"],
       "@ynab-counter/app-core": ["../../packages/app-core/src"],
-      "@ynab-counter/app-core/*": ["../../packages/app-core/src/*"]
+      "@ynab-counter/app-core/*": ["../../packages/app-core/src/*"],
+      "@ynab-counter/ynab-client": ["../../packages/ynab-client/src"],
+      "@ynab-counter/ynab-client/*": ["../../packages/ynab-client/src/*"]
     },
     "types": [
       "node"
@@ -34,7 +36,8 @@
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
-    "../../packages/app-core/src/**/*.ts"
+    "../../packages/app-core/src/**/*.ts",
+    "../../packages/ynab-client/src/**/*.ts"
   ],
   "exclude": [
     "node_modules"

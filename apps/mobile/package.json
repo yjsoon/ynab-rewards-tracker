@@ -21,6 +21,7 @@
     "@tamagui/lucide-icons": "^1.115.3",
     "@tamagui/themes": "^1.115.3",
     "@ynab-counter/app-core": "workspace:*",
+    "@ynab-counter/ynab-client": "workspace:*",
     "expo": "~54.0.12",
     "expo-constants": "~18.0.9",
     "expo-font": "~14.0.1",
