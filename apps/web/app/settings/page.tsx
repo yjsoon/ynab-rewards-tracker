@@ -988,7 +988,7 @@ export default function SettingsPage() {
                   value={tokenInput}
                   onChange={(e) => setTokenInput(e.target.value)}
                   placeholder="Paste your YNAB Personal Access Token"
-                  className="flex-1 px-3 py-2 border rounded-md"
+                  className="flex-1 px-3 py-2 border rounded-md text-base md:text-sm"
                 />
                 <Button type="submit">Save Token</Button>
               </div>
@@ -1149,7 +1149,7 @@ export default function SettingsPage() {
                 type="text"
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value)}
-                className="w-full px-3 py-2 border rounded-md mt-1"
+                className="w-full px-3 py-2 border rounded-md mt-1 text-base md:text-sm"
                 placeholder="$"
                 aria-label="Currency symbol or code"
                 maxLength={4}
@@ -1164,7 +1164,7 @@ export default function SettingsPage() {
                 min="0"
                 value={milesValuation}
                 onChange={(e) => setMilesValuation(Number(e.target.value))}
-                className="w-full px-3 py-2 border rounded-md mt-1"
+                className="w-full px-3 py-2 border rounded-md mt-1 text-base md:text-sm"
                 placeholder="0.01"
                 aria-label="Miles valuation in dollars per mile"
               />
@@ -1296,7 +1296,7 @@ export default function SettingsPage() {
                   </div>
                   <textarea
                     id="cloud-sync-phrase"
-                    className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-base md:text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     rows={2}
                     value={cloudSyncPhrase}
                     onChange={(event) => setCloudSyncPhrase(event.target.value)}
