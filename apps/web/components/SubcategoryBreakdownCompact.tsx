@@ -194,11 +194,11 @@ export function SubcategoryBreakdownCompact({
                       <span className="text-sm font-medium">{entry.name}</span>
                       <span className="text-sm text-muted-foreground">•</span>
                       <span className="text-sm font-semibold">
-                        <CurrencyAmount value={entry.totalSpend} currency={currency} decimals={0} />
+                        <CurrencyAmount value={entry.totalSpend} currency={currency} decimals={compactSubtitles ? 0 : 2} />
                       </span>
                     </div>
                     {compactSubtitles ? (
-                      /* Summary mode: single line "Cap $X • Avail $Z" */
+                      /* Summary mode: single line "Cap $X • Avail $Z" - no decimals */
                       entry.maximumSpend && entry.maximumSpend > 0 ? (
                         <p className="text-xs text-muted-foreground">
                           Cap <CurrencyAmount value={entry.maximumSpend} currency={currency} decimals={0} />
@@ -211,7 +211,7 @@ export function SubcategoryBreakdownCompact({
                       <div className="text-xs text-muted-foreground">
                         {entry.maximumSpend && entry.maximumSpend > 0 ? (
                           <p>
-                            Cap <CurrencyAmount value={entry.maximumSpend} currency={currency} decimals={0} />
+                            Cap <CurrencyAmount value={entry.maximumSpend} currency={currency} />
                             {' '}
                             <span className={entry.maximumSpendExceeded ? 'text-red-600 font-medium' : ''}>
                               ({Math.round(progress)}%)
@@ -220,12 +220,12 @@ export function SubcategoryBreakdownCompact({
                         ) : null}
                         {entry.maximumSpend && entry.maximumSpend > 0 ? (
                           <p>
-                            Avail <CurrencyAmount value={Math.max(0, entry.maximumSpend - entry.totalSpend)} currency={currency} decimals={0} />
+                            Avail <CurrencyAmount value={Math.max(0, entry.maximumSpend - entry.totalSpend)} currency={currency} />
                             {entry.rewardEarned > 0 && (
                               <>
                                 {' • '}
                                 {cardType === 'cashback' ? (
-                                  <><CurrencyAmount value={Math.round(entry.rewardEarned)} currency={currency} decimals={0} /> rebate</>
+                                  <><CurrencyAmount value={entry.rewardEarned} currency={currency} /> rebate</>
                                 ) : (
                                   <>{Math.round(entry.rewardEarned).toLocaleString()} miles</>
                                 )}
@@ -235,7 +235,7 @@ export function SubcategoryBreakdownCompact({
                         ) : entry.rewardEarned > 0 ? (
                           <p>
                             {cardType === 'cashback' ? (
-                              <><CurrencyAmount value={Math.round(entry.rewardEarned)} currency={currency} decimals={0} /> rebate</>
+                              <><CurrencyAmount value={entry.rewardEarned} currency={currency} /> rebate</>
                             ) : (
                               <>{Math.round(entry.rewardEarned).toLocaleString()} miles</>
                             )}
