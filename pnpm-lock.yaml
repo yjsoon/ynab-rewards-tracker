@@ -309,7 +309,7 @@ importers:
         specifier: 5.6.2
         version: 5.6.2
       vitest:
-        specifier: ^2.1.8
+        specifier: ^2.1.9
         version: 2.1.9(@types/node@24.3.1)(lightningcss@1.30.2)(terser@5.44.0)
 
 packages:
