@@ -346,6 +346,7 @@ export default function SettingsPage() {
       const client = new YnabClient(pat);
       const fetchedBudgets = await client.getBudgets();
       setBudgets(fetchedBudgets);
+      setConnectionMessage(''); // Clear "Fetching budgets..." message on success
 
       if (fetchedBudgets.length === 1) {
         handleBudgetSelect(fetchedBudgets[0].id, fetchedBudgets[0].name);
