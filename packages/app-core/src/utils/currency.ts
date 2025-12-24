@@ -21,7 +21,7 @@ export function createCurrencyFormatter(options: CurrencyFormatterOptions): Intl
   return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency,
-    currencyDisplay: 'narrowSymbol', // Use $ instead of US$
+    currencyDisplay: 'narrowSymbol', // Prefer narrow currency symbols (e.g., "$" for USD in many locales)
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   });

@@ -186,11 +186,6 @@ function mergeAbortSignals(externalSignal: AbortSignal | undefined, timeoutMs: n
     }
   }
 
-  // Clean up external listener when controller aborts
-  controller.signal.addEventListener('abort', () => {
-    clearTimeout(timeoutId);
-  }, { once: true });
-
   return controller.signal;
 }
 

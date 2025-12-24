@@ -8,7 +8,7 @@ import {
   normalizeCurrencyCode,
   type CurrencyFormatterOptions,
 } from '@ynab-counter/app-core/utils/currency'
-import { absFromMilli, fromMilli, getErrorMessage, isoDate } from '@ynab-counter/app-core/utils/general'
+import { absFromMilli, fromMilli, getErrorMessage, isoDate, localIsoDate } from '@ynab-counter/app-core/utils/general'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -77,4 +77,4 @@ export function formatCurrencyParts(
   });
 }
 
-export { fromMilli, absFromMilli, isoDate, getErrorMessage };
+export { fromMilli, absFromMilli, isoDate, localIsoDate, getErrorMessage };
