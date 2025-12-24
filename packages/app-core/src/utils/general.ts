@@ -1,0 +1,33 @@
+/**
+ * Convert YNAB milliunits to dollars as number.
+ */
+export function fromMilli(amount: number): number {
+  return amount / 1000;
+}
+
+/**
+ * Convert YNAB milliunits to dollars, absolute value (useful for spend).
+ */
+export function absFromMilli(amount: number): number {
+  return Math.abs(amount) / 1000;
+}
+
+/**
+ * Format Date to YYYY-MM-DD (local date component).
+ */
+export function isoDate(date: Date): string {
+  return date.toISOString().split('T')[0];
+}
+
+/**
+ * Extracts error message from various error types.
+ */
+export function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === 'string') {
+    return error;
+  }
+  return String(error);
+}
