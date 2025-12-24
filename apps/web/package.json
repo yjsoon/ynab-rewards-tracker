@@ -29,6 +29,7 @@
     "@scure/bip39": "^2.0.0",
     "@types/papaparse": "^5.5.0",
     "@ynab-counter/app-core": "workspace:*",
+    "@ynab-counter/ynab-client": "workspace:*",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.544.0",

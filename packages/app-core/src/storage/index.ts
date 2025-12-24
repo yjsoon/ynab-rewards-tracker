@@ -4,3 +4,4 @@ export * from './internal-types';
 export * from './migrations';
 export * from './normalisers';
 export * from './helpers';
+export * from './dashboardCache';

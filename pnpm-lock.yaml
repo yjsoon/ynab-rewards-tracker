@@ -59,6 +59,9 @@ importers:
       '@ynab-counter/app-core':
         specifier: workspace:*
         version: link:../../packages/app-core
+      '@ynab-counter/ynab-client':
+        specifier: workspace:*
+        version: link:../../packages/ynab-client
       expo:
         specifier: ~54.0.12
         version: 54.0.13(@babel/core@7.28.4)(@expo/metro-runtime@6.1.2)(expo-router@6.0.11)(graphql@15.8.0)(react-native@0.81.4(@babel/core@7.28.4)(@types/react@19.1.12)(react@19.1.0))(react@19.1.0)
@@ -198,6 +201,9 @@ importers:
       '@ynab-counter/app-core':
         specifier: workspace:*
         version: link:../../packages/app-core
+      '@ynab-counter/ynab-client':
+        specifier: workspace:*
+        version: link:../../packages/ynab-client
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -268,6 +274,9 @@ importers:
       '@types/node':
         specifier: ^24.3.1
         version: 24.3.1
+      vitest:
+        specifier: ^2.1.9
+        version: 2.1.9(@types/node@24.3.1)(lightningcss@1.30.2)(terser@5.44.0)
 
   packages/db:
     dependencies:
@@ -299,6 +308,9 @@ importers:
       typescript:
         specifier: 5.6.2
         version: 5.6.2
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@24.3.1)(lightningcss@1.30.2)(terser@5.44.0)
 
 packages:
 

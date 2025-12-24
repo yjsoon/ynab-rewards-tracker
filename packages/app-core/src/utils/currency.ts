@@ -1,4 +1,52 @@
 /**
+ * Options for currency formatting.
+ */
+export type CurrencyFormatterOptions = {
+  /** BCP 47 locale string (e.g., 'en-US', 'en-GB') */
+  locale: string;
+  /** ISO 4217 currency code (e.g., 'USD', 'GBP') */
+  currency: string;
+  /** Number of decimal places (default: 2) */
+  decimals?: number;
+};
+
+/**
+ * Create an Intl.NumberFormat instance for currency formatting.
+ * Requires explicit locale and currency - use platform-specific
+ * resolution for defaults (navigator.language, user settings, etc.).
+ */
+export function createCurrencyFormatter(options: CurrencyFormatterOptions): Intl.NumberFormat {
+  const { locale, currency, decimals = 2 } = options;
+
+  return new Intl.NumberFormat(locale, {
+    style: 'currency',
+    currency,
+    currencyDisplay: 'narrowSymbol', // Prefer narrow currency symbols (e.g., "$" for USD in many locales)
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+}
+
+/**
+ * Format a number as currency.
+ * Requires explicit locale and currency options.
+ */
+export function formatCurrency(value: number, options: CurrencyFormatterOptions): string {
+  return createCurrencyFormatter(options).format(value);
+}
+
+/**
+ * Format a number as currency parts (for custom rendering).
+ * Requires explicit locale and currency options.
+ */
+export function formatCurrencyParts(
+  value: number,
+  options: CurrencyFormatterOptions,
+): Intl.NumberFormatPart[] {
+  return createCurrencyFormatter(options).formatToParts(value);
+}
+
+/**
  * Normalize currency symbols to valid ISO 4217 codes for Intl.NumberFormat.
  * Maps common symbols ($, £, €) to ISO codes (USD, GBP, EUR).
  * Falls back to USD for invalid input.

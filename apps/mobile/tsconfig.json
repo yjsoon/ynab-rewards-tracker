@@ -5,7 +5,9 @@
     "paths": {
       "@/*": ["./src/*"],
       "@ynab-counter/app-core": ["../../packages/app-core/src"],
-      "@ynab-counter/app-core/*": ["../../packages/app-core/src/*"]
+      "@ynab-counter/app-core/*": ["../../packages/app-core/src/*"],
+      "@ynab-counter/ynab-client": ["../../packages/ynab-client/src"],
+      "@ynab-counter/ynab-client/*": ["../../packages/ynab-client/src/*"]
     },
     "jsx": "react-native",
     "strict": true,
@@ -18,7 +20,8 @@
     "**/*.tsx",
     ".expo/types/**/*.ts",
     "expo-env.d.ts",
-    "../../packages/app-core/src/**/*.ts"
+    "../../packages/app-core/src/**/*.ts",
+    "../../packages/ynab-client/src/**/*.ts"
   ],
   "exclude": ["node_modules"]
 }

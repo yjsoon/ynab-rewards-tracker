@@ -1,0 +1,103 @@
+import { describe, it, expect } from 'vitest';
+import {
+  createCurrencyFormatter,
+  formatCurrency,
+  formatCurrencyParts,
+  normalizeCurrencyCode,
+} from './currency';
+
+describe('createCurrencyFormatter', () => {
+  it('creates a formatter with default 2 decimals', () => {
+    const formatter = createCurrencyFormatter({ locale: 'en-US', currency: 'USD' });
+    expect(formatter.format(123.456)).toBe('$123.46');
+  });
+
+  it('respects custom decimal places', () => {
+    const formatter = createCurrencyFormatter({ locale: 'en-US', currency: 'USD', decimals: 0 });
+    expect(formatter.format(123.456)).toBe('$123');
+  });
+
+  it('works with different currencies', () => {
+    const formatter = createCurrencyFormatter({ locale: 'en-GB', currency: 'GBP' });
+    expect(formatter.format(100)).toBe('£100.00');
+  });
+});
+
+describe('formatCurrency', () => {
+  it('formats USD correctly', () => {
+    expect(formatCurrency(1234.56, { locale: 'en-US', currency: 'USD' })).toBe('$1,234.56');
+  });
+
+  it('formats EUR correctly', () => {
+    const result = formatCurrency(1234.56, { locale: 'de-DE', currency: 'EUR' });
+    // German locale uses different separators
+    expect(result).toContain('€');
+    expect(result).toContain('1.234,56');
+  });
+
+  it('handles zero decimals', () => {
+    expect(formatCurrency(99.99, { locale: 'en-US', currency: 'USD', decimals: 0 })).toBe('$100');
+  });
+
+  it('handles negative values', () => {
+    expect(formatCurrency(-50.25, { locale: 'en-US', currency: 'USD' })).toBe('-$50.25');
+  });
+});
+
+describe('formatCurrencyParts', () => {
+  it('returns parts array for custom rendering', () => {
+    const parts = formatCurrencyParts(123.45, { locale: 'en-US', currency: 'USD' });
+    expect(Array.isArray(parts)).toBe(true);
+    expect(parts.some(p => p.type === 'currency')).toBe(true);
+    expect(parts.some(p => p.type === 'integer')).toBe(true);
+    expect(parts.some(p => p.type === 'fraction')).toBe(true);
+  });
+});
+
+describe('normalizeCurrencyCode', () => {
+  it('returns USD for undefined input', () => {
+    expect(normalizeCurrencyCode(undefined)).toBe('USD');
+  });
+
+  it('returns USD for empty string', () => {
+    expect(normalizeCurrencyCode('')).toBe('USD');
+  });
+
+  it('maps $ to USD', () => {
+    expect(normalizeCurrencyCode('$')).toBe('USD');
+  });
+
+  it('maps £ to GBP', () => {
+    expect(normalizeCurrencyCode('£')).toBe('GBP');
+  });
+
+  it('maps € to EUR', () => {
+    expect(normalizeCurrencyCode('€')).toBe('EUR');
+  });
+
+  it('normalizes lowercase ISO codes', () => {
+    expect(normalizeCurrencyCode('usd')).toBe('USD');
+    expect(normalizeCurrencyCode('gbp')).toBe('GBP');
+  });
+
+  it('passes through valid uppercase ISO codes', () => {
+    expect(normalizeCurrencyCode('USD')).toBe('USD');
+    expect(normalizeCurrencyCode('SGD')).toBe('SGD');
+    expect(normalizeCurrencyCode('JPY')).toBe('JPY');
+  });
+
+  it('trims whitespace', () => {
+    expect(normalizeCurrencyCode('  USD  ')).toBe('USD');
+  });
+
+  it('maps regional dollar variants', () => {
+    expect(normalizeCurrencyCode('A$')).toBe('AUD');
+    expect(normalizeCurrencyCode('C$')).toBe('CAD');
+    expect(normalizeCurrencyCode('S$')).toBe('SGD');
+  });
+
+  it('falls back to USD for invalid input', () => {
+    expect(normalizeCurrencyCode('invalid')).toBe('USD');
+    expect(normalizeCurrencyCode('XXXX')).toBe('USD');
+  });
+});

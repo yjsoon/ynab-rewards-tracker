@@ -1,11 +1,36 @@
 /**
  * Client-side YNAB API wrapper
- * Uses local API proxy routes to avoid CORS issues
+ * Uses local API proxy routes to avoid CORS issues.
+ *
+ * Note: This wrapper adds caching and request deduplication on top of the
+ * shared YNAB client types. It uses a proxy URL for CORS, so doesn't use
+ * the core YnabClient directly.
  */
 
 import type { Transaction } from '@/types/transaction';
 import { storage } from './storage';
 import { UNFLAGGED_FLAG, YNAB_FLAG_COLORS, type YnabFlagColor } from './ynab-constants';
+
+// Re-export shared types for backwards compatibility
+export type {
+  YnabBudgetSummary,
+  YnabAccountSummary,
+  YnabPayee,
+  YnabTransactionSummary,
+  YnabCategoryGroup,
+  YnabCategory,
+  YnabApiResponse,
+} from '@ynab-counter/ynab-client';
+
+// Re-export error types for consumers
+export {
+  YnabApiError,
+  isYnabApiError,
+  createYnabError,
+} from '@ynab-counter/ynab-client';
+export type { YnabApiErrorCode } from '@ynab-counter/ynab-client';
+
+import type { YnabBudgetSummary, YnabAccountSummary, YnabPayee } from '@ynab-counter/ynab-client';
 
 // Simple in-memory de-dupe and cache for GETs within a short window.
 // Avoids hammering YNAB when multiple components request the same path.
@@ -22,26 +47,6 @@ function makeKey(path: string, pat: string, init?: RequestInit) {
 
 interface YnabResponse<T> {
   data: T;
-}
-
-export interface YnabBudgetSummary {
-  id: string;
-  name: string;
-  last_modified_on: string;
-}
-
-export interface YnabAccountSummary {
-  id: string;
-  name: string;
-  type: string;
-  on_budget: boolean;
-  closed: boolean;
-  balance: number;
-}
-
-export interface YnabPayee {
-  id: string;
-  name: string;
 }
 
 export class YnabClient {

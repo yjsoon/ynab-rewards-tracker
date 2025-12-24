@@ -2,7 +2,13 @@ import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
 
 import { storage } from '@/lib/storage'
-import { normalizeCurrencyCode } from '@ynab-counter/app-core/utils/currency'
+import {
+  formatCurrency,
+  formatCurrencyParts as formatCurrencyPartsCore,
+  normalizeCurrencyCode,
+  type CurrencyFormatterOptions,
+} from '@ynab-counter/app-core/utils/currency'
+import { absFromMilli, fromMilli, getErrorMessage, isoDate, localIsoDate } from '@ynab-counter/app-core/utils/general'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -14,7 +20,9 @@ export type CurrencyFormatOptions = {
   decimals?: number;
 };
 
-function resolveCurrencyFormattingOptions(options: CurrencyFormatOptions = {}) {
+function resolveCurrencyFormattingOptions(
+  options: CurrencyFormatOptions = {}
+): CurrencyFormatterOptions {
   const locale = options.locale ?? (typeof navigator !== 'undefined' ? navigator.language : 'en-US');
 
   if (options.currency) {
@@ -42,33 +50,6 @@ function resolveCurrencyFormattingOptions(options: CurrencyFormatOptions = {}) {
   };
 }
 
-function createCurrencyFormatter(options: CurrencyFormatOptions = {}) {
-  const { locale, currency } = resolveCurrencyFormattingOptions(options);
-  const decimals = options.decimals ?? 2;
-
-  return new Intl.NumberFormat(locale, {
-    style: 'currency',
-    currency,
-    currencyDisplay: 'narrowSymbol', // Use $ instead of US$
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  });
-}
-
-/**
- * Convert YNAB milliunits to dollars as number
- */
-export function fromMilli(amount: number): number {
-  return amount / 1000;
-}
-
-/**
- * Convert YNAB milliunits to dollars, absolute value (useful for spend)
- */
-export function absFromMilli(amount: number): number {
-  return Math.abs(amount) / 1000;
-}
-
 /**
  * Format a dollar amount for display
  */
@@ -76,34 +57,24 @@ export function formatDollars(
   value: number,
   options: CurrencyFormatOptions = {}
 ): string {
-  return createCurrencyFormatter(options).format(value);
+  const resolved = resolveCurrencyFormattingOptions(options);
+
+  return formatCurrency(value, {
+    ...resolved,
+    decimals: options.decimals,
+  });
 }
 
 export function formatCurrencyParts(
   value: number,
   options: CurrencyFormatOptions = {}
 ): Intl.NumberFormatPart[] {
-  return createCurrencyFormatter(options).formatToParts(value);
+  const resolved = resolveCurrencyFormattingOptions(options);
+
+  return formatCurrencyPartsCore(value, {
+    ...resolved,
+    decimals: options.decimals,
+  });
 }
 
-/**
- * Format Date to YYYY-MM-DD (local date component)
- */
-export function isoDate(date: Date): string {
-  return date.toISOString().split('T')[0];
-}
-
-/**
- * Extracts error message from various error types
- * @param error - The error object (can be Error, string, or unknown)
- * @returns A string error message
- */
-export function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  if (typeof error === 'string') {
-    return error;
-  }
-  return String(error);
-}
+export { fromMilli, absFromMilli, isoDate, localIsoDate, getErrorMessage };
