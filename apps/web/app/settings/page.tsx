@@ -28,6 +28,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
   Dialog,
   DialogContent,
@@ -46,6 +47,7 @@ import {
 import { getErrorMessage, cn } from '@/lib/utils';
 import {
   CheckCircle2,
+  ChevronRight,
   CreditCard as CreditCardIcon,
   Trash2,
   Download,
@@ -86,7 +88,15 @@ const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   savings: 'Savings',
   cash: 'Cash',
   lineOfCredit: 'Line of Credit',
+  otherAsset: 'Other Asset',
+  otherLiability: 'Other Liability',
 };
+
+// Order for displaying account type groups, with most relevant first
+const ACCOUNT_TYPE_ORDER = ['creditCard', 'checking', 'lineOfCredit', 'savings', 'cash', 'otherAsset', 'otherLiability'];
+
+// Account types that should be expanded by default
+const EXPANDED_BY_DEFAULT = new Set(['creditCard', 'checking']);
 
 function buildTrackedCard(accountId: string, accountName: string): CreditCard {
   return {
@@ -277,6 +287,41 @@ export default function SettingsPage() {
       .map(card => [card.ynabAccountId, card] as const);
     return new Map(entries);
   }, [cards]);
+
+  // Group accounts by type for collapsible sections
+  const accountsByType = useMemo(() => {
+    const groups: Record<string, YnabAccount[]> = {};
+    accounts.forEach(acc => {
+      if (!groups[acc.type]) groups[acc.type] = [];
+      groups[acc.type].push(acc);
+    });
+    return groups;
+  }, [accounts]);
+
+  const accountTypesToRender = useMemo(() => {
+    const ordered = ACCOUNT_TYPE_ORDER.filter(type => accountsByType[type]?.length > 0);
+    const extraTypes = Object.keys(accountsByType)
+      .filter(type => !ACCOUNT_TYPE_ORDER.includes(type) && accountsByType[type]?.length > 0)
+      .sort((a, b) => a.localeCompare(b));
+    return [...ordered, ...extraTypes];
+  }, [accountsByType]);
+
+  // Track which account type groups are expanded
+  const [expandedAccountGroups, setExpandedAccountGroups] = useState<Set<string>>(
+    () => new Set(EXPANDED_BY_DEFAULT)
+  );
+
+  const toggleAccountGroup = useCallback((type: string) => {
+    setExpandedAccountGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(type)) {
+        next.delete(type);
+      } else {
+        next.add(type);
+      }
+      return next;
+    });
+  }, []);
 
   // Detect orphaned cards (cards with ynabAccountId that no longer exist in current YNAB connection)
   const orphanedCards = useMemo(() => {
@@ -1111,19 +1156,40 @@ export default function SettingsPage() {
             {loadingAccounts ? (
               <p className="text-sm">Loading accounts...</p>
             ) : accounts.length > 0 ? (
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {accounts.map(account => {
-                  const isTracked = trackedAccountIds.includes(account.id);
-                  const linkedCard = cardsByAccountId.get(account.id);
+              <div className="space-y-4">
+                {accountTypesToRender.map(type => {
+                  const typeAccounts = accountsByType[type];
+                  const isExpanded = expandedAccountGroups.has(type);
+                  const trackedCount = typeAccounts.filter(a => trackedAccountIds.includes(a.id)).length;
 
                   return (
-                    <TrackedAccountCard
-                      key={account.id} 
-                      account={account}
-                      isTracked={isTracked}
-                      linkedCard={linkedCard}
-                      onToggle={() => handleAccountToggle(account.id, account.name)}
-                    />
+                    <Collapsible key={type} open={isExpanded} onOpenChange={() => toggleAccountGroup(type)}>
+                      <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium mb-2 hover:text-primary transition-colors">
+                        <ChevronRight className={cn("h-4 w-4 transition-transform", isExpanded && "rotate-90")} />
+                        <span>{ACCOUNT_TYPE_LABELS[type] || type}</span>
+                        <span className="text-muted-foreground font-normal">
+                          ({trackedCount > 0 ? `${trackedCount}/` : ''}{typeAccounts.length})
+                        </span>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 mb-4">
+                          {typeAccounts.map(account => {
+                            const isTracked = trackedAccountIds.includes(account.id);
+                            const linkedCard = cardsByAccountId.get(account.id);
+
+                            return (
+                              <TrackedAccountCard
+                                key={account.id}
+                                account={account}
+                                isTracked={isTracked}
+                                linkedCard={linkedCard}
+                                onToggle={() => handleAccountToggle(account.id, account.name)}
+                              />
+                            );
+                          })}
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
                   );
                 })}
               </div>
@@ -1314,7 +1380,7 @@ export default function SettingsPage() {
                     disabled={isCloudSyncBusy}
                   >
                     <KeyRound className="mr-2 h-4 w-4" aria-hidden="true" />
-                    {isGeneratingCloudSync ? 'Generating…' : 'Generate & upload'}
+                    {isGeneratingCloudSync ? 'Generating…' : 'Generate new code'}
                   </Button>
                   <Button
                     type="button"
@@ -1323,7 +1389,7 @@ export default function SettingsPage() {
                     disabled={isCloudSyncBusy || !cloudSyncPhrase.trim()}
                   >
                     <CloudUpload className="mr-2 h-4 w-4" aria-hidden="true" />
-                    {isUploadingCloudSync ? 'Uploading…' : 'Upload with code'}
+                    {isUploadingCloudSync ? 'Saving…' : 'Save local → cloud'}
                   </Button>
                   <Button
                     type="button"
@@ -1332,9 +1398,12 @@ export default function SettingsPage() {
                     disabled={isCloudSyncBusy || !cloudSyncPhrase.trim()}
                   >
                     <CloudDownload className="mr-2 h-4 w-4" aria-hidden="true" />
-                    {isDownloadingCloudSync ? 'Downloading…' : 'Download & apply'}
+                    {isDownloadingCloudSync ? 'Restoring…' : 'Restore cloud → local'}
                   </Button>
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  &quot;Save&quot; overwrites cloud with your local settings. &quot;Restore&quot; replaces local with cloud backup.
+                </p>
 
                 {/* Secondary destructive action */}
                 <div className="flex items-center justify-between">
