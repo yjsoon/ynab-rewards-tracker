@@ -8,9 +8,11 @@ import {
   ChevronDown,
   ChevronRight,
   CreditCard as CreditCardIcon,
+  DollarSign,
   GripVertical,
   Loader2,
   Percent,
+  Plane,
   Settings2,
   Sparkles,
   TrendingUp,
@@ -84,10 +86,10 @@ interface DashboardCardOverviewProps {
   cards: CreditCard[];
   cashbackCards: CreditCard[];
   milesCards: CreditCard[];
+  allCards: CreditCard[];
   visibleFeaturedCards: CreditCard[];
   hiddenCards: HiddenCard[];
   viewMode: DashboardViewMode;
-  onViewModeChange(mode: DashboardViewMode): void;
   onHideCard(cardId: string, hiddenUntil: string): void;
   onUnhideAll(): void;
   pat: string;
@@ -95,11 +97,11 @@ interface DashboardCardOverviewProps {
   transactionsLoading: boolean;
   transactionsRefreshing: boolean;
   hasCachedTransactions: boolean;
-  transactionsLastUpdatedAt: string | null;
   cashbackCollapsed: boolean;
   milesCollapsed: boolean;
   onToggleGroup(category: 'cashback' | 'miles'): void;
-  onReorderCards(category: 'cashback' | 'miles', orderedIds: string[]): void;
+  onReorderCards(category: 'cashback' | 'miles' | 'all', orderedIds: string[]): void;
+  groupByType?: boolean;
 }
 
 function createSettingsClickHandler(cardId: string) {
@@ -114,10 +116,10 @@ export function DashboardCardOverview({
   cards,
   cashbackCards,
   milesCards,
+  allCards,
   visibleFeaturedCards,
   hiddenCards,
   viewMode,
-  onViewModeChange,
   onHideCard,
   onUnhideAll,
   pat,
@@ -125,26 +127,16 @@ export function DashboardCardOverview({
   transactionsLoading,
   transactionsRefreshing,
   hasCachedTransactions,
-  transactionsLastUpdatedAt,
   cashbackCollapsed,
   milesCollapsed,
   onToggleGroup,
   onReorderCards,
+  groupByType = true,
 }: DashboardCardOverviewProps) {
   const hiddenCount = hiddenCards.length;
   const hasVisibleCards = visibleFeaturedCards.length > 0;
 
   const isInitialLoading = transactionsLoading && !hasCachedTransactions;
-
-  const formattedTime = useMemo(() => {
-    if (!transactionsLastUpdatedAt) return null;
-    try {
-      const date = new Date(transactionsLastUpdatedAt);
-      return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-    } catch {
-      return null;
-    }
-  }, [transactionsLastUpdatedAt]);
 
   const handleShowAll = useCallback(() => {
     onUnhideAll();
@@ -211,6 +203,31 @@ export function DashboardCardOverview({
       );
     }
 
+    // Ungrouped mode: show all cards in a single grid
+    if (!groupByType) {
+      // Combine already-ordered cashback and miles cards
+      const allOrderedCards = allCards;
+
+      return (
+        <CardGroup
+          category="all"
+          title=""
+          icon={null}
+          cards={allOrderedCards}
+          viewMode={viewMode}
+          pat={pat}
+          prefetchedTransactions={prefetchedTransactions}
+          onHideCard={onHideCard}
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
+          onReorderCards={(orderedIds) => onReorderCards('all', orderedIds)}
+          isRefreshing={transactionsRefreshing}
+          showTypeBadge
+        />
+      );
+    }
+
+    // Grouped mode: show Cashback and Miles sections
     return (
       <>
         {cashbackCards.length > 0 && (
@@ -257,6 +274,7 @@ export function DashboardCardOverview({
     prefetchedTransactions,
     onHideCard,
     milesCards,
+    allCards,
     hiddenCount,
     handleShowAll,
     cashbackCollapsed,
@@ -264,7 +282,8 @@ export function DashboardCardOverview({
     onToggleGroup,
     onReorderCards,
     transactionsRefreshing,
-    visibleFeaturedCards.length,
+    groupByType,
+    visibleFeaturedCards,
   ]);
 
   return (
@@ -291,7 +310,7 @@ export function DashboardCardOverview({
 }
 
 interface CardGroupProps {
-  category: 'cashback' | 'miles';
+  category: 'cashback' | 'miles' | 'all';
   title: string;
   icon: ReactNode;
   cards: CreditCard[];
@@ -303,6 +322,7 @@ interface CardGroupProps {
   onToggleCollapse(): void;
   onReorderCards(orderedIds: string[]): void;
   isRefreshing: boolean;
+  showTypeBadge?: boolean;
 }
 
 function CardGroup({
@@ -318,6 +338,7 @@ function CardGroup({
   onToggleCollapse,
   onReorderCards,
   isRefreshing,
+  showTypeBadge = false,
 }: CardGroupProps) {
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const sensors = useSensors(
@@ -367,26 +388,30 @@ function CardGroup({
     [items, onReorderCards]
   );
 
-  return (
-    <section className="space-y-4">
-      <div className="flex items-center gap-2">
-        <h2 className="flex items-center gap-2 text-xl font-semibold">
-          <button
-            type="button"
-            onClick={onToggleCollapse}
-            aria-expanded={!isCollapsed}
-            aria-controls={contentId}
-            className="flex items-center gap-2 text-left transition-colors hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 rounded-md px-1 py-1"
-          >
-            <ChevronIcon className="h-5 w-5" aria-hidden="true" />
-            {icon}
-            <span>{title}</span>
-          </button>
-        </h2>
-        <Badge variant="secondary">{cards.length}</Badge>
-      </div>
+  const isAllCategory = category === 'all';
 
-      {!isCollapsed && cards.length > 0 && (
+  return (
+    <section className={isAllCategory ? "" : "space-y-4"}>
+      {!isAllCategory && (
+        <div className="flex items-center gap-2">
+          <h2 className="flex items-center gap-2 text-xl font-semibold">
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              aria-expanded={!isCollapsed}
+              aria-controls={contentId}
+              className="flex items-center gap-2 text-left transition-colors hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 rounded-md px-1 py-1"
+            >
+              <ChevronIcon className="h-5 w-5" aria-hidden="true" />
+              {icon}
+              <span>{title}</span>
+            </button>
+          </h2>
+          <Badge variant="secondary">{cards.length}</Badge>
+        </div>
+      )}
+
+      {(isAllCategory || !isCollapsed) && cards.length > 0 && (
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
@@ -423,6 +448,7 @@ function CardGroup({
                     onHideCard={onHideCard}
                     isSorting={Boolean(activeDragId)}
                     isRefreshing={isRefreshing}
+                    showTypeBadge={showTypeBadge}
                   />
                 );
               })}
@@ -444,9 +470,10 @@ interface SortableDashboardCardProps {
   onHideCard(cardId: string, hiddenUntil: string): void;
   isSorting: boolean;
   isRefreshing: boolean;
+  showTypeBadge?: boolean;
 }
 
-function SortableDashboardCard({ card, viewMode, pat, prefetchedTransactions, onHideCard, isSorting, isRefreshing }: SortableDashboardCardProps) {
+function SortableDashboardCard({ card, viewMode, pat, prefetchedTransactions, onHideCard, isSorting, isRefreshing, showTypeBadge = false }: SortableDashboardCardProps) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id: card.id,
   });
@@ -560,6 +587,23 @@ function SortableDashboardCard({ card, viewMode, pat, prefetchedTransactions, on
             >
               {card.name}
             </CardTitle>
+            {showTypeBadge && (
+              <Badge
+                variant="outline"
+                className={cn(
+                  "shrink-0 h-5 w-5 p-0 flex items-center justify-center",
+                  card.type === 'cashback'
+                    ? "border-green-200 text-green-700 dark:border-green-800 dark:text-green-400"
+                    : "border-blue-200 text-blue-700 dark:border-blue-800 dark:text-blue-400"
+                )}
+              >
+                {card.type === 'cashback' ? (
+                  <DollarSign className="h-3 w-3" />
+                ) : (
+                  <Plane className="h-3 w-3" />
+                )}
+              </Badge>
+            )}
             {card.promotionalPeriod && (
               <Badge
                 variant="secondary"

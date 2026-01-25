@@ -221,11 +221,12 @@ export interface AppSettings {
   currency?: string;
   milesValuation?: number;
   dashboardViewMode?: DashboardViewMode;
+  groupCardsByType?: boolean;
   cloudSyncKeyId?: string;
   cloudSyncLastSyncedAt?: string;
   cloudSyncMnemonic?: string;
   rememberCloudSyncCode?: boolean;
-  cardOrdering?: Partial<Record<'cashback' | 'miles', string[]>>;
+  cardOrdering?: Partial<Record<'cashback' | 'miles' | 'all', string[]>>;
   collapsedCardGroups?: Partial<Record<'cashback' | 'miles', boolean>>;
   summaryViewSubcategoriesExpanded?: SummaryViewSubcategoriesPreference;
   statementFormatter?: StatementFormatterSettings;

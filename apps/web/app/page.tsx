@@ -4,7 +4,6 @@ import { useEffect, useCallback, useMemo, useState } from "react";
 import {
   useYnabPAT,
   useCreditCards,
-  useRewardRules,
   useSelectedBudget,
   useTrackedAccountIds,
   useHiddenCards,
@@ -20,8 +19,17 @@ import { SetupProgressAlert } from "@/components/dashboard/SetupProgressAlert";
 import { DashboardCardOverview } from "@/components/dashboard/DashboardCardOverview";
 import { useTrackedTransactions } from "@/hooks/useTrackedTransactions";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { RefreshCw } from "lucide-react";
+import { ChevronDown, LayoutGrid, List, RefreshCw } from "lucide-react";
 
 // Constants
 const TRANSACTION_LOOKBACK_DAYS = 30;
@@ -64,8 +72,6 @@ interface SetupStatus {
 export default function DashboardPage() {
   const { pat } = useYnabPAT();
   const { cards } = useCreditCards();
-  const { rules } = useRewardRules();
-
   const { selectedBudget } = useSelectedBudget();
   const { trackedAccountIds } = useTrackedAccountIds();
 
@@ -101,23 +107,9 @@ export default function DashboardPage() {
     [persistDashboardViewMode]
   );
 
-  const handleHideCard = useCallback(
-    (cardId: string, hiddenUntil: string) => {
-      hideCard(cardId, hiddenUntil);
-    },
-    [hideCard]
-  );
-
-  const handleUnhideCard = useCallback(
-    (cardId: string) => {
-      unhideCard(cardId);
-    },
-    [unhideCard]
-  );
-
   const handleUnhideAll = useCallback(() => {
-    hiddenCards.forEach((entry) => handleUnhideCard(entry.cardId));
-  }, [hiddenCards, handleUnhideCard]);
+    hiddenCards.forEach((entry) => unhideCard(entry.cardId));
+  }, [hiddenCards, unhideCard]);
 
   const featuredCards = useMemo(
     () => cards.filter((card) => card.featured ?? true),
@@ -130,7 +122,7 @@ export default function DashboardPage() {
   );
 
   const applyStoredOrdering = useCallback(
-    (list: CreditCard[], category: 'cashback' | 'miles') => {
+    (list: CreditCard[], category: 'cashback' | 'miles' | 'all') => {
       const stored = settings.cardOrdering?.[category];
       if (!stored || stored.length === 0) {
         return list;
@@ -193,14 +185,6 @@ export default function DashboardPage() {
     [setupStatus]
   );
 
-  const hasUnsetMinimumSpend = useMemo(
-    () =>
-      cards.some(
-        (card) => card.minimumSpend === null || card.minimumSpend === undefined
-      ),
-    [cards]
-  );
-
   const setupProgress = useMemo(
     () => Object.values(setupStatus).filter(Boolean).length,
     [setupStatus]
@@ -212,7 +196,7 @@ export default function DashboardPage() {
   );
 
   // Group and sort cards
-  const { cashbackCards, milesCards } = useMemo(() => {
+  const { cashbackCards, milesCards, allCards } = useMemo(() => {
     const now = new Date();
 
     const getDaysRemaining = (card: (typeof cards)[0]) => {
@@ -232,12 +216,21 @@ export default function DashboardPage() {
 
     const orderedCashback = applyStoredOrdering(cashback, 'cashback');
     const orderedMiles = applyStoredOrdering(miles, 'miles');
+    const orderedAll = applyStoredOrdering([...orderedCashback, ...orderedMiles], 'all');
 
-    return { cashbackCards: orderedCashback, milesCards: orderedMiles };
+    return { cashbackCards: orderedCashback, milesCards: orderedMiles, allCards: orderedAll };
   }, [visibleFeaturedCards, applyStoredOrdering]);
 
   const cashbackCollapsed = settings.collapsedCardGroups?.cashback ?? false;
   const milesCollapsed = settings.collapsedCardGroups?.miles ?? false;
+  const groupByType = settings.groupCardsByType ?? true;
+
+  const handleGroupByTypeToggle = useCallback(
+    (checked: boolean) => {
+      updateSettings({ groupCardsByType: checked });
+    },
+    [updateSettings]
+  );
 
   const handleToggleGroup = useCallback(
     (category: 'cashback' | 'miles') => {
@@ -253,8 +246,10 @@ export default function DashboardPage() {
   );
 
   const handleCardReorder = useCallback(
-    (category: 'cashback' | 'miles', orderedIds: string[]) => {
-      const allCategoryIds = cards.filter((card) => card.type === category).map((card) => card.id);
+    (category: 'cashback' | 'miles' | 'all', orderedIds: string[]) => {
+      const allCategoryIds = category === 'all'
+        ? cards.map((card) => card.id)
+        : cards.filter((card) => card.type === category).map((card) => card.id);
       const seen = new Set<string>();
       const dedupedOrdered = orderedIds.filter((id) => {
         if (seen.has(id) || !allCategoryIds.includes(id)) {
@@ -265,10 +260,21 @@ export default function DashboardPage() {
       });
       const remaining = allCategoryIds.filter((id) => !seen.has(id));
 
+      const nextOrdering = [...dedupedOrdered, ...remaining];
       updateSettings({
         cardOrdering: {
           ...(settings.cardOrdering ?? {}),
-          [category]: [...dedupedOrdered, ...remaining],
+          [category]: nextOrdering,
+          ...(category === 'all'
+            ? {
+                cashback: nextOrdering.filter((id) =>
+                  cards.some((card) => card.id === id && card.type === 'cashback')
+                ),
+                miles: nextOrdering.filter((id) =>
+                  cards.some((card) => card.id === id && card.type === 'miles')
+                ),
+              }
+            : {}),
         },
       });
     },
@@ -293,37 +299,41 @@ export default function DashboardPage() {
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
         <h1 className="text-3xl font-bold">Dashboard</h1>
         <div className="flex items-center gap-3">
-          <span className="text-sm text-muted-foreground">View</span>
-          <div className="inline-flex items-center gap-1 rounded-full border border-border/50 bg-background/80 p-1 shadow-inner dark:border-border/40 dark:bg-muted/40">
-            <Button
-              type="button"
-              size="sm"
-              variant={viewMode === "summary" ? "default" : "ghost"}
-              className={cn(
-                "rounded-full px-3 transition-colors",
-                viewMode === "summary"
-                  ? "shadow-sm"
-                  : "text-muted-foreground hover:text-primary-foreground hover:bg-primary/80"
-              )}
-              onClick={() => handleViewModeChange("summary")}
-            >
-              Summary
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant={viewMode === "detailed" ? "default" : "ghost"}
-              className={cn(
-                "rounded-full px-3 transition-colors",
-                viewMode === "detailed"
-                  ? "shadow-sm"
-                  : "text-muted-foreground hover:text-primary-foreground hover:bg-primary/80"
-              )}
-              onClick={() => handleViewModeChange("detailed")}
-            >
-              Detailed
-            </Button>
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="gap-1.5">
+                {viewMode === "summary" ? (
+                  <LayoutGrid className="h-4 w-4" />
+                ) : (
+                  <List className="h-4 w-4" />
+                )}
+                <span className="hidden sm:inline">
+                  {viewMode === "summary" ? "Summary" : "Detailed"}
+                </span>
+                <ChevronDown className="h-3 w-3" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuRadioGroup
+                value={viewMode}
+                onValueChange={(v) => handleViewModeChange(v as DashboardViewMode)}
+              >
+                <DropdownMenuRadioItem value="summary">
+                  Summary view
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="detailed">
+                  Detailed view
+                </DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuCheckboxItem
+                checked={groupByType}
+                onCheckedChange={handleGroupByTypeToggle}
+              >
+                Group by card type
+              </DropdownMenuCheckboxItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <div className="flex items-center gap-2">
             <Button
               type="button"
@@ -359,26 +369,26 @@ export default function DashboardPage() {
         />
       )}
 
-      <DashboardCardOverview
+  <DashboardCardOverview
         cards={cards}
         cashbackCards={cashbackCards}
         milesCards={milesCards}
+        allCards={allCards}
         visibleFeaturedCards={visibleFeaturedCards}
         hiddenCards={hiddenCards}
         viewMode={viewMode}
-        onViewModeChange={handleViewModeChange}
-        onHideCard={handleHideCard}
+        onHideCard={hideCard}
         onUnhideAll={handleUnhideAll}
         pat={pat}
         prefetchedTransactions={allTransactions}
         transactionsLoading={loading}
         transactionsRefreshing={refreshing}
         hasCachedTransactions={hasCachedData}
-        transactionsLastUpdatedAt={lastUpdatedAt}
         cashbackCollapsed={cashbackCollapsed}
         milesCollapsed={milesCollapsed}
         onToggleGroup={handleToggleGroup}
         onReorderCards={handleCardReorder}
+        groupByType={groupByType}
       />
     </div>
   );
