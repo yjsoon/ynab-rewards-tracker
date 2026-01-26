@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git checkout:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "mcp__RepoPrompt__read_file",
+      "mcp__RepoPrompt__file_search",
+      "mcp__RepoPrompt__list_models",
+      "Bash(git pull:*)",
+      "Bash(git reset:*)",
+      "Bash(git worktree:*)",
+      "mcp__RepoPrompt__workspace_context"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

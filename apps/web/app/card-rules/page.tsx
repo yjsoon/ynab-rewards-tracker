@@ -4,6 +4,13 @@ import { useState, useEffect, useMemo, useCallback, Suspense } from 'react';
 import { useThemeGroups, useCreditCards, useSettings } from '@/hooks/useLocalStorage';
 import { useAutoBackup } from '@/hooks/useAutoBackup';
 import { Card, CardContent } from '@/components/ui/card';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -378,30 +385,45 @@ function CardRulesPageContent() {
         <TabsContent value="cashback" className="space-y-4">
           {cashbackCards.length > 0 ? (
             <>
+              {cashbackCards.length > 2 && (
+                <div className="sticky top-0 z-10 bg-background/95 backdrop-blur py-2 -mx-6 px-6 border-b">
+                  <Select onValueChange={(id) => document.getElementById(`card-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+                    <SelectTrigger className="w-full sm:w-64">
+                      <SelectValue placeholder="Jump to card..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {cashbackCards.map(card => (
+                        <SelectItem key={card.id} value={card.id}>{card.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="space-y-4">
                   {cashbackCards.map(card => (
-                    <CardSettingsEditor
-                      key={card.id}
-                      card={card}
-                      state={editState[card.id] || {}}
-                      onFieldChange={(field, value) => handleFieldChange(card.id, field, value)}
-                      isChanged={changedCards.has(card.id)}
-                      isSelected={selectedCards.has(card.id)}
-                      showCardType
-                      highlightUnsetMinimum
-                      flagNames={flagNames}
-                      leadingAccessory={(
-                        <div className="pt-1">
-                          <input
-                            type="checkbox"
-                            aria-label={`Select ${card.name}`}
-                            className="mt-2 h-4 w-4 cursor-pointer rounded border-border text-primary focus:ring-2 focus:ring-primary accent-primary"
-                            checked={selectedCards.has(card.id)}
-                            onChange={() => toggleCardSelection(card.id)}
-                          />
-                        </div>
-                      )}
-                    />
+                    <div key={card.id} id={`card-${card.id}`}>
+                      <CardSettingsEditor
+                        card={card}
+                        state={editState[card.id] || {}}
+                        onFieldChange={(field, value) => handleFieldChange(card.id, field, value)}
+                        isChanged={changedCards.has(card.id)}
+                        isSelected={selectedCards.has(card.id)}
+                        showCardType
+                        highlightUnsetMinimum
+                        flagNames={flagNames}
+                        leadingAccessory={(
+                          <div className="pt-1">
+                            <input
+                              type="checkbox"
+                              aria-label={`Select ${card.name}`}
+                              className="mt-2 h-4 w-4 cursor-pointer rounded border-border text-primary focus:ring-2 focus:ring-primary accent-primary"
+                              checked={selectedCards.has(card.id)}
+                              onChange={() => toggleCardSelection(card.id)}
+                            />
+                          </div>
+                        )}
+                      />
+                    </div>
                   ))}
               </div>
             </>
@@ -418,33 +440,48 @@ function CardRulesPageContent() {
         <TabsContent value="miles" className="space-y-4">
           {milesCards.length > 0 ? (
             <>
+              {milesCards.length > 2 && (
+                <div className="sticky top-0 z-10 bg-background/95 backdrop-blur py-2 -mx-6 px-6 border-b">
+                  <Select onValueChange={(id) => document.getElementById(`card-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+                    <SelectTrigger className="w-full sm:w-64">
+                      <SelectValue placeholder="Jump to card..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {milesCards.map(card => (
+                        <SelectItem key={card.id} value={card.id}>{card.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="space-y-4">
                   {milesCards.map(card => (
-                    <CardSettingsEditor
-                      key={card.id}
-                      card={card}
-                      state={editState[card.id] || {}}
-                      onFieldChange={(field, value) => handleFieldChange(card.id, field, value)}
-                      isChanged={changedCards.has(card.id)}
-                      isSelected={selectedCards.has(card.id)}
-                      showCardType
-                      highlightUnsetMinimum
-                      flagNames={flagNames}
-                      leadingAccessory={(
-                        <div className="pt-1">
-                          <input
-                            type="checkbox"
-                            aria-label={`Select ${card.name}`}
-                            className="mt-2 h-4 w-4 cursor-pointer rounded border-border text-primary focus:ring-2 focus:ring-primary accent-primary"
-                            checked={selectedCards.has(card.id)}
-                            onChange={() => toggleCardSelection(card.id)}
-                          />
-                        </div>
-                      )}
-                    />
+                    <div key={card.id} id={`card-${card.id}`}>
+                      <CardSettingsEditor
+                        card={card}
+                        state={editState[card.id] || {}}
+                        onFieldChange={(field, value) => handleFieldChange(card.id, field, value)}
+                        isChanged={changedCards.has(card.id)}
+                        isSelected={selectedCards.has(card.id)}
+                        showCardType
+                        highlightUnsetMinimum
+                        flagNames={flagNames}
+                        leadingAccessory={(
+                          <div className="pt-1">
+                            <input
+                              type="checkbox"
+                              aria-label={`Select ${card.name}`}
+                              className="mt-2 h-4 w-4 cursor-pointer rounded border-border text-primary focus:ring-2 focus:ring-primary accent-primary"
+                              checked={selectedCards.has(card.id)}
+                              onChange={() => toggleCardSelection(card.id)}
+                            />
+                          </div>
+                        )}
+                      />
+                    </div>
                   ))}
               </div>
-              
+
               {settings?.milesValuation && (
                 <Alert>
                   <AlertCircle className="h-4 w-4" />

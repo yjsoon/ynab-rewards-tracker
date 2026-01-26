@@ -30,7 +30,6 @@ import type {
   DashboardTransactionsCacheEntry,
   DashboardTransactionsCachePayload,
   CachedTransaction,
-  Transaction,
   StatementFormatterSettings,
 } from '@ynab-counter/app-core/storage';
 import type {
