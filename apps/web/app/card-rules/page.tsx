@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback, Suspense } from 'react';
+import { useState, useEffect, useMemo, Suspense } from 'react';
 import { useThemeGroups, useCreditCards, useSettings } from '@/hooks/useLocalStorage';
 import { useAutoBackup } from '@/hooks/useAutoBackup';
 import { Card, CardContent } from '@/components/ui/card';
@@ -13,22 +13,30 @@ import {
 } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
-import { 
-  Save, 
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
+import {
+  Save,
   CreditCard as CreditCardIcon,
   Percent,
   AlertCircle,
   CheckCircle,
-  Layers
+  ChevronDown,
 } from 'lucide-react';
 import { storage, type CardSubcategory, type CreditCard } from '@/lib/storage';
-import { CardSettingsEditor, type CardEditState as SingleCardEditState } from '@/components/CardSettingsEditor';
+import { type CardEditState as SingleCardEditState } from '@/components/CardSettingsEditor';
+import { CardSettingsCompact } from '@/components/CardSettingsCompact';
+import { CardSettingsDialog } from '@/components/CardSettingsDialog';
 import { ThemeGroupingManager } from '@/components/ThemeGroupingManager';
 import { prepareSubcategoriesForSave } from '@/lib/subcategory-utils';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { featureFlags } from '@ynab-counter/app-core/config/featureFlags';
 import { cn } from '@/lib/utils';
 
@@ -41,10 +49,10 @@ function CardRulesPageContent() {
   const { autoBackup } = useAutoBackup();
   const { themeGroups, saveThemeGroup, deleteThemeGroup } = useThemeGroups();
   const { settings } = useSettings();
-  const router = useRouter();
   const searchParams = useSearchParams();
   const flagNames = useMemo(() => storage.getFlagNames(), []);
   const showThemes = featureFlags.recommendations;
+
   const [editState, setEditState] = useState<CardEditState>({});
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -53,43 +61,11 @@ function CardRulesPageContent() {
   const [batchRate, setBatchRate] = useState('');
   const [batchError, setBatchError] = useState('');
 
-  const initialTab = useMemo<'cashback' | 'miles' | 'themes'>(() => {
-    const tabParam = searchParams?.get('tab');
-    if (tabParam === 'cashback' || tabParam === 'miles') {
-      return tabParam;
-    }
-    if (tabParam === 'themes' && showThemes) {
-      return 'themes';
-    }
-    return 'cashback';
-  }, [searchParams, showThemes]);
-
-  const [activeTab, setActiveTab] = useState<'cashback' | 'miles' | 'themes'>(initialTab);
-
-  useEffect(() => {
-    setActiveTab((prev) => (prev === initialTab ? prev : initialTab));
-  }, [initialTab]);
-
-  const handleTabChange = useCallback((value: string) => {
-    if (value !== 'cashback' && value !== 'miles' && value !== 'themes') {
-      return;
-    }
-    if (value === 'themes' && !showThemes) {
-      return;
-    }
-
-    const nextTab = value as 'cashback' | 'miles' | 'themes';
-    setActiveTab(nextTab);
-
-    const nextParams = new URLSearchParams(searchParams?.toString() ?? '');
-    if (nextTab === 'cashback') {
-      nextParams.delete('tab');
-    } else {
-      nextParams.set('tab', nextTab);
-    }
-    const queryString = nextParams.toString();
-    router.replace(`/card-rules${queryString ? `?${queryString}` : ''}`, { scroll: false });
-  }, [router, searchParams, showThemes]);
+  // New state for grid layout
+  const [dialogCardId, setDialogCardId] = useState<string | null>(null);
+  const [groupByType, setGroupByType] = useState(true);
+  const [cashbackExpanded, setCashbackExpanded] = useState(true);
+  const [milesExpanded, setMilesExpanded] = useState(true);
 
   // Group cards by type
   const cashbackCards = cards.filter(card => card.type === 'cashback');
@@ -100,7 +76,7 @@ function CardRulesPageContent() {
     const initialState: CardEditState = {};
     cards.forEach(card => {
       initialState[card.id] = {
-        earningRate: card.earningRate || (card.type === 'cashback' ? 1 : 1),
+        earningRate: card.earningRate || 1,
         earningBlockSize: card.earningBlockSize,
         minimumSpend: card.minimumSpend,
         maximumSpend: card.maximumSpend,
@@ -115,6 +91,14 @@ function CardRulesPageContent() {
     setChangedCards(new Set());
     setSelectedCards(new Set());
   }, [cards]);
+
+  // Handle URL param for opening a specific card
+  useEffect(() => {
+    const cardId = searchParams?.get('card');
+    if (cardId && cards.some(c => c.id === cardId)) {
+      setDialogCardId(cardId);
+    }
+  }, [searchParams, cards]);
 
   const handleFieldChange = (cardId: string, field: keyof SingleCardEditState, value: unknown) => {
     setEditState(prev => ({
@@ -268,7 +252,7 @@ function CardRulesPageContent() {
           earningBlockSize: changes.earningBlockSize,
           minimumSpend: changes.minimumSpend,
           maximumSpend: changes.maximumSpend ?? card.maximumSpend,
-          billingCycle: changes.billingCycleType === 'billing' 
+          billingCycle: changes.billingCycleType === 'billing'
             ? { type: 'billing', dayOfMonth: changes.billingCycleDay }
             : { type: 'calendar' },
           featured: changes.featured !== undefined ? changes.featured : (card.featured ?? true),
@@ -297,9 +281,50 @@ function CardRulesPageContent() {
     }
   };
 
+  const handleJumpToCard = (cardId: string) => {
+    // Expand the relevant section if grouped
+    if (groupByType) {
+      const card = cards.find(c => c.id === cardId);
+      if (card?.type === 'cashback') setCashbackExpanded(true);
+      else if (card?.type === 'miles') setMilesExpanded(true);
+    }
+
+    // Delay scroll to let collapsible expand
+    setTimeout(() => {
+      const element = document.getElementById(`card-${cardId}`);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        element.classList.add('ring-2', 'ring-primary');
+        setTimeout(() => {
+          element.classList.remove('ring-2', 'ring-primary');
+        }, 1500);
+      }
+    }, 50);
+  };
+
   const selectedCount = selectedCards.size;
   const changedCount = changedCards.size;
-  const showStickyBar = (selectedCount > 0 || changedCount > 0) && activeTab !== 'themes';
+  const showStickyBar = selectedCount > 0 || changedCount > 0;
+
+  const dialogCard = dialogCardId ? cards.find(c => c.id === dialogCardId) : null;
+
+  const renderCardGrid = (cardList: CreditCard[]) => (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {cardList.map(card => (
+        <div key={card.id} id={`card-${card.id}`}>
+          <CardSettingsCompact
+            card={card}
+            state={editState[card.id] || {}}
+            isChanged={changedCards.has(card.id)}
+            isSelected={selectedCards.has(card.id)}
+            onSelect={() => toggleCardSelection(card.id)}
+            onClick={() => setDialogCardId(card.id)}
+            onToggleFeatured={(featured) => handleFieldChange(card.id, 'featured', featured)}
+          />
+        </div>
+      ))}
+    </div>
+  );
 
   if (cards.length === 0) {
     return (
@@ -322,6 +347,7 @@ function CardRulesPageContent() {
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-8">
+      {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
         <div className="space-y-2">
           <h1 className="text-3xl font-bold">Cards</h1>
@@ -360,160 +386,142 @@ function CardRulesPageContent() {
         </Alert>
       )}
 
-      <Tabs
-        value={activeTab}
-        onValueChange={handleTabChange}
-        className="space-y-6"
-      >
-        <TabsList className={cn('grid w-full max-w-md', showThemes ? 'grid-cols-3' : 'grid-cols-2')}>
-          <TabsTrigger value="cashback" className="gap-2">
-            <Percent className="h-4 w-4" />
-            Cashback ({cashbackCards.length})
-          </TabsTrigger>
-          <TabsTrigger value="miles" className="gap-2">
-            <CreditCardIcon className="h-4 w-4" />
-            Miles ({milesCards.length})
-          </TabsTrigger>
-          {showThemes && (
-            <TabsTrigger value="themes" className="gap-2">
-              <Layers className="h-4 w-4" />
-              Themes ({themeGroups.length})
-            </TabsTrigger>
+      {/* Controls row */}
+      <div className="flex flex-wrap items-center gap-4 mb-6 p-4 rounded-lg bg-muted/30 border">
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="group-by-type"
+            checked={groupByType}
+            onCheckedChange={(checked) => setGroupByType(checked === true)}
+          />
+          <Label htmlFor="group-by-type" className="text-sm cursor-pointer">
+            Group by card type
+          </Label>
+        </div>
+
+        <div className="h-6 border-l border-border hidden sm:block" />
+
+        <Select onValueChange={handleJumpToCard}>
+          <SelectTrigger className="w-full sm:w-64">
+            <SelectValue placeholder="Jump to card..." />
+          </SelectTrigger>
+          <SelectContent>
+            {cards.map(card => (
+              <SelectItem key={card.id} value={card.id}>
+                <span className="flex items-center gap-2">
+                  {card.type === 'cashback' ? (
+                    <Percent className="h-3 w-3 text-muted-foreground" />
+                  ) : (
+                    <CreditCardIcon className="h-3 w-3 text-muted-foreground" />
+                  )}
+                  {card.name}
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Card grid */}
+      {groupByType ? (
+        <div className="space-y-6">
+          {/* Cashback section */}
+          {cashbackCards.length > 0 && (
+            <Collapsible open={cashbackExpanded} onOpenChange={setCashbackExpanded}>
+              <CollapsibleTrigger className="flex items-center gap-2 w-full text-left group">
+                <ChevronDown className={cn(
+                  'h-5 w-5 text-muted-foreground transition-transform',
+                  !cashbackExpanded && '-rotate-90'
+                )} />
+                <h2 className="text-lg font-semibold flex items-center gap-2">
+                  <Percent className="h-4 w-4 text-muted-foreground" />
+                  Cashback Cards
+                  <Badge variant="secondary" className="ml-1">{cashbackCards.length}</Badge>
+                </h2>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-4">
+                {renderCardGrid(cashbackCards)}
+              </CollapsibleContent>
+            </Collapsible>
           )}
-        </TabsList>
 
-        <TabsContent value="cashback" className="space-y-4">
-          {cashbackCards.length > 0 ? (
-            <>
-              {cashbackCards.length > 2 && (
-                <div className="sticky top-0 z-10 bg-background/95 backdrop-blur py-2 -mx-6 px-6 border-b">
-                  <Select onValueChange={(id) => document.getElementById(`card-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
-                    <SelectTrigger className="w-full sm:w-64">
-                      <SelectValue placeholder="Jump to card..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {cashbackCards.map(card => (
-                        <SelectItem key={card.id} value={card.id}>{card.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-              <div className="space-y-4">
-                  {cashbackCards.map(card => (
-                    <div key={card.id} id={`card-${card.id}`}>
-                      <CardSettingsEditor
-                        card={card}
-                        state={editState[card.id] || {}}
-                        onFieldChange={(field, value) => handleFieldChange(card.id, field, value)}
-                        isChanged={changedCards.has(card.id)}
-                        isSelected={selectedCards.has(card.id)}
-                        showCardType
-                        highlightUnsetMinimum
-                        flagNames={flagNames}
-                        leadingAccessory={(
-                          <div className="pt-1">
-                            <input
-                              type="checkbox"
-                              aria-label={`Select ${card.name}`}
-                              className="mt-2 h-4 w-4 cursor-pointer rounded border-border text-primary focus:ring-2 focus:ring-primary accent-primary"
-                              checked={selectedCards.has(card.id)}
-                              onChange={() => toggleCardSelection(card.id)}
-                            />
-                          </div>
-                        )}
-                      />
-                    </div>
-                  ))}
-              </div>
-            </>
-          ) : (
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <Percent className="h-8 w-8 text-muted-foreground mb-3" />
-                <p className="text-muted-foreground">No cashback cards configured</p>
-              </CardContent>
-            </Card>
+          {/* Miles section */}
+          {milesCards.length > 0 && (
+            <Collapsible open={milesExpanded} onOpenChange={setMilesExpanded}>
+              <CollapsibleTrigger className="flex items-center gap-2 w-full text-left group">
+                <ChevronDown className={cn(
+                  'h-5 w-5 text-muted-foreground transition-transform',
+                  !milesExpanded && '-rotate-90'
+                )} />
+                <h2 className="text-lg font-semibold flex items-center gap-2">
+                  <CreditCardIcon className="h-4 w-4 text-muted-foreground" />
+                  Miles Cards
+                  <Badge variant="secondary" className="ml-1">{milesCards.length}</Badge>
+                </h2>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-4">
+                {renderCardGrid(milesCards)}
+                {settings?.milesValuation && (
+                  <Alert className="mt-4">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      Miles are valued at ${settings.milesValuation} per mile for comparison purposes.
+                      You can adjust this in Settings.
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </CollapsibleContent>
+            </Collapsible>
           )}
-        </TabsContent>
 
-        <TabsContent value="miles" className="space-y-4">
-          {milesCards.length > 0 ? (
-            <>
-              {milesCards.length > 2 && (
-                <div className="sticky top-0 z-10 bg-background/95 backdrop-blur py-2 -mx-6 px-6 border-b">
-                  <Select onValueChange={(id) => document.getElementById(`card-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
-                    <SelectTrigger className="w-full sm:w-64">
-                      <SelectValue placeholder="Jump to card..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {milesCards.map(card => (
-                        <SelectItem key={card.id} value={card.id}>{card.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-              <div className="space-y-4">
-                  {milesCards.map(card => (
-                    <div key={card.id} id={`card-${card.id}`}>
-                      <CardSettingsEditor
-                        card={card}
-                        state={editState[card.id] || {}}
-                        onFieldChange={(field, value) => handleFieldChange(card.id, field, value)}
-                        isChanged={changedCards.has(card.id)}
-                        isSelected={selectedCards.has(card.id)}
-                        showCardType
-                        highlightUnsetMinimum
-                        flagNames={flagNames}
-                        leadingAccessory={(
-                          <div className="pt-1">
-                            <input
-                              type="checkbox"
-                              aria-label={`Select ${card.name}`}
-                              className="mt-2 h-4 w-4 cursor-pointer rounded border-border text-primary focus:ring-2 focus:ring-primary accent-primary"
-                              checked={selectedCards.has(card.id)}
-                              onChange={() => toggleCardSelection(card.id)}
-                            />
-                          </div>
-                        )}
-                      />
-                    </div>
-                  ))}
-              </div>
-
-              {settings?.milesValuation && (
-                <Alert>
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    Miles are valued at ${settings.milesValuation} per mile for comparison purposes.
-                    You can adjust this in Settings.
-                  </AlertDescription>
-                </Alert>
-              )}
-            </>
-          ) : (
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <CreditCardIcon className="h-8 w-8 text-muted-foreground mb-3" />
-                <p className="text-muted-foreground">No miles cards configured</p>
-              </CardContent>
-            </Card>
+        </div>
+      ) : (
+        /* Ungrouped: single grid with all cards */
+        <div>
+          {renderCardGrid(cards)}
+          {settings?.milesValuation && milesCards.length > 0 && (
+            <Alert className="mt-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                Miles are valued at ${settings.milesValuation} per mile for comparison purposes.
+                You can adjust this in Settings.
+              </AlertDescription>
+            </Alert>
           )}
-        </TabsContent>
+        </div>
+      )}
 
-        {showThemes && (
-          <TabsContent value="themes" className="space-y-4">
-            <ThemeGroupingManager
-              cards={cards}
-              themeGroups={themeGroups}
-              onSaveGroup={saveThemeGroup}
-              onDeleteGroup={deleteThemeGroup}
-            />
-          </TabsContent>
-        )}
-      </Tabs>
+      {/* Themes section (if enabled) */}
+      {showThemes && (
+        <div className="mt-8">
+          <h2 className="text-lg font-semibold mb-4">Theme Groups</h2>
+          <ThemeGroupingManager
+            cards={cards}
+            themeGroups={themeGroups}
+            onSaveGroup={saveThemeGroup}
+            onDeleteGroup={deleteThemeGroup}
+          />
+        </div>
+      )}
 
+      {/* Dialog for editing card */}
+      <CardSettingsDialog
+        card={dialogCard ?? null}
+        state={dialogCardId ? editState[dialogCardId] || {} : {}}
+        open={dialogCardId !== null}
+        onOpenChange={(open) => {
+          if (!open) setDialogCardId(null);
+        }}
+        onFieldChange={(field, value) => {
+          if (dialogCardId) {
+            handleFieldChange(dialogCardId, field, value);
+          }
+        }}
+        isChanged={dialogCardId ? changedCards.has(dialogCardId) : false}
+        flagNames={flagNames}
+      />
+
+      {/* Sticky batch action bar */}
       {showStickyBar && (
         <div className="fixed bottom-6 left-1/2 z-40 w-full max-w-3xl -translate-x-1/2 rounded-2xl border bg-background/90 p-4 shadow-xl backdrop-blur">
           <div className="flex flex-wrap items-center justify-between gap-4">
