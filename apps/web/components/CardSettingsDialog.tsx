@@ -36,7 +36,7 @@ export function CardSettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col p-0">
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden flex flex-col p-0">
         <DialogHeader className="px-6 pt-6 pb-2">
           <DialogTitle>{card.name}</DialogTitle>
           <DialogDescription>{card.issuer ?? 'Unknown issuer'}</DialogDescription>
