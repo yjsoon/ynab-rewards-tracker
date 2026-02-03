@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useCallback, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   useYnabPAT,
   useCreditCards,
@@ -71,6 +72,9 @@ interface SetupStatus {
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { pat } = useYnabPAT();
   const { cards } = useCreditCards();
   const { selectedBudget } = useSelectedBudget();
@@ -85,34 +89,40 @@ export default function DashboardPage() {
   const { settings, updateSettings } = useSettings();
 
   // Tab state: "featured" (default) or "all"
-  const [activeTab, setActiveTab] = useState<'featured' | 'all'>('featured');
-  const [initialCardId, setInitialCardId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'featured' | 'all'>(() => {
+    return searchParams.get('tab') === 'all' || searchParams.get('card')
+      ? 'all'
+      : 'featured';
+  });
+  const [initialCardId, setInitialCardId] = useState<string | null>(
+    () => searchParams.get('card')
+  );
 
-  // Read tab and card from URL on mount
+  // Sync tab and card from URL changes
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('tab') === 'all') setActiveTab('all');
-    const cardParam = params.get('card');
+    const tabParam = searchParams.get('tab');
+    const cardParam = searchParams.get('card');
     if (cardParam) {
       setActiveTab('all');
       setInitialCardId(cardParam);
+      return;
     }
-  }, []);
+    setActiveTab(tabParam === 'all' ? 'all' : 'featured');
+    setInitialCardId(null);
+  }, [searchParams]);
 
   // Sync tab to URL
   const handleTabChange = useCallback((tab: 'featured' | 'all') => {
     setActiveTab(tab);
     setInitialCardId(null);
-    if (typeof window === 'undefined') return;
-    const params = new URLSearchParams(window.location.search);
+    const params = new URLSearchParams(searchParams.toString());
     if (tab === 'all') params.set('tab', 'all');
     else params.delete('tab');
     params.delete('card');
     const query = params.toString();
-    const newUrl = query ? `${window.location.pathname}?${query}` : window.location.pathname;
-    window.history.replaceState({}, '', newUrl);
-  }, []);
+    const newUrl = query ? `${pathname}?${query}` : pathname;
+    router.replace(newUrl);
+  }, [pathname, router, searchParams]);
 
   // Auto-sync settings from cloud on page load (once per 30 minutes)
   useAutoSync();
