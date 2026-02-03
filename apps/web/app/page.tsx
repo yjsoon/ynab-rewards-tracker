@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback, useMemo, useState } from "react";
+import { Suspense, useEffect, useCallback, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   useYnabPAT,
@@ -71,7 +71,7 @@ interface SetupStatus {
   cards: boolean;
 }
 
-export default function DashboardPage() {
+function DashboardContent() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -466,5 +466,13 @@ export default function DashboardPage() {
         <AllCardsTab initialCardId={initialCardId} />
       )}
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<div className="max-w-6xl mx-auto px-6 py-8"><div className="h-8 w-48 bg-muted animate-pulse rounded" /></div>}>
+      <DashboardContent />
+    </Suspense>
   );
 }
