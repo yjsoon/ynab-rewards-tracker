@@ -17,6 +17,7 @@ import type { CreditCard, DashboardViewMode } from "@/lib/storage";
 import { DashboardLanding } from "@/components/dashboard/DashboardLanding";
 import { SetupProgressAlert } from "@/components/dashboard/SetupProgressAlert";
 import { DashboardCardOverview } from "@/components/dashboard/DashboardCardOverview";
+import { AllCardsTab } from "@/components/dashboard/AllCardsTab";
 import { useTrackedTransactions } from "@/hooks/useTrackedTransactions";
 import { Button } from "@/components/ui/button";
 import {
@@ -82,6 +83,36 @@ export default function DashboardPage() {
     isLoading: isViewModeLoading
   } = useDashboardViewMode();
   const { settings, updateSettings } = useSettings();
+
+  // Tab state: "featured" (default) or "all"
+  const [activeTab, setActiveTab] = useState<'featured' | 'all'>('featured');
+  const [initialCardId, setInitialCardId] = useState<string | null>(null);
+
+  // Read tab and card from URL on mount
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('tab') === 'all') setActiveTab('all');
+    const cardParam = params.get('card');
+    if (cardParam) {
+      setActiveTab('all');
+      setInitialCardId(cardParam);
+    }
+  }, []);
+
+  // Sync tab to URL
+  const handleTabChange = useCallback((tab: 'featured' | 'all') => {
+    setActiveTab(tab);
+    setInitialCardId(null);
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    if (tab === 'all') params.set('tab', 'all');
+    else params.delete('tab');
+    params.delete('card');
+    const query = params.toString();
+    const newUrl = query ? `${window.location.pathname}?${query}` : window.location.pathname;
+    window.history.replaceState({}, '', newUrl);
+  }, []);
 
   // Auto-sync settings from cloud on page load (once per 30 minutes)
   useAutoSync();
@@ -297,68 +328,98 @@ export default function DashboardPage() {
   return (
     <div className="max-w-6xl mx-auto px-6 py-8">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
-        <h1 className="text-3xl font-bold">Dashboard</h1>
-        <div className="flex items-center gap-3">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="gap-1.5">
-                {viewMode === "summary" ? (
-                  <LayoutGrid className="h-4 w-4" />
-                ) : (
-                  <List className="h-4 w-4" />
-                )}
-                <span className="hidden sm:inline">
-                  {viewMode === "summary" ? "Summary" : "Detailed"}
-                </span>
-                <ChevronDown className="h-3 w-3" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuRadioGroup
-                value={viewMode}
-                onValueChange={(v) => handleViewModeChange(v as DashboardViewMode)}
-              >
-                <DropdownMenuRadioItem value="summary">
-                  Summary view
-                </DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="detailed">
-                  Detailed view
-                </DropdownMenuRadioItem>
-              </DropdownMenuRadioGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuCheckboxItem
-                checked={groupByType}
-                onCheckedChange={handleGroupByTypeToggle}
-              >
-                Group by card type
-              </DropdownMenuCheckboxItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <div className="flex items-center gap-2">
-            <Button
+        <div className="flex items-center gap-4">
+          <h1 className="text-3xl font-bold">Dashboard</h1>
+          <div className="flex items-center rounded-lg border bg-muted/30 p-0.5">
+            <button
               type="button"
-              size="sm"
-              variant="ghost"
-              onClick={refresh}
-              disabled={refreshing || loading}
-              className="rounded-full px-2.5"
-              title={lastUpdatedAt ? `Last updated: ${formatLastUpdated(lastUpdatedAt)}` : "Refresh data"}
-              aria-label="Refresh dashboard data"
+              onClick={() => handleTabChange('featured')}
+              className={cn(
+                "px-3 py-1.5 text-sm font-medium rounded-md transition-colors",
+                activeTab === 'featured'
+                  ? "bg-background shadow-sm text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
             >
-              <RefreshCw
-                className={cn(
-                  "h-4 w-4",
-                  (refreshing || loading) && "animate-spin"
-                )}
-              />
-            </Button>
-            {lastUpdatedAt && !refreshing && !loading && (
-              <span className="text-xs text-muted-foreground hidden sm:inline">
-                {formatLastUpdated(lastUpdatedAt)}
-              </span>
-            )}
+              Featured
+            </button>
+            <button
+              type="button"
+              onClick={() => handleTabChange('all')}
+              className={cn(
+                "px-3 py-1.5 text-sm font-medium rounded-md transition-colors",
+                activeTab === 'all'
+                  ? "bg-background shadow-sm text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              All Cards
+            </button>
           </div>
         </div>
+        {activeTab === 'featured' && (
+          <div className="flex items-center gap-3">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="gap-1.5">
+                  {viewMode === "summary" ? (
+                    <LayoutGrid className="h-4 w-4" />
+                  ) : (
+                    <List className="h-4 w-4" />
+                  )}
+                  <span className="hidden sm:inline">
+                    {viewMode === "summary" ? "Summary" : "Detailed"}
+                  </span>
+                  <ChevronDown className="h-3 w-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuRadioGroup
+                  value={viewMode}
+                  onValueChange={(v) => handleViewModeChange(v as DashboardViewMode)}
+                >
+                  <DropdownMenuRadioItem value="summary">
+                    Summary view
+                  </DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="detailed">
+                    Detailed view
+                  </DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuCheckboxItem
+                  checked={groupByType}
+                  onCheckedChange={handleGroupByTypeToggle}
+                >
+                  Group by card type
+                </DropdownMenuCheckboxItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={refresh}
+                disabled={refreshing || loading}
+                className="rounded-full px-2.5"
+                title={lastUpdatedAt ? `Last updated: ${formatLastUpdated(lastUpdatedAt)}` : "Refresh data"}
+                aria-label="Refresh dashboard data"
+              >
+                <RefreshCw
+                  className={cn(
+                    "h-4 w-4",
+                    (refreshing || loading) && "animate-spin"
+                  )}
+                />
+              </Button>
+              {lastUpdatedAt && !refreshing && !loading && (
+                <span className="text-xs text-muted-foreground hidden sm:inline">
+                  {formatLastUpdated(lastUpdatedAt)}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {!isFullyConfigured && (
@@ -369,27 +430,31 @@ export default function DashboardPage() {
         />
       )}
 
-  <DashboardCardOverview
-        cards={cards}
-        cashbackCards={cashbackCards}
-        milesCards={milesCards}
-        allCards={allCards}
-        visibleFeaturedCards={visibleFeaturedCards}
-        hiddenCards={hiddenCards}
-        viewMode={viewMode}
-        onHideCard={hideCard}
-        onUnhideAll={handleUnhideAll}
-        pat={pat}
-        prefetchedTransactions={allTransactions}
-        transactionsLoading={loading}
-        transactionsRefreshing={refreshing}
-        hasCachedTransactions={hasCachedData}
-        cashbackCollapsed={cashbackCollapsed}
-        milesCollapsed={milesCollapsed}
-        onToggleGroup={handleToggleGroup}
-        onReorderCards={handleCardReorder}
-        groupByType={groupByType}
-      />
+      {activeTab === 'featured' ? (
+        <DashboardCardOverview
+          cards={cards}
+          cashbackCards={cashbackCards}
+          milesCards={milesCards}
+          allCards={allCards}
+          visibleFeaturedCards={visibleFeaturedCards}
+          hiddenCards={hiddenCards}
+          viewMode={viewMode}
+          onHideCard={hideCard}
+          onUnhideAll={handleUnhideAll}
+          pat={pat}
+          prefetchedTransactions={allTransactions}
+          transactionsLoading={loading}
+          transactionsRefreshing={refreshing}
+          hasCachedTransactions={hasCachedData}
+          cashbackCollapsed={cashbackCollapsed}
+          milesCollapsed={milesCollapsed}
+          onToggleGroup={handleToggleGroup}
+          onReorderCards={handleCardReorder}
+          groupByType={groupByType}
+        />
+      ) : (
+        <AllCardsTab initialCardId={initialCardId} />
+      )}
     </div>
   );
 }

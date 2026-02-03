@@ -8,6 +8,7 @@ import {
   DialogFooter,
   DialogDescription,
 } from '@/components/ui/dialog';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { CardSettingsEditor, type CardEditState } from '@/components/CardSettingsEditor';
 import type { CreditCard } from '@/lib/storage';
@@ -52,7 +53,12 @@ export function CardSettingsDialog({
             flagNames={flagNames}
           />
         </div>
-        <DialogFooter className="px-6 py-4 border-t bg-muted/30">
+        <DialogFooter className="px-6 py-4 border-t bg-muted/30 justify-between sm:justify-between">
+          <Button variant="link" asChild className="px-0">
+            <Link href={`/cards/${card.id}`}>
+              View transactions →
+            </Link>
+          </Button>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Close
           </Button>

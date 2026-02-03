@@ -195,7 +195,7 @@ export default function RecommendationsPage() {
               Visit Cards to create themes like Transport or Dining, then link your cards.
             </p>
             <Button asChild>
-              <Link href="/card-rules?tab=themes">Configure Themes</Link>
+              <Link href="/?tab=all">Configure Themes</Link>
             </Button>
           </CardContent>
         </Card>
@@ -223,7 +223,7 @@ export default function RecommendationsPage() {
             {loading ? 'Refreshing...' : 'Refresh'}
           </Button>
           <Button variant="outline" size="sm" asChild>
-            <Link href="/card-rules?tab=themes">Manage Themes</Link>
+            <Link href="/?tab=all">Manage Themes</Link>
           </Button>
         </div>
       </header>

@@ -7,7 +7,7 @@ type RulesRedirectProps = {
 /**
  * Legacy route redirect
  * Maintains backwards compatibility for bookmarks and external links
- * to the old /rules path, redirecting to /card-rules while preserving query params
+ * to the old /rules path, redirecting to /?tab=all while preserving query params
  */
 export default function RulesRedirect({ searchParams }: RulesRedirectProps) {
   const params = new URLSearchParams();
@@ -25,5 +25,6 @@ export default function RulesRedirect({ searchParams }: RulesRedirectProps) {
   });
 
   const query = params.toString();
-  permanentRedirect(`/card-rules${query ? `?${query}` : ''}`);
+  params.set('tab', 'all');
+  permanentRedirect(`/?${params.toString()}`);
 }

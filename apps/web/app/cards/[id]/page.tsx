@@ -20,7 +20,7 @@ export default function CardDetailPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const cardId = params.id as string;
-  const defaultTab = searchParams.get('tab') || 'settings';
+  const defaultTab = searchParams.get('tab') || 'transactions';
   const startEditing = searchParams.get('edit') === '1' || searchParams.get('edit') === 'true';
   
   const { cards } = useCreditCards();

@@ -2,17 +2,20 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { CSSProperties, KeyboardEvent, MouseEvent, ReactNode } from "react";
+import type { CSSProperties, KeyboardEvent, ReactNode } from "react";
 import { useMemo, useCallback, useEffect, useRef, useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
   CreditCard as CreditCardIcon,
   DollarSign,
+  EyeOff,
   GripVertical,
   Loader2,
+  MoreHorizontal,
   Percent,
   Plane,
+  ReceiptText,
   Settings2,
   Sparkles,
   TrendingUp,
@@ -42,8 +45,15 @@ import type {
 } from "@/lib/storage";
 import type { Transaction } from "@/types/transaction";
 import { cn } from "@/lib/utils";
+import { SimpleRewardsCalculator } from "@/lib/rewards-engine";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Card,
   CardContent,
@@ -104,13 +114,6 @@ interface DashboardCardOverviewProps {
   groupByType?: boolean;
 }
 
-function createSettingsClickHandler(cardId: string) {
-  return (event: MouseEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
-    window.location.href = `/cards/${cardId}?tab=settings&edit=1`;
-  };
-}
 
 export function DashboardCardOverview({
   cards,
@@ -546,15 +549,36 @@ function SortableDashboardCard({ card, viewMode, pat, prefetchedTransactions, on
         onKeyDown={handleKeyDown}
       >
         <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={createSettingsClickHandler(card.id)}
-            aria-label="Go to card settings"
-          >
-            <Settings2 className="h-4 w-4" />
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                aria-label="Card actions"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+              <DropdownMenuItem onClick={() => { window.location.href = `/cards/${card.id}?tab=settings&edit=1`; }}>
+                <Settings2 className="h-4 w-4 mr-2" />
+                Edit settings
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => {
+                const period = SimpleRewardsCalculator.calculatePeriod(card);
+                onHideCard(card.id, period.end);
+              }}>
+                <EyeOff className="h-4 w-4 mr-2" />
+                Hide from dashboard
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => { window.location.href = `/cards/${card.id}`; }}>
+                <ReceiptText className="h-4 w-4 mr-2" />
+                View transactions
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         <div className="absolute bottom-3 right-3">
