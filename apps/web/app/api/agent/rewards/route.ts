@@ -341,7 +341,7 @@ function buildCardStatus(
 
   const shouldStopUsing = Boolean(summary.shouldStopUsing || (maximumExceeded ?? false));
 
-  const base = {
+  const base: CardStatusAvailable = {
     available: true,
     period: summary.period,
     limits: {
