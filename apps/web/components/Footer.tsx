@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Github } from "lucide-react";
 
 export function Footer() {
@@ -37,6 +38,13 @@ export function Footer() {
               </a>
               <span className="ml-0.5">.</span>
             </span>
+            <span className="hidden sm:inline">•</span>
+            <Link
+              href="/agent-api"
+              className="font-medium underline underline-offset-4 hover:text-primary"
+            >
+              Agent API
+            </Link>
           </div>
           <p className="text-xs text-center text-muted-foreground">
             Rewards Tracker for YNAB is not affiliated with or endorsed by{" "}
