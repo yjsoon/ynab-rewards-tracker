@@ -7,6 +7,7 @@ A client-side rewards tracker spanning a production-ready web app and an in-prog
 - **Web App (`apps/web`)**: Fully featured, production-ready experience with complete YNAB integration, rewards calculation engine, storage persistence, and dashboard analytics. The Recommendations page is temporarily hidden from navigation (not ready for production).
 - **Mobile App (`apps/mobile`)**: Expo-based companion app currently wiring up live YNAB integration, AsyncStorage persistence, and rewards calculations. Home and Settings screens are mid-integration; card management UI and remaining tab screens still need implementation. The Recommendations tab is temporarily hidden (not ready for production).
 - **Shared Foundation (`packages/app-core`)**: Cross-platform rewards engine, storage types, and utilities consumed by both apps.
+- **Agent API (`apps/web/app/api/agent/rewards`)**: Stateless endpoint that decrypts Cloud Sync data in memory and recomputes rewards for card limits, category recommendations, and transaction advice.
 
 ## Tech Stack
 
@@ -18,6 +19,7 @@ A client-side rewards tracker spanning a production-ready web app and an in-prog
 - Browser `localStorage` persistence via storage service
 - Cloud sync via Cloudflare KV (native bindings in production)
 - YNAB API proxied through `/api/ynab/*` routes (bearer PAT)
+- Agent API docs at `/agent-api` (uses Cloud Sync + PAT per request)
 - React hooks + Context API for state management
 
 ### Mobile App (`apps/mobile`)
@@ -85,6 +87,7 @@ The production web app currently delivers the following capabilities. The mobile
 - Eligible spend calculation (respecting both minimum and maximum)
 - Normalised dollar values for cross-card comparison
 - Real-time recomputation with caching
+ - Agent API outputs limit signals and transaction advice on demand
 
 ### Dashboard & Analytics
 - Overview of all tracked cards

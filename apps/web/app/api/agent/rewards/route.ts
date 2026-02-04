@@ -43,6 +43,75 @@ const ADVICE_PRIORITY: Record<AdviceStatus, number> = {
 
 const INCLUDE_KEYS = new Set(['cards', 'signals', 'categories', 'advice', 'alerts']);
 
+type SummaryAvailable = {
+  available: true;
+  period: string | null | undefined;
+  totalSpend: number;
+  eligibleSpend: number;
+  eligibleSpendBeforeBlocks: number;
+  rewardEarned: number;
+  rewardEarnedDollars: number;
+  rewardType: 'cashback' | 'miles';
+  minimumMet: boolean;
+  minimumProgress: number | null;
+  maximumExceeded: boolean;
+  maximumProgress: number | null;
+  shouldStopUsing: boolean;
+  ruleCount: number;
+};
+
+type SummaryUnavailable = {
+  available: false;
+  reason: string;
+};
+
+type SummaryResult = SummaryAvailable | SummaryUnavailable;
+
+type CardStatusAvailable = {
+  available: true;
+  period: string | null | undefined;
+  limits: {
+    minimum: {
+      target: number | null;
+      remaining: number | null;
+      progress: number | null;
+      met: boolean | null;
+    };
+    maximum: {
+      cap: number | null;
+      remaining: number | null;
+      progress: number | null;
+      exceeded: boolean | null;
+    };
+    shouldStopUsing: boolean;
+  };
+  spend?: {
+    total: number;
+    eligible: number;
+    eligibleBeforeBlocks: number;
+    rewardEarned: number;
+    rewardEarnedDollars: number;
+    rewardType: 'cashback' | 'miles';
+  };
+  rules?: ReturnType<typeof buildRulePayload>;
+};
+
+type CardStatusUnavailable = {
+  available: false;
+  reason: string;
+  rules?: ReturnType<typeof buildRulePayload>;
+};
+
+type CardStatus = CardStatusAvailable | CardStatusUnavailable;
+
+function isSummaryAvailable(summary: SummaryResult): summary is SummaryAvailable {
+  return summary.available;
+}
+
+function isStatusAvailable(status: CardStatus): status is CardStatusAvailable {
+  return status.available;
+}
+
 interface CloudSyncPayload {
   ciphertext: string;
   iv: string;
@@ -150,7 +219,7 @@ function resolveEligibleBeforeBlocks(calculations: RewardCalculation[]): number 
   return resolveMax(calculations.map((calc) => calc.eligibleSpend));
 }
 
-function summariseCalculations(calculations: RewardCalculation[]) {
+function summariseCalculations(calculations: RewardCalculation[]): SummaryResult {
   if (calculations.length === 0) {
     return {
       available: false,
@@ -252,18 +321,10 @@ function getPositiveNumber(value: number | null | undefined): number | null {
 
 function buildCardStatus(
   card: CreditCard,
-  summary: ReturnType<typeof summariseCalculations>,
+  summary: SummaryAvailable,
   rules: ReturnType<typeof buildRulePayload> | null,
   view: 'full' | 'limits'
-) {
-  if (!summary.available) {
-    return {
-      available: false,
-      reason: summary.reason,
-      ...(view === 'full' && rules ? { rules } : {}),
-    };
-  }
-
+): CardStatusAvailable {
   const totalSpend = summary.totalSpend;
   const eligibleSpend = summary.eligibleSpend;
   const eligibleSpendBeforeBlocks = summary.eligibleSpendBeforeBlocks;
@@ -669,7 +730,7 @@ export async function POST(request: Request) {
         ? buildRulePayload(cardCalculations, ruleLookup, includeBreakdowns)
         : null;
 
-      const status = summary.available
+      const status: CardStatus = isSummaryAvailable(summary)
         ? buildCardStatus(card, summary, rulesPayload, cardsView)
         : {
             available: false,
@@ -677,7 +738,7 @@ export async function POST(request: Request) {
             ...(cardsView === 'full' && rulesPayload ? { rules: rulesPayload } : {}),
           };
 
-      if (status.available) {
+      if (isStatusAvailable(status)) {
         const minimumRemaining = status.limits.minimum.remaining;
         if (typeof minimumRemaining === 'number' && minimumRemaining > 0) {
           minimumSpendNeeded.push({

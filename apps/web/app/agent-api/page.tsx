@@ -288,6 +288,10 @@ export default function AgentApiPage() {
             <p>
               Transaction advice errors: <span className="font-mono text-foreground">invalid_amount</span>, <span className="font-mono text-foreground">theme_group_not_found</span>, or <span className="font-mono text-foreground">missing_theme_group_or_flag_color</span>.
             </p>
+            <p>
+              Response headers include <span className="font-mono text-foreground">X-Agent-Api-Include</span> and{' '}
+              <span className="font-mono text-foreground">X-Agent-Api-Cards-View</span> for quick inspection.
+            </p>
           </div>
         </CardContent>
       </Card>
