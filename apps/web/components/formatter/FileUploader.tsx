@@ -293,6 +293,9 @@ export function FileUploader({ onFileProcess, isLoading, customPrompt, onCustomP
               placeholder="E.g. Dates are DD/MM, ignore records marked REVERSAL, show FX currency in memo"
               className="min-h-[120px]"
             />
+            <p className="text-xs text-muted-foreground">
+              Additional instructions save automatically in local storage and stay here for your next round.
+            </p>
             <div className="flex flex-wrap gap-2">
               {EXAMPLE_PROMPTS.map((prompt) => (
                 <Badge

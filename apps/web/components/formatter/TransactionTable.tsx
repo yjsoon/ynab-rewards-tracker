@@ -38,6 +38,11 @@ export function TransactionTable({ transactions, onChange }: TransactionTablePro
     });
   };
 
+  const handleClearAllTransactions = () => {
+    setRows([]);
+    onChange?.([]);
+  };
+
   const handleDownload = () => {
     const csv = Papa.unparse({
       fields: ['Date', 'Payee', 'Memo', 'Outflow', 'Inflow'],
@@ -67,6 +72,15 @@ export function TransactionTable({ transactions, onChange }: TransactionTablePro
             <div className="rounded-md bg-secondary/40 px-3 py-1 font-semibold">
               {totalTransactions} {totalTransactions === 1 ? 'transaction' : 'transactions'}
             </div>
+            <Button
+              onClick={handleClearAllTransactions}
+              disabled={rows.length === 0}
+              variant="outline"
+              className="cursor-pointer"
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Clear all transactions
+            </Button>
             <Button onClick={handleDownload} disabled={rows.length === 0} className="cursor-pointer">
               <Download className="mr-2 h-4 w-4" />
               Download CSV

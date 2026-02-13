@@ -51,6 +51,7 @@ const PROVIDER_COPY: Record<StatementFormatterProvider, {
 
 const MODEL_OPTIONS: Record<StatementFormatterProvider, Array<{ value: string; label: string }>> = {
   gemini: [
+    { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview' },
     { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
     { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
     { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
@@ -60,8 +61,7 @@ const MODEL_OPTIONS: Record<StatementFormatterProvider, Array<{ value: string; l
     { value: 'gpt-4o', label: 'GPT-4o' },
   ],
   openrouter: [
-    { value: 'google/gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite (Google)' },
-    { value: 'google/gemini-flash-1.5-8b', label: 'Gemini Flash 1.5 8B (Google)' },
+    { value: 'google/gemini-3-flash-preview', label: 'Gemini 3 Flash Preview (Google)' },
     { value: 'openai/gpt-4o-mini', label: 'GPT-4o Mini (OpenAI)' },
     { value: 'anthropic/claude-3.5-haiku', label: 'Claude 3.5 Haiku (Anthropic)' },
   ],
@@ -87,6 +87,13 @@ export function ProviderConfigCard({ provider, onProviderChange, model, onModelC
       timeoutRef.current = window.setTimeout(() => setSaveState('idle'), 2000);
     }
   }, [apiKey, saveState]);
+
+  useEffect(() => {
+    if (modelOptions.some((option) => option.value === model)) {
+      return;
+    }
+    onModelChange(modelOptions[0].value);
+  }, [model, modelOptions, onModelChange]);
 
   const handleApiKeyChange = (value: string) => {
     if (timeoutRef.current) {

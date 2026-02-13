@@ -4,9 +4,9 @@ import type { NextRequest } from 'next/server';
 import type { StatementFormatterProvider, StatementFormatterTransaction } from '@/types/statement-formatter';
 
 const PROVIDER_DEFAULT_MODEL: Record<StatementFormatterProvider, string> = {
-  gemini: 'gemini-2.5-flash-lite',
+  gemini: 'gemini-3-flash-preview',
   openai: 'gpt-4o-mini',
-  openrouter: 'google/gemini-2.5-flash-lite',
+  openrouter: 'google/gemini-3-flash-preview',
 };
 
 const PROVIDER_LABEL: Record<StatementFormatterProvider, string> = {
