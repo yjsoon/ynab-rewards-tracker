@@ -9,10 +9,8 @@ import { getAlertRecommendations, getCardRecommendations } from '@ynab-counter/a
 import { resolveLatestPeriod } from '@ynab-counter/app-core/rewards-engine/utils/recommendation-helpers';
 import { YnabClient, isYnabApiError } from '@ynab-counter/ynab-client';
 
-export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
-export const maxDuration = 60;
 
 const CLOUDFLARE_ACCOUNT_ID = process.env.CLOUDFLARE_ACCOUNT_ID;
 const CLOUDFLARE_KV_NAMESPACE_ID = process.env.CLOUDFLARE_KV_NAMESPACE_ID;
