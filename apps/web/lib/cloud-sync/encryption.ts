@@ -1,3 +1,6 @@
+import { pbkdf2 } from '@noble/hashes/pbkdf2.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+
 import { normaliseMnemonic } from './mnemonic';
 
 const SALT = 'ynab-rewards-cloud-sync-v1';
@@ -5,6 +8,7 @@ const PBKDF2_ITERATIONS = 210_000;
 const PBKDF2_HASH = 'SHA-256';
 const AES_ALGO = 'AES-GCM';
 const AES_KEY_LENGTH = 256;
+const AES_KEY_LENGTH_BYTES = AES_KEY_LENGTH / 8;
 const IV_LENGTH_BYTES = 12;
 
 const textEncoder = new TextEncoder();
@@ -76,22 +80,58 @@ function fromBase64Url(value: string): Uint8Array {
 async function deriveKey(mnemonic: string): Promise<CryptoKey> {
   const crypto = ensureCrypto();
   const normalised = normaliseMnemonic(mnemonic);
-  const keyMaterial = await crypto.subtle.importKey(
-    'raw',
+
+  try {
+    const keyMaterial = await crypto.subtle.importKey(
+      'raw',
+      textEncoder.encode(normalised),
+      'PBKDF2',
+      false,
+      ['deriveBits']
+    );
+    const derivedBits = await crypto.subtle.deriveBits(
+      {
+        name: 'PBKDF2',
+        salt: textEncoder.encode(SALT),
+        iterations: PBKDF2_ITERATIONS,
+        hash: PBKDF2_HASH,
+      },
+      keyMaterial,
+      AES_KEY_LENGTH
+    );
+
+    return crypto.subtle.importKey(
+      'raw',
+      derivedBits,
+      { name: AES_ALGO, length: AES_KEY_LENGTH },
+      false,
+      ['encrypt', 'decrypt']
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message.toLowerCase() : '';
+    const shouldFallback =
+      message.includes('pbkdf2') &&
+      (message.includes('iteration') || message.includes('exceed') || message.includes('limit'));
+
+    if (!shouldFallback) {
+      throw error;
+    }
+  }
+
+  // Cloudflare Workers currently rejects PBKDF2 >100k via Web Crypto.
+  const keyBytes = pbkdf2(
+    sha256,
     textEncoder.encode(normalised),
-    'PBKDF2',
-    false,
-    ['deriveKey', 'deriveBits']
+    textEncoder.encode(SALT),
+    {
+      c: PBKDF2_ITERATIONS,
+      dkLen: AES_KEY_LENGTH_BYTES,
+    }
   );
 
-  return crypto.subtle.deriveKey(
-    {
-      name: 'PBKDF2',
-      salt: textEncoder.encode(SALT),
-      iterations: PBKDF2_ITERATIONS,
-      hash: PBKDF2_HASH,
-    },
-    keyMaterial,
+  return crypto.subtle.importKey(
+    'raw',
+    keyBytes,
     { name: AES_ALGO, length: AES_KEY_LENGTH },
     false,
     ['encrypt', 'decrypt']

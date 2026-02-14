@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { Buffer } from 'node:buffer';
 import { webcrypto } from 'node:crypto';
 
@@ -72,5 +72,37 @@ describe('cloud sync encryption helpers', () => {
     await expect(
       decryptJson('legal winner thank year wave sausage worth useful legal winner thank yellow', encrypted.ciphertext, encrypted.iv)
     ).rejects.toThrow();
+  });
+
+  it('falls back when Web Crypto rejects high PBKDF2 iterations', async () => {
+    const subtle = globalThis.crypto.subtle;
+    const payload = { cards: [{ id: 'fallback-card', name: 'Fallback Card' }] };
+    const nativeEncrypted = await encryptJson(mnemonic, payload);
+    const nativeDeriveBits = subtle.deriveBits.bind(subtle);
+
+    const deriveBitsSpy = vi.spyOn(subtle, 'deriveBits');
+    deriveBitsSpy.mockRejectedValue(new Error('PBKDF2 iteration count 210000 exceeds limit of 100000'));
+
+    try {
+      const fallbackDecrypted = await decryptJson<typeof payload>(
+        mnemonic,
+        nativeEncrypted.ciphertext,
+        nativeEncrypted.iv
+      );
+      expect(fallbackDecrypted).toEqual(payload);
+
+      const fallbackEncrypted = await encryptJson(mnemonic, payload);
+      deriveBitsSpy.mockImplementation(nativeDeriveBits);
+
+      const nativeDecrypted = await decryptJson<typeof payload>(
+        mnemonic,
+        fallbackEncrypted.ciphertext,
+        fallbackEncrypted.iv
+      );
+      expect(nativeDecrypted).toEqual(payload);
+      expect(deriveBitsSpy).toHaveBeenCalled();
+    } finally {
+      deriveBitsSpy.mockRestore();
+    }
   });
 });
