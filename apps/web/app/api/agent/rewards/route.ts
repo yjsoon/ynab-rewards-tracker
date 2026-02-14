@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getCloudflareContext } from '@opennextjs/cloudflare';
 
 import { computeKeyId, decryptJson } from '@/lib/cloud-sync/encryption';
 import type { StorageData, RewardCalculation, CreditCard } from '@ynab-counter/app-core/storage/types';
@@ -11,6 +12,11 @@ import { YnabClient, isYnabApiError } from '@ynab-counter/ynab-client';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
+export const maxDuration = 60;
+
+const CLOUDFLARE_ACCOUNT_ID = process.env.CLOUDFLARE_ACCOUNT_ID;
+const CLOUDFLARE_KV_NAMESPACE_ID = process.env.CLOUDFLARE_KV_NAMESPACE_ID;
+const CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN;
 
 interface AgentRewardsRequest {
   pat?: string;
@@ -119,7 +125,25 @@ interface CloudSyncPayload {
   version?: number;
 }
 
+interface CloudflareError {
+  success: boolean;
+  errors: Array<{ code: number; message: string }>;
+}
+
+interface KVNamespace {
+  get(key: string): Promise<string | null>;
+}
+
 class AgentApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
+class CloudflareKVError extends Error {
   status: number;
 
   constructor(message: string, status: number) {
@@ -161,22 +185,120 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
-async function fetchCloudSyncPayload(origin: string, keyId: string): Promise<CloudSyncPayload> {
-  const url = new URL('/api/cloud-sync', origin);
-  url.searchParams.set('key', keyId);
+async function fetchCloudSyncPayload(keyId: string): Promise<CloudSyncPayload> {
+  const stored = await retrieveCloudSyncValue(keyId);
 
-  const response = await fetch(url.toString(), { method: 'GET', cache: 'no-store' });
-
-  if (response.status === 404) {
+  if (!stored) {
     throw new AgentApiError('Cloud sync backup not found.', 404);
   }
 
-  if (!response.ok) {
-    const text = await response.text().catch(() => '');
-    throw new AgentApiError(text || 'Failed to fetch cloud sync backup.', response.status);
+  let parsed: CloudSyncPayload;
+  try {
+    parsed = JSON.parse(stored) as CloudSyncPayload;
+  } catch {
+    throw new AgentApiError('Cloud sync payload is malformed.', 500);
   }
 
-  return response.json() as Promise<CloudSyncPayload>;
+  if (!isNonEmptyString(parsed.ciphertext) || !isNonEmptyString(parsed.iv)) {
+    throw new AgentApiError('Cloud sync payload is malformed.', 500);
+  }
+
+  return parsed;
+}
+
+async function getNativeKV(): Promise<KVNamespace | null> {
+  try {
+    const ctx = await getCloudflareContext();
+    const env = ctx?.env as Record<string, unknown> | undefined;
+    const kv = env?.CLOUD_SYNC_KV;
+    if (
+      kv &&
+      typeof kv === 'object' &&
+      'get' in kv &&
+      typeof (kv as Record<string, unknown>).get === 'function'
+    ) {
+      return kv as KVNamespace;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function requestCloudflareKV(key: string): Promise<Response> {
+  if (!CLOUDFLARE_ACCOUNT_ID || !CLOUDFLARE_KV_NAMESPACE_ID || !CLOUDFLARE_API_TOKEN) {
+    return new Response('Cloud sync not configured', { status: 501 });
+  }
+
+  const endpoint = new URL(
+    `https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/storage/kv/namespaces/${CLOUDFLARE_KV_NAMESPACE_ID}/values/${encodeURIComponent(
+      key
+    )}`
+  );
+
+  const response = await fetch(endpoint, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`,
+      'Content-Type': 'text/plain',
+    },
+  });
+
+  if (!response.ok && process.env.NODE_ENV !== 'production') {
+    console.error('Cloud sync KV request failed', {
+      method: 'GET',
+      status: response.status,
+      statusText: response.statusText,
+      endpoint: endpoint.href,
+    });
+  }
+
+  return response;
+}
+
+async function retrieveValueREST(key: string): Promise<string | null> {
+  const response = await requestCloudflareKV(key);
+
+  if (response.status === 404) {
+    return null;
+  }
+
+  if (!response.ok) {
+    const bodyText = await response.text().catch(() => '');
+    let message = bodyText || 'Failed to retrieve cloud sync data';
+    if (bodyText) {
+      try {
+        const parsed = JSON.parse(bodyText) as CloudflareError;
+        message = parsed?.errors?.[0]?.message || message;
+      } catch {
+        // Keep plain text body message.
+      }
+    }
+    throw new CloudflareKVError(`Cloudflare (${response.status}): ${message}`, response.status || 502);
+  }
+
+  return response.text();
+}
+
+async function retrieveCloudSyncValue(key: string): Promise<string | null> {
+  const kv = await getNativeKV();
+  if (kv) {
+    try {
+      return await kv.get(key);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to retrieve cloud sync data';
+      throw new AgentApiError(`KV error: ${message}`, 502);
+    }
+  }
+
+  try {
+    return await retrieveValueREST(key);
+  } catch (error) {
+    if (error instanceof CloudflareKVError) {
+      throw new AgentApiError(error.message, error.status);
+    }
+    throw error;
+  }
 }
 
 function groupCalculationsByCard(calculations: RewardCalculation[]): Map<string, RewardCalculation[]> {
@@ -641,8 +763,7 @@ export async function POST(request: Request) {
 
   try {
     const keyId = await computeKeyId(syncCode);
-    const origin = new URL(request.url).origin;
-    const encryptedPayload = await fetchCloudSyncPayload(origin, keyId);
+    const encryptedPayload = await fetchCloudSyncPayload(keyId);
     let storage: StorageData;
     try {
       storage = await decryptJson<StorageData>(syncCode, encryptedPayload.ciphertext, encryptedPayload.iv);
