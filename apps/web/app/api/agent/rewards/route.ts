@@ -765,8 +765,9 @@ export async function POST(request: Request) {
     let storage: StorageData;
     try {
       storage = await decryptJson<StorageData>(syncCode, encryptedPayload.ciphertext, encryptedPayload.iv);
-    } catch {
-      throw new AgentApiError('Cloud sync code is invalid for this backup.', 401);
+    } catch (decryptError) {
+      const msg = decryptError instanceof Error ? decryptError.message : String(decryptError);
+      throw new AgentApiError(`Cloud sync code is invalid for this backup. Debug: ${msg}`, 401);
     }
 
     const budgetId = isNonEmptyString(body.budgetId)
