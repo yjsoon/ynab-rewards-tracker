@@ -252,6 +252,7 @@ export default function SettingsPage() {
   const isDeletingCloudSync = cloudSyncAction === 'delete';
   const isCodeRemembered = settings.rememberCloudSyncCode && Boolean(settings.cloudSyncMnemonic);
   const autoSyncEnabled = isAutoSyncEnabled(settings);
+  const canEnableAutoSync = isCodeRemembered;
   const storedMnemonic = settings.cloudSyncMnemonic || '';
 
   useEffect(() => {
@@ -807,12 +808,18 @@ export default function SettingsPage() {
       updateSettings({
         cloudSyncMnemonic: undefined,
         rememberCloudSyncCode: false,
+        autoSyncEnabled: false,
       });
-      setCloudSyncMessage('Sync code removed from this device.');
+      setCloudSyncMessage('Sync code removed from this device. Auto sync has been turned off.');
     }
   }
 
   function handleAutoSyncToggle(checked: boolean) {
+    if (checked && !canEnableAutoSync) {
+      setCloudSyncError('Remember your sync code on this device before enabling auto sync.');
+      return;
+    }
+
     updateSettings({ autoSyncEnabled: checked });
     setCloudSyncMessage(
       checked
@@ -917,11 +924,12 @@ export default function SettingsPage() {
     updateSettings({
       cloudSyncMnemonic: undefined,
       rememberCloudSyncCode: false,
+      autoSyncEnabled: false,
       // Keep cloudSyncKeyId and cloudSyncLastSyncedAt for history
     });
     setCloudSyncPhrase('');
     setGeneratedCloudPhrase(null);
-    setCloudSyncMessage('Sync code removed from this device. Cloud backup and sync history preserved.');
+    setCloudSyncMessage('Sync code removed from this device. Auto sync disabled. Cloud backup and sync history preserved.');
   }
 
   // Fix #1: Show confirmation before clearing
@@ -1394,9 +1402,20 @@ export default function SettingsPage() {
                       id="auto-sync-enabled"
                       checked={autoSyncEnabled}
                       onCheckedChange={handleAutoSyncToggle}
+                      disabled={!canEnableAutoSync}
                       aria-label="Enable automatic cloud sync"
+                      title={
+                        !canEnableAutoSync
+                          ? 'Auto sync requires a remembered sync code on this device.'
+                          : 'Enable automatic cloud sync'
+                      }
                     />
                   </div>
+                  {!canEnableAutoSync && (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Remember your sync code on this device to enable auto sync.
+                    </p>
+                  )}
                 </div>
 
                 {/* Action buttons - compact layout */}

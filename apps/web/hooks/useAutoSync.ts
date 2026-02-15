@@ -10,100 +10,13 @@ import {
   uploadEncryptedSettings,
   isAutoSyncEnabled,
 } from '@/lib/cloud-sync';
-import { shouldWarnAboutOutdatedUpload } from '@/lib/cloud-sync/decision-helpers';
+import { determineAutoSyncAction } from '@/lib/cloud-sync/auto-sync-helpers';
 import { storage } from '@/lib/storage';
 
 const SYNC_COOLDOWN = 30 * 60 * 1000; // 30 minutes
+const PARSE_ERROR_COOLDOWN = 5 * 60 * 1000; // 5 minutes
 const LAST_SYNC_KEY = 'ynab-rewards-tracker:lastAutoSync';
-
-function parseExportedSettings(): unknown {
-  return JSON.parse(storage.exportSettings());
-}
-
-function validateImportedSettings(data: unknown): data is Record<string, unknown> {
-  if (!data || typeof data !== 'object') {
-    return false;
-  }
-
-  const obj = data as Record<string, unknown>;
-  return Array.isArray(obj.cards) && Array.isArray(obj.rules) && typeof obj.settings === 'object' && obj.settings !== null;
-}
-
-function hasPrimaryData(payload: unknown): boolean {
-  if (!payload || typeof payload !== 'object') {
-    return false;
-  }
-
-  const obj = payload as Record<string, unknown>;
-  const cards = Array.isArray(obj.cards) ? obj.cards : [];
-  const rules = Array.isArray(obj.rules) ? obj.rules : [];
-  const tagMappings = Array.isArray(obj.tagMappings) ? obj.tagMappings : [];
-  const themeGroups = Array.isArray(obj.themeGroups) ? obj.themeGroups : [];
-  const hiddenCards = Array.isArray(obj.hiddenCards) ? obj.hiddenCards : [];
-
-  const ynab = obj.ynab && typeof obj.ynab === 'object'
-    ? (obj.ynab as Record<string, unknown>)
-    : null;
-  const trackedAccounts = ynab && Array.isArray(ynab.trackedAccountIds) ? ynab.trackedAccountIds : [];
-
-  return (
-    cards.length > 0 ||
-    rules.length > 0 ||
-    tagMappings.length > 0 ||
-    themeGroups.length > 0 ||
-    hiddenCards.length > 0 ||
-    trackedAccounts.length > 0
-  );
-}
-
-function toStableObject(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(toStableObject);
-  }
-
-  if (value && typeof value === 'object') {
-    const entries = Object.entries(value as Record<string, unknown>)
-      .filter(([, entryValue]) => entryValue !== undefined)
-      .sort(([left], [right]) => left.localeCompare(right));
-
-    const normalisedEntries = entries.map(([key, entryValue]) => [key, toStableObject(entryValue)] as const);
-    return Object.fromEntries(normalisedEntries);
-  }
-
-  return value;
-}
-
-function createComparableSnapshot(payload: unknown): string {
-  const cloned = payload && typeof payload === 'object'
-    ? JSON.parse(JSON.stringify(payload)) as Record<string, unknown>
-    : payload;
-
-  if (!cloned || typeof cloned !== 'object') {
-    return JSON.stringify(cloned);
-  }
-
-  const root = cloned as Record<string, unknown>;
-
-  // Ignore volatile/transient fields when deciding whether data diverged.
-  delete root.cachedData;
-  delete root.calculations;
-
-  if (root.settings && typeof root.settings === 'object') {
-    const settings = root.settings as Record<string, unknown>;
-    delete settings.cloudSyncLastSyncedAt;
-    delete settings.cloudSyncKeyId;
-    delete settings.cloudSyncMnemonic;
-    delete settings.rememberCloudSyncCode;
-  }
-
-  if (root.ynab && typeof root.ynab === 'object') {
-    const ynab = root.ynab as Record<string, unknown>;
-    delete ynab.pat;
-    delete ynab.lastSync;
-  }
-
-  return JSON.stringify(toStableObject(root));
-}
+const LAST_PARSE_ERROR_KEY = 'ynab-rewards-tracker:lastAutoSyncParseError';
 
 /**
  * Hook for auto-syncing settings with cloud.
@@ -118,12 +31,19 @@ export function useAutoSync() {
 
   const autoSync = useCallback(async () => {
     const rememberedMnemonic = settings.cloudSyncMnemonic;
-    const isEnabled =
-      isAutoSyncEnabled(settings) &&
-      settings.rememberCloudSyncCode &&
-      rememberedMnemonic;
+    // Auto-sync only runs when users explicitly store a local sync code on this device.
+    const isEnabled = isAutoSyncEnabled(settings) && settings.rememberCloudSyncCode && rememberedMnemonic;
 
     if (!isEnabled || !rememberedMnemonic) {
+      return;
+    }
+
+    const now = Date.now();
+
+    const lastParseErrorTime = typeof window === 'undefined' ? null : localStorage.getItem(LAST_PARSE_ERROR_KEY);
+    const parsedLastParseErrorTime = lastParseErrorTime ? Number.parseInt(lastParseErrorTime, 10) : Number.NaN;
+    if (Number.isFinite(parsedLastParseErrorTime) && now - parsedLastParseErrorTime < PARSE_ERROR_COOLDOWN) {
+      console.log('Auto-sync: Skipped due to recent local export parse error');
       return;
     }
 
@@ -133,7 +53,6 @@ export function useAutoSync() {
 
     // Check cooldown
     const lastSyncTime = typeof window === 'undefined' ? null : localStorage.getItem(LAST_SYNC_KEY);
-    const now = Date.now();
     const parsedLastSyncTime = lastSyncTime ? Number.parseInt(lastSyncTime, 10) : Number.NaN;
     if (Number.isFinite(parsedLastSyncTime) && now - parsedLastSyncTime < SYNC_COOLDOWN) {
       console.log('Auto-sync: Skipped (within cooldown period)');
@@ -149,16 +68,37 @@ export function useAutoSync() {
         }
 
         const keyId = await computeKeyId(normalised);
-        const localPayload = parseExportedSettings();
+        let localPayload: unknown;
+        try {
+          localPayload = JSON.parse(storage.exportSettings());
+          localStorage.removeItem(LAST_PARSE_ERROR_KEY);
+        } catch (error) {
+          localStorage.setItem(LAST_PARSE_ERROR_KEY, now.toString());
+          console.error('Auto-sync: Failed to parse local export payload', error);
+          return;
+        }
+
         const stored = await fetchEncryptedSettings(keyId);
 
-        if (!stored) {
-          if (!hasPrimaryData(localPayload)) {
-            localStorage.setItem(LAST_SYNC_KEY, now.toString());
-            console.log('Auto-sync: No cloud backup yet and local data is empty');
-            return;
-          }
+        const decrypted = stored
+          ? await decryptJson<unknown>(normalised, stored.ciphertext, stored.iv)
+          : null;
 
+        const action = determineAutoSyncAction({
+          localPayload,
+          cloudPayload: decrypted,
+          cloudUpdatedAt: stored?.updatedAt,
+          localLastSyncedAt: settings.cloudSyncLastSyncedAt,
+          localKeyId: settings.cloudSyncKeyId,
+          phraseKeyId: keyId,
+        });
+
+        if (action === 'skip') {
+          console.log('Auto-sync: No cloud backup yet and local data is empty');
+          return;
+        }
+
+        if (action === 'seed_cloud') {
           const { ciphertext, iv } = await encryptJson(normalised, localPayload);
           const { updatedAt } = await uploadEncryptedSettings({ keyId, ciphertext, iv });
           updateSettings({ cloudSyncKeyId: keyId, cloudSyncLastSyncedAt: updatedAt });
@@ -167,19 +107,11 @@ export function useAutoSync() {
           return;
         }
 
-        const decrypted = await decryptJson<unknown>(normalised, stored.ciphertext, stored.iv);
-        if (!validateImportedSettings(decrypted)) {
-          throw new Error('Invalid settings data');
+        if (!stored || !decrypted) {
+          throw new Error('Missing cloud payload for sync action');
         }
 
-        const shouldUseCloud = shouldWarnAboutOutdatedUpload({
-          cloudUpdatedAt: stored.updatedAt,
-          localLastSyncedAt: settings.cloudSyncLastSyncedAt,
-          localKeyId: settings.cloudSyncKeyId,
-          phraseKeyId: keyId,
-        });
-
-        if (shouldUseCloud) {
+        if (action === 'pull_cloud') {
           importSettings(JSON.stringify(decrypted, null, 2));
           updateSettings({ cloudSyncKeyId: keyId, cloudSyncLastSyncedAt: stored.updatedAt });
           localStorage.setItem(LAST_SYNC_KEY, now.toString());
@@ -187,9 +119,7 @@ export function useAutoSync() {
           return;
         }
 
-        const localSnapshot = createComparableSnapshot(localPayload);
-        const cloudSnapshot = createComparableSnapshot(decrypted);
-        if (localSnapshot !== cloudSnapshot) {
+        if (action === 'push_local') {
           const { ciphertext, iv } = await encryptJson(normalised, localPayload);
           const { updatedAt } = await uploadEncryptedSettings({ keyId, ciphertext, iv });
           updateSettings({ cloudSyncKeyId: keyId, cloudSyncLastSyncedAt: updatedAt });
@@ -215,10 +145,15 @@ export function useAutoSync() {
   }, [settings, importSettings, updateSettings]);
 
   useEffect(() => {
+    // Intentionally re-run when settings change; cooldown prevents repeated network churn.
     void autoSync();
   }, [autoSync]);
 
   useEffect(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      return;
+    }
+
     const onFocus = () => {
       void autoSync();
     };
