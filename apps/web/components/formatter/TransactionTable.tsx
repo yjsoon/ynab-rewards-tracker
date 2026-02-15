@@ -165,7 +165,7 @@ export function TransactionTable({ transactions, onChange }: TransactionTablePro
                       type="button"
                       size="icon"
                       variant="ghost"
-                      className="h-8 w-8 opacity-0 group-hover:opacity-100 text-destructive"
+                      className="h-8 w-8 opacity-0 group-hover:opacity-100 text-destructive hover:bg-destructive hover:text-destructive-foreground"
                       onClick={() => handleRemove(index)}
                       aria-label="Delete row"
                     >

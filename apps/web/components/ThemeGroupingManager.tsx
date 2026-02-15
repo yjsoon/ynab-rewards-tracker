@@ -385,7 +385,7 @@ export function ThemeGroupingManager({
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="text-destructive hover:text-destructive"
+                        className="text-destructive hover:bg-destructive hover:text-destructive-foreground"
                         onClick={() => setGroupPendingDeletion(group)}
                       >
                         <Trash2 className="h-4 w-4" />

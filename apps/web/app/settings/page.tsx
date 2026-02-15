@@ -1413,7 +1413,7 @@ export default function SettingsPage() {
                     size="sm"
                     onClick={handleCloudDelete}
                     disabled={isCloudSyncBusy}
-                    className="text-destructive hover:text-destructive"
+                    className="text-destructive hover:bg-destructive hover:text-destructive-foreground"
                   >
                     <CloudOff className="mr-2 h-3 w-3" aria-hidden="true" />
                     {isDeletingCloudSync ? 'Deleting…' : 'Delete cloud backup'}
