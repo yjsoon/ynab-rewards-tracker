@@ -8,6 +8,7 @@ Client-side tracker that analyses YNAB transactions to monitor credit card rewar
 - Connect via YNAB personal access token and track linked credit card accounts.
 - Define per-card reward rules with minimum/maximum spend limits and category mapping.
 - Real-time reward computation with normalised dollar comparisons and recommendations.
+- Optional Cloud Sync with encrypted backups and automatic bidirectional sync.
 - Agent API for card limits, category guidance, and transaction advice (powered by Cloud Sync + PAT).
 - Web app built with Next.js 14, Tailwind CSS, and shadcn/ui.
 - Mobile companion app built with Expo and React Native.

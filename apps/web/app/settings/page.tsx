@@ -14,6 +14,7 @@ import {
   deleteEncryptedSettings,
   isValidMnemonic,
   normaliseMnemonic,
+  isAutoSyncEnabled,
 } from '@/lib/cloud-sync';
 import {
   shouldWarnAboutEmptyUpload as checkEmptyUpload,
@@ -218,7 +219,7 @@ export default function SettingsPage() {
   const [showClearOrphanedDialog, setShowClearOrphanedDialog] = useState(false);
   const [clearingOrphanedCards, setClearingOrphanedCards] = useState(false);
 
-  // Auto-backup state
+  // Auto-sync upload state
   const [autoBackupError, setAutoBackupError] = useState('');
 
   // Budget and account selection state
@@ -250,6 +251,7 @@ export default function SettingsPage() {
   const isDownloadingCloudSync = cloudSyncAction === 'download';
   const isDeletingCloudSync = cloudSyncAction === 'delete';
   const isCodeRemembered = settings.rememberCloudSyncCode && Boolean(settings.cloudSyncMnemonic);
+  const autoSyncEnabled = isAutoSyncEnabled(settings);
   const storedMnemonic = settings.cloudSyncMnemonic || '';
 
   useEffect(() => {
@@ -535,11 +537,11 @@ export default function SettingsPage() {
     updateSettings({ milesValuation: mv, currency: curr });
     setValuationMessage('Saved valuations. Recommendations will use normalised values for comparison.');
 
-    // Auto-backup to cloud after save
+    // Auto-sync upload after save
     try {
       await autoBackup();
     } catch (error) {
-      setAutoBackupError('Cloud backup failed. Your changes are saved locally.');
+      setAutoBackupError('Cloud sync upload failed. Your changes are saved locally.');
     }
   }
 
@@ -621,7 +623,7 @@ export default function SettingsPage() {
       cloudSyncLastSyncedAt: updatedAt,
     };
 
-    // If remember is enabled, update the stored mnemonic to keep auto-backup in sync
+    // If remember is enabled, update the stored mnemonic to keep automatic sync working
     if (settings.rememberCloudSyncCode) {
       settingsUpdate.cloudSyncMnemonic = normalised;
     }
@@ -808,6 +810,15 @@ export default function SettingsPage() {
       });
       setCloudSyncMessage('Sync code removed from this device.');
     }
+  }
+
+  function handleAutoSyncToggle(checked: boolean) {
+    updateSettings({ autoSyncEnabled: checked });
+    setCloudSyncMessage(
+      checked
+        ? 'Auto sync enabled. This device will reconcile cloud and local settings automatically.'
+        : 'Auto sync disabled. Use Save/Restore manually when needed.'
+    );
   }
 
   // Helper to check if uploading empty settings would overwrite cloud backup
@@ -1247,7 +1258,7 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      {/* Auto-backup error notification */}
+      {/* Auto-sync upload error notification */}
       {autoBackupError && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" aria-hidden="true" />
@@ -1274,16 +1285,16 @@ export default function SettingsPage() {
                       <Check className="h-5 w-5 text-primary" aria-hidden="true" />
                     </div>
                     <div>
-                      <p className="text-sm font-medium">Auto-backup enabled</p>
-                      {cloudSyncLastSynced ? (
-                        <p className="text-xs text-muted-foreground">
-                          Last backup: {cloudSyncLastSynced}
-                        </p>
-                      ) : (
-                        <p className="text-xs text-muted-foreground">
-                          Settings will auto-backup on save
-                        </p>
-                      )}
+                      <p className="text-sm font-medium">
+                        {autoSyncEnabled ? 'Auto sync enabled' : 'Sync code remembered'}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {autoSyncEnabled
+                          ? cloudSyncLastSynced
+                            ? `Last sync: ${cloudSyncLastSynced}`
+                            : 'Cloud and local settings will sync automatically'
+                          : 'Auto sync is off. Use Save/Restore buttons when needed.'}
+                      </p>
                     </div>
                   </div>
                   <Button
@@ -1369,6 +1380,23 @@ export default function SettingsPage() {
                     onChange={(event) => setCloudSyncPhrase(event.target.value)}
                     placeholder="twelve lowercase words separated by spaces"
                   />
+                </div>
+
+                <div className="rounded-md border bg-muted/20 p-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">Auto sync</p>
+                      <p className="text-xs text-muted-foreground">
+                        On load and when this tab becomes active, compare cloud vs local and keep the most recent version.
+                      </p>
+                    </div>
+                    <Switch
+                      id="auto-sync-enabled"
+                      checked={autoSyncEnabled}
+                      onCheckedChange={handleAutoSyncToggle}
+                      aria-label="Enable automatic cloud sync"
+                    />
+                  </div>
                 </div>
 
                 {/* Action buttons - compact layout */}

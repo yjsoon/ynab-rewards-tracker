@@ -11,7 +11,6 @@ import {
   useDashboardViewMode,
   useSettings
 } from "@/hooks/useLocalStorage";
-import { useAutoSync } from "@/hooks/useAutoSync";
 import { SimpleRewardsCalculator } from "@/lib/rewards-engine";
 import { clampDaysLeft } from "@/lib/date";
 import type { CreditCard, DashboardViewMode } from "@/lib/storage";
@@ -123,9 +122,6 @@ function DashboardContent() {
     const newUrl = query ? `${pathname}?${query}` : pathname;
     router.replace(newUrl);
   }, [pathname, router, searchParams]);
-
-  // Auto-sync settings from cloud on page load (once per 30 minutes)
-  useAutoSync();
 
   const viewMode: DashboardViewMode = isViewModeLoading ? 'summary' : storedViewMode;
 
