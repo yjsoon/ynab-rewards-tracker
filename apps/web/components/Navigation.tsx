@@ -23,6 +23,7 @@ export function Navigation() {
     { href: '/transactions', label: 'Transactions', icon: ReceiptText },
     { href: '/agent-api', label: 'Agent API', icon: Sparkles },
   ];
+  const mobileLinks = [...navLinks, { href: '/settings', label: 'Settings', icon: Settings }];
 
   const isSettings = pathname.startsWith('/settings');
 
@@ -122,47 +123,29 @@ export function Navigation() {
               className="absolute right-0 top-0 h-full w-64 bg-background border-l shadow-xl animate-in slide-in-from-right duration-300"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex flex-col p-4 gap-2">
-                {navLinks.map((link) => {
-                  const Icon = link.icon;
-                  const isActive = pathname === link.href;
-                  return (
-                    <Button
-                      key={link.href}
-                      variant={isActive ? "secondary" : "outline"}
-                      size="lg"
-                      asChild
-                      className={cn(
-                        "justify-start gap-3 w-full",
-                        isActive && "bg-secondary"
-                      )}
-                      onClick={closeMobileMenu}
-                    >
-                      <Link href={link.href}>
+              <div className="p-4">
+                <div className="overflow-hidden rounded-xl border bg-card/95">
+                  {mobileLinks.map((link, index) => {
+                    const Icon = link.icon;
+                    const isActive = pathname === link.href;
+                    const isLast = index === mobileLinks.length - 1;
+                    return (
+                      <Link
+                        key={link.href}
+                        href={link.href}
+                        className={cn(
+                          "flex w-full items-center gap-3 px-5 py-4 text-base transition-colors",
+                          !isLast && "border-b",
+                          isActive ? "bg-secondary text-secondary-foreground" : "hover:bg-muted/50"
+                        )}
+                        onClick={closeMobileMenu}
+                      >
                         <Icon className="h-5 w-5" />
-                        <span className="text-base">{link.label}</span>
+                        <span>{link.label}</span>
                       </Link>
-                    </Button>
-                  );
-                })}
-
-                <div className="border-t my-2" />
-
-                <Button
-                  variant={isSettings ? 'secondary' : 'outline'}
-                  size="lg"
-                  asChild
-                  className={cn(
-                    "justify-start gap-3 w-full",
-                    isSettings && 'bg-secondary'
-                  )}
-                  onClick={closeMobileMenu}
-                >
-                  <Link href="/settings">
-                    <Settings className="h-5 w-5" />
-                    <span className="text-base">Settings</span>
-                  </Link>
-                </Button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </div>
