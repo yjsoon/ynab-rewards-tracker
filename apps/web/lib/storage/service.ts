@@ -568,6 +568,7 @@ export class StorageService {
         ...storage.settings,
         cloudSyncMnemonic: undefined,
         rememberCloudSyncCode: undefined,
+        autoSyncEnabled: undefined,
         statementFormatter: formatterSettings,
       },
     };
@@ -583,6 +584,7 @@ export class StorageService {
       const pat = storage.ynab.pat;
       const cloudSyncMnemonic = storage.settings?.cloudSyncMnemonic;
       const rememberCloudSyncCode = storage.settings?.rememberCloudSyncCode;
+      const autoSyncEnabled = storage.settings?.autoSyncEnabled;
       const formatterApiKeys = storage.settings?.statementFormatter?.apiKeys;
 
       Object.assign(storage, imported);
@@ -600,6 +602,11 @@ export class StorageService {
       // Restore rememberCloudSyncCode preference (boolean type check)
       if (typeof rememberCloudSyncCode === 'boolean') {
         storage.settings.rememberCloudSyncCode = rememberCloudSyncCode;
+      }
+
+      // Preserve per-device auto-sync preference
+      if (typeof autoSyncEnabled === 'boolean') {
+        storage.settings.autoSyncEnabled = autoSyncEnabled;
       }
 
       if (formatterApiKeys) {

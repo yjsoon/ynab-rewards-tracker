@@ -226,6 +226,7 @@ export interface AppSettings {
   cloudSyncLastSyncedAt?: string;
   cloudSyncMnemonic?: string;
   rememberCloudSyncCode?: boolean;
+  autoSyncEnabled?: boolean;
   cardOrdering?: Partial<Record<'cashback' | 'miles' | 'all', string[]>>;
   collapsedCardGroups?: Partial<Record<'cashback' | 'miles', boolean>>;
   summaryViewSubcategoriesExpanded?: SummaryViewSubcategoriesPreference;

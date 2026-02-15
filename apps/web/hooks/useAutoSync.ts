@@ -3,78 +3,173 @@ import { useSettings } from './useLocalStorage';
 import {
   normaliseMnemonic,
   isValidMnemonic,
+  encryptJson,
   decryptJson,
   computeKeyId,
   fetchEncryptedSettings,
+  uploadEncryptedSettings,
+  isAutoSyncEnabled,
 } from '@/lib/cloud-sync';
+import { determineAutoSyncAction } from '@/lib/cloud-sync/auto-sync-helpers';
 import { storage } from '@/lib/storage';
 
 const SYNC_COOLDOWN = 30 * 60 * 1000; // 30 minutes
+const PARSE_ERROR_COOLDOWN = 5 * 60 * 1000; // 5 minutes
 const LAST_SYNC_KEY = 'ynab-rewards-tracker:lastAutoSync';
+const LAST_PARSE_ERROR_KEY = 'ynab-rewards-tracker:lastAutoSyncParseError';
 
 /**
- * Hook for auto-syncing settings from cloud on app load.
- * Only syncs once per half-hour to avoid excessive API calls.
+ * Hook for auto-syncing settings with cloud.
+ * Runs on initial load and when the tab regains focus/visibility, with cooldown.
+ * Reconciles both directions:
+ * - cloud newer -> cloud replaces local
+ * - otherwise, if local differs -> local uploads to cloud
  */
 export function useAutoSync() {
   const { settings, updateSettings, importSettings } = useSettings();
-  const hasAttemptedRef = useRef(false);
+  const inFlightRef = useRef<Promise<void> | null>(null);
 
   const autoSync = useCallback(async () => {
-    const isEnabled = settings.rememberCloudSyncCode && settings.cloudSyncMnemonic;
-    if (!isEnabled || !settings.cloudSyncMnemonic) {
+    const rememberedMnemonic = settings.cloudSyncMnemonic;
+    // Auto-sync only runs when users explicitly store a local sync code on this device.
+    const isEnabled = isAutoSyncEnabled(settings) && settings.rememberCloudSyncCode && rememberedMnemonic;
+
+    if (!isEnabled || !rememberedMnemonic) {
       return;
     }
 
-    // Check cooldown
-    const lastSyncTime = localStorage.getItem(LAST_SYNC_KEY);
     const now = Date.now();
-    if (lastSyncTime && now - parseInt(lastSyncTime, 10) < SYNC_COOLDOWN) {
+
+    const lastParseErrorTime = typeof window === 'undefined' ? null : localStorage.getItem(LAST_PARSE_ERROR_KEY);
+    const parsedLastParseErrorTime = lastParseErrorTime ? Number.parseInt(lastParseErrorTime, 10) : Number.NaN;
+    if (Number.isFinite(parsedLastParseErrorTime) && now - parsedLastParseErrorTime < PARSE_ERROR_COOLDOWN) {
+      console.log('Auto-sync: Skipped due to recent local export parse error');
+      return;
+    }
+
+    if (inFlightRef.current) {
+      return inFlightRef.current;
+    }
+
+    // Check cooldown
+    const lastSyncTime = typeof window === 'undefined' ? null : localStorage.getItem(LAST_SYNC_KEY);
+    const parsedLastSyncTime = lastSyncTime ? Number.parseInt(lastSyncTime, 10) : Number.NaN;
+    if (Number.isFinite(parsedLastSyncTime) && now - parsedLastSyncTime < SYNC_COOLDOWN) {
       console.log('Auto-sync: Skipped (within cooldown period)');
       return;
     }
 
+    const run = (async () => {
+      try {
+        const normalised = normaliseMnemonic(rememberedMnemonic);
+        if (!isValidMnemonic(normalised)) {
+          console.error('Auto-sync: Invalid stored mnemonic');
+          return;
+        }
+
+        const keyId = await computeKeyId(normalised);
+        let localPayload: unknown;
+        try {
+          localPayload = JSON.parse(storage.exportSettings());
+          localStorage.removeItem(LAST_PARSE_ERROR_KEY);
+        } catch (error) {
+          localStorage.setItem(LAST_PARSE_ERROR_KEY, now.toString());
+          console.error('Auto-sync: Failed to parse local export payload', error);
+          return;
+        }
+
+        const stored = await fetchEncryptedSettings(keyId);
+
+        const decrypted = stored
+          ? await decryptJson<unknown>(normalised, stored.ciphertext, stored.iv)
+          : null;
+
+        const action = determineAutoSyncAction({
+          localPayload,
+          cloudPayload: decrypted,
+          cloudUpdatedAt: stored?.updatedAt,
+          localLastSyncedAt: settings.cloudSyncLastSyncedAt,
+          localKeyId: settings.cloudSyncKeyId,
+          phraseKeyId: keyId,
+        });
+
+        if (action === 'skip') {
+          console.log('Auto-sync: No cloud backup yet and local data is empty');
+          return;
+        }
+
+        if (action === 'seed_cloud') {
+          const { ciphertext, iv } = await encryptJson(normalised, localPayload);
+          const { updatedAt } = await uploadEncryptedSettings({ keyId, ciphertext, iv });
+          updateSettings({ cloudSyncKeyId: keyId, cloudSyncLastSyncedAt: updatedAt });
+          localStorage.setItem(LAST_SYNC_KEY, now.toString());
+          console.log('Auto-sync: Seeded cloud backup from local settings');
+          return;
+        }
+
+        if (!stored || !decrypted) {
+          throw new Error('Missing cloud payload for sync action');
+        }
+
+        if (action === 'pull_cloud') {
+          importSettings(JSON.stringify(decrypted, null, 2));
+          updateSettings({ cloudSyncKeyId: keyId, cloudSyncLastSyncedAt: stored.updatedAt });
+          localStorage.setItem(LAST_SYNC_KEY, now.toString());
+          console.log('Auto-sync: Pulled newer cloud settings');
+          return;
+        }
+
+        if (action === 'push_local') {
+          const { ciphertext, iv } = await encryptJson(normalised, localPayload);
+          const { updatedAt } = await uploadEncryptedSettings({ keyId, ciphertext, iv });
+          updateSettings({ cloudSyncKeyId: keyId, cloudSyncLastSyncedAt: updatedAt });
+          localStorage.setItem(LAST_SYNC_KEY, now.toString());
+          console.log('Auto-sync: Pushed newer local settings to cloud');
+          return;
+        }
+
+        updateSettings({ cloudSyncKeyId: keyId, cloudSyncLastSyncedAt: stored.updatedAt });
+        localStorage.setItem(LAST_SYNC_KEY, now.toString());
+        console.log('Auto-sync: Local and cloud settings are already in sync');
+      } catch (error) {
+        console.error('Auto-sync failed:', error);
+      }
+    })();
+
+    inFlightRef.current = run;
     try {
-      const normalised = normaliseMnemonic(settings.cloudSyncMnemonic);
-      if (!isValidMnemonic(normalised)) {
-        console.error('Auto-sync: Invalid stored mnemonic');
-        return;
-      }
-
-      const keyId = await computeKeyId(normalised);
-      const stored = await fetchEncryptedSettings(keyId);
-
-      if (!stored) {
-        console.log('Auto-sync: No cloud backup found yet');
-        return;
-      }
-
-      const decrypted = await decryptJson<unknown>(normalised, stored.ciphertext, stored.iv);
-
-      // Validate before importing
-      const obj = decrypted as Record<string, unknown>;
-      if (!obj || typeof obj !== 'object' || !Array.isArray(obj.cards) || !Array.isArray(obj.rules)) {
-        throw new Error('Invalid settings data');
-      }
-
-      // Apply settings silently
-      importSettings(JSON.stringify(decrypted, null, 2));
-      updateSettings({ cloudSyncKeyId: keyId, cloudSyncLastSyncedAt: stored.updatedAt });
-
-      // Update cooldown
-      localStorage.setItem(LAST_SYNC_KEY, now.toString());
-
-      console.log('Auto-sync: Settings synced from cloud');
-    } catch (error) {
-      console.error('Auto-sync failed:', error);
+      await run;
+    } finally {
+      inFlightRef.current = null;
     }
   }, [settings, importSettings, updateSettings]);
 
-  // Run auto-sync once on mount
   useEffect(() => {
-    if (!hasAttemptedRef.current) {
-      hasAttemptedRef.current = true;
-      autoSync();
+    // Intentionally re-run when settings change; cooldown prevents repeated network churn.
+    void autoSync();
+  }, [autoSync]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      return;
     }
+
+    const onFocus = () => {
+      void autoSync();
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void autoSync();
+      }
+    };
+
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
   }, [autoSync]);
 }
