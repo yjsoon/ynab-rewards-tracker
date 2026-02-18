@@ -589,7 +589,7 @@ function SortableDashboardCard({ card, viewMode, pat, prefetchedTransactions, on
             size="icon"
             className="h-12 w-12 rounded-full bg-background/90 backdrop-blur px-0 cursor-grab hover:cursor-grab active:cursor-grabbing touch-none select-none shadow-sm border border-border/60 hover:bg-background"
             aria-label={`Reorder ${card.name}`}
-            onPointerDown={(event) => {
+            onPointerDownCapture={(event) => {
               event.stopPropagation();
             }}
             onClick={(event) => {
