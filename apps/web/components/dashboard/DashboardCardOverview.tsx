@@ -345,7 +345,7 @@ function CardGroup({
 }: CardGroupProps) {
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
@@ -587,8 +587,11 @@ function SortableDashboardCard({ card, viewMode, pat, prefetchedTransactions, on
             type="button"
             variant="secondary"
             size="icon"
-            className="h-9 w-9 rounded-full bg-background/90 backdrop-blur px-0 cursor-grab active:cursor-grabbing shadow-sm border border-border/60 hover:bg-background"
+            className="h-12 w-12 rounded-full bg-background/90 backdrop-blur px-0 cursor-grab hover:cursor-grab active:cursor-grabbing touch-none select-none shadow-sm border border-border/60 hover:bg-background"
             aria-label={`Reorder ${card.name}`}
+            onPointerDown={(event) => {
+              event.stopPropagation();
+            }}
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
@@ -596,7 +599,7 @@ function SortableDashboardCard({ card, viewMode, pat, prefetchedTransactions, on
             {...attributes}
             {...listeners}
           >
-            <GripVertical className="h-4 w-4" aria-hidden="true" />
+            <GripVertical className="h-5 w-5" aria-hidden="true" />
           </Button>
         </div>
 
