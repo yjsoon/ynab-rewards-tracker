@@ -581,17 +581,14 @@ function SortableDashboardCard({ card, viewMode, pat, prefetchedTransactions, on
           </DropdownMenu>
         </div>
 
-        <div className="absolute bottom-3 right-3">
+        <div className="absolute bottom-0 right-0 z-20">
           <Button
             ref={setActivatorNodeRef}
             type="button"
-            variant="secondary"
+            variant="ghost"
             size="icon"
-            className="h-12 w-12 rounded-full bg-background/90 backdrop-blur px-0 cursor-grab hover:cursor-grab active:cursor-grabbing touch-none select-none shadow-sm border border-border/60 hover:bg-background"
+            className="h-8 w-8 rounded-none rounded-tl-lg border-l border-t border-border/70 bg-background/80 backdrop-blur-sm px-0 text-muted-foreground cursor-grab hover:cursor-grab active:cursor-grabbing touch-none select-none shadow-sm hover:bg-background/95 hover:text-foreground"
             aria-label={`Reorder ${card.name}`}
-            onPointerDownCapture={(event) => {
-              event.stopPropagation();
-            }}
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
@@ -599,7 +596,7 @@ function SortableDashboardCard({ card, viewMode, pat, prefetchedTransactions, on
             {...attributes}
             {...listeners}
           >
-            <GripVertical className="h-5 w-5" aria-hidden="true" />
+            <GripVertical className="h-4 w-4 pointer-events-none" aria-hidden="true" />
           </Button>
         </div>
 
