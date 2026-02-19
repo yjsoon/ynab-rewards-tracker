@@ -548,13 +548,13 @@ function SortableDashboardCard({ card, viewMode, pat, prefetchedTransactions, on
         }}
         onKeyDown={handleKeyDown}
       >
-        <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="absolute top-0 right-0 z-20">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8"
+                className="h-8 w-8 rounded-none rounded-bl-lg border-l border-b border-border/70 bg-background/80 backdrop-blur-sm px-0 text-muted-foreground shadow-sm hover:bg-background/95 hover:text-foreground"
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
                 aria-label="Card actions"
               >
