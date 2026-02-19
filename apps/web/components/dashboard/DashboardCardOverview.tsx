@@ -601,42 +601,46 @@ function SortableDashboardCard({ card, viewMode, pat, prefetchedTransactions, on
         </div>
 
         <CardHeader className="pb-3">
-          <div className="flex items-center gap-2 pr-12">
+          <div className="flex min-w-0 items-center gap-2 pr-4">
             <CardTitle
               title={card.name}
               className={cn(
                 viewMode === "detailed" ? "text-lg" : "text-[0.95rem] sm:text-base",
-                "truncate"
+                "min-w-0 flex-1 truncate"
               )}
             >
               {card.name}
             </CardTitle>
-            {showTypeBadge && (
-              <Badge
-                variant="outline"
-                className={cn(
-                  "shrink-0 h-5 w-5 p-0 flex items-center justify-center",
-                  card.type === 'cashback'
-                    ? "border-green-200 text-green-700 dark:border-green-800 dark:text-green-400"
-                    : "border-blue-200 text-blue-700 dark:border-blue-800 dark:text-blue-400"
+            {(showTypeBadge || card.promotionalPeriod) && (
+              <div className="ml-auto flex shrink-0 items-center gap-1.5">
+                {showTypeBadge && (
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "shrink-0 h-5 w-5 p-0 flex items-center justify-center",
+                      card.type === 'cashback'
+                        ? "border-green-200 text-green-700 dark:border-green-800 dark:text-green-400"
+                        : "border-blue-200 text-blue-700 dark:border-blue-800 dark:text-blue-400"
+                    )}
+                  >
+                    {card.type === 'cashback' ? (
+                      <DollarSign className="h-3 w-3" />
+                    ) : (
+                      <Plane className="h-3 w-3" />
+                    )}
+                  </Badge>
                 )}
-              >
-                {card.type === 'cashback' ? (
-                  <DollarSign className="h-3 w-3" />
-                ) : (
-                  <Plane className="h-3 w-3" />
+                {card.promotionalPeriod && (
+                  <Badge
+                    variant="secondary"
+                    className="shrink-0 h-5 px-1.5 gap-1 bg-purple-100 text-purple-700 hover:bg-purple-100 dark:bg-purple-950/50 dark:text-purple-300"
+                    aria-label={`Promotional period${card.promotionalPeriod.startDate ? ` from ${card.promotionalPeriod.startDate}` : ''} until ${card.promotionalPeriod.endDate}`}
+                  >
+                    <Sparkles className="h-3 w-3" aria-hidden="true" />
+                    <span className="text-[0.65rem] font-medium">Promo</span>
+                  </Badge>
                 )}
-              </Badge>
-            )}
-            {card.promotionalPeriod && (
-              <Badge
-                variant="secondary"
-                className="shrink-0 h-5 px-1.5 gap-1 bg-purple-100 text-purple-700 hover:bg-purple-100 dark:bg-purple-950/50 dark:text-purple-300"
-                aria-label={`Promotional period${card.promotionalPeriod.startDate ? ` from ${card.promotionalPeriod.startDate}` : ''} until ${card.promotionalPeriod.endDate}`}
-              >
-                <Sparkles className="h-3 w-3" aria-hidden="true" />
-                <span className="text-[0.65rem] font-medium">Promo</span>
-              </Badge>
+              </div>
             )}
           </div>
         </CardHeader>
