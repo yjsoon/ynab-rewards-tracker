@@ -129,6 +129,7 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
 
     return {
       totalSpend: calculation.totalSpend,
+      countedSpend: calculation.countedSpend,
       eligibleSpend: calculation.eligibleSpend,
       eligibleSpendBeforeBlocks: calculation.eligibleSpendBeforeBlocks,
       rewardEarned: calculation.rewardEarned,
@@ -155,16 +156,29 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
     );
   }
 
-  const { totalSpend, eligibleSpend, eligibleSpendBeforeBlocks, rewardEarned, rewardEarnedDollars, minimumSpend, minimumSpendMet, maximumSpend, maximumSpendExceeded, subcategoryBreakdowns } = spendingAnalysis;
+  const { totalSpend, countedSpend, eligibleSpend, eligibleSpendBeforeBlocks, rewardEarned, rewardEarnedDollars, minimumSpend, minimumSpendMet, maximumSpend, maximumSpendExceeded, subcategoryBreakdowns } = spendingAnalysis;
 
   const currency = settings?.currency;
   const milesValuation = settings?.milesValuation ?? 0.01;
   const hasMaximum = typeof maximumSpend === 'number' && maximumSpend > 0;
+  const hasBlockRounding = Boolean(
+    (typeof card.earningBlockSize === 'number' && card.earningBlockSize > 0) ||
+      (card.subcategoriesEnabled &&
+        card.subcategories?.some(
+          (subcategory) =>
+            typeof subcategory.milesBlockSize === 'number' && subcategory.milesBlockSize > 0
+        ))
+  );
+  const displayedSpend = hasBlockRounding ? countedSpend : totalSpend;
 
   const unearnedAmount = Math.max(
     0,
     (eligibleSpendBeforeBlocks ?? eligibleSpend ?? 0) - (eligibleSpend ?? 0)
   );
+  const displayedSubcategoryBreakdowns = hasBlockRounding
+    ? subcategoryBreakdowns.map((entry) => ({ ...entry, totalSpend: entry.countedSpend }))
+    : subcategoryBreakdowns;
+  const showActualSpend = hasBlockRounding && totalSpend - displayedSpend >= 0.01;
 
   return (
     <div className="space-y-6">
@@ -190,11 +204,16 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
             <div className="p-4 rounded-lg bg-muted/50">
               <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
                 <DollarSign className="h-4 w-4" />
-                Total Spent
+                {showActualSpend ? 'Reward Spend' : 'Total Spent'}
               </div>
               <p className="text-2xl font-bold">
-                <CurrencyAmount value={totalSpend} currency={currency} />
+                <CurrencyAmount value={displayedSpend} currency={currency} />
               </p>
+              {showActualSpend && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Actual: <CurrencyAmount value={totalSpend} currency={currency} />
+                </p>
+              )}
             </div>
 
             <div className="p-4 rounded-lg bg-muted/50">
@@ -252,6 +271,8 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
                   totalSpend={totalSpend}
                   minimumSpend={minimumSpend}
                   maximumSpend={maximumSpend}
+                  minimumProgressSpend={totalSpend}
+                  maximumProgressSpend={displayedSpend}
                   currency={currency}
                   showLabels={true}
                   showWarnings={true}
@@ -263,7 +284,7 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
                 <Alert className="border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/30">
                   <XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
                   <AlertDescription className="text-red-700 dark:text-red-300">
-                    <strong>Maximum spend limit exceeded!</strong> You&apos;ve spent <CurrencyAmount value={totalSpend} currency={currency} /> which is over the <CurrencyAmount value={maximumSpend ?? 0} currency={currency} /> limit. No additional rewards will be earned on this card this period.
+                    <strong>Maximum spend limit exceeded!</strong> You&apos;ve spent <CurrencyAmount value={displayedSpend} currency={currency} /> which is over the <CurrencyAmount value={maximumSpend ?? 0} currency={currency} /> limit. No additional rewards will be earned on this card this period.
                   </AlertDescription>
                 </Alert>
               ) : minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0 && !minimumSpendMet ? (
@@ -277,7 +298,7 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
                 <Alert className="border-emerald-200/60 bg-emerald-50/60 dark:border-emerald-900/40 dark:bg-emerald-950/20">
                   <CheckCircle2 className="h-4 w-4 text-emerald-500/80 dark:text-emerald-300/80" />
                   <AlertDescription className="text-emerald-700/80 dark:text-emerald-200/90">
-                    <strong className="font-semibold">You&apos;re earning rewards!</strong> {hasMaximum && !maximumSpendExceeded && `You have ${formatDollars((maximumSpend ?? 0) - totalSpend, { currency })} left before reaching the maximum spend limit.`}
+                    <strong className="font-semibold">You&apos;re earning rewards!</strong> {hasMaximum && !maximumSpendExceeded && `You have ${formatDollars((maximumSpend ?? 0) - displayedSpend, { currency })} left before reaching the maximum spend limit.`}
                   </AlertDescription>
                 </Alert>
               ) : null}
@@ -299,10 +320,10 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
                 <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Subcategory Breakdown</h3>
               </div>
               <SubcategoryBreakdownDetailed
-                breakdowns={subcategoryBreakdowns}
+                breakdowns={displayedSubcategoryBreakdowns}
                 cardType={card.type}
                 currency={currency || 'USD'}
-                totalCardSpend={totalSpend}
+                totalCardSpend={displayedSpend}
                 totalCardReward={rewardEarned}
               />
             </div>

@@ -23,6 +23,7 @@ export interface SubcategoryCalculation {
   name: string;
   flagColor: YnabFlagColor;
   totalSpend: number;
+  countedSpend: number;
   eligibleSpendBeforeBlocks: number;
   eligibleSpend: number;
   rewardRate: number;
@@ -42,6 +43,7 @@ export interface SimplifiedCalculation {
   cardId: string;
   period: string;
   totalSpend: number;
+  countedSpend: number;
   eligibleSpend: number;
   eligibleSpendBeforeBlocks?: number;
   rewardEarned: number;
@@ -156,12 +158,13 @@ export class SimpleRewardsCalculator {
 
     let eligibleSpend = 0;
     let eligibleSpendBeforeBlocks = 0;
+    let countedSpend = 0;
     let rewardEarned = 0;
     let rewardEarnedDollars = 0;
     let subcategoryBreakdowns: SubcategoryCalculation[] | undefined;
 
     if (context.enabled && context.activeSubcategories.length > 0) {
-      const spendByFlag = new Map<YnabFlagColor, number>();
+      const spendByFlag = new Map<YnabFlagColor, { total: number; transactions: number[] }>();
       for (const txn of periodTransactions) {
         const flagColour = normaliseFlagColor(txn.flag_color);
         const subcategory = resolveSubcategory(context, flagColour);
@@ -171,8 +174,14 @@ export class SimpleRewardsCalculator {
         }
 
         const effectiveFlag = subcategory?.flagColor ?? UNFLAGGED_FLAG.value;
-        const prev = spendByFlag.get(effectiveFlag) ?? 0;
-        spendByFlag.set(effectiveFlag, prev + Math.abs(txn.amount) / 1000);
+        const txnSpend = Math.abs(txn.amount) / 1000;
+        const prev = spendByFlag.get(effectiveFlag);
+        if (prev) {
+          prev.total += txnSpend;
+          prev.transactions.push(txnSpend);
+        } else {
+          spendByFlag.set(effectiveFlag, { total: txnSpend, transactions: [txnSpend] });
+        }
       }
 
       const hasCardCap = typeof maximumSpend === 'number' && maximumSpend !== null && maximumSpend > 0;
@@ -186,7 +195,8 @@ export class SimpleRewardsCalculator {
             id: subcategory.id,
             name: subcategory.name,
             flagColor: subcategory.flagColor,
-            totalSpend: spendByFlag.get(subcategory.flagColor) ?? 0,
+            totalSpend: spendByFlag.get(subcategory.flagColor)?.total ?? 0,
+            countedSpend: 0,
             eligibleSpendBeforeBlocks: 0,
             eligibleSpend: 0,
             rewardRate: 0,
@@ -203,12 +213,17 @@ export class SimpleRewardsCalculator {
           continue;
         }
 
-        const totalForSubcategory = spendByFlag.get(subcategory.flagColor) ?? 0;
+        const spendBucket = spendByFlag.get(subcategory.flagColor);
+        const totalForSubcategory = spendBucket?.total ?? 0;
+        const transactionsForSubcategory = spendBucket?.transactions ?? [];
         const rewardRate = getRewardRate(card, subcategory);
         const blockSize = getBlockSize(card, subcategory);
 
         let subEligibleBeforeBlocks = 0;
         let subEligible = 0;
+        let subCountedBeforeBlocks = 0;
+        let subCounted = 0;
+        let countedBlocks = 0;
         let blocksEarned = 0;
         let subReward = 0;
         let subRewardDollars = 0;
@@ -219,19 +234,45 @@ export class SimpleRewardsCalculator {
           : null;
         const subMinimumMet = minimumSpendMet && (!minimumNeeded || totalForSubcategory >= minimumNeeded);
 
+        if (rewardRate > 0 && totalForSubcategory > 0) {
+          let remainingSubcategoryCap = maximumAllowed ?? Number.POSITIVE_INFINITY;
+
+          for (const txnSpend of transactionsForSubcategory) {
+            if (remainingCardCap <= 0 || remainingSubcategoryCap <= 0) {
+              break;
+            }
+            if (txnSpend <= 0) {
+              continue;
+            }
+
+            const spendContribution = Math.min(txnSpend, remainingCardCap, remainingSubcategoryCap);
+            if (spendContribution <= 0) {
+              continue;
+            }
+
+            subCountedBeforeBlocks += spendContribution;
+            const blockResult = applyBlock(spendContribution, blockSize);
+            subCounted += blockResult.amount;
+            countedBlocks += blockResult.blocks;
+
+            if (hasCardCap) {
+              remainingCardCap = Math.max(0, remainingCardCap - spendContribution);
+            }
+            if (maximumAllowed) {
+              remainingSubcategoryCap = Math.max(0, remainingSubcategoryCap - spendContribution);
+            }
+          }
+
+          countedSpend += subCounted;
+
+          if (subMinimumMet) {
+            subEligibleBeforeBlocks = subCountedBeforeBlocks;
+            subEligible = subCounted;
+            blocksEarned = countedBlocks;
+          }
+        }
+
         if (subMinimumMet && rewardRate > 0 && totalForSubcategory > 0) {
-          const cappedBySubcategory = maximumAllowed
-            ? Math.min(totalForSubcategory, maximumAllowed)
-            : totalForSubcategory;
-
-          const cappedByCard = Math.min(cappedBySubcategory, remainingCardCap);
-
-          subEligibleBeforeBlocks = cappedByCard;
-
-          const blockResult = applyBlock(subEligibleBeforeBlocks, blockSize);
-          subEligible = blockResult.amount;
-          blocksEarned = blockResult.blocks;
-
           if (card.type === 'cashback') {
             subReward = subEligible * (rewardRate / 100);
             subRewardDollars = subReward;
@@ -244,10 +285,6 @@ export class SimpleRewardsCalculator {
           eligibleSpend += subEligible;
           rewardEarned += subReward;
           rewardEarnedDollars += subRewardDollars;
-
-          if (hasCardCap) {
-            remainingCardCap = Math.max(0, remainingCardCap - subEligibleBeforeBlocks);
-          }
         }
 
         const cardCapHit = hasCardCap && remainingCardCap <= 0;
@@ -258,6 +295,7 @@ export class SimpleRewardsCalculator {
           name: subcategory.name,
           flagColor: subcategory.flagColor,
           totalSpend: totalForSubcategory,
+          countedSpend: subCounted,
           eligibleSpendBeforeBlocks: subEligibleBeforeBlocks,
           eligibleSpend: subEligible,
           rewardRate,
@@ -274,7 +312,7 @@ export class SimpleRewardsCalculator {
         });
       }
     } else {
-      if (minimumSpendMet && card.earningRate) {
+      if (card.earningRate) {
         const hasCardCap = typeof maximumSpend === 'number' && maximumSpend !== null && maximumSpend > 0;
         const spendCap = hasCardCap ? maximumSpend! : Number.POSITIVE_INFINITY;
         let remainingCap = spendCap;
@@ -288,7 +326,6 @@ export class SimpleRewardsCalculator {
             continue;
           }
           const spendContribution = Math.min(txnSpend, remainingCap);
-          eligibleSpendBeforeBlocks += spendContribution;
 
           let earnablePortion = spendContribution;
           if (card.earningBlockSize && card.earningBlockSize > 0) {
@@ -296,11 +333,17 @@ export class SimpleRewardsCalculator {
             earnablePortion = blocks * card.earningBlockSize;
           }
 
-          eligibleSpend += earnablePortion;
+          countedSpend += earnablePortion;
+
+          if (minimumSpendMet) {
+            eligibleSpendBeforeBlocks += spendContribution;
+            eligibleSpend += earnablePortion;
+          }
+
           remainingCap -= spendContribution;
         }
 
-        if (eligibleSpend > 0) {
+        if (minimumSpendMet && eligibleSpend > 0) {
           if (card.type === 'cashback') {
             rewardEarned = eligibleSpend * (card.earningRate / 100);
             rewardEarnedDollars = rewardEarned;
@@ -312,20 +355,14 @@ export class SimpleRewardsCalculator {
       }
     }
 
-    const maximumSpendExceededRaw = isMaximumSpendExceeded(totalSpend, maximumSpend);
-    const maximumSpendExceededByEligible =
-      typeof maximumSpend === 'number' && maximumSpend !== null && maximumSpend > 0
-        ? (eligibleSpendBeforeBlocks ?? 0) >= maximumSpend
-        : false;
-    const maximumSpendExceeded = maximumSpendExceededRaw || maximumSpendExceededByEligible;
-
-    const baselineForMaxProgress = eligibleSpendBeforeBlocks ?? totalSpend;
-    const maximumSpendProgress = calculateMaximumSpendProgress(baselineForMaxProgress, maximumSpend);
+    const maximumSpendExceeded = isMaximumSpendExceeded(countedSpend, maximumSpend);
+    const maximumSpendProgress = calculateMaximumSpendProgress(countedSpend, maximumSpend);
 
     return {
       cardId: card.id,
       period: period.label,
       totalSpend,
+      countedSpend,
       eligibleSpend,
       eligibleSpendBeforeBlocks,
       rewardEarned,

@@ -124,6 +124,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions, onHideC
 
     return {
       totalSpend: calculation.totalSpend,
+      countedSpend: calculation.countedSpend,
       eligibleSpend: calculation.eligibleSpend,
       eligibleSpendBeforeBlocks: calculation.eligibleSpendBeforeBlocks,
       rewardEarned: calculation.rewardEarned,
@@ -152,12 +153,21 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions, onHideC
     );
   }
 
-  const { totalSpend, eligibleSpend, eligibleSpendBeforeBlocks, rewardEarned, rewardEarnedDollars, daysRemaining, minimumSpend, minimumSpendMet, maximumSpend, maximumSpendExceeded, subcategoryBreakdowns } = summary;
+  const { totalSpend, countedSpend, eligibleSpend, eligibleSpendBeforeBlocks, rewardEarned, rewardEarnedDollars, daysRemaining, minimumSpend, minimumSpendMet, maximumSpend, maximumSpendExceeded, subcategoryBreakdowns } = summary;
 
   const currency = settings?.currency;
   const milesValuation = settings?.milesValuation ?? 0.01;
   const hasMinimum = hasMinimumSpendRequirement(minimumSpend);
   const hasMaximum = typeof maximumSpend === 'number' && maximumSpend > 0;
+  const hasBlockRounding = Boolean(
+    (typeof card.earningBlockSize === 'number' && card.earningBlockSize > 0) ||
+      (card.subcategoriesEnabled &&
+        card.subcategories?.some(
+          (subcategory) =>
+            typeof subcategory.milesBlockSize === 'number' && subcategory.milesBlockSize > 0
+        ))
+  );
+  const displayedSpend = hasBlockRounding ? countedSpend : totalSpend;
   const rewardTileState = maximumSpendExceeded ? 'exceeded' : (!minimumSpendMet && hasMinimum ? 'warn' : (minimumSpendMet ? 'success' : 'neutral'));
 
   const rewardTileClasses = {
@@ -185,6 +195,10 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions, onHideC
     0,
     (eligibleSpendBeforeBlocks ?? eligibleSpend ?? 0) - (eligibleSpend ?? 0)
   );
+  const displayedSubcategoryBreakdowns = hasBlockRounding
+    ? subcategoryBreakdowns.map((entry) => ({ ...entry, totalSpend: entry.countedSpend }))
+    : subcategoryBreakdowns;
+  const showActualSpend = hasBlockRounding && totalSpend - displayedSpend >= 0.01;
 
   const daysSeverityClass = daysRemaining <= 1
     ? 'text-rose-500 dark:text-rose-300'
@@ -201,9 +215,16 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions, onHideC
       <div className="grid grid-cols-2 gap-2">
         <div className="rounded-lg bg-muted/10 p-3 text-left">
           <p className="text-2xl font-semibold tracking-tight">
-            <CurrencyAmount value={totalSpend} currency={currency} />
+            <CurrencyAmount value={displayedSpend} currency={currency} />
           </p>
-          <p className="text-xs text-muted-foreground uppercase">Spent this period</p>
+          <p className="text-xs text-muted-foreground uppercase">
+            {showActualSpend ? 'Reward spend this period' : 'Spent this period'}
+          </p>
+          {showActualSpend && (
+            <p className="text-[11px] text-muted-foreground">
+              Actual: <CurrencyAmount value={totalSpend} currency={currency} />
+            </p>
+          )}
         </div>
         <div className={`flex min-h-[68px] flex-col justify-center rounded-lg p-3 text-left transition-colors ${rewardTileClasses}`}>
           <p className={`text-xl font-semibold tracking-tight leading-tight ${rewardTileState === 'neutral' ? 'text-foreground' : ''} sm:text-2xl`}>
@@ -220,6 +241,8 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions, onHideC
             totalSpend={totalSpend}
             minimumSpend={minimumSpend}
             maximumSpend={maximumSpend}
+            minimumProgressSpend={totalSpend}
+            maximumProgressSpend={displayedSpend}
             currency={currency}
             showLabels={true}
             showWarnings={true}
@@ -261,7 +284,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions, onHideC
 
       {card.subcategoriesEnabled && subcategoryBreakdowns.length > 0 && (
         <SubcategoryBreakdownCompact
-          breakdowns={subcategoryBreakdowns}
+          breakdowns={displayedSubcategoryBreakdowns}
           cardType={card.type}
           currency={currency || '$'}
           flagNames={flagNames}

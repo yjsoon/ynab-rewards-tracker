@@ -8,6 +8,8 @@ interface SpendingProgressBarProps {
   totalSpend: number;
   minimumSpend?: number | null;
   maximumSpend?: number | null;
+  minimumProgressSpend?: number;
+  maximumProgressSpend?: number;
   currency?: string;
   className?: string;
   showLabels?: boolean;
@@ -18,6 +20,8 @@ export function SpendingProgressBar({
   totalSpend,
   minimumSpend,
   maximumSpend,
+  minimumProgressSpend,
+  maximumProgressSpend,
   currency,
   className,
   showLabels = true,
@@ -27,6 +31,8 @@ export function SpendingProgressBar({
   const hasMinimum = typeof minimumSpend === 'number' && minimumSpend > 0;
   const hasMaximum = typeof maximumSpend === 'number' && maximumSpend > 0;
   const hasLimits = hasMinimum || hasMaximum;
+  const spendForMinimum = minimumProgressSpend ?? totalSpend;
+  const spendForMaximum = maximumProgressSpend ?? totalSpend;
 
   // Calculate progress percentages
   const getProgressPercentage = () => {
@@ -34,12 +40,12 @@ export function SpendingProgressBar({
 
     if (hasMaximum) {
       // Cap at maximum for display
-      return Math.min(100, (totalSpend / maximumSpend) * 100);
+      return Math.min(100, (spendForMaximum / maximumSpend) * 100);
     }
 
     if (hasMinimum) {
       // Show progress towards minimum
-      return Math.min(100, (totalSpend / minimumSpend) * 100);
+      return Math.min(100, (spendForMinimum / minimumSpend) * 100);
     }
 
     return 0;
@@ -49,8 +55,8 @@ export function SpendingProgressBar({
   const getSpendingZone = () => {
     if (!hasLimits) return 'neutral';
 
-    const minimumMet = !hasMinimum || totalSpend >= minimumSpend;
-    const maximumExceeded = hasMaximum && totalSpend >= maximumSpend;
+    const minimumMet = !hasMinimum || spendForMinimum >= minimumSpend;
+    const maximumExceeded = hasMaximum && spendForMaximum >= maximumSpend;
 
     if (maximumExceeded) return 'exceeded'; // Red zone - no rewards
     if (minimumMet) return 'earning'; // Green zone - earning rewards
@@ -93,9 +99,9 @@ export function SpendingProgressBar({
   const maximumPosition = hasMaximum ? getMarkerPosition(maximumSpend) : null;
 
   // Calculate remaining amounts
-  const remainingToMinimum = hasMinimum ? Math.max(0, minimumSpend - totalSpend) : 0;
-  const remainingToMaximum = hasMaximum ? Math.max(0, maximumSpend - totalSpend) : 0;
-  const exceededAmount = hasMaximum && totalSpend >= maximumSpend ? totalSpend - maximumSpend : 0;
+  const remainingToMinimum = hasMinimum ? Math.max(0, minimumSpend - spendForMinimum) : 0;
+  const remainingToMaximum = hasMaximum ? Math.max(0, maximumSpend - spendForMaximum) : 0;
+  const exceededAmount = hasMaximum && spendForMaximum >= maximumSpend ? spendForMaximum - maximumSpend : 0;
 
   return (
     <div className={cn("space-y-2", className)}>
