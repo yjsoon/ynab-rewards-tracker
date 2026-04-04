@@ -112,6 +112,8 @@ interface DashboardCardOverviewProps {
   onToggleGroup(category: 'cashback' | 'miles'): void;
   onReorderCards(category: 'cashback' | 'miles' | 'all', orderedIds: string[]): void;
   groupByType?: boolean;
+  referenceDate?: Date;
+  allowHideCards?: boolean;
 }
 
 
@@ -135,6 +137,8 @@ export function DashboardCardOverview({
   onToggleGroup,
   onReorderCards,
   groupByType = true,
+  referenceDate,
+  allowHideCards = true,
 }: DashboardCardOverviewProps) {
   const hiddenCount = hiddenCards.length;
   const hasVisibleCards = visibleFeaturedCards.length > 0;
@@ -226,6 +230,8 @@ export function DashboardCardOverview({
           onReorderCards={(orderedIds) => onReorderCards('all', orderedIds)}
           isRefreshing={transactionsRefreshing}
           showTypeBadge
+          referenceDate={referenceDate}
+          allowHideCards={allowHideCards}
         />
       );
     }
@@ -247,6 +253,8 @@ export function DashboardCardOverview({
             onToggleCollapse={() => onToggleGroup('cashback')}
             onReorderCards={(orderedIds) => onReorderCards('cashback', orderedIds)}
             isRefreshing={transactionsRefreshing}
+            referenceDate={referenceDate}
+            allowHideCards={allowHideCards}
           />
         )}
         {milesCards.length > 0 && (
@@ -263,6 +271,8 @@ export function DashboardCardOverview({
             onToggleCollapse={() => onToggleGroup('miles')}
             onReorderCards={(orderedIds) => onReorderCards('miles', orderedIds)}
             isRefreshing={transactionsRefreshing}
+            referenceDate={referenceDate}
+            allowHideCards={allowHideCards}
           />
         )}
       </>
@@ -287,6 +297,8 @@ export function DashboardCardOverview({
     transactionsRefreshing,
     groupByType,
     visibleFeaturedCards,
+    referenceDate,
+    allowHideCards,
   ]);
 
   return (
@@ -326,6 +338,8 @@ interface CardGroupProps {
   onReorderCards(orderedIds: string[]): void;
   isRefreshing: boolean;
   showTypeBadge?: boolean;
+  referenceDate?: Date;
+  allowHideCards: boolean;
 }
 
 function CardGroup({
@@ -342,6 +356,8 @@ function CardGroup({
   onReorderCards,
   isRefreshing,
   showTypeBadge = false,
+  referenceDate,
+  allowHideCards,
 }: CardGroupProps) {
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const sensors = useSensors(
@@ -452,6 +468,8 @@ function CardGroup({
                     isSorting={Boolean(activeDragId)}
                     isRefreshing={isRefreshing}
                     showTypeBadge={showTypeBadge}
+                    referenceDate={referenceDate}
+                    allowHideCard={allowHideCards}
                   />
                 );
               })}
@@ -474,9 +492,22 @@ interface SortableDashboardCardProps {
   isSorting: boolean;
   isRefreshing: boolean;
   showTypeBadge?: boolean;
+  referenceDate?: Date;
+  allowHideCard: boolean;
 }
 
-function SortableDashboardCard({ card, viewMode, pat, prefetchedTransactions, onHideCard, isSorting, isRefreshing, showTypeBadge = false }: SortableDashboardCardProps) {
+function SortableDashboardCard({
+  card,
+  viewMode,
+  pat,
+  prefetchedTransactions,
+  onHideCard,
+  isSorting,
+  isRefreshing,
+  showTypeBadge = false,
+  referenceDate,
+  allowHideCard,
+}: SortableDashboardCardProps) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id: card.id,
   });
@@ -566,13 +597,15 @@ function SortableDashboardCard({ card, viewMode, pat, prefetchedTransactions, on
                 <Settings2 className="h-4 w-4 mr-2" />
                 Edit settings
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => {
-                const period = SimpleRewardsCalculator.calculatePeriod(card);
-                onHideCard(card.id, period.end);
-              }}>
-                <EyeOff className="h-4 w-4 mr-2" />
-                Hide from dashboard
-              </DropdownMenuItem>
+              {allowHideCard && (
+                <DropdownMenuItem onClick={() => {
+                  const period = SimpleRewardsCalculator.calculatePeriod(card, referenceDate);
+                  onHideCard(card.id, period.end);
+                }}>
+                  <EyeOff className="h-4 w-4 mr-2" />
+                  Hide from dashboard
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem onClick={() => { window.location.href = `/cards/${card.id}`; }}>
                 <ReceiptText className="h-4 w-4 mr-2" />
                 View transactions
@@ -653,6 +686,8 @@ function SortableDashboardCard({ card, viewMode, pat, prefetchedTransactions, on
               onHideCard={onHideCard}
               showHideOption
               isRefreshing={isRefreshing}
+              referenceDate={referenceDate}
+              allowHideCard={allowHideCard}
             />
           ) : (
             <CardSummaryCompact
@@ -661,6 +696,8 @@ function SortableDashboardCard({ card, viewMode, pat, prefetchedTransactions, on
               prefetchedTransactions={prefetchedTransactions}
               onHideCard={onHideCard}
               isRefreshing={isRefreshing}
+              referenceDate={referenceDate}
+              allowHideCard={allowHideCard}
             />
           )}
         </CardContent>

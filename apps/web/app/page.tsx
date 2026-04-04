@@ -18,7 +18,13 @@ import { DashboardLanding } from "@/components/dashboard/DashboardLanding";
 import { SetupProgressAlert } from "@/components/dashboard/SetupProgressAlert";
 import { DashboardCardOverview } from "@/components/dashboard/DashboardCardOverview";
 import { AllCardsTab } from "@/components/dashboard/AllCardsTab";
+import { DashboardPeriodNavigator } from "@/components/dashboard/DashboardPeriodNavigator";
 import { useTrackedTransactions } from "@/hooks/useTrackedTransactions";
+import {
+  resolveDashboardPeriod,
+  shiftDashboardPeriodDays,
+  shiftDashboardPeriodMonths,
+} from "@/lib/dashboard-period";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -86,6 +92,33 @@ function DashboardContent() {
     isLoading: isViewModeLoading
   } = useDashboardViewMode();
   const { settings, updateSettings } = useSettings();
+  const [dayBoundaryTick, setDayBoundaryTick] = useState(0);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const now = new Date();
+    const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    const timeoutMs = Math.max(1000, nextMidnight.getTime() - now.getTime() + 100);
+    const timeoutId = window.setTimeout(() => {
+      setDayBoundaryTick((tick) => tick + 1);
+    }, timeoutMs);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [dayBoundaryTick]);
+
+  const liveDashboardPeriod = useMemo(
+    () => resolveDashboardPeriod(null, null),
+    [dayBoundaryTick]
+  );
+  const dashboardPeriod = useMemo(
+    () => resolveDashboardPeriod(searchParams.get("asOf"), searchParams.get("month")),
+    [searchParams, dayBoundaryTick]
+  );
 
   // Tab state: "featured" (default) or "all"
   const [activeTab, setActiveTab] = useState<'featured' | 'all'>(() => {
@@ -123,6 +156,47 @@ function DashboardContent() {
     router.replace(newUrl);
   }, [pathname, router, searchParams]);
 
+  const handleDashboardDateChange = useCallback((dateValue: string | null) => {
+    const params = new URLSearchParams(searchParams.toString());
+
+    params.delete("month");
+    if (!dateValue || dateValue === liveDashboardPeriod.dateValue) {
+      params.delete("asOf");
+    } else {
+      params.set("asOf", dateValue);
+    }
+
+    const query = params.toString();
+    const newUrl = query ? `${pathname}?${query}` : pathname;
+    router.replace(newUrl);
+  }, [liveDashboardPeriod.dateValue, pathname, router, searchParams]);
+
+  const handlePreviousDay = useCallback(() => {
+    handleDashboardDateChange(shiftDashboardPeriodDays(dashboardPeriod.dateValue, -1));
+  }, [dashboardPeriod.dateValue, handleDashboardDateChange]);
+
+  const handleNextDay = useCallback(() => {
+    if (dashboardPeriod.isToday) {
+      return;
+    }
+    handleDashboardDateChange(shiftDashboardPeriodDays(dashboardPeriod.dateValue, 1));
+  }, [dashboardPeriod.dateValue, dashboardPeriod.isToday, handleDashboardDateChange]);
+
+  const handlePreviousMonth = useCallback(() => {
+    handleDashboardDateChange(shiftDashboardPeriodMonths(dashboardPeriod.dateValue, -1));
+  }, [dashboardPeriod.dateValue, handleDashboardDateChange]);
+
+  const handleNextMonth = useCallback(() => {
+    if (dashboardPeriod.isToday) {
+      return;
+    }
+    handleDashboardDateChange(shiftDashboardPeriodMonths(dashboardPeriod.dateValue, 1));
+  }, [dashboardPeriod.dateValue, dashboardPeriod.isToday, handleDashboardDateChange]);
+
+  const handleResetDate = useCallback(() => {
+    handleDashboardDateChange(null);
+  }, [handleDashboardDateChange]);
+
   const viewMode: DashboardViewMode = isViewModeLoading ? 'summary' : storedViewMode;
 
   const handleViewModeChange = useCallback(
@@ -154,9 +228,14 @@ function DashboardContent() {
   );
 
   const visibleFeaturedCards = useMemo(
-    () => featuredCards.filter((card) => !isCardHidden(card.id)),
-    [featuredCards, isCardHidden]
+    () => (
+      dashboardPeriod.isToday
+        ? featuredCards.filter((card) => !isCardHidden(card.id))
+        : featuredCards
+    ),
+    [dashboardPeriod.isToday, featuredCards, isCardHidden]
   );
+  const effectiveHiddenCards = dashboardPeriod.isToday ? hiddenCards : [];
 
   const applyStoredOrdering = useCallback(
     (list: CreditCard[], category: 'cashback' | 'miles' | 'all') => {
@@ -195,6 +274,7 @@ function DashboardContent() {
     featuredCards,
     lookbackDays: TRANSACTION_LOOKBACK_DAYS,
     recentLimit: RECENT_TRANSACTIONS_LIMIT,
+    referenceDate: dashboardPeriod.referenceDate,
   });
 
   useEffect(() => {
@@ -235,14 +315,15 @@ function DashboardContent() {
   // Group and sort cards
   const { cashbackCards, milesCards, allCards } = useMemo(() => {
     const now = new Date();
+    const sortReferenceDate = dashboardPeriod.referenceDate;
 
     const getDaysRemaining = (card: (typeof cards)[0]) => {
-      const period = SimpleRewardsCalculator.calculatePeriod(card);
+      const period = SimpleRewardsCalculator.calculatePeriod(card, sortReferenceDate);
       const periodDate = {
         startDate: new Date(period.start),
         endDate: new Date(period.end)
       };
-      return clampDaysLeft(periodDate, now);
+      return clampDaysLeft(periodDate, sortReferenceDate);
     };
 
     const cashback = visibleFeaturedCards.filter((c) => c.type === "cashback");
@@ -256,7 +337,7 @@ function DashboardContent() {
     const orderedAll = applyStoredOrdering([...orderedCashback, ...orderedMiles], 'all');
 
     return { cashbackCards: orderedCashback, milesCards: orderedMiles, allCards: orderedAll };
-  }, [visibleFeaturedCards, applyStoredOrdering]);
+  }, [visibleFeaturedCards, applyStoredOrdering, dashboardPeriod.referenceDate]);
 
   const cashbackCollapsed = settings.collapsedCardGroups?.cashback ?? false;
   const milesCollapsed = settings.collapsedCardGroups?.miles ?? false;
@@ -334,14 +415,14 @@ function DashboardContent() {
   return (
     <div className="max-w-6xl mx-auto px-6 py-8">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
-        <div className="flex items-center gap-4">
+        <div className="flex min-w-0 items-center gap-4">
           <h1 className="text-3xl font-bold">Dashboard</h1>
-          <div className="flex items-center rounded-lg border bg-muted/30 p-0.5">
+          <div className="shrink-0 flex items-center rounded-lg border bg-muted/30 p-0.5">
             <button
               type="button"
               onClick={() => handleTabChange('featured')}
               className={cn(
-                "px-3 py-1.5 text-sm font-medium rounded-md transition-colors",
+                "whitespace-nowrap px-3 py-1.5 text-sm font-medium rounded-md transition-colors",
                 activeTab === 'featured'
                   ? "bg-background shadow-sm text-foreground"
                   : "text-muted-foreground hover:text-foreground"
@@ -353,7 +434,7 @@ function DashboardContent() {
               type="button"
               onClick={() => handleTabChange('all')}
               className={cn(
-                "px-3 py-1.5 text-sm font-medium rounded-md transition-colors",
+                "whitespace-nowrap px-3 py-1.5 text-sm font-medium rounded-md transition-colors",
                 activeTab === 'all'
                   ? "bg-background shadow-sm text-foreground"
                   : "text-muted-foreground hover:text-foreground"
@@ -364,43 +445,63 @@ function DashboardContent() {
           </div>
         </div>
         {activeTab === 'featured' && (
-          <div className="flex items-center gap-3">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="gap-1.5">
-                  {viewMode === "summary" ? (
-                    <LayoutGrid className="h-4 w-4" />
-                  ) : (
-                    <List className="h-4 w-4" />
-                  )}
-                  <span className="hidden sm:inline">
-                    {viewMode === "summary" ? "Summary" : "Detailed"}
-                  </span>
-                  <ChevronDown className="h-3 w-3" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuRadioGroup
-                  value={viewMode}
-                  onValueChange={(v) => handleViewModeChange(v as DashboardViewMode)}
-                >
-                  <DropdownMenuRadioItem value="summary">
-                    Summary view
-                  </DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="detailed">
-                    Detailed view
-                  </DropdownMenuRadioItem>
-                </DropdownMenuRadioGroup>
-                <DropdownMenuSeparator />
-                <DropdownMenuCheckboxItem
-                  checked={groupByType}
-                  onCheckedChange={handleGroupByTypeToggle}
-                >
-                  Group by card type
-                </DropdownMenuCheckboxItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <div className="flex items-center gap-2">
+          <div className="flex w-full items-center justify-between gap-2 md:ml-auto md:w-auto md:shrink-0 md:justify-end">
+            <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto pb-1 sm:gap-2 sm:overflow-visible sm:pb-0">
+              <DashboardPeriodNavigator
+                dateValue={dashboardPeriod.dateValue}
+                monthLabel={dashboardPeriod.monthLabel}
+                asOfLabel={dashboardPeriod.asOfLabel}
+                triggerLabel={dashboardPeriod.triggerLabel}
+                maxDateValue={liveDashboardPeriod.dateValue}
+                isToday={dashboardPeriod.isToday}
+                onPreviousDay={handlePreviousDay}
+                onNextDay={handleNextDay}
+                onPreviousMonth={handlePreviousMonth}
+                onNextMonth={handleNextMonth}
+                onReset={handleResetDate}
+                onDateChange={handleDashboardDateChange}
+              />
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1.5 data-[state=open]:bg-red-50 data-[state=open]:text-red-700 hover:data-[state=open]:bg-red-50 hover:data-[state=open]:text-red-700 dark:data-[state=open]:bg-red-950/40 dark:data-[state=open]:text-red-300"
+                  >
+                    {viewMode === "summary" ? (
+                      <LayoutGrid className="h-4 w-4" />
+                    ) : (
+                      <List className="h-4 w-4" />
+                    )}
+                    <span className="hidden sm:inline">
+                      {viewMode === "summary" ? "Summary" : "Detailed"}
+                    </span>
+                    <ChevronDown className="h-3 w-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuRadioGroup
+                    value={viewMode}
+                    onValueChange={(v) => handleViewModeChange(v as DashboardViewMode)}
+                  >
+                    <DropdownMenuRadioItem value="summary">
+                      Summary view
+                    </DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="detailed">
+                      Detailed view
+                    </DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuCheckboxItem
+                    checked={groupByType}
+                    onCheckedChange={handleGroupByTypeToggle}
+                  >
+                    Group by card type
+                  </DropdownMenuCheckboxItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+            <div className="ml-auto flex shrink-0 items-center gap-2">
               <Button
                 type="button"
                 size="sm"
@@ -443,7 +544,7 @@ function DashboardContent() {
           milesCards={milesCards}
           allCards={allCards}
           visibleFeaturedCards={visibleFeaturedCards}
-          hiddenCards={hiddenCards}
+          hiddenCards={effectiveHiddenCards}
           viewMode={viewMode}
           onHideCard={hideCard}
           onUnhideAll={handleUnhideAll}
@@ -457,6 +558,8 @@ function DashboardContent() {
           onToggleGroup={handleToggleGroup}
           onReorderCards={handleCardReorder}
           groupByType={groupByType}
+          referenceDate={dashboardPeriod.referenceDate}
+          allowHideCards={dashboardPeriod.isToday}
         />
       ) : (
         <AllCardsTab initialCardId={initialCardId} />

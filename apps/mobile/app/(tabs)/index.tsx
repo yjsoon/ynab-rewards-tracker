@@ -192,6 +192,10 @@ function convertStoredCalculation(card: CreditCard, stored: RewardCalculation): 
     periodEnd = period.end;
   }
 
+  // Legacy stored calculations predate countedSpend, so use eligible spend when
+  // it is available even if it is legitimately zero.
+  const countedSpend = stored.eligibleSpend ?? stored.totalSpend;
+
   return {
     cardId: stored.cardId,
     period: stored.period,
@@ -199,6 +203,7 @@ function convertStoredCalculation(card: CreditCard, stored: RewardCalculation): 
     periodEnd,
     rewardType: stored.rewardType,
     totalSpend: stored.totalSpend,
+    countedSpend,
     eligibleSpend: stored.eligibleSpend,
     rewardEarned: stored.rewardEarned,
     rewardEarnedDollars: stored.rewardEarnedDollars ?? stored.rewardEarned,
@@ -221,6 +226,7 @@ function mapStoredSubcategories(
     name: entry.name,
     flagColor: entry.flagColor,
     totalSpend: entry.totalSpend,
+    countedSpend: entry.eligibleSpend ?? entry.totalSpend,
     eligibleSpend: entry.eligibleSpend,
     eligibleSpendBeforeBlocks: entry.eligibleSpendBeforeBlocks ?? entry.eligibleSpend,
     rewardEarned: entry.rewardEarned,

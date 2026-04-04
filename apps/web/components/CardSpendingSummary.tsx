@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { formatDateValue } from '@/lib/dashboard-period';
 import { SimpleRewardsCalculator } from '@/lib/rewards-engine';
 import { YnabClient } from '@/lib/ynab-client';
 import { storage } from '@/lib/storage';
@@ -28,9 +29,20 @@ interface CardSpendingSummaryProps {
   onHideCard?: (cardId: string, hiddenUntil: string) => void;
   showHideOption?: boolean;
   isRefreshing?: boolean;
+  referenceDate?: Date;
+  allowHideCard?: boolean;
 }
 
-export function CardSpendingSummary({ card, pat, prefetchedTransactions, onHideCard, showHideOption, isRefreshing }: CardSpendingSummaryProps) {
+export function CardSpendingSummary({
+  card,
+  pat,
+  prefetchedTransactions,
+  onHideCard,
+  showHideOption,
+  isRefreshing,
+  referenceDate,
+  allowHideCard = true,
+}: CardSpendingSummaryProps) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const abortRef = useRef<AbortController | null>(null);
@@ -38,17 +50,30 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions, onHideC
   const { selectedBudget } = useSelectedBudget();
   const flagNames = useMemo(() => storage.getFlagNames(), []);
 
-  // Calculate current period
-  const period = useMemo(() => SimpleRewardsCalculator.calculatePeriod(card), [card]);
+  const period = useMemo(
+    () => SimpleRewardsCalculator.calculatePeriod(card, referenceDate),
+    [card, referenceDate]
+  );
+  const asOfDate = useMemo(
+    () => formatDateValue(referenceDate ?? new Date()),
+    [referenceDate]
+  );
+  const calculationPeriod = useMemo(
+    () => ({
+      ...period,
+      end: period.end < asOfDate ? period.end : asOfDate,
+    }),
+    [asOfDate, period]
+  );
 
   // Use prefetched budget-wide transactions if provided; otherwise fetch
   const loadTransactions = useCallback(async () => {
     // Use prefetched data path
-    if (prefetchedTransactions && prefetchedTransactions.length >= 0) {
+    if (prefetchedTransactions) {
       const cardTxns = prefetchedTransactions.filter((t: Transaction) =>
         t.account_id === card.ynabAccountId &&
-          t.date >= period.start &&
-          t.date <= period.end
+          t.date >= calculationPeriod.start &&
+          t.date <= calculationPeriod.end
       );
 
       setTransactions(cardTxns);
@@ -78,11 +103,13 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions, onHideC
 
     try {
       const allTxns = await client.getTransactions(budgetId, {
-        since_date: period.start,
+        since_date: calculationPeriod.start,
         signal: controller.signal,
       });
       const cardTxns = allTxns.filter((t: Transaction) =>
-        t.account_id === card.ynabAccountId && t.date <= period.end
+        t.account_id === card.ynabAccountId &&
+          t.date >= calculationPeriod.start &&
+          t.date <= calculationPeriod.end
       );
       setTransactions(cardTxns);
     } catch (error) {
@@ -95,7 +122,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions, onHideC
         abortRef.current = null;
       }
     }
-  }, [prefetchedTransactions, pat, card.ynabAccountId, period, selectedBudget.id]);
+  }, [prefetchedTransactions, pat, card.ynabAccountId, calculationPeriod, selectedBudget.id]);
 
   useEffect(() => {
     loadTransactions();
@@ -112,14 +139,12 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions, onHideC
     const calculation = SimpleRewardsCalculator.calculateCardRewards(
       card,
       transactions,
-      period,
+      calculationPeriod,
       settings || undefined
     );
 
-    // Calculate days remaining
-    const now = new Date();
     const end = new Date(period.end);
-    const diff = end.getTime() - now.getTime();
+    const diff = end.getTime() - (referenceDate ?? new Date()).getTime();
     const daysRemaining = Math.ceil(diff / (1000 * 60 * 60 * 24));
 
     return {
@@ -138,7 +163,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions, onHideC
       maximumSpendProgress: calculation.maximumSpendProgress,
       subcategoryBreakdowns: calculation.subcategoryBreakdowns ?? [],
     };
-  }, [card, transactions, period, settings]);
+  }, [calculationPeriod, card, period.end, referenceDate, settings, transactions]);
 
   if (loading) {
     return (
@@ -255,7 +280,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions, onHideC
               <span>Stop using - max reached</span>
             </div>
           )}
-          {maximumSpendExceeded && showHideOption && onHideCard && (
+          {allowHideCard && maximumSpendExceeded && showHideOption && onHideCard && (
             <Button
               variant="outline"
               size="sm"
