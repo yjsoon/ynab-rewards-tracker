@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Sparkles } from "lucide-react";
+import { formatDateValue } from "@/lib/dashboard-period";
 import { SimpleRewardsCalculator } from "@/lib/rewards-engine";
 import { YnabClient } from "@/lib/ynab-client";
 import { useSelectedBudget, useSettings } from "@/hooks/useLocalStorage";
@@ -18,13 +19,6 @@ import type { Transaction } from "@/types/transaction";
 
 const isExpansionMap = (value: unknown): value is Record<string, boolean> =>
   value !== undefined && typeof value === "object" && value !== null && !Array.isArray(value);
-
-function formatAsOfDate(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
 
 interface CardSummaryCompactProps {
   card: CreditCard;
@@ -57,7 +51,7 @@ export function CardSummaryCompact({
     [card, referenceDate]
   );
   const asOfDate = useMemo(
-    () => formatAsOfDate(referenceDate ?? new Date()),
+    () => formatDateValue(referenceDate ?? new Date()),
     [referenceDate]
   );
   const calculationPeriod = useMemo(

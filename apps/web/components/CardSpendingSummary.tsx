@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { formatDateValue } from '@/lib/dashboard-period';
 import { SimpleRewardsCalculator } from '@/lib/rewards-engine';
 import { YnabClient } from '@/lib/ynab-client';
 import { storage } from '@/lib/storage';
@@ -18,13 +19,6 @@ import {
 } from '@/lib/minimum-spend-helpers';
 import type { CreditCard } from '@/lib/storage';
 import type { Transaction } from '@/types/transaction';
-
-function formatAsOfDate(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
 
 interface CardSpendingSummaryProps {
   card: CreditCard;
@@ -61,7 +55,7 @@ export function CardSpendingSummary({
     [card, referenceDate]
   );
   const asOfDate = useMemo(
-    () => formatAsOfDate(referenceDate ?? new Date()),
+    () => formatDateValue(referenceDate ?? new Date()),
     [referenceDate]
   );
   const calculationPeriod = useMemo(
@@ -75,7 +69,7 @@ export function CardSpendingSummary({
   // Use prefetched budget-wide transactions if provided; otherwise fetch
   const loadTransactions = useCallback(async () => {
     // Use prefetched data path
-    if (prefetchedTransactions && prefetchedTransactions.length >= 0) {
+    if (prefetchedTransactions) {
       const cardTxns = prefetchedTransactions.filter((t: Transaction) =>
         t.account_id === card.ynabAccountId &&
           t.date >= calculationPeriod.start &&

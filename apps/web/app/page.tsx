@@ -117,7 +117,7 @@ function DashboardContent() {
   );
   const dashboardPeriod = useMemo(
     () => resolveDashboardPeriod(searchParams.get("asOf"), searchParams.get("month")),
-    [searchParams]
+    [searchParams, dayBoundaryTick]
   );
 
   // Tab state: "featured" (default) or "all"
