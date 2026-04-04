@@ -48,6 +48,7 @@ interface UseTrackedTransactionsArgs {
   featuredCards: CreditCard[];
   lookbackDays: number;
   recentLimit?: number;
+  referenceDate?: Date;
 }
 
 interface UseTrackedTransactionsResult {
@@ -79,6 +80,7 @@ export function useTrackedTransactions({
   featuredCards,
   lookbackDays,
   recentLimit,
+  referenceDate,
 }: UseTrackedTransactionsArgs): UseTrackedTransactionsResult {
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
   const [accountsMap, setAccountsMap] = useState<Map<string, string>>(new Map());
@@ -91,19 +93,21 @@ export function useTrackedTransactions({
   const lastFetchKeyRef = useRef("");
 
   const earliestTrackedWindow = useMemo(() => {
+    const anchorDate = referenceDate ?? new Date();
+
     if (featuredCards.length === 0) {
-      const fallback = new Date();
+      const fallback = new Date(anchorDate);
       fallback.setDate(fallback.getDate() - lookbackDays);
       return fallback.toISOString().split("T")[0];
     }
 
     const earliestMillis = featuredCards
-      .map((card) => SimpleRewardsCalculator.calculatePeriod(card))
+      .map((card) => SimpleRewardsCalculator.calculatePeriod(card, anchorDate))
       .map((period) => new Date(period.start).getTime())
       .reduce((min, current) => Math.min(min, current), Number.POSITIVE_INFINITY);
 
     return new Date(earliestMillis).toISOString().split("T")[0];
-  }, [featuredCards, lookbackDays]);
+  }, [featuredCards, lookbackDays, referenceDate]);
 
   const loadTransactions = useCallback(async () => {
     if (!pat || !selectedBudgetId) {

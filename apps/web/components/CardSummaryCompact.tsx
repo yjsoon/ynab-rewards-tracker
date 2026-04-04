@@ -19,15 +19,32 @@ import type { Transaction } from "@/types/transaction";
 const isExpansionMap = (value: unknown): value is Record<string, boolean> =>
   value !== undefined && typeof value === "object" && value !== null && !Array.isArray(value);
 
+function formatAsOfDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 interface CardSummaryCompactProps {
   card: CreditCard;
   pat?: string;
   prefetchedTransactions?: Transaction[];
   onHideCard?: (cardId: string, hiddenUntil: string) => void;
   isRefreshing?: boolean;
+  referenceDate?: Date;
+  allowHideCard?: boolean;
 }
 
-export function CardSummaryCompact({ card, pat, prefetchedTransactions, onHideCard, isRefreshing }: CardSummaryCompactProps) {
+export function CardSummaryCompact({
+  card,
+  pat,
+  prefetchedTransactions,
+  onHideCard,
+  isRefreshing,
+  referenceDate,
+  allowHideCard = true,
+}: CardSummaryCompactProps) {
   const { settings, updateSettings } = useSettings();
   const { selectedBudget } = useSelectedBudget();
 
@@ -35,13 +52,29 @@ export function CardSummaryCompact({ card, pat, prefetchedTransactions, onHideCa
   const [loading, setLoading] = useState(true);
   const abortRef = useRef<AbortController | null>(null);
 
-  const period = useMemo(() => SimpleRewardsCalculator.calculatePeriod(card), [card]);
+  const period = useMemo(
+    () => SimpleRewardsCalculator.calculatePeriod(card, referenceDate),
+    [card, referenceDate]
+  );
+  const asOfDate = useMemo(
+    () => formatAsOfDate(referenceDate ?? new Date()),
+    [referenceDate]
+  );
+  const calculationPeriod = useMemo(
+    () => ({
+      ...period,
+      end: period.end < asOfDate ? period.end : asOfDate,
+    }),
+    [asOfDate, period]
+  );
   const flagNames = useMemo(() => storage.getFlagNames(), []);
 
   const loadTransactions = useCallback(async () => {
     if (prefetchedTransactions) {
       const cardTxns = prefetchedTransactions.filter((txn) =>
-        txn.account_id === card.ynabAccountId && txn.date >= period.start && txn.date <= period.end
+        txn.account_id === card.ynabAccountId &&
+        txn.date >= calculationPeriod.start &&
+        txn.date <= calculationPeriod.end
       );
       setTransactions(cardTxns);
       setLoading(false);
@@ -68,11 +101,14 @@ export function CardSummaryCompact({ card, pat, prefetchedTransactions, onHideCa
 
     try {
       const allTxns = await client.getTransactions(selectedBudget.id, {
-        since_date: period.start,
+        since_date: calculationPeriod.start,
         signal: controller.signal,
       });
       const cardTxns = allTxns.filter(
-        (txn: Transaction) => txn.account_id === card.ynabAccountId && txn.date <= period.end
+        (txn: Transaction) =>
+          txn.account_id === card.ynabAccountId &&
+          txn.date >= calculationPeriod.start &&
+          txn.date <= calculationPeriod.end
       );
       setTransactions(cardTxns);
     } catch (error) {
@@ -85,7 +121,7 @@ export function CardSummaryCompact({ card, pat, prefetchedTransactions, onHideCa
         abortRef.current = null;
       }
     }
-  }, [prefetchedTransactions, pat, card.ynabAccountId, period, selectedBudget.id]);
+  }, [prefetchedTransactions, pat, card.ynabAccountId, calculationPeriod, selectedBudget.id]);
 
   useEffect(() => {
     loadTransactions();
@@ -99,13 +135,12 @@ export function CardSummaryCompact({ card, pat, prefetchedTransactions, onHideCa
     const calculation = SimpleRewardsCalculator.calculateCardRewards(
       card,
       transactions,
-      period,
+      calculationPeriod,
       settings || undefined
     );
 
-    const now = new Date();
     const end = new Date(period.end);
-    const diff = end.getTime() - now.getTime();
+    const diff = end.getTime() - (referenceDate ?? new Date()).getTime();
     const daysRemaining = Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
 
     return {
@@ -118,7 +153,7 @@ export function CardSummaryCompact({ card, pat, prefetchedTransactions, onHideCa
       daysRemaining,
       subcategoryBreakdowns: calculation.subcategoryBreakdowns ?? [],
     };
-  }, [card, transactions, period, settings]);
+  }, [calculationPeriod, card, period.end, referenceDate, settings, transactions]);
 
   const summaryViewExpansionSetting = settings?.summaryViewSubcategoriesExpanded;
 
@@ -294,7 +329,7 @@ export function CardSummaryCompact({ card, pat, prefetchedTransactions, onHideCa
           </span>
         </div>
 
-        {maximumSpendExceeded && onHideCard && (
+        {allowHideCard && maximumSpendExceeded && onHideCard && (
           <Button
             variant="ghost"
             size="sm"

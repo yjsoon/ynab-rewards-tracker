@@ -110,8 +110,8 @@ export class SimpleRewardsCalculator {
   /**
    * Calculate the current period for a card based on billing cycle
    */
-  static calculatePeriod(card: CreditCard): CalculationPeriod {
-    const period = calculateCardPeriod(card);
+  static calculatePeriod(card: CreditCard, targetDate: Date = new Date()): CalculationPeriod {
+    const period = calculateCardPeriod(card, targetDate);
     const useStartLabel = Boolean(card.billingCycle?.type === 'billing' && card.billingCycle.dayOfMonth);
 
     return toSimplePeriod(period, useStartLabel);

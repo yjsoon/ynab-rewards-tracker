@@ -19,6 +19,13 @@ import {
 import type { CreditCard } from '@/lib/storage';
 import type { Transaction } from '@/types/transaction';
 
+function formatAsOfDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 interface CardSpendingSummaryProps {
   card: CreditCard;
   pat?: string;
@@ -28,9 +35,20 @@ interface CardSpendingSummaryProps {
   onHideCard?: (cardId: string, hiddenUntil: string) => void;
   showHideOption?: boolean;
   isRefreshing?: boolean;
+  referenceDate?: Date;
+  allowHideCard?: boolean;
 }
 
-export function CardSpendingSummary({ card, pat, prefetchedTransactions, onHideCard, showHideOption, isRefreshing }: CardSpendingSummaryProps) {
+export function CardSpendingSummary({
+  card,
+  pat,
+  prefetchedTransactions,
+  onHideCard,
+  showHideOption,
+  isRefreshing,
+  referenceDate,
+  allowHideCard = true,
+}: CardSpendingSummaryProps) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const abortRef = useRef<AbortController | null>(null);
@@ -38,8 +56,21 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions, onHideC
   const { selectedBudget } = useSelectedBudget();
   const flagNames = useMemo(() => storage.getFlagNames(), []);
 
-  // Calculate current period
-  const period = useMemo(() => SimpleRewardsCalculator.calculatePeriod(card), [card]);
+  const period = useMemo(
+    () => SimpleRewardsCalculator.calculatePeriod(card, referenceDate),
+    [card, referenceDate]
+  );
+  const asOfDate = useMemo(
+    () => formatAsOfDate(referenceDate ?? new Date()),
+    [referenceDate]
+  );
+  const calculationPeriod = useMemo(
+    () => ({
+      ...period,
+      end: period.end < asOfDate ? period.end : asOfDate,
+    }),
+    [asOfDate, period]
+  );
 
   // Use prefetched budget-wide transactions if provided; otherwise fetch
   const loadTransactions = useCallback(async () => {
@@ -47,8 +78,8 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions, onHideC
     if (prefetchedTransactions && prefetchedTransactions.length >= 0) {
       const cardTxns = prefetchedTransactions.filter((t: Transaction) =>
         t.account_id === card.ynabAccountId &&
-          t.date >= period.start &&
-          t.date <= period.end
+          t.date >= calculationPeriod.start &&
+          t.date <= calculationPeriod.end
       );
 
       setTransactions(cardTxns);
@@ -78,11 +109,13 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions, onHideC
 
     try {
       const allTxns = await client.getTransactions(budgetId, {
-        since_date: period.start,
+        since_date: calculationPeriod.start,
         signal: controller.signal,
       });
       const cardTxns = allTxns.filter((t: Transaction) =>
-        t.account_id === card.ynabAccountId && t.date <= period.end
+        t.account_id === card.ynabAccountId &&
+          t.date >= calculationPeriod.start &&
+          t.date <= calculationPeriod.end
       );
       setTransactions(cardTxns);
     } catch (error) {
@@ -95,7 +128,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions, onHideC
         abortRef.current = null;
       }
     }
-  }, [prefetchedTransactions, pat, card.ynabAccountId, period, selectedBudget.id]);
+  }, [prefetchedTransactions, pat, card.ynabAccountId, calculationPeriod, selectedBudget.id]);
 
   useEffect(() => {
     loadTransactions();
@@ -112,14 +145,12 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions, onHideC
     const calculation = SimpleRewardsCalculator.calculateCardRewards(
       card,
       transactions,
-      period,
+      calculationPeriod,
       settings || undefined
     );
 
-    // Calculate days remaining
-    const now = new Date();
     const end = new Date(period.end);
-    const diff = end.getTime() - now.getTime();
+    const diff = end.getTime() - (referenceDate ?? new Date()).getTime();
     const daysRemaining = Math.ceil(diff / (1000 * 60 * 60 * 24));
 
     return {
@@ -138,7 +169,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions, onHideC
       maximumSpendProgress: calculation.maximumSpendProgress,
       subcategoryBreakdowns: calculation.subcategoryBreakdowns ?? [],
     };
-  }, [card, transactions, period, settings]);
+  }, [calculationPeriod, card, period.end, referenceDate, settings, transactions]);
 
   if (loading) {
     return (
@@ -255,7 +286,7 @@ export function CardSpendingSummary({ card, pat, prefetchedTransactions, onHideC
               <span>Stop using - max reached</span>
             </div>
           )}
-          {maximumSpendExceeded && showHideOption && onHideCard && (
+          {allowHideCard && maximumSpendExceeded && showHideOption && onHideCard && (
             <Button
               variant="outline"
               size="sm"
