@@ -8,6 +8,7 @@
  */
 
 import type { Transaction } from "@/types/transaction";
+import type { BudgetAccountsCacheAccount } from "./storage";
 import { storage } from "./storage";
 import {
   UNFLAGGED_FLAG,
@@ -45,6 +46,7 @@ import type {
 const inflightGet = new Map<string, Promise<unknown>>();
 const getCache = new Map<string, { expiry: number; data: unknown }>();
 const CACHE_TTL_MS = 30_000; // 30s soft cache; YNAB data isn't ultra-realtime
+const ACCOUNTS_CACHE_TTL_MS = 5 * 60 * 1000;
 const FLAG_NAMES_CACHE_TTL_MS = 5 * 60 * 1000;
 const inflightFlagNames = new Map<
   string,
@@ -168,9 +170,21 @@ export class YnabClient {
     budgetId: string,
     init?: RequestInit,
   ) {
+    const cachedAccounts = storage.getBudgetAccountsCache<
+      TAccount & BudgetAccountsCacheAccount
+    >(budgetId, ACCOUNTS_CACHE_TTL_MS);
+
+    if (cachedAccounts) {
+      return cachedAccounts;
+    }
+
     const result = await this.request<YnabResponse<{ accounts: TAccount[] }>>(
       `budgets/${budgetId}/accounts`,
       init,
+    );
+    storage.setBudgetAccountsCache(
+      budgetId,
+      result.data.accounts as Array<TAccount & BudgetAccountsCacheAccount>,
     );
     return result.data.accounts;
   }

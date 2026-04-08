@@ -1,7 +1,11 @@
-import type { YnabFlagColor } from '@ynab-counter/app-core/ynab';
+import type { YnabFlagColor } from "@ynab-counter/app-core/ynab";
 
-import { STORAGE_KEY, STORAGE_VERSION, STORAGE_VERSION_KEY } from '@ynab-counter/app-core/storage';
-import { applyStorageMigrations } from '@ynab-counter/app-core/storage';
+import {
+  STORAGE_KEY,
+  STORAGE_VERSION,
+  STORAGE_VERSION_KEY,
+} from "@ynab-counter/app-core/storage";
+import { applyStorageMigrations } from "@ynab-counter/app-core/storage";
 import {
   areHiddenCardListsEqual,
   createDefaultStorage,
@@ -15,9 +19,11 @@ import {
   findDashboardCacheEntry,
   applyCardDeletion,
   validateHiddenUntilDate,
-} from '@ynab-counter/app-core/storage';
+} from "@ynab-counter/app-core/storage";
 import type {
   AppSettings,
+  BudgetAccountsCacheAccount,
+  BudgetAccountsCacheEntry,
   CreditCard,
   HiddenCard,
   HiddenCardReason,
@@ -31,15 +37,16 @@ import type {
   DashboardTransactionsCachePayload,
   CachedTransaction,
   StatementFormatterSettings,
-} from '@ynab-counter/app-core/storage';
+} from "@ynab-counter/app-core/storage";
 import type {
   MutableCard,
   MutableStorageData,
   MutableThemeGroup,
-} from '@ynab-counter/app-core/storage';
+} from "@ynab-counter/app-core/storage";
 
 export class StorageService {
   private static readonly DASHBOARD_CACHE_LIMIT = 500;
+  private static readonly BUDGET_ACCOUNTS_CACHE_LIMIT = 5;
   private cachedStorage: StorageData | null = null;
   private hasCachedStorage = false;
   private hasAttachedStorageListener = false;
@@ -60,11 +67,11 @@ export class StorageService {
   }
 
   private attachStorageListener(): void {
-    if (typeof window === 'undefined' || this.hasAttachedStorageListener) {
+    if (typeof window === "undefined" || this.hasAttachedStorageListener) {
       return;
     }
 
-    window.addEventListener('storage', this.handleStorageEvent);
+    window.addEventListener("storage", this.handleStorageEvent);
     this.hasAttachedStorageListener = true;
   }
 
@@ -74,7 +81,7 @@ export class StorageService {
     if (Array.isArray(data.cards)) {
       const flagNames = data.cachedData?.flagNames;
       data.cards = data.cards.map((card) =>
-        normaliseCard({ ...card } as MutableCard, flagNames)
+        normaliseCard({ ...card } as MutableCard, flagNames),
       );
     }
 
@@ -85,7 +92,7 @@ export class StorageService {
   }
 
   private ensureVersion(): void {
-    if (typeof window === 'undefined') {
+    if (typeof window === "undefined") {
       return;
     }
 
@@ -97,14 +104,17 @@ export class StorageService {
         this.invalidateCache();
       }
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('StorageService.ensureVersion: Failed to access localStorage:', error);
+      if (process.env.NODE_ENV === "development") {
+        console.error(
+          "StorageService.ensureVersion: Failed to access localStorage:",
+          error,
+        );
       }
     }
   }
 
   private getStorage(): StorageData {
-    if (typeof window === 'undefined') {
+    if (typeof window === "undefined") {
       return createDefaultStorage();
     }
 
@@ -118,14 +128,16 @@ export class StorageService {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
-        const data = this.normalizeStorage(JSON.parse(stored) as MutableStorageData);
+        const data = this.normalizeStorage(
+          JSON.parse(stored) as MutableStorageData,
+        );
         this.cachedStorage = data;
         this.hasCachedStorage = true;
         return data;
       }
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Failed to parse localStorage:', error);
+      if (process.env.NODE_ENV === "development") {
+        console.error("Failed to parse localStorage:", error);
       }
     }
 
@@ -136,7 +148,7 @@ export class StorageService {
   }
 
   private setStorage(data: StorageData): void {
-    if (typeof window === 'undefined') {
+    if (typeof window === "undefined") {
       return;
     }
 
@@ -147,8 +159,8 @@ export class StorageService {
       this.cachedStorage = normalized;
       this.hasCachedStorage = true;
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Failed to set localStorage:', error);
+      if (process.env.NODE_ENV === "development") {
+        console.error("Failed to set localStorage:", error);
       }
     }
   }
@@ -171,7 +183,9 @@ export class StorageService {
     return settings.statementFormatter || {};
   }
 
-  updateStatementFormatterSettings(settings: Partial<StatementFormatterSettings>): void {
+  updateStatementFormatterSettings(
+    settings: Partial<StatementFormatterSettings>,
+  ): void {
     const storage = this.getStorage();
     storage.settings = storage.settings || {};
     const existing = storage.settings.statementFormatter || {};
@@ -191,16 +205,16 @@ export class StorageService {
     this.setStorage(storage);
   }
 
-  getDashboardViewMode(): 'summary' | 'detailed' {
+  getDashboardViewMode(): "summary" | "detailed" {
     const mode = this.getSettings().dashboardViewMode;
-    return mode === 'summary' || mode === 'detailed' ? mode : 'summary';
+    return mode === "summary" || mode === "detailed" ? mode : "summary";
   }
 
-  setDashboardViewMode(mode: 'summary' | 'detailed'): void {
+  setDashboardViewMode(mode: "summary" | "detailed"): void {
     this.updateSettings({ dashboardViewMode: mode });
   }
 
-  getPAT(): YnabConnection['pat'] {
+  getPAT(): YnabConnection["pat"] {
     return this.getStorage().ynab.pat;
   }
 
@@ -248,7 +262,10 @@ export class StorageService {
 
   saveCard(card: CreditCard): void {
     const storage = this.getStorage();
-    const normalisedCard = normaliseCard({ ...card } as MutableCard, storage.cachedData?.flagNames);
+    const normalisedCard = normaliseCard(
+      { ...card } as MutableCard,
+      storage.cachedData?.flagNames,
+    );
     upsertById(storage.cards, normalisedCard);
     pruneThemeGroups(storage as MutableStorageData);
     this.setStorage(storage);
@@ -293,17 +310,23 @@ export class StorageService {
       candidate.createdAt = nowIso;
     }
 
-    const existingIndex = typeof candidate.id === 'string'
-      ? storage.themeGroups.findIndex((g) => g.id === candidate.id)
-      : -1;
+    const existingIndex =
+      typeof candidate.id === "string"
+        ? storage.themeGroups.findIndex((g) => g.id === candidate.id)
+        : -1;
 
-    const fallbackPriority = existingIndex >= 0
-      ? storage.themeGroups[existingIndex].priority
-      : storage.themeGroups.length;
+    const fallbackPriority =
+      existingIndex >= 0
+        ? storage.themeGroups[existingIndex].priority
+        : storage.themeGroups.length;
 
-    const normalisedGroup = normaliseThemeGroup({
-      ...candidate,
-    } as MutableThemeGroup, storage, fallbackPriority);
+    const normalisedGroup = normaliseThemeGroup(
+      {
+        ...candidate,
+      } as MutableThemeGroup,
+      storage,
+      fallbackPriority,
+    );
 
     if (existingIndex >= 0) {
       const existing = storage.themeGroups[existingIndex];
@@ -321,7 +344,9 @@ export class StorageService {
 
   deleteThemeGroup(groupId: string): void {
     const storage = this.getStorage();
-    storage.themeGroups = storage.themeGroups.filter((group) => group.id !== groupId);
+    storage.themeGroups = storage.themeGroups.filter(
+      (group) => group.id !== groupId,
+    );
     pruneThemeGroups(storage as MutableStorageData);
     this.setStorage(storage);
   }
@@ -357,7 +382,10 @@ export class StorageService {
   saveCalculation(calculation: RewardCalculation): void {
     const storage = this.getStorage();
     const index = storage.calculations.findIndex(
-      (c) => c.cardId === calculation.cardId && c.ruleId === calculation.ruleId && c.period === calculation.period,
+      (c) =>
+        c.cardId === calculation.cardId &&
+        c.ruleId === calculation.ruleId &&
+        c.period === calculation.period,
     );
     if (index >= 0) {
       storage.calculations[index] = calculation;
@@ -370,7 +398,8 @@ export class StorageService {
   deleteCalculation(cardId: string, ruleId: string, period: string): void {
     const storage = this.getStorage();
     storage.calculations = storage.calculations.filter(
-      (c) => !(c.cardId === cardId && c.ruleId === ruleId && c.period === period),
+      (c) =>
+        !(c.cardId === cardId && c.ruleId === ruleId && c.period === period),
     );
     this.setStorage(storage);
   }
@@ -383,7 +412,9 @@ export class StorageService {
 
   deleteCalculationsForPeriod(period: string): void {
     const storage = this.getStorage();
-    storage.calculations = (storage.calculations || []).filter((c) => c.period !== period);
+    storage.calculations = (storage.calculations || []).filter(
+      (c) => c.period !== period,
+    );
     this.setStorage(storage);
   }
 
@@ -398,11 +429,11 @@ export class StorageService {
     this.setStorage(storage);
   }
 
-  getCachedData(): StorageData['cachedData'] {
+  getCachedData(): StorageData["cachedData"] {
     return this.getStorage().cachedData;
   }
 
-  setCachedData(data: StorageData['cachedData']): void {
+  setCachedData(data: StorageData["cachedData"]): void {
     const storage = this.getStorage();
     storage.cachedData = data;
     this.setStorage(storage);
@@ -426,11 +457,98 @@ export class StorageService {
 
     if (Array.isArray(storage.cards)) {
       storage.cards = storage.cards.map((card) =>
-        normaliseCard({ ...card } as MutableCard, storage.cachedData?.flagNames)
+        normaliseCard(
+          { ...card } as MutableCard,
+          storage.cachedData?.flagNames,
+        ),
       );
     }
 
     pruneThemeGroups(storage);
+    this.setStorage(storage);
+  }
+
+  getBudgetAccountsCache<
+    TAccount extends BudgetAccountsCacheAccount = BudgetAccountsCacheAccount,
+  >(budgetId: string, ttlMs = 5 * 60 * 1000): TAccount[] | null {
+    if (typeof window === "undefined") {
+      return null;
+    }
+
+    const entries = this.getStorage().cachedData?.accounts || [];
+    const match = entries.find((entry) => entry.budgetId === budgetId);
+
+    if (!match) {
+      return null;
+    }
+
+    const age = Date.now() - new Date(match.fetchedAt).getTime();
+    if (age > ttlMs || !Array.isArray(match.accounts)) {
+      return null;
+    }
+
+    const accounts = match.accounts.filter(
+      (account): account is BudgetAccountsCacheAccount =>
+        typeof account === "object" &&
+        account !== null &&
+        typeof account.id === "string" &&
+        typeof account.name === "string",
+    );
+
+    if (accounts.length === 0) {
+      return null;
+    }
+
+    return accounts as TAccount[];
+  }
+
+  setBudgetAccountsCache<TAccount extends BudgetAccountsCacheAccount>(
+    budgetId: string,
+    accounts: TAccount[],
+    fetchedAt = new Date().toISOString(),
+  ): void {
+    if (
+      typeof window === "undefined" ||
+      !Array.isArray(accounts) ||
+      accounts.length === 0
+    ) {
+      return;
+    }
+
+    const sanitizedAccounts = accounts.filter(
+      (account): account is TAccount =>
+        typeof account === "object" &&
+        account !== null &&
+        typeof account.id === "string" &&
+        typeof account.name === "string",
+    );
+
+    if (sanitizedAccounts.length === 0) {
+      return;
+    }
+
+    const storage = this.getStorage() as MutableStorageData;
+    storage.cachedData = storage.cachedData || {};
+    const entries = storage.cachedData.accounts || [];
+
+    const nextEntry: BudgetAccountsCacheEntry = {
+      budgetId,
+      fetchedAt,
+      accounts: sanitizedAccounts,
+    };
+
+    const filtered = entries.filter((entry) => entry.budgetId !== budgetId);
+    filtered.push(nextEntry);
+    filtered.sort(
+      (a, b) =>
+        new Date(b.fetchedAt).getTime() - new Date(a.fetchedAt).getTime(),
+    );
+
+    if (filtered.length > StorageService.BUDGET_ACCOUNTS_CACHE_LIMIT) {
+      filtered.splice(StorageService.BUDGET_ACCOUNTS_CACHE_LIMIT);
+    }
+
+    storage.cachedData.accounts = filtered;
     this.setStorage(storage);
   }
 
@@ -446,7 +564,11 @@ export class StorageService {
     return normalised;
   }
 
-  hideCard(cardId: string, hiddenUntil: string, reason: HiddenCardReason = 'maximum_spend_reached'): void {
+  hideCard(
+    cardId: string,
+    hiddenUntil: string,
+    reason: HiddenCardReason = "maximum_spend_reached",
+  ): void {
     const storage = this.getStorage() as MutableStorageData;
     const existing = storage.hiddenCards || [];
     const expiry = validateHiddenUntilDate(hiddenUntil);
@@ -466,7 +588,9 @@ export class StorageService {
     const storage = this.getStorage() as MutableStorageData;
     const existing = storage.hiddenCards || [];
 
-    storage.hiddenCards = normaliseHiddenCards(existing.filter((entry) => entry.cardId !== cardId));
+    storage.hiddenCards = normaliseHiddenCards(
+      existing.filter((entry) => entry.cardId !== cardId),
+    );
     this.setStorage(storage);
   }
 
@@ -486,9 +610,9 @@ export class StorageService {
     budgetId: string,
     sinceDate: string,
     trackedAccountIds: string[],
-    ttlMs = 5 * 60 * 1000
+    ttlMs = 5 * 60 * 1000,
   ): DashboardTransactionsCacheEntry | null {
-    if (typeof window === 'undefined') {
+    if (typeof window === "undefined") {
       return null;
     }
 
@@ -496,7 +620,12 @@ export class StorageService {
     const entries = storage.cachedData?.dashboardTransactions || [];
 
     const now = Date.now();
-    const match = findDashboardCacheEntry(entries, budgetId, sinceDate, trackedAccountIds);
+    const match = findDashboardCacheEntry(
+      entries,
+      budgetId,
+      sinceDate,
+      trackedAccountIds,
+    );
 
     if (!match) {
       return null;
@@ -512,7 +641,7 @@ export class StorageService {
       return null;
     }
     const sanitized = match.transactions
-      .map(txn => sanitizeTransactionForCache(txn))
+      .map((txn) => sanitizeTransactionForCache(txn))
       .filter((txn): txn is CachedTransaction => txn !== null)
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .slice(0, StorageService.DASHBOARD_CACHE_LIMIT);
@@ -523,8 +652,10 @@ export class StorageService {
     };
   }
 
-  setDashboardTransactionsCache(payload: DashboardTransactionsCachePayload): void {
-    if (typeof window === 'undefined') {
+  setDashboardTransactionsCache(
+    payload: DashboardTransactionsCachePayload,
+  ): void {
+    if (typeof window === "undefined") {
       return;
     }
 
@@ -534,7 +665,7 @@ export class StorageService {
 
     // Sort transactions by date (newest first), sanitize, and limit to most recent
     const sanitized = [...payload.transactions]
-      .map(txn => sanitizeTransactionForCache(txn))
+      .map((txn) => sanitizeTransactionForCache(txn))
       .filter((txn): txn is CachedTransaction => txn !== null)
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .slice(0, StorageService.DASHBOARD_CACHE_LIMIT);
@@ -549,11 +680,19 @@ export class StorageService {
       accounts: payload.accounts,
     };
 
-    const normalizedKey = createDashboardCacheKey(normalized.budgetId, normalized.sinceDate, normalized.trackedAccountIds);
+    const normalizedKey = createDashboardCacheKey(
+      normalized.budgetId,
+      normalized.sinceDate,
+      normalized.trackedAccountIds,
+    );
 
     // Remove existing entry with same key
     const filtered = entries.filter((existing) => {
-      const existingKey = createDashboardCacheKey(existing.budgetId, existing.sinceDate, existing.trackedAccountIds);
+      const existingKey = createDashboardCacheKey(
+        existing.budgetId,
+        existing.sinceDate,
+        existing.trackedAccountIds,
+      );
       return existingKey !== normalizedKey;
     });
 
@@ -561,7 +700,10 @@ export class StorageService {
 
     // Cap at 5 entries, remove oldest by fetchedAt
     if (filtered.length > 5) {
-      filtered.sort((a, b) => new Date(b.fetchedAt).getTime() - new Date(a.fetchedAt).getTime());
+      filtered.sort(
+        (a, b) =>
+          new Date(b.fetchedAt).getTime() - new Date(a.fetchedAt).getTime(),
+      );
       filtered.splice(5);
     }
 
@@ -570,7 +712,7 @@ export class StorageService {
   }
 
   pruneDashboardTransactionsCache(ttlMs = 5 * 60 * 1000): void {
-    if (typeof window === 'undefined') {
+    if (typeof window === "undefined") {
       return;
     }
 
@@ -633,39 +775,40 @@ export class StorageService {
       Object.assign(storage, imported);
 
       // Restore PAT if it exists (non-empty string)
-      if (pat && typeof pat === 'string') {
+      if (pat && typeof pat === "string") {
         storage.ynab.pat = pat;
       }
 
       // Restore cloudSyncMnemonic if it exists and is a valid string
-      if (cloudSyncMnemonic && typeof cloudSyncMnemonic === 'string') {
+      if (cloudSyncMnemonic && typeof cloudSyncMnemonic === "string") {
         storage.settings.cloudSyncMnemonic = cloudSyncMnemonic;
       }
 
       // Restore rememberCloudSyncCode preference (boolean type check)
-      if (typeof rememberCloudSyncCode === 'boolean') {
+      if (typeof rememberCloudSyncCode === "boolean") {
         storage.settings.rememberCloudSyncCode = rememberCloudSyncCode;
       }
 
       // Preserve per-device auto-sync preference
-      if (typeof autoSyncEnabled === 'boolean') {
+      if (typeof autoSyncEnabled === "boolean") {
         storage.settings.autoSyncEnabled = autoSyncEnabled;
       }
 
       if (formatterApiKeys) {
-        storage.settings.statementFormatter = storage.settings.statementFormatter || {};
+        storage.settings.statementFormatter =
+          storage.settings.statementFormatter || {};
         storage.settings.statementFormatter.apiKeys = formatterApiKeys;
       }
 
       pruneThemeGroups(storage);
       this.setStorage(storage);
     } catch (error) {
-      throw new Error('Invalid settings file');
+      throw new Error("Invalid settings file");
     }
   }
 
   clearAll(): void {
-    if (typeof window === 'undefined') {
+    if (typeof window === "undefined") {
       return;
     }
     localStorage.removeItem(STORAGE_KEY);

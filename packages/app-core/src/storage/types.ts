@@ -1,4 +1,4 @@
-import type { YnabFlagColor } from '../ynab/constants';
+import type { YnabFlagColor } from "../ynab/constants";
 
 /**
  * Unified transaction type used across web and core packages.
@@ -41,8 +41,16 @@ export interface TransactionWithRewards extends Transaction {
  */
 export type CachedTransaction = Pick<
   Transaction,
-  'id' | 'date' | 'amount' | 'account_id' | 'payee_name' |
-  'category_name' | 'flag_color' | 'flag_name' | 'cleared' | 'approved'
+  | "id"
+  | "date"
+  | "amount"
+  | "account_id"
+  | "payee_name"
+  | "category_name"
+  | "flag_color"
+  | "flag_name"
+  | "cleared"
+  | "approved"
 >;
 
 /**
@@ -77,15 +85,15 @@ export interface CreditCard {
   id: string;
   name: string;
   issuer: string;
-  type: 'cashback' | 'miles';
+  type: "cashback" | "miles";
   ynabAccountId: string;
   billingCycle?: {
-    type: 'calendar' | 'billing';
+    type: "calendar" | "billing";
     dayOfMonth?: number;
   };
   promotionalPeriod?: {
-    startDate?: string;  // ISO 8601 date (YYYY-MM-DD), optional - defaults to current period start
-    endDate: string;     // ISO 8601 date (YYYY-MM-DD)
+    startDate?: string; // ISO 8601 date (YYYY-MM-DD), optional - defaults to current period start
+    endDate: string; // ISO 8601 date (YYYY-MM-DD)
     description?: string; // Optional description (e.g., "5x groceries Q4 2024")
   };
   featured: boolean;
@@ -104,7 +112,7 @@ export interface RewardRule {
   id: string;
   cardId: string;
   name: string;
-  rewardType: 'cashback' | 'miles';
+  rewardType: "cashback" | "miles";
   rewardValue: number;
   minimumSpend?: number;
   maximumSpend?: number;
@@ -120,9 +128,9 @@ export interface CategoryCap {
   capAmount: number;
 }
 
-export type DashboardViewMode = 'summary' | 'detailed';
+export type DashboardViewMode = "summary" | "detailed";
 
-export type HiddenCardReason = 'maximum_spend_reached';
+export type HiddenCardReason = "maximum_spend_reached";
 
 export interface HiddenCard {
   cardId: string;
@@ -166,7 +174,7 @@ export interface RewardCalculation {
   eligibleSpend: number;
   rewardEarned: number;
   rewardEarnedDollars?: number;
-  rewardType: 'cashback' | 'miles';
+  rewardType: "cashback" | "miles";
   categoryBreakdowns?: CategoryBreakdown[];
   subcategoryBreakdowns?: SubcategoryBreakdown[];
   minimumProgress?: number;
@@ -205,7 +213,7 @@ export interface YnabConnection {
   trackedAccountIds?: string[];
 }
 
-export type StatementFormatterProvider = 'openai' | 'gemini' | 'openrouter';
+export type StatementFormatterProvider = "openai" | "gemini" | "openrouter";
 
 export interface StatementFormatterSettings {
   provider?: StatementFormatterProvider;
@@ -214,10 +222,12 @@ export interface StatementFormatterSettings {
   customPrompt?: string;
 }
 
-export type SummaryViewSubcategoriesPreference = boolean | Record<string, boolean>;
+export type SummaryViewSubcategoriesPreference =
+  | boolean
+  | Record<string, boolean>;
 
 export interface AppSettings {
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   currency?: string;
   milesValuation?: number;
   dashboardViewMode?: DashboardViewMode;
@@ -227,8 +237,8 @@ export interface AppSettings {
   cloudSyncMnemonic?: string;
   rememberCloudSyncCode?: boolean;
   autoSyncEnabled?: boolean;
-  cardOrdering?: Partial<Record<'cashback' | 'miles' | 'all', string[]>>;
-  collapsedCardGroups?: Partial<Record<'cashback' | 'miles', boolean>>;
+  cardOrdering?: Partial<Record<"cashback" | "miles" | "all", string[]>>;
+  collapsedCardGroups?: Partial<Record<"cashback" | "miles", boolean>>;
   summaryViewSubcategoriesExpanded?: SummaryViewSubcategoriesPreference;
   statementFormatter?: StatementFormatterSettings;
 }
@@ -242,6 +252,22 @@ export interface DashboardTransactionsCacheEntry {
   accounts: Array<{ id: string; name: string }>;
 }
 
+export interface BudgetAccountsCacheAccount {
+  id: string;
+  name: string;
+  type?: string;
+  on_budget?: boolean;
+  closed?: boolean;
+  balance?: number;
+  [key: string]: unknown;
+}
+
+export interface BudgetAccountsCacheEntry {
+  budgetId: string;
+  fetchedAt: string;
+  accounts: BudgetAccountsCacheAccount[];
+}
+
 export interface StorageData {
   ynab: YnabConnection;
   cards: CreditCard[];
@@ -253,7 +279,7 @@ export interface StorageData {
   hiddenCards?: HiddenCard[];
   cachedData?: {
     budgets?: unknown[];
-    accounts?: unknown[];
+    accounts?: BudgetAccountsCacheEntry[];
     transactions?: unknown[];
     lastUpdated?: string;
     flagNames?: Partial<Record<YnabFlagColor, string>>;
