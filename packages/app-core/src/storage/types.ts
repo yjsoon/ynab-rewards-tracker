@@ -248,6 +248,7 @@ export interface DashboardTransactionsCacheEntry {
   sinceDate: string;
   fetchedAt: string;
   trackedAccountIds: string[];
+  isComplete?: boolean;
   transactions: CachedTransaction[];
   accounts: Array<{ id: string; name: string }>;
 }

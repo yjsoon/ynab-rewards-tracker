@@ -640,6 +640,15 @@ export class StorageService {
     if (!Array.isArray(match.transactions)) {
       return null;
     }
+
+    const isCompleteSnapshot =
+      match.isComplete === true ||
+      (match.isComplete === undefined &&
+        match.transactions.length < StorageService.DASHBOARD_CACHE_LIMIT);
+
+    if (!isCompleteSnapshot) {
+      return null;
+    }
     const sanitized = match.transactions
       .map((txn) => sanitizeTransactionForCache(txn))
       .filter((txn): txn is CachedTransaction => txn !== null)
@@ -667,8 +676,13 @@ export class StorageService {
     const sanitized = [...payload.transactions]
       .map((txn) => sanitizeTransactionForCache(txn))
       .filter((txn): txn is CachedTransaction => txn !== null)
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      .slice(0, StorageService.DASHBOARD_CACHE_LIMIT);
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    const isComplete = sanitized.length <= StorageService.DASHBOARD_CACHE_LIMIT;
+    const limitedTransactions = sanitized.slice(
+      0,
+      StorageService.DASHBOARD_CACHE_LIMIT,
+    );
 
     // Normalize and sanitize entry
     const normalized: DashboardTransactionsCacheEntry = {
@@ -676,7 +690,8 @@ export class StorageService {
       sinceDate: payload.sinceDate,
       fetchedAt: payload.fetchedAt,
       trackedAccountIds: [...payload.trackedAccountIds].sort(),
-      transactions: sanitized,
+      isComplete,
+      transactions: limitedTransactions,
       accounts: payload.accounts,
     };
 
@@ -695,6 +710,12 @@ export class StorageService {
       );
       return existingKey !== normalizedKey;
     });
+
+    if (!isComplete) {
+      storage.cachedData.dashboardTransactions = filtered;
+      this.setStorage(storage);
+      return;
+    }
 
     filtered.push(normalized);
 
