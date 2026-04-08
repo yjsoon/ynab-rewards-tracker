@@ -40,6 +40,49 @@ import type {
 
 export class StorageService {
   private static readonly DASHBOARD_CACHE_LIMIT = 500;
+  private cachedStorage: StorageData | null = null;
+  private hasCachedStorage = false;
+  private hasAttachedStorageListener = false;
+
+  private readonly handleStorageEvent = (event: StorageEvent): void => {
+    if (
+      event.key === null ||
+      event.key === STORAGE_KEY ||
+      event.key === STORAGE_VERSION_KEY
+    ) {
+      this.invalidateCache();
+    }
+  };
+
+  private invalidateCache(): void {
+    this.cachedStorage = null;
+    this.hasCachedStorage = false;
+  }
+
+  private attachStorageListener(): void {
+    if (typeof window === 'undefined' || this.hasAttachedStorageListener) {
+      return;
+    }
+
+    window.addEventListener('storage', this.handleStorageEvent);
+    this.hasAttachedStorageListener = true;
+  }
+
+  private normalizeStorage(data: MutableStorageData): StorageData {
+    applyStorageMigrations(data);
+
+    if (Array.isArray(data.cards)) {
+      const flagNames = data.cachedData?.flagNames;
+      data.cards = data.cards.map((card) =>
+        normaliseCard({ ...card } as MutableCard, flagNames)
+      );
+    }
+
+    pruneThemeGroups(data);
+    data.hiddenCards = normaliseHiddenCards(data.hiddenCards || []);
+
+    return data;
+  }
 
   private ensureVersion(): void {
     if (typeof window === 'undefined') {
@@ -51,6 +94,7 @@ export class StorageService {
       if (storedVersion !== STORAGE_VERSION) {
         localStorage.removeItem(STORAGE_KEY);
         localStorage.setItem(STORAGE_VERSION_KEY, STORAGE_VERSION);
+        this.invalidateCache();
       }
     } catch (error) {
       if (process.env.NODE_ENV === 'development') {
@@ -64,26 +108,19 @@ export class StorageService {
       return createDefaultStorage();
     }
 
+    this.attachStorageListener();
     this.ensureVersion();
+
+    if (this.hasCachedStorage && this.cachedStorage) {
+      return this.cachedStorage;
+    }
 
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
-        const data = JSON.parse(stored) as MutableStorageData;
-
-        applyStorageMigrations(data);
-
-        if (Array.isArray(data.cards)) {
-          const flagNames = data.cachedData?.flagNames;
-          data.cards = data.cards.map((card) =>
-            normaliseCard({ ...card } as MutableCard, flagNames)
-          );
-        }
-
-        pruneThemeGroups(data);
-
-        data.hiddenCards = normaliseHiddenCards(data.hiddenCards || []);
-
+        const data = this.normalizeStorage(JSON.parse(stored) as MutableStorageData);
+        this.cachedStorage = data;
+        this.hasCachedStorage = true;
         return data;
       }
     } catch (error) {
@@ -92,7 +129,10 @@ export class StorageService {
       }
     }
 
-    return createDefaultStorage();
+    const emptyStorage = createDefaultStorage();
+    this.cachedStorage = emptyStorage;
+    this.hasCachedStorage = true;
+    return emptyStorage;
   }
 
   private setStorage(data: StorageData): void {
@@ -101,8 +141,11 @@ export class StorageService {
     }
 
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      const normalized = this.normalizeStorage(data as MutableStorageData);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
       localStorage.setItem(STORAGE_VERSION_KEY, STORAGE_VERSION);
+      this.cachedStorage = normalized;
+      this.hasCachedStorage = true;
     } catch (error) {
       if (process.env.NODE_ENV === 'development') {
         console.error('Failed to set localStorage:', error);
@@ -627,5 +670,6 @@ export class StorageService {
     }
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(STORAGE_VERSION_KEY);
+    this.invalidateCache();
   }
 }
