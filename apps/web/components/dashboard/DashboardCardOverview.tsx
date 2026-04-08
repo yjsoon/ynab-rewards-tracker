@@ -1,42 +1,18 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import type { CSSProperties, KeyboardEvent, ReactNode } from "react";
-import { useMemo, useCallback, useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
+import { useMemo, useCallback, useEffect, useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
   CreditCard as CreditCardIcon,
-  DollarSign,
-  EyeOff,
   GripVertical,
   Loader2,
-  MoreHorizontal,
   Percent,
-  Plane,
-  ReceiptText,
-  Settings2,
-  Sparkles,
   TrendingUp,
 } from "lucide-react";
-import {
-  DndContext,
-  type DragEndEvent,
-  KeyboardSensor,
-  PointerSensor,
-  closestCenter,
-  useSensor,
-  useSensors,
-} from "@dnd-kit/core";
-import {
-  SortableContext,
-  arrayMove,
-  rectSortingStrategy,
-  useSortable,
-  sortableKeyboardCoordinates,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 
 import type {
   AppSettings,
@@ -48,15 +24,8 @@ import type {
 import type { YnabFlagColor } from "@/lib/ynab-constants";
 import type { Transaction } from "@/types/transaction";
 import { cn } from "@/lib/utils";
-import { SimpleRewardsCalculator } from "@/lib/rewards-engine";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Card,
   CardContent,
@@ -64,20 +33,17 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  CardSpendingSummary,
-  CardSpendingSummaryContent,
-} from "@/components/CardSpendingSummary";
-import {
-  CardSummaryCompact,
-  CardSummaryCompactContent,
-} from "@/components/CardSummaryCompact";
 import type { PrefetchedCardMetrics } from "@/lib/card-metrics";
+import { DashboardCardTile } from "@/components/dashboard/DashboardCardTile";
 
-const isExpansionMap = (
-  value: SummaryViewSubcategoriesPreference | undefined
-): value is Record<string, boolean> =>
-  value !== undefined && typeof value === "object" && value !== null && !Array.isArray(value);
+const loadSortableDashboardCardGrid = () =>
+  import("./SortableDashboardCardGrid").then(
+    (module) => module.SortableDashboardCardGrid,
+  );
+
+const SortableDashboardCardGrid = dynamic(loadSortableDashboardCardGrid, {
+  ssr: false,
+});
 
 function DashboardCardSkeleton({ viewMode }: { viewMode: DashboardViewMode }) {
   return (
@@ -86,7 +52,7 @@ function DashboardCardSkeleton({ viewMode }: { viewMode: DashboardViewMode }) {
         <div className="h-5 bg-muted rounded w-32" />
       </CardHeader>
       <CardContent className="space-y-3">
-        {viewMode === 'detailed' ? (
+        {viewMode === "detailed" ? (
           <>
             <div className="grid grid-cols-2 gap-2">
               <div className="h-16 bg-muted rounded" />
@@ -129,13 +95,15 @@ interface DashboardCardOverviewProps {
   hasCachedTransactions: boolean;
   cashbackCollapsed: boolean;
   milesCollapsed: boolean;
-  onToggleGroup(category: 'cashback' | 'miles'): void;
-  onReorderCards(category: 'cashback' | 'miles' | 'all', orderedIds: string[]): void;
+  onToggleGroup(category: "cashback" | "miles"): void;
+  onReorderCards(
+    category: "cashback" | "miles" | "all",
+    orderedIds: string[],
+  ): void;
   groupByType?: boolean;
   referenceDate?: Date;
   allowHideCards?: boolean;
 }
-
 
 export function DashboardCardOverview({
   cards,
@@ -167,12 +135,48 @@ export function DashboardCardOverview({
 }: DashboardCardOverviewProps) {
   const hiddenCount = hiddenCards.length;
   const hasVisibleCards = visibleFeaturedCards.length > 0;
+  const canReorderCards = visibleFeaturedCards.length > 1;
 
   const isInitialLoading = transactionsLoading && !hasCachedTransactions;
+  const [isReorderMode, setIsReorderMode] = useState(false);
+  const [isPreparingReorderMode, setIsPreparingReorderMode] = useState(false);
 
   const handleShowAll = useCallback(() => {
     onUnhideAll();
   }, [onUnhideAll]);
+
+  useEffect(() => {
+    if (!canReorderCards && isReorderMode) {
+      setIsReorderMode(false);
+    }
+  }, [canReorderCards, isReorderMode]);
+
+  const handlePrepareReorderMode = useCallback(() => {
+    if (isReorderMode || isPreparingReorderMode) {
+      return;
+    }
+
+    void loadSortableDashboardCardGrid();
+  }, [isPreparingReorderMode, isReorderMode]);
+
+  const handleToggleReorderMode = useCallback(async () => {
+    if (!canReorderCards) {
+      return;
+    }
+
+    if (isReorderMode) {
+      setIsReorderMode(false);
+      return;
+    }
+
+    setIsPreparingReorderMode(true);
+    try {
+      await loadSortableDashboardCardGrid();
+      setIsReorderMode(true);
+    } finally {
+      setIsPreparingReorderMode(false);
+    }
+  }, [canReorderCards, isReorderMode]);
 
   const summaryContent = useMemo(() => {
     if (isInitialLoading && visibleFeaturedCards.length > 0) {
@@ -183,7 +187,7 @@ export function DashboardCardOverview({
             "grid gap-4",
             viewMode === "detailed"
               ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"
-              : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+              : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4",
           )}
         >
           {Array.from({ length: skeletonCount }).map((_, i) => (
@@ -198,12 +202,19 @@ export function DashboardCardOverview({
         <Card className="mb-8">
           <CardHeader>
             <CardTitle>Your Reward Cards</CardTitle>
-            <CardDescription>Manage your credit cards and their reward rules</CardDescription>
+            <CardDescription>
+              Manage your credit cards and their reward rules
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="text-center py-8">
-              <CreditCardIcon className="h-12 w-12 text-muted-foreground mx-auto mb-4" aria-hidden="true" />
-              <p className="text-lg mb-4 text-muted-foreground">No cards configured yet</p>
+              <CreditCardIcon
+                className="h-12 w-12 text-muted-foreground mx-auto mb-4"
+                aria-hidden="true"
+              />
+              <p className="text-lg mb-4 text-muted-foreground">
+                No cards configured yet
+              </p>
               <Button asChild>
                 <Link href="/settings">
                   <CreditCardIcon className="mr-2 h-4 w-4" aria-hidden="true" />
@@ -221,11 +232,15 @@ export function DashboardCardOverview({
         <Card>
           <CardHeader>
             <CardTitle>All cards hidden</CardTitle>
-            <CardDescription>Hidden cards will return when their next billing cycle starts.</CardDescription>
+            <CardDescription>
+              Hidden cards will return when their next billing cycle starts.
+            </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             <p className="text-muted-foreground">
-              {hiddenCount === 1 ? "1 card is currently hidden." : `${hiddenCount} cards are currently hidden.`}
+              {hiddenCount === 1
+                ? "1 card is currently hidden."
+                : `${hiddenCount} cards are currently hidden.`}
             </p>
             <Button variant="outline" onClick={handleShowAll}>
               Show hidden cards now
@@ -241,27 +256,28 @@ export function DashboardCardOverview({
       const allOrderedCards = allCards;
 
       return (
-          <CardGroup
-            category="all"
-            title=""
-            icon={null}
-            cards={allOrderedCards}
-            cardMetricsById={cardMetricsById}
-            flagNames={flagNames}
-            settings={settings}
-            summaryViewSubcategoriesExpanded={summaryViewSubcategoriesExpanded}
-            viewMode={viewMode}
-            pat={pat}
-            prefetchedTransactions={prefetchedTransactions}
-            onToggleSummarySubcategories={onToggleSummarySubcategories}
-            onHideCard={onHideCard}
-            isCollapsed={false}
-            onToggleCollapse={() => {}}
-          onReorderCards={(orderedIds) => onReorderCards('all', orderedIds)}
+        <CardGroup
+          category="all"
+          title=""
+          icon={null}
+          cards={allOrderedCards}
+          cardMetricsById={cardMetricsById}
+          flagNames={flagNames}
+          settings={settings}
+          summaryViewSubcategoriesExpanded={summaryViewSubcategoriesExpanded}
+          viewMode={viewMode}
+          pat={pat}
+          prefetchedTransactions={prefetchedTransactions}
+          onToggleSummarySubcategories={onToggleSummarySubcategories}
+          onHideCard={onHideCard}
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
+          onReorderCards={(orderedIds) => onReorderCards("all", orderedIds)}
           isRefreshing={transactionsRefreshing}
           showTypeBadge
           referenceDate={referenceDate}
           allowHideCards={allowHideCards}
+          isReorderMode={isReorderMode}
         />
       );
     }
@@ -273,7 +289,9 @@ export function DashboardCardOverview({
           <CardGroup
             category="cashback"
             title="Cashback Cards"
-            icon={<Percent className="h-5 w-5 text-green-600" aria-hidden="true" />}
+            icon={
+              <Percent className="h-5 w-5 text-green-600" aria-hidden="true" />
+            }
             cards={cashbackCards}
             cardMetricsById={cardMetricsById}
             flagNames={flagNames}
@@ -285,18 +303,26 @@ export function DashboardCardOverview({
             onToggleSummarySubcategories={onToggleSummarySubcategories}
             onHideCard={onHideCard}
             isCollapsed={cashbackCollapsed}
-            onToggleCollapse={() => onToggleGroup('cashback')}
-            onReorderCards={(orderedIds) => onReorderCards('cashback', orderedIds)}
+            onToggleCollapse={() => onToggleGroup("cashback")}
+            onReorderCards={(orderedIds) =>
+              onReorderCards("cashback", orderedIds)
+            }
             isRefreshing={transactionsRefreshing}
             referenceDate={referenceDate}
             allowHideCards={allowHideCards}
+            isReorderMode={isReorderMode}
           />
         )}
         {milesCards.length > 0 && (
           <CardGroup
             category="miles"
             title="Miles Cards"
-            icon={<TrendingUp className="h-5 w-5 text-blue-600" aria-hidden="true" />}
+            icon={
+              <TrendingUp
+                className="h-5 w-5 text-blue-600"
+                aria-hidden="true"
+              />
+            }
             cards={milesCards}
             cardMetricsById={cardMetricsById}
             flagNames={flagNames}
@@ -308,11 +334,12 @@ export function DashboardCardOverview({
             onToggleSummarySubcategories={onToggleSummarySubcategories}
             onHideCard={onHideCard}
             isCollapsed={milesCollapsed}
-            onToggleCollapse={() => onToggleGroup('miles')}
-            onReorderCards={(orderedIds) => onReorderCards('miles', orderedIds)}
+            onToggleCollapse={() => onToggleGroup("miles")}
+            onReorderCards={(orderedIds) => onReorderCards("miles", orderedIds)}
             isRefreshing={transactionsRefreshing}
             referenceDate={referenceDate}
             allowHideCards={allowHideCards}
+            isReorderMode={isReorderMode}
           />
         )}
       </>
@@ -335,6 +362,7 @@ export function DashboardCardOverview({
     allCards,
     hiddenCount,
     handleShowAll,
+    isReorderMode,
     cashbackCollapsed,
     milesCollapsed,
     onToggleGroup,
@@ -364,13 +392,42 @@ export function DashboardCardOverview({
         </div>
       )}
 
+      {canReorderCards && (
+        <div className="flex items-center justify-end gap-2">
+          {isReorderMode && (
+            <span className="hidden text-sm text-muted-foreground sm:inline">
+              Drag cards to save their order.
+            </span>
+          )}
+          <Button
+            type="button"
+            size="sm"
+            variant={isReorderMode ? "default" : "outline"}
+            className="gap-2"
+            disabled={isPreparingReorderMode}
+            onClick={() => {
+              void handleToggleReorderMode();
+            }}
+            onMouseEnter={handlePrepareReorderMode}
+            onFocus={handlePrepareReorderMode}
+          >
+            {isPreparingReorderMode ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <GripVertical className="h-4 w-4" />
+            )}
+            {isReorderMode ? "Done reordering" : "Reorder cards"}
+          </Button>
+        </div>
+      )}
+
       {summaryContent}
     </div>
   );
 }
 
 interface CardGroupProps {
-  category: 'cashback' | 'miles' | 'all';
+  category: "cashback" | "miles" | "all";
   title: string;
   icon: ReactNode;
   cards: CreditCard[];
@@ -390,6 +447,7 @@ interface CardGroupProps {
   showTypeBadge?: boolean;
   referenceDate?: Date;
   allowHideCards: boolean;
+  isReorderMode: boolean;
 }
 
 function CardGroup({
@@ -413,56 +471,12 @@ function CardGroup({
   showTypeBadge = false,
   referenceDate,
   allowHideCards,
+  isReorderMode,
 }: CardGroupProps) {
-  const [activeDragId, setActiveDragId] = useState<string | null>(null);
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-  );
-
-  const cardById = useMemo(() => new Map(cards.map((card) => [card.id, card])), [cards]);
-  const [orderedIds, setOrderedIds] = useState(() => cards.map((card) => card.id));
-
-  useEffect(() => {
-    const nextIds = cards.map((card) => card.id);
-    setOrderedIds((prev) => {
-      const prevKey = prev.join("|");
-      const nextKey = nextIds.join("|");
-      if (prevKey === nextKey) {
-        return prev;
-      }
-      return nextIds;
-    });
-  }, [cards]);
-
-  const items = orderedIds;
   const contentId = `${category}-card-group`;
   const ChevronIcon = isCollapsed ? ChevronRight : ChevronDown;
 
-  const handleDragEnd = useCallback(
-    (event: DragEndEvent) => {
-      const { active, over } = event;
-      if (!over || active.id === over.id) {
-        return;
-      }
-
-      const activeId = String(active.id);
-      const overId = String(over.id);
-      const oldIndex = items.indexOf(activeId);
-      const newIndex = items.indexOf(overId);
-
-      if (oldIndex === -1 || newIndex === -1) {
-        return;
-      }
-
-      const reordered = arrayMove(items, oldIndex, newIndex);
-      setOrderedIds(reordered);
-      onReorderCards(reordered);
-    },
-    [items, onReorderCards]
-  );
-
-  const isAllCategory = category === 'all';
+  const isAllCategory = category === "all";
 
   return (
     <section className={isAllCategory ? "" : "space-y-4"}>
@@ -485,68 +499,59 @@ function CardGroup({
         </div>
       )}
 
-      {(isAllCategory || !isCollapsed) && cards.length > 0 && (
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragStart={({ active }) => setActiveDragId(String(active.id))}
-          onDragCancel={() => setActiveDragId(null)}
-          onDragEnd={(event) => {
-            handleDragEnd(event);
-            setActiveDragId(null);
-          }}
-        >
-          <SortableContext items={items} strategy={rectSortingStrategy}>
-            <div
-              id={contentId}
-              className={cn(
-                "grid gap-4",
-                viewMode === "detailed"
-                  ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"
-                  : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
-              )}
-            >
-              {items.map((cardId) => {
-                const card = cardById.get(cardId);
-                if (!card) {
-                  return null;
-                }
+      {(isAllCategory || !isCollapsed) &&
+        cards.length > 0 &&
+        (isReorderMode ? (
+          <SortableDashboardCardGrid
+            cards={cards}
+            cardMetricsById={cardMetricsById}
+            contentId={contentId}
+            flagNames={flagNames}
+            settings={settings}
+            summaryViewSubcategoriesExpanded={summaryViewSubcategoriesExpanded}
+            viewMode={viewMode}
+            pat={pat}
+            prefetchedTransactions={prefetchedTransactions}
+            onToggleSummarySubcategories={onToggleSummarySubcategories}
+            onHideCard={onHideCard}
+            onReorderCards={onReorderCards}
+            isRefreshing={isRefreshing}
+            showTypeBadge={showTypeBadge}
+            referenceDate={referenceDate}
+            allowHideCard={allowHideCards}
+          />
+        ) : (
+          <StaticDashboardCardGrid
+            cards={cards}
+            cardMetricsById={cardMetricsById}
+            contentId={contentId}
+            flagNames={flagNames}
+            settings={settings}
+            summaryViewSubcategoriesExpanded={summaryViewSubcategoriesExpanded}
+            viewMode={viewMode}
+            pat={pat}
+            prefetchedTransactions={prefetchedTransactions}
+            onToggleSummarySubcategories={onToggleSummarySubcategories}
+            onHideCard={onHideCard}
+            isRefreshing={isRefreshing}
+            showTypeBadge={showTypeBadge}
+            referenceDate={referenceDate}
+            allowHideCard={allowHideCards}
+          />
+        ))}
 
-                return (
-                  <SortableDashboardCard
-                    key={card.id}
-                    card={card}
-                    flagNames={flagNames}
-                    metrics={cardMetricsById[card.id]}
-                    settings={settings}
-                    summaryViewSubcategoriesExpanded={summaryViewSubcategoriesExpanded}
-                    viewMode={viewMode}
-                    pat={pat}
-                    prefetchedTransactions={prefetchedTransactions}
-                    onToggleSummarySubcategories={onToggleSummarySubcategories}
-                    onHideCard={onHideCard}
-                    isSorting={Boolean(activeDragId)}
-                    isRefreshing={isRefreshing}
-                    showTypeBadge={showTypeBadge}
-                    referenceDate={referenceDate}
-                    allowHideCard={allowHideCards}
-                  />
-                );
-              })}
-            </div>
-          </SortableContext>
-        </DndContext>
+      {isCollapsed && (
+        <div id={contentId} className="hidden" aria-hidden="true" />
       )}
-
-      {isCollapsed && <div id={contentId} className="hidden" aria-hidden="true" />}
     </section>
   );
 }
 
-interface SortableDashboardCardProps {
-  card: CreditCard;
+interface StaticDashboardCardGridProps {
+  cards: CreditCard[];
+  cardMetricsById: Record<string, PrefetchedCardMetrics>;
+  contentId: string;
   flagNames: Partial<Record<YnabFlagColor, string>>;
-  metrics?: PrefetchedCardMetrics;
   settings: AppSettings;
   summaryViewSubcategoriesExpanded?: SummaryViewSubcategoriesPreference;
   viewMode: DashboardViewMode;
@@ -554,17 +559,17 @@ interface SortableDashboardCardProps {
   prefetchedTransactions: Transaction[];
   onToggleSummarySubcategories(cardId: string): void;
   onHideCard(cardId: string, hiddenUntil: string): void;
-  isSorting: boolean;
   isRefreshing: boolean;
   showTypeBadge?: boolean;
   referenceDate?: Date;
   allowHideCard: boolean;
 }
 
-function SortableDashboardCard({
-  card,
+function StaticDashboardCardGrid({
+  cards,
+  cardMetricsById,
+  contentId,
   flagNames,
-  metrics,
   settings,
   summaryViewSubcategoriesExpanded,
   viewMode,
@@ -572,236 +577,40 @@ function SortableDashboardCard({
   prefetchedTransactions,
   onToggleSummarySubcategories,
   onHideCard,
-  isSorting,
   isRefreshing,
   showTypeBadge = false,
   referenceDate,
   allowHideCard,
-}: SortableDashboardCardProps) {
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
-    id: card.id,
-  });
-
-  const suppressClickRef = useRef(false);
-  const router = useRouter();
-
-  const handleNavigate = useCallback(() => {
-    router.push(`/cards/${card.id}`);
-  }, [router, card.id]);
-
-  const handleKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLDivElement>) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        if (!suppressClickRef.current) {
-          handleNavigate();
-        }
-      }
-    },
-    [handleNavigate]
-  );
-
-  useEffect(() => {
-    if (isSorting) {
-      suppressClickRef.current = true;
-      return;
-    }
-
-    if (typeof window === "undefined") {
-      suppressClickRef.current = false;
-      return;
-    }
-
-    const timeout = window.setTimeout(() => {
-      suppressClickRef.current = false;
-    }, 150);
-
-    return () => window.clearTimeout(timeout);
-  }, [isSorting]);
-
-  const style: CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
-
-  if (isDragging) {
-    style.zIndex = 50;
-  }
-
-  const accentClasses = "border border-border/70 dark:border-border/50 hover:border-primary/40";
-  const isSubcategoryExpanded = isExpansionMap(summaryViewSubcategoriesExpanded)
-    ? summaryViewSubcategoriesExpanded[card.id] ?? false
-    : Boolean(summaryViewSubcategoriesExpanded);
-
+}: StaticDashboardCardGridProps) {
   return (
-    <div ref={setNodeRef} style={style} className="focus-visible:outline-none">
-      <Card
-        role="link"
-        tabIndex={0}
-        aria-label={`View details for ${card.name}`}
-        className={cn(
-          "group relative overflow-hidden flex flex-col h-full cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-lg",
-          "bg-card",
-          accentClasses,
-          isDragging ? "ring-2 ring-primary/60 shadow-lg" : undefined
-        )}
-        onClick={() => {
-          if (!suppressClickRef.current) {
-            handleNavigate();
-          }
-        }}
-        onKeyDown={handleKeyDown}
-      >
-        <div className="absolute top-0 right-0 z-20">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 rounded-none rounded-bl-lg border-l border-b border-border/70 bg-background/80 backdrop-blur-sm px-0 text-muted-foreground shadow-sm hover:bg-background/95 hover:text-foreground"
-                onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                aria-label="Card actions"
-              >
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-              <DropdownMenuItem onClick={() => { window.location.href = `/cards/${card.id}?tab=settings&edit=1`; }}>
-                <Settings2 className="h-4 w-4 mr-2" />
-                Edit settings
-              </DropdownMenuItem>
-              {allowHideCard && (
-                <DropdownMenuItem onClick={() => {
-                  const period = SimpleRewardsCalculator.calculatePeriod(card, referenceDate);
-                  onHideCard(card.id, period.end);
-                }}>
-                  <EyeOff className="h-4 w-4 mr-2" />
-                  Hide from dashboard
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuItem onClick={() => { window.location.href = `/cards/${card.id}`; }}>
-                <ReceiptText className="h-4 w-4 mr-2" />
-                View transactions
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-
-        <div className="absolute bottom-0 right-0 z-20">
-          <Button
-            ref={setActivatorNodeRef}
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 rounded-none rounded-tl-lg border-l border-t border-border/70 bg-background/80 backdrop-blur-sm px-0 text-muted-foreground cursor-grab hover:cursor-grab active:cursor-grabbing touch-none select-none shadow-sm hover:bg-background/95 hover:text-foreground"
-            aria-label={`Reorder ${card.name}`}
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-            }}
-            {...attributes}
-            {...listeners}
-          >
-            <GripVertical className="h-4 w-4 pointer-events-none" aria-hidden="true" />
-          </Button>
-        </div>
-
-        <CardHeader className="pb-3">
-          <div className="flex min-w-0 items-center gap-2 pr-4">
-            <CardTitle
-              title={card.name}
-              className={cn(
-                viewMode === "detailed" ? "text-lg" : "text-[0.95rem] sm:text-base",
-                "min-w-0 flex-1 truncate"
-              )}
-            >
-              {card.name}
-            </CardTitle>
-            {(showTypeBadge || card.promotionalPeriod) && (
-              <div className="ml-auto flex shrink-0 items-center gap-1.5">
-                {showTypeBadge && (
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "shrink-0 h-5 w-5 p-0 flex items-center justify-center",
-                      card.type === 'cashback'
-                        ? "border-green-200 text-green-700 dark:border-green-800 dark:text-green-400"
-                        : "border-blue-200 text-blue-700 dark:border-blue-800 dark:text-blue-400"
-                    )}
-                  >
-                    {card.type === 'cashback' ? (
-                      <DollarSign className="h-3 w-3" />
-                    ) : (
-                      <Plane className="h-3 w-3" />
-                    )}
-                  </Badge>
-                )}
-                {card.promotionalPeriod && (
-                  <Badge
-                    variant="secondary"
-                    className="shrink-0 h-5 px-1.5 gap-1 bg-purple-100 text-purple-700 hover:bg-purple-100 dark:bg-purple-950/50 dark:text-purple-300"
-                    aria-label={`Promotional period${card.promotionalPeriod.startDate ? ` from ${card.promotionalPeriod.startDate}` : ''} until ${card.promotionalPeriod.endDate}`}
-                  >
-                    <Sparkles className="h-3 w-3" aria-hidden="true" />
-                    <span className="text-[0.65rem] font-medium">Promo</span>
-                  </Badge>
-                )}
-              </div>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent className="flex-1 flex flex-col">
-          {viewMode === "detailed" ? (
-            metrics ? (
-              <CardSpendingSummaryContent
-                card={card}
-                flagNames={flagNames}
-                isRefreshing={isRefreshing}
-                metrics={metrics}
-                onHideCard={onHideCard}
-                showHideOption
-                settings={settings}
-                allowHideCard={allowHideCard}
-              />
-            ) : (
-              <CardSpendingSummary
-                card={card}
-                pat={pat}
-                prefetchedTransactions={prefetchedTransactions}
-                onHideCard={onHideCard}
-                showHideOption
-                isRefreshing={isRefreshing}
-                referenceDate={referenceDate}
-                allowHideCard={allowHideCard}
-              />
-            )
-          ) : (
-            metrics ? (
-              <CardSummaryCompactContent
-                card={card}
-                flagNames={flagNames}
-                isRefreshing={isRefreshing}
-                isSubcategoryExpanded={isSubcategoryExpanded}
-                metrics={metrics}
-                onHideCard={onHideCard}
-                onToggleSubcategories={() => onToggleSummarySubcategories(card.id)}
-                settings={settings}
-                allowHideCard={allowHideCard}
-              />
-            ) : (
-              <CardSummaryCompact
-                card={card}
-                pat={pat}
-                prefetchedTransactions={prefetchedTransactions}
-                onHideCard={onHideCard}
-                isRefreshing={isRefreshing}
-                referenceDate={referenceDate}
-                allowHideCard={allowHideCard}
-              />
-            )
-          )}
-        </CardContent>
-      </Card>
+    <div
+      id={contentId}
+      className={cn(
+        "grid gap-4",
+        viewMode === "detailed"
+          ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"
+          : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4",
+      )}
+    >
+      {cards.map((card) => (
+        <DashboardCardTile
+          key={card.id}
+          card={card}
+          flagNames={flagNames}
+          metrics={cardMetricsById[card.id]}
+          settings={settings}
+          summaryViewSubcategoriesExpanded={summaryViewSubcategoriesExpanded}
+          viewMode={viewMode}
+          pat={pat}
+          prefetchedTransactions={prefetchedTransactions}
+          onToggleSummarySubcategories={onToggleSummarySubcategories}
+          onHideCard={onHideCard}
+          isRefreshing={isRefreshing}
+          showTypeBadge={showTypeBadge}
+          referenceDate={referenceDate}
+          allowHideCard={allowHideCard}
+        />
+      ))}
     </div>
   );
 }
