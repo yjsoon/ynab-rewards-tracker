@@ -6,19 +6,20 @@ import {
   useCreditCards,
   useSelectedBudget,
   useTrackedAccountIds,
-  useSettings
+  useSettings,
 } from "@/hooks/useLocalStorage";
 import { useTrackedTransactions } from "@/hooks/useTrackedTransactions";
 import { DashboardLanding } from "@/components/dashboard/DashboardLanding";
 import { SetupProgressAlert } from "@/components/dashboard/SetupProgressAlert";
 import { EnhancedTransactionsTable } from "@/components/transactions/EnhancedTransactionsTable";
+import { storage } from "@/lib/storage";
 import { YnabClient } from "@/lib/ynab-client";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
-  CardTitle
+  CardTitle,
 } from "@/components/ui/card";
 import type { YnabFlagColor } from "@/lib/ynab-constants";
 
@@ -38,40 +39,51 @@ export default function TransactionsPage() {
   const { selectedBudget } = useSelectedBudget();
   const { trackedAccountIds } = useTrackedAccountIds();
   const { settings } = useSettings();
-  const [customFlagNames, setCustomFlagNames] = useState<Partial<Record<YnabFlagColor, string>>>({});
+  const [customFlagNames, setCustomFlagNames] = useState<
+    Partial<Record<YnabFlagColor, string>>
+  >({});
 
   const setupStatus: SetupStatus = useMemo(
     () => ({
       pat: Boolean(pat),
       budget: Boolean(selectedBudget.id),
       accounts: trackedAccountIds.length > 0,
-      cards: cards.length > 0
+      cards: cards.length > 0,
     }),
-    [pat, selectedBudget.id, trackedAccountIds.length, cards.length]
+    [pat, selectedBudget.id, trackedAccountIds.length, cards.length],
   );
 
   const setupProgress = useMemo(
     () => Object.values(setupStatus).filter(Boolean).length,
-    [setupStatus]
+    [setupStatus],
   );
 
   const setupPercentage = useMemo(
     () => (setupProgress / 4) * 100,
-    [setupProgress]
+    [setupProgress],
   );
 
   const featuredCards = useMemo(
     () => cards.filter((card) => card.featured ?? true),
-    [cards]
+    [cards],
   );
 
-  const { recentTransactions, accountsMap, loading, error, hasCachedData, refreshing, lastUpdatedAt, refresh } = useTrackedTransactions({
+  const {
+    recentTransactions,
+    accountsMap,
+    loading,
+    error,
+    hasCachedData,
+    refreshing,
+    lastUpdatedAt,
+    refresh,
+  } = useTrackedTransactions({
     pat,
     selectedBudgetId: selectedBudget.id,
     trackedAccountIds,
     featuredCards,
     lookbackDays: TRANSACTION_LOOKBACK_DAYS,
-    recentLimit: EXTENDED_TRANSACTIONS_LIMIT
+    recentLimit: EXTENDED_TRANSACTIONS_LIMIT,
   });
 
   const tableLoading = loading && !hasCachedData;
@@ -83,11 +95,20 @@ export default function TransactionsPage() {
       return;
     }
 
+    const storedFlagNames = storage.getFlagNames();
+    if (Object.keys(storedFlagNames).length > 0) {
+      setCustomFlagNames(storedFlagNames);
+      return;
+    }
+
     const fetchFlagNames = async () => {
       try {
         const client = new YnabClient(pat);
         const names = await client.getCustomFlagNames(budgetId);
-        setCustomFlagNames(names);
+        if (Object.keys(names).length > 0) {
+          storage.mergeFlagNames(names);
+          setCustomFlagNames(storage.getFlagNames());
+        }
       } catch (err) {
         console.warn("Failed to fetch custom flag names", err);
       }
@@ -105,7 +126,8 @@ export default function TransactionsPage() {
       <div className="space-y-2 mb-6">
         <h1 className="text-3xl font-bold">Transactions</h1>
         <p className="text-muted-foreground">
-          Review up to the last {EXTENDED_TRANSACTIONS_LIMIT} transactions from your tracked accounts.
+          Review up to the last {EXTENDED_TRANSACTIONS_LIMIT} transactions from
+          your tracked accounts.
         </p>
       </div>
 
@@ -121,8 +143,9 @@ export default function TransactionsPage() {
         <CardHeader>
           <CardTitle>Recent Transactions</CardTitle>
           <CardDescription>
-            Showing activity from the past {TRANSACTION_LOOKBACK_DAYS} days across your tracked accounts.
-            Expand any transaction to view details and edit its flag colour.
+            Showing activity from the past {TRANSACTION_LOOKBACK_DAYS} days
+            across your tracked accounts. Expand any transaction to view details
+            and edit its flag colour.
           </CardDescription>
         </CardHeader>
         <CardContent>

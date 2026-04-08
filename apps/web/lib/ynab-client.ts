@@ -7,9 +7,13 @@
  * the core YnabClient directly.
  */
 
-import type { Transaction } from '@/types/transaction';
-import { storage } from './storage';
-import { UNFLAGGED_FLAG, YNAB_FLAG_COLORS, type YnabFlagColor } from './ynab-constants';
+import type { Transaction } from "@/types/transaction";
+import { storage } from "./storage";
+import {
+  UNFLAGGED_FLAG,
+  YNAB_FLAG_COLORS,
+  type YnabFlagColor,
+} from "./ynab-constants";
 
 // Re-export shared types for backwards compatibility
 export type {
@@ -20,29 +24,46 @@ export type {
   YnabCategoryGroup,
   YnabCategory,
   YnabApiResponse,
-} from '@ynab-counter/ynab-client';
+} from "@ynab-counter/ynab-client";
 
 // Re-export error types for consumers
 export {
   YnabApiError,
   isYnabApiError,
   createYnabError,
-} from '@ynab-counter/ynab-client';
-export type { YnabApiErrorCode } from '@ynab-counter/ynab-client';
+} from "@ynab-counter/ynab-client";
+export type { YnabApiErrorCode } from "@ynab-counter/ynab-client";
 
-import type { YnabBudgetSummary, YnabAccountSummary, YnabPayee } from '@ynab-counter/ynab-client';
+import type {
+  YnabBudgetSummary,
+  YnabAccountSummary,
+  YnabPayee,
+} from "@ynab-counter/ynab-client";
 
 // Simple in-memory de-dupe and cache for GETs within a short window.
 // Avoids hammering YNAB when multiple components request the same path.
 const inflightGet = new Map<string, Promise<unknown>>();
 const getCache = new Map<string, { expiry: number; data: unknown }>();
 const CACHE_TTL_MS = 30_000; // 30s soft cache; YNAB data isn't ultra-realtime
+const FLAG_NAMES_CACHE_TTL_MS = 5 * 60 * 1000;
+const inflightFlagNames = new Map<
+  string,
+  Promise<Partial<Record<YnabFlagColor, string>>>
+>();
+const flagNamesCache = new Map<
+  string,
+  { expiry: number; data: Partial<Record<YnabFlagColor, string>> }
+>();
 
 function makeKey(path: string, pat: string, init?: RequestInit) {
-  const method = (init?.method || 'GET').toUpperCase();
+  const method = (init?.method || "GET").toUpperCase();
   // Only cache GETs without AbortSignals
   // Include PAT in key to prevent cross-token cache reuse
   return `${method}:${pat}:${path}`;
+}
+
+function makeFlagNamesKey(budgetId: string, pat: string) {
+  return `FLAG_NAMES:${pat}:${budgetId}`;
 }
 
 interface YnabResponse<T> {
@@ -57,12 +78,12 @@ export class YnabClient {
   }
 
   private async request<T>(path: string, options?: RequestInit): Promise<T> {
-    const method = (options?.method || 'GET').toUpperCase();
+    const method = (options?.method || "GET").toUpperCase();
     const hasSignal = !!options?.signal;
     const key = makeKey(path, this.pat, options);
 
     // Serve from short cache for GETs without signals
-    if (method === 'GET' && !hasSignal) {
+    if (method === "GET" && !hasSignal) {
       const cached = getCache.get(key);
       const now = Date.now();
       if (cached && cached.expiry > now) {
@@ -77,28 +98,30 @@ export class YnabClient {
       const response = await fetch(`/api/ynab/${path}`, {
         ...options,
         headers: {
-          'Authorization': `Bearer ${this.pat}`,
-          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.pat}`,
+          "Content-Type": "application/json",
           ...options?.headers,
         },
       });
 
       if (!response.ok) {
         // Gentle backoff on 429 once
-        if (response.status === 429 && attempt === 1 && method === 'GET') {
-          const retryAfter = Number(response.headers.get('Retry-After'));
-          const delayMs = isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 1500;
-          await new Promise(r => setTimeout(r, delayMs));
+        if (response.status === 429 && attempt === 1 && method === "GET") {
+          const retryAfter = Number(response.headers.get("Retry-After"));
+          const delayMs =
+            isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 1500;
+          await new Promise((r) => setTimeout(r, delayMs));
           return doFetch(2);
         }
 
         try {
           const error = await response.json();
-          const message = error?.message || error?.error || JSON.stringify(error);
-          throw new Error(message || 'YNAB API error');
+          const message =
+            error?.message || error?.error || JSON.stringify(error);
+          throw new Error(message || "YNAB API error");
         } catch {
-          const text = await response.text().catch(() => '');
-          throw new Error(text || 'YNAB API error');
+          const text = await response.text().catch(() => "");
+          throw new Error(text || "YNAB API error");
         }
       }
 
@@ -107,18 +130,18 @@ export class YnabClient {
 
     const promise = doFetch();
 
-    if (method === 'GET' && !hasSignal) {
+    if (method === "GET" && !hasSignal) {
       inflightGet.set(key, promise as Promise<unknown>);
     }
 
     try {
       const data = await promise;
-      if (method === 'GET' && !hasSignal) {
+      if (method === "GET" && !hasSignal) {
         getCache.set(key, { expiry: Date.now() + CACHE_TTL_MS, data });
       }
       return data;
     } finally {
-      if (method === 'GET' && !hasSignal) {
+      if (method === "GET" && !hasSignal) {
         inflightGet.delete(key);
       }
     }
@@ -126,108 +149,167 @@ export class YnabClient {
 
   // Budgets
   async getBudgets(init?: RequestInit) {
-    const result = await this.request<YnabResponse<{ budgets: YnabBudgetSummary[] }>>('budgets', init);
+    const result = await this.request<
+      YnabResponse<{ budgets: YnabBudgetSummary[] }>
+    >("budgets", init);
     return result.data.budgets;
   }
 
   async getBudget(budgetId: string, init?: RequestInit) {
-    const result = await this.request<YnabResponse<{ budget: unknown }>>(`budgets/${budgetId}`, init);
+    const result = await this.request<YnabResponse<{ budget: unknown }>>(
+      `budgets/${budgetId}`,
+      init,
+    );
     return result.data.budget;
   }
 
   // Accounts
-  async getAccounts<TAccount = YnabAccountSummary>(budgetId: string, init?: RequestInit) {
-    const result = await this.request<YnabResponse<{ accounts: TAccount[] }>>(`budgets/${budgetId}/accounts`, init);
+  async getAccounts<TAccount = YnabAccountSummary>(
+    budgetId: string,
+    init?: RequestInit,
+  ) {
+    const result = await this.request<YnabResponse<{ accounts: TAccount[] }>>(
+      `budgets/${budgetId}/accounts`,
+      init,
+    );
     return result.data.accounts;
   }
 
   async getBudgetSettings(budgetId: string, init?: RequestInit) {
-    const result = await this.request<YnabResponse<{ settings: Record<string, unknown> }>>(
-      `budgets/${budgetId}/settings`,
-      init
-    );
+    const result = await this.request<
+      YnabResponse<{ settings: Record<string, unknown> }>
+    >(`budgets/${budgetId}/settings`, init);
     return result.data.settings;
   }
 
-  async getCustomFlagNames(budgetId: string): Promise<Partial<Record<YnabFlagColor, string>>> {
-    try {
-      const settings = await this.getBudgetSettings(budgetId);
-      if (!settings) {
-        return {};
-      }
+  async getCustomFlagNames(
+    budgetId: string,
+  ): Promise<Partial<Record<YnabFlagColor, string>>> {
+    const cacheKey = makeFlagNamesKey(budgetId, this.pat);
+    const cached = flagNamesCache.get(cacheKey);
+    if (cached && cached.expiry > Date.now()) {
+      return cached.data;
+    }
 
-      const display = settings?.display ?? settings;
-      const candidates: Partial<Record<YnabFlagColor, string>> = {};
-      const flagValues: YnabFlagColor[] = [UNFLAGGED_FLAG.value, ...YNAB_FLAG_COLORS.map((flag) => flag.value)];
+    const inflight = inflightFlagNames.get(cacheKey);
+    if (inflight) {
+      return inflight;
+    }
 
-      const assignIfMatch = (key: string, value: unknown) => {
-        if (typeof value !== 'string') return;
-        for (const colour of flagValues) {
-          // Use word boundary check to avoid false positives (e.g., 'colored_red' matching 'red')
-          const colourRegex = new RegExp(`\\b${colour}\\b`, 'i');
-          if (colourRegex.test(key)) {
-            candidates[colour] = value;
+    const request = (async () => {
+      try {
+        const settings = await this.getBudgetSettings(budgetId);
+        if (!settings) {
+          return {};
+        }
+
+        const display = settings?.display ?? settings;
+        const candidates: Partial<Record<YnabFlagColor, string>> = {};
+        const flagValues: YnabFlagColor[] = [
+          UNFLAGGED_FLAG.value,
+          ...YNAB_FLAG_COLORS.map((flag) => flag.value),
+        ];
+
+        const assignIfMatch = (key: string, value: unknown) => {
+          if (typeof value !== "string") return;
+          for (const colour of flagValues) {
+            // Use word boundary check to avoid false positives (e.g., 'colored_red' matching 'red')
+            const colourRegex = new RegExp(`\\b${colour}\\b`, "i");
+            if (colourRegex.test(key)) {
+              candidates[colour] = value;
+            }
+          }
+        };
+
+        if (display && typeof display === "object") {
+          Object.entries(display).forEach(([key, value]) =>
+            assignIfMatch(key, value),
+          );
+
+          const flagNamesAlias =
+            (display as Record<string, unknown>).flag_names ??
+            (display as Record<string, unknown>).flagNames;
+          if (flagNamesAlias && typeof flagNamesAlias === "object") {
+            Object.entries(flagNamesAlias as Record<string, unknown>).forEach(
+              ([key, value]) => assignIfMatch(key, value),
+            );
           }
         }
-      };
 
-      if (display && typeof display === 'object') {
-        Object.entries(display).forEach(([key, value]) => assignIfMatch(key, value));
-
-        const flagNamesAlias = (display as Record<string, unknown>).flag_names ??
-          (display as Record<string, unknown>).flagNames;
-        if (flagNamesAlias && typeof flagNamesAlias === 'object') {
-          Object.entries(flagNamesAlias as Record<string, unknown>).forEach(([key, value]) =>
-            assignIfMatch(key, value)
-          );
+        if (!candidates[UNFLAGGED_FLAG.value]) {
+          candidates[UNFLAGGED_FLAG.value] = UNFLAGGED_FLAG.label;
         }
-      }
 
-      if (!candidates[UNFLAGGED_FLAG.value]) {
-        candidates[UNFLAGGED_FLAG.value] = UNFLAGGED_FLAG.label;
-      }
+        flagNamesCache.set(cacheKey, {
+          expiry: Date.now() + FLAG_NAMES_CACHE_TTL_MS,
+          data: candidates,
+        });
 
-      return candidates;
-    } catch (error) {
-      console.warn('Failed to fetch YNAB flag names', error);
-      return {};
+        return candidates;
+      } catch (error) {
+        console.warn("Failed to fetch YNAB flag names", error);
+        return {};
+      }
+    })();
+
+    inflightFlagNames.set(cacheKey, request);
+
+    try {
+      return await request;
+    } finally {
+      if (inflightFlagNames.get(cacheKey) === request) {
+        inflightFlagNames.delete(cacheKey);
+      }
     }
   }
 
   // Categories
   async getCategories(budgetId: string, init?: RequestInit) {
-    const result = await this.request<YnabResponse<{ category_groups: unknown }>>(`budgets/${budgetId}/categories`, init);
+    const result = await this.request<
+      YnabResponse<{ category_groups: unknown }>
+    >(`budgets/${budgetId}/categories`, init);
     return result.data.category_groups;
   }
 
   // Transactions
   async getTransactions(
-    budgetId: string, 
-    options?: { 
+    budgetId: string,
+    options?: {
       since_date?: string;
-      type?: 'uncategorized' | 'unapproved';
+      type?: "uncategorized" | "unapproved";
       signal?: AbortSignal;
-    }
+    },
   ) {
     const params = new URLSearchParams();
-    if (options?.since_date) params.append('since_date', options.since_date);
-    if (options?.type) params.append('type', options.type);
-    
-    const query = params.toString() ? `?${params.toString()}` : '';
-    const result = await this.request<YnabResponse<{ transactions: Transaction[] }>>(`budgets/${budgetId}/transactions${query}`, {
-      signal: options?.signal
+    if (options?.since_date) params.append("since_date", options.since_date);
+    if (options?.type) params.append("type", options.type);
+
+    const query = params.toString() ? `?${params.toString()}` : "";
+    const result = await this.request<
+      YnabResponse<{ transactions: Transaction[] }>
+    >(`budgets/${budgetId}/transactions${query}`, {
+      signal: options?.signal,
     });
     return result.data.transactions;
   }
 
-  async getTransaction(budgetId: string, transactionId: string, init?: RequestInit) {
-    const result = await this.request<YnabResponse<{ transaction: Transaction }>>(`budgets/${budgetId}/transactions/${transactionId}`, init);
+  async getTransaction(
+    budgetId: string,
+    transactionId: string,
+    init?: RequestInit,
+  ) {
+    const result = await this.request<
+      YnabResponse<{ transaction: Transaction }>
+    >(`budgets/${budgetId}/transactions/${transactionId}`, init);
     return result.data.transaction;
   }
 
   // Payees
   async getPayees(budgetId: string, init?: RequestInit) {
-    const result = await this.request<YnabResponse<{ payees: YnabPayee[] }>>(`budgets/${budgetId}/payees`, init);
+    const result = await this.request<YnabResponse<{ payees: YnabPayee[] }>>(
+      `budgets/${budgetId}/payees`,
+      init,
+    );
     return result.data.payees;
   }
 
@@ -245,7 +327,8 @@ export class YnabClient {
 // Helper to get client with current PAT from storage
 export function getYnabClient(pat?: string): YnabClient | null {
   // Use provided PAT or read from storage service for consistency
-  const token = pat || (typeof window !== 'undefined' ? storage.getPAT() : null) || null;
+  const token =
+    pat || (typeof window !== "undefined" ? storage.getPAT() : null) || null;
   if (!token) return null;
   return new YnabClient(token);
 }

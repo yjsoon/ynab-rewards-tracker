@@ -9,6 +9,40 @@ import type { CreditCard, CachedTransaction } from "@/lib/storage";
 import type { Transaction } from "@/types/transaction";
 
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const BACKGROUND_REFRESH_MIN_AGE_MS = 60 * 1000; // Skip immediate revalidation for very recent data
+const CACHE_SCOPE_TRACKED_ACCOUNT_IDS: string[] = [];
+
+interface TrackedTransactionsSnapshot {
+  fetchedAt: string;
+  accounts: Array<{ id: string; name: string }>;
+  transactions: Transaction[];
+}
+
+const trackedTransactionsMemoryCache = new Map<
+  string,
+  TrackedTransactionsSnapshot
+>();
+const trackedTransactionsInflightRequests = new Map<
+  string,
+  Promise<TrackedTransactionsSnapshot>
+>();
+
+function makeTrackedTransactionsSnapshotKey(
+  pat: string,
+  budgetId: string,
+  sinceDate: string,
+): string {
+  return [pat, budgetId, sinceDate].join("::");
+}
+
+function getSnapshotAgeMs(fetchedAt: string): number {
+  const parsed = new Date(fetchedAt).getTime();
+  if (!Number.isFinite(parsed)) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  return Math.max(0, Date.now() - parsed);
+}
 
 /**
  * Type guard that validates cached transactions and safely converts them to full Transaction objects.
@@ -20,12 +54,12 @@ function isCachedTransactionArray(data: unknown): data is CachedTransaction[] {
   }
   return data.every((item) => {
     return (
-      typeof item === 'object' &&
+      typeof item === "object" &&
       item !== null &&
-      typeof item.id === 'string' &&
-      typeof item.date === 'string' &&
-      typeof item.amount === 'number' &&
-      typeof item.account_id === 'string'
+      typeof item.id === "string" &&
+      typeof item.date === "string" &&
+      typeof item.amount === "number" &&
+      typeof item.account_id === "string"
     );
   });
 }
@@ -39,6 +73,116 @@ function cachedToTransaction(cached: CachedTransaction): Transaction {
     memo: undefined,
     subtransactions: undefined,
   };
+}
+
+function getCachedTrackedTransactionsSnapshot(
+  pat: string,
+  budgetId: string,
+  sinceDate: string,
+  trackedAccountIds: string[],
+): TrackedTransactionsSnapshot | null {
+  const snapshotKey = makeTrackedTransactionsSnapshotKey(
+    pat,
+    budgetId,
+    sinceDate,
+  );
+  const cachedSnapshot = trackedTransactionsMemoryCache.get(snapshotKey);
+
+  if (
+    cachedSnapshot &&
+    getSnapshotAgeMs(cachedSnapshot.fetchedAt) <= CACHE_TTL_MS
+  ) {
+    return cachedSnapshot;
+  }
+
+  storage.pruneDashboardTransactionsCache(CACHE_TTL_MS);
+
+  const storedSnapshot =
+    storage.getDashboardTransactionsCache(
+      budgetId,
+      sinceDate,
+      CACHE_SCOPE_TRACKED_ACCOUNT_IDS,
+      CACHE_TTL_MS,
+    ) ??
+    storage.getDashboardTransactionsCache(
+      budgetId,
+      sinceDate,
+      trackedAccountIds,
+      CACHE_TTL_MS,
+    );
+
+  if (
+    !storedSnapshot ||
+    !isCachedTransactionArray(storedSnapshot.transactions)
+  ) {
+    return null;
+  }
+
+  const snapshot: TrackedTransactionsSnapshot = {
+    fetchedAt: storedSnapshot.fetchedAt,
+    accounts: storedSnapshot.accounts,
+    transactions: storedSnapshot.transactions.map(cachedToTransaction),
+  };
+
+  trackedTransactionsMemoryCache.set(snapshotKey, snapshot);
+  return snapshot;
+}
+
+async function fetchTrackedTransactionsSnapshot(
+  pat: string,
+  budgetId: string,
+  sinceDate: string,
+): Promise<TrackedTransactionsSnapshot> {
+  const snapshotKey = makeTrackedTransactionsSnapshotKey(
+    pat,
+    budgetId,
+    sinceDate,
+  );
+  const existingRequest = trackedTransactionsInflightRequests.get(snapshotKey);
+  if (existingRequest) {
+    return existingRequest;
+  }
+
+  const request = (async () => {
+    const client = new YnabClient(pat);
+    const [accounts, transactions] = await Promise.all([
+      client.getAccounts<{ id: string; name: string }>(budgetId),
+      client.getTransactions(budgetId, {
+        since_date: sinceDate,
+      }),
+    ]);
+
+    const snapshot: TrackedTransactionsSnapshot = {
+      fetchedAt: new Date().toISOString(),
+      accounts: accounts.map((account) => ({
+        id: account.id,
+        name: account.name,
+      })),
+      transactions,
+    };
+
+    trackedTransactionsMemoryCache.set(snapshotKey, snapshot);
+    storage.setDashboardTransactionsCache({
+      budgetId,
+      sinceDate,
+      fetchedAt: snapshot.fetchedAt,
+      trackedAccountIds: CACHE_SCOPE_TRACKED_ACCOUNT_IDS,
+      transactions,
+      accounts: snapshot.accounts,
+    });
+
+    return snapshot;
+  })();
+
+  trackedTransactionsInflightRequests.set(snapshotKey, request);
+
+  try {
+    return await request;
+  } finally {
+    if (trackedTransactionsInflightRequests.get(snapshotKey) === request) {
+      trackedTransactionsInflightRequests.delete(snapshotKey);
+    }
+  }
 }
 
 interface UseTrackedTransactionsArgs {
@@ -71,7 +215,8 @@ interface UseTrackedTransactionsResult {
  * locally via `allTransactions`. `recentTransactions` is derived client-side so that
  * changes to the account filters, lookback window, or list size do not trigger
  * redundant network requests. Consumers can call `refresh()` to manually refetch,
- * and the hook aborts any in-flight request during unmount to avoid memory leaks.
+ * while route-to-route mounts reuse a short-lived in-memory and localStorage snapshot
+ * before revalidating older data in the background.
  */
 export function useTrackedTransactions({
   pat,
@@ -83,14 +228,16 @@ export function useTrackedTransactions({
   referenceDate,
 }: UseTrackedTransactionsArgs): UseTrackedTransactionsResult {
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
-  const [accountsMap, setAccountsMap] = useState<Map<string, string>>(new Map());
+  const [accountsMap, setAccountsMap] = useState<Map<string, string>>(
+    new Map(),
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [hasCachedData, setHasCachedData] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
 
-  const abortRef = useRef<AbortController | null>(null);
   const lastFetchKeyRef = useRef("");
+  const requestIdRef = useRef(0);
 
   const earliestTrackedWindow = useMemo(() => {
     const anchorDate = referenceDate ?? new Date();
@@ -104,13 +251,29 @@ export function useTrackedTransactions({
     const earliestMillis = featuredCards
       .map((card) => SimpleRewardsCalculator.calculatePeriod(card, anchorDate))
       .map((period) => new Date(period.start).getTime())
-      .reduce((min, current) => Math.min(min, current), Number.POSITIVE_INFINITY);
+      .reduce(
+        (min, current) => Math.min(min, current),
+        Number.POSITIVE_INFINITY,
+      );
 
     return new Date(earliestMillis).toISOString().split("T")[0];
   }, [featuredCards, lookbackDays, referenceDate]);
 
+  const applySnapshot = useCallback((snapshot: TrackedTransactionsSnapshot) => {
+    const accountNameMap = new Map<string, string>();
+    snapshot.accounts.forEach((account) => {
+      accountNameMap.set(account.id, account.name);
+    });
+
+    setAccountsMap(accountNameMap);
+    setAllTransactions(snapshot.transactions);
+    setHasCachedData(true);
+    setLastUpdatedAt(snapshot.fetchedAt);
+  }, []);
+
   const loadTransactions = useCallback(async () => {
     if (!pat || !selectedBudgetId) {
+      requestIdRef.current += 1;
       setAllTransactions([]);
       setAccountsMap(new Map());
       setError("");
@@ -121,61 +284,38 @@ export function useTrackedTransactions({
 
     setLoading(true);
     setError("");
-
-    if (abortRef.current) {
-      abortRef.current.abort();
-    }
-
-    const controller = new AbortController();
-    abortRef.current = controller;
+    const requestId = ++requestIdRef.current;
 
     try {
-      const client = new YnabClient(pat);
-      const [accounts, transactions] = await Promise.all([
-        client.getAccounts<{ id: string; name: string }>(selectedBudgetId, {
-          signal: controller.signal,
-        }),
-        client.getTransactions(selectedBudgetId, {
-          since_date: earliestTrackedWindow,
-          signal: controller.signal,
-        }),
-      ]);
-      const accountNameMap = new Map<string, string>();
-      accounts.forEach((account) => {
-        accountNameMap.set(account.id, account.name);
-      });
-      setAccountsMap(accountNameMap);
-      setAllTransactions(transactions);
+      const snapshot = await fetchTrackedTransactionsSnapshot(
+        pat,
+        selectedBudgetId,
+        earliestTrackedWindow,
+      );
 
-      // Persist to cache after successful fetch
-      const now = new Date().toISOString();
-      storage.setDashboardTransactionsCache({
-        budgetId: selectedBudgetId,
-        sinceDate: earliestTrackedWindow,
-        fetchedAt: now,
-        trackedAccountIds: [...trackedAccountIds].sort(), // Normalize for consistent key
-        transactions: transactions,
-        accounts: accounts.map((acc) => ({ id: acc.id, name: acc.name })),
-      });
-
-      setHasCachedData(true);
-      setLastUpdatedAt(now);
-    } catch (err) {
-      if (!(err instanceof Error) || err.name !== "AbortError") {
-        const message = err instanceof Error ? err.message : String(err);
-        setError(`Failed to load transactions: ${message}`);
-        lastFetchKeyRef.current = "";
+      if (requestIdRef.current !== requestId) {
+        return;
       }
+
+      applySnapshot(snapshot);
+    } catch (err) {
+      if (requestIdRef.current !== requestId) {
+        return;
+      }
+
+      const message = err instanceof Error ? err.message : String(err);
+      setError(`Failed to load transactions: ${message}`);
+      lastFetchKeyRef.current = "";
     } finally {
-      if (abortRef.current === controller) {
+      if (requestIdRef.current === requestId) {
         setLoading(false);
-        abortRef.current = null;
       }
     }
-  }, [pat, selectedBudgetId, earliestTrackedWindow, trackedAccountIds]);
+  }, [applySnapshot, pat, selectedBudgetId, earliestTrackedWindow]);
 
   useEffect(() => {
     if (!pat || !selectedBudgetId) {
+      requestIdRef.current += 1;
       lastFetchKeyRef.current = "";
       setAllTransactions([]);
       setAccountsMap(new Map());
@@ -184,12 +324,7 @@ export function useTrackedTransactions({
       return;
     }
 
-    const fetchKey = [
-      pat,
-      selectedBudgetId,
-      earliestTrackedWindow,
-      [...trackedAccountIds].sort().join(',')
-    ].join("::");
+    const fetchKey = [pat, selectedBudgetId, earliestTrackedWindow].join("::");
 
     if (lastFetchKeyRef.current === fetchKey) {
       return;
@@ -197,47 +332,40 @@ export function useTrackedTransactions({
 
     lastFetchKeyRef.current = fetchKey;
 
-    // Prune expired entries on mount
-    storage.pruneDashboardTransactionsCache(CACHE_TTL_MS);
-
     // Attempt to hydrate from cache
-    const cached = storage.getDashboardTransactionsCache(
+    const cached = getCachedTrackedTransactionsSnapshot(
+      pat,
       selectedBudgetId,
       earliestTrackedWindow,
       trackedAccountIds,
-      CACHE_TTL_MS
     );
 
     if (cached) {
-      // Hydrate from cache without entering loading state
-      const accountNameMap = new Map<string, string>();
-      cached.accounts.forEach((acc) => {
-        accountNameMap.set(acc.id, acc.name);
-      });
-      setAccountsMap(accountNameMap);
+      applySnapshot(cached);
+      setError("");
+      setLoading(false);
 
-      // Validate and convert cached transactions to full Transaction objects
-      if (isCachedTransactionArray(cached.transactions)) {
-        setAllTransactions(cached.transactions.map(cachedToTransaction));
-      } else {
-        setAllTransactions([]);
+      if (getSnapshotAgeMs(cached.fetchedAt) >= BACKGROUND_REFRESH_MIN_AGE_MS) {
+        void loadTransactions();
       }
-
-      setHasCachedData(true);
-      setLastUpdatedAt(cached.fetchedAt);
-      // Trigger background refresh
-      loadTransactions();
     } else {
       // No cache - proceed with network fetch
       setHasCachedData(false);
       setLastUpdatedAt(null);
-      loadTransactions();
+      void loadTransactions();
     }
-  }, [pat, selectedBudgetId, earliestTrackedWindow, trackedAccountIds, loadTransactions]);
+  }, [
+    pat,
+    selectedBudgetId,
+    earliestTrackedWindow,
+    trackedAccountIds,
+    applySnapshot,
+    loadTransactions,
+  ]);
 
   useEffect(() => {
     return () => {
-      abortRef.current?.abort();
+      requestIdRef.current += 1;
     };
   }, []);
 
@@ -247,24 +375,31 @@ export function useTrackedTransactions({
     }
 
     const sortedTransactions = [...allTransactions].sort(
-      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
     );
 
-    const cutoff = lookbackDays > 0 ? (() => {
-      const date = new Date();
-      date.setDate(date.getDate() - lookbackDays);
-      return date;
-    })() : null;
+    const cutoff =
+      lookbackDays > 0
+        ? (() => {
+            const date = new Date();
+            date.setDate(date.getDate() - lookbackDays);
+            return date;
+          })()
+        : null;
 
     let filtered = sortedTransactions;
 
     if (trackedAccountIds.length > 0) {
       const trackedAccountIdsSet = new Set(trackedAccountIds);
-      filtered = filtered.filter((transaction) => trackedAccountIdsSet.has(transaction.account_id));
+      filtered = filtered.filter((transaction) =>
+        trackedAccountIdsSet.has(transaction.account_id),
+      );
     }
 
     if (cutoff) {
-      filtered = filtered.filter((transaction) => new Date(transaction.date) >= cutoff);
+      filtered = filtered.filter(
+        (transaction) => new Date(transaction.date) >= cutoff,
+      );
     }
 
     if (typeof recentLimit === "number" && recentLimit > 0) {
@@ -283,7 +418,7 @@ export function useTrackedTransactions({
 
   const refresh = useCallback(() => {
     lastFetchKeyRef.current = "";
-    loadTransactions();
+    void loadTransactions();
   }, [loadTransactions]);
 
   const refreshing = loading && hasCachedData;
