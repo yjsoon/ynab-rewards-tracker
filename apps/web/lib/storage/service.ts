@@ -470,13 +470,22 @@ export class StorageService {
 
   getBudgetAccountsCache<
     TAccount extends BudgetAccountsCacheAccount = BudgetAccountsCacheAccount,
-  >(budgetId: string, ttlMs = 5 * 60 * 1000): TAccount[] | null {
+  >(
+    budgetId: string,
+    ttlMs = 5 * 60 * 1000,
+    scopeKey?: string,
+  ): TAccount[] | null {
     if (typeof window === "undefined") {
       return null;
     }
 
     const entries = this.getStorage().cachedData?.accounts || [];
-    const match = entries.find((entry) => entry.budgetId === budgetId);
+    const normalizedScopeKey = scopeKey ?? "";
+    const match = entries.find(
+      (entry) =>
+        entry.budgetId === budgetId &&
+        (entry.scopeKey ?? "") === normalizedScopeKey,
+    );
 
     if (!match) {
       return null;
@@ -506,6 +515,7 @@ export class StorageService {
     budgetId: string,
     accounts: TAccount[],
     fetchedAt = new Date().toISOString(),
+    scopeKey?: string,
   ): void {
     if (
       typeof window === "undefined" ||
@@ -530,14 +540,20 @@ export class StorageService {
     const storage = this.getStorage() as MutableStorageData;
     storage.cachedData = storage.cachedData || {};
     const entries = storage.cachedData.accounts || [];
+    const normalizedScopeKey = scopeKey ?? "";
 
     const nextEntry: BudgetAccountsCacheEntry = {
       budgetId,
       fetchedAt,
+      scopeKey: normalizedScopeKey || undefined,
       accounts: sanitizedAccounts,
     };
 
-    const filtered = entries.filter((entry) => entry.budgetId !== budgetId);
+    const filtered = entries.filter(
+      (entry) =>
+        entry.budgetId !== budgetId ||
+        (entry.scopeKey ?? "") !== normalizedScopeKey,
+    );
     filtered.push(nextEntry);
     filtered.sort(
       (a, b) =>

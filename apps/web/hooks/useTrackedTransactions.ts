@@ -35,6 +35,10 @@ function makeTrackedTransactionsSnapshotKey(
   return [pat, budgetId, sinceDate].join("::");
 }
 
+function makeTrackedAccountsScopeKey(trackedAccountIds: string[]): string {
+  return [...trackedAccountIds].sort().join(",");
+}
+
 function getSnapshotAgeMs(fetchedAt: string): number {
   const parsed = new Date(fetchedAt).getTime();
   if (!Number.isFinite(parsed)) {
@@ -238,6 +242,10 @@ export function useTrackedTransactions({
 
   const lastFetchKeyRef = useRef("");
   const requestIdRef = useRef(0);
+  const trackedAccountsScopeKey = useMemo(
+    () => makeTrackedAccountsScopeKey(trackedAccountIds),
+    [trackedAccountIds],
+  );
 
   const earliestTrackedWindow = useMemo(() => {
     const anchorDate = referenceDate ?? new Date();
@@ -324,7 +332,12 @@ export function useTrackedTransactions({
       return;
     }
 
-    const fetchKey = [pat, selectedBudgetId, earliestTrackedWindow].join("::");
+    const fetchKey = [
+      pat,
+      selectedBudgetId,
+      earliestTrackedWindow,
+      trackedAccountsScopeKey,
+    ].join("::");
 
     if (lastFetchKeyRef.current === fetchKey) {
       return;
@@ -359,6 +372,7 @@ export function useTrackedTransactions({
     selectedBudgetId,
     earliestTrackedWindow,
     trackedAccountIds,
+    trackedAccountsScopeKey,
     applySnapshot,
     loadTransactions,
   ]);

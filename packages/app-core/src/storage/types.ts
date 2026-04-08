@@ -266,6 +266,7 @@ export interface BudgetAccountsCacheAccount {
 export interface BudgetAccountsCacheEntry {
   budgetId: string;
   fetchedAt: string;
+  scopeKey?: string;
   accounts: BudgetAccountsCacheAccount[];
 }
 

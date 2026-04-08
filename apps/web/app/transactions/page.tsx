@@ -98,23 +98,33 @@ export default function TransactionsPage() {
     const storedFlagNames = storage.getFlagNames();
     if (Object.keys(storedFlagNames).length > 0) {
       setCustomFlagNames(storedFlagNames);
-      return;
     }
+
+    let cancelled = false;
 
     const fetchFlagNames = async () => {
       try {
         const client = new YnabClient(pat);
         const names = await client.getCustomFlagNames(budgetId);
+        if (cancelled) {
+          return;
+        }
+
         if (Object.keys(names).length > 0) {
           storage.mergeFlagNames(names);
-          setCustomFlagNames(storage.getFlagNames());
         }
+
+        setCustomFlagNames(names);
       } catch (err) {
         console.warn("Failed to fetch custom flag names", err);
       }
     };
 
-    fetchFlagNames();
+    void fetchFlagNames();
+
+    return () => {
+      cancelled = true;
+    };
   }, [pat, selectedBudget.id]);
 
   if (!setupStatus.pat) {

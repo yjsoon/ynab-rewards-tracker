@@ -172,7 +172,7 @@ export class YnabClient {
   ) {
     const cachedAccounts = storage.getBudgetAccountsCache<
       TAccount & BudgetAccountsCacheAccount
-    >(budgetId, ACCOUNTS_CACHE_TTL_MS);
+    >(budgetId, ACCOUNTS_CACHE_TTL_MS, this.pat);
 
     if (cachedAccounts) {
       return cachedAccounts;
@@ -185,6 +185,8 @@ export class YnabClient {
     storage.setBudgetAccountsCache(
       budgetId,
       result.data.accounts as Array<TAccount & BudgetAccountsCacheAccount>,
+      new Date().toISOString(),
+      this.pat,
     );
     return result.data.accounts;
   }
