@@ -14,12 +14,14 @@ import {
 import { SimpleRewardsCalculator } from "@/lib/rewards-engine";
 import { clampDaysLeft } from "@/lib/date";
 import type { CreditCard, DashboardViewMode } from "@/lib/storage";
+import type { SummaryViewSubcategoriesPreference } from "@/lib/storage";
 import { DashboardLanding } from "@/components/dashboard/DashboardLanding";
 import { SetupProgressAlert } from "@/components/dashboard/SetupProgressAlert";
 import { DashboardCardOverview } from "@/components/dashboard/DashboardCardOverview";
 import { AllCardsTab } from "@/components/dashboard/AllCardsTab";
 import { DashboardPeriodNavigator } from "@/components/dashboard/DashboardPeriodNavigator";
 import { useTrackedTransactions } from "@/hooks/useTrackedTransactions";
+import { buildCardMetricsById } from "@/lib/card-metrics";
 import {
   resolveDashboardPeriod,
   shiftDashboardPeriodDays,
@@ -36,6 +38,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { storage } from "@/lib/storage";
 import { ChevronDown, LayoutGrid, List, RefreshCw } from "lucide-react";
 
 // Constants
@@ -76,6 +79,11 @@ interface SetupStatus {
   cards: boolean;
 }
 
+const isExpansionMap = (
+  value: SummaryViewSubcategoriesPreference | undefined
+): value is Record<string, boolean> =>
+  value !== undefined && typeof value === "object" && value !== null && !Array.isArray(value);
+
 function DashboardContent() {
   const router = useRouter();
   const pathname = usePathname();
@@ -111,13 +119,17 @@ function DashboardContent() {
     };
   }, [dayBoundaryTick]);
 
-  const liveDashboardPeriod = useMemo(
-    () => resolveDashboardPeriod(null, null),
+  const currentTime = useMemo(
+    () => Date.now() + dayBoundaryTick * 0,
     [dayBoundaryTick]
   );
+  const liveDashboardPeriod = useMemo(
+    () => resolveDashboardPeriod(null, null, new Date(currentTime)),
+    [currentTime]
+  );
   const dashboardPeriod = useMemo(
-    () => resolveDashboardPeriod(searchParams.get("asOf"), searchParams.get("month")),
-    [searchParams, dayBoundaryTick]
+    () => resolveDashboardPeriod(searchParams.get("asOf"), searchParams.get("month"), new Date(currentTime)),
+    [currentTime, searchParams]
   );
 
   // Tab state: "featured" (default) or "all"
@@ -276,6 +288,49 @@ function DashboardContent() {
     recentLimit: RECENT_TRANSACTIONS_LIMIT,
     referenceDate: dashboardPeriod.referenceDate,
   });
+  const [flagNames, setFlagNames] = useState(() => storage.getFlagNames());
+
+  useEffect(() => {
+    setFlagNames(storage.getFlagNames());
+  }, [lastUpdatedAt, selectedBudget.id]);
+  const summaryViewSubcategoriesExpanded = settings.summaryViewSubcategoriesExpanded;
+  const handleToggleSummarySubcategories = useCallback(
+    (cardId: string) => {
+      const currentSetting = summaryViewSubcategoriesExpanded;
+      const currentValue = isExpansionMap(currentSetting)
+        ? currentSetting[cardId] ?? false
+        : Boolean(currentSetting);
+
+      const nextValue = !currentValue;
+      const nextSetting: SummaryViewSubcategoriesPreference = isExpansionMap(currentSetting)
+        ? { ...currentSetting, [cardId]: nextValue }
+        : { [cardId]: nextValue };
+
+      updateSettings({
+        summaryViewSubcategoriesExpanded: nextSetting,
+      });
+    },
+    [summaryViewSubcategoriesExpanded, updateSettings]
+  );
+  const cardMetricsById = useMemo(
+    () => (
+      activeTab === 'featured'
+        ? buildCardMetricsById(
+            visibleFeaturedCards,
+            allTransactions,
+            settings,
+            dashboardPeriod.referenceDate
+          )
+        : {}
+    ),
+    [
+      activeTab,
+      allTransactions,
+      dashboardPeriod.referenceDate,
+      settings,
+      visibleFeaturedCards,
+    ]
+  );
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -314,7 +369,6 @@ function DashboardContent() {
 
   // Group and sort cards
   const { cashbackCards, milesCards, allCards } = useMemo(() => {
-    const now = new Date();
     const sortReferenceDate = dashboardPeriod.referenceDate;
 
     const getDaysRemaining = (card: (typeof cards)[0]) => {
@@ -540,12 +594,17 @@ function DashboardContent() {
       {activeTab === 'featured' ? (
         <DashboardCardOverview
           cards={cards}
+          cardMetricsById={cardMetricsById}
           cashbackCards={cashbackCards}
           milesCards={milesCards}
           allCards={allCards}
           visibleFeaturedCards={visibleFeaturedCards}
           hiddenCards={effectiveHiddenCards}
+          flagNames={flagNames}
+          settings={settings}
+          summaryViewSubcategoriesExpanded={summaryViewSubcategoriesExpanded}
           viewMode={viewMode}
+          onToggleSummarySubcategories={handleToggleSummarySubcategories}
           onHideCard={hideCard}
           onUnhideAll={handleUnhideAll}
           pat={pat}

@@ -17,10 +17,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { CardSpendingSummary } from '@/components/CardSpendingSummary';
+import { CardSpendingSummaryContent } from '@/components/CardSpendingSummary';
 import { RealTimeRecommendations, type CardOption } from '@/lib/real-time-recommendations';
 import { getEarliestPeriodStart } from '@ynab-counter/app-core/rewards-engine/utils/periods';
 import { useThemeGroups, useCreditCards, useSettings, useYnabPAT, useSelectedBudget } from '@/hooks/useLocalStorage';
+import { buildCardMetricsById } from '@/lib/card-metrics';
+import { storage } from '@/lib/storage';
 import type { Transaction } from '@/types/transaction';
 
 
@@ -36,6 +38,19 @@ export default function RecommendationsPage() {
   const [error, setError] = useState<string | null>(null);
   const [lastFetchTime, setLastFetchTime] = useState<Date | null>(null);
   const [expandedNotRecommended, setExpandedNotRecommended] = useState<Record<string, boolean>>({});
+  const [flagNames, setFlagNames] = useState(() => storage.getFlagNames());
+  const cardsById = useMemo(
+    () => new Map(cards.map((card) => [card.id, card])),
+    [cards]
+  );
+  const cardMetricsById = useMemo(
+    () => buildCardMetricsById(cards, transactions, settings),
+    [cards, settings, transactions]
+  );
+
+  useEffect(() => {
+    setFlagNames(storage.getFlagNames());
+  }, [lastFetchTime, selectedBudget?.id]);
 
   const recommendations = useMemo(() => {
     const engine = new RealTimeRecommendations(settings);
@@ -111,9 +126,9 @@ export default function RecommendationsPage() {
   }, [cards.length, fetchTransactions, pat, selectedBudget?.id]);
 
   const renderCardOption = (option: CardOption, isPrimary = false) => {
-    // Find the actual card object
-    const card = cards.find(c => c.id === option.cardId);
+    const card = cardsById.get(option.cardId);
     if (!card) return null;
+    const metrics = cardMetricsById[card.id];
 
     // Check if card is maxed
     const isMaxed = option.recommendation === 'avoid';
@@ -155,11 +170,14 @@ export default function RecommendationsPage() {
         </div>
 
         {/* CardSpendingSummary Component */}
-        <CardSpendingSummary
-          card={card}
-          pat={pat}
-          prefetchedTransactions={transactions}
-        />
+        {metrics ? (
+          <CardSpendingSummaryContent
+            card={card}
+            flagNames={flagNames}
+            metrics={metrics}
+            settings={settings}
+          />
+        ) : null}
 
         {/* Reasons (only for primary card) */}
         {option.reasons.length > 0 && isPrimary && (
@@ -346,4 +364,3 @@ export default function RecommendationsPage() {
     </div>
   );
 }
-

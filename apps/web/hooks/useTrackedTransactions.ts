@@ -131,20 +131,20 @@ export function useTrackedTransactions({
 
     try {
       const client = new YnabClient(pat);
-
-      const accounts = await client.getAccounts<{ id: string; name: string }>(selectedBudgetId, {
-        signal: controller.signal,
-      });
+      const [accounts, transactions] = await Promise.all([
+        client.getAccounts<{ id: string; name: string }>(selectedBudgetId, {
+          signal: controller.signal,
+        }),
+        client.getTransactions(selectedBudgetId, {
+          since_date: earliestTrackedWindow,
+          signal: controller.signal,
+        }),
+      ]);
       const accountNameMap = new Map<string, string>();
       accounts.forEach((account) => {
         accountNameMap.set(account.id, account.name);
       });
       setAccountsMap(accountNameMap);
-
-      const transactions = await client.getTransactions(selectedBudgetId, {
-        since_date: earliestTrackedWindow,
-        signal: controller.signal,
-      });
       setAllTransactions(transactions);
 
       // Persist to cache after successful fetch
@@ -259,7 +259,8 @@ export function useTrackedTransactions({
     let filtered = sortedTransactions;
 
     if (trackedAccountIds.length > 0) {
-      filtered = filtered.filter((transaction) => trackedAccountIds.includes(transaction.account_id));
+      const trackedAccountIdsSet = new Set(trackedAccountIds);
+      filtered = filtered.filter((transaction) => trackedAccountIdsSet.has(transaction.account_id));
     }
 
     if (cutoff) {

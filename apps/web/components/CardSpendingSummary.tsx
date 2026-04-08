@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { formatDateValue } from '@/lib/dashboard-period';
+import type { YnabFlagColor } from '@/lib/ynab-constants';
 import { SimpleRewardsCalculator } from '@/lib/rewards-engine';
 import { YnabClient } from '@/lib/ynab-client';
 import { storage } from '@/lib/storage';
@@ -17,169 +18,45 @@ import {
   isMinimumSpendConfigured,
   hasMinimumSpendRequirement
 } from '@/lib/minimum-spend-helpers';
-import type { CreditCard } from '@/lib/storage';
+import type { AppSettings, CreditCard } from '@/lib/storage';
 import type { Transaction } from '@/types/transaction';
+import type { PrefetchedCardMetrics } from '@/lib/card-metrics';
 
-interface CardSpendingSummaryProps {
+interface CardSpendingSummaryContentProps {
   card: CreditCard;
-  pat?: string;
-  // Optional: if provided, component will not fetch and will use these
-  // budget-wide transactions (it will filter to this card + period).
-  prefetchedTransactions?: Transaction[];
+  flagNames: Partial<Record<YnabFlagColor, string>>;
+  isRefreshing?: boolean;
+  metrics: PrefetchedCardMetrics;
   onHideCard?: (cardId: string, hiddenUntil: string) => void;
   showHideOption?: boolean;
-  isRefreshing?: boolean;
-  referenceDate?: Date;
+  settings?: AppSettings;
   allowHideCard?: boolean;
 }
 
-export function CardSpendingSummary({
+export function CardSpendingSummaryContent({
   card,
-  pat,
-  prefetchedTransactions,
+  flagNames,
+  isRefreshing,
+  metrics,
   onHideCard,
   showHideOption,
-  isRefreshing,
-  referenceDate,
+  settings,
   allowHideCard = true,
-}: CardSpendingSummaryProps) {
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [loading, setLoading] = useState(true);
-  const abortRef = useRef<AbortController | null>(null);
-  const { settings } = useSettings();
-  const { selectedBudget } = useSelectedBudget();
-  const flagNames = useMemo(() => storage.getFlagNames(), []);
-
-  const period = useMemo(
-    () => SimpleRewardsCalculator.calculatePeriod(card, referenceDate),
-    [card, referenceDate]
-  );
-  const asOfDate = useMemo(
-    () => formatDateValue(referenceDate ?? new Date()),
-    [referenceDate]
-  );
-  const calculationPeriod = useMemo(
-    () => ({
-      ...period,
-      end: period.end < asOfDate ? period.end : asOfDate,
-    }),
-    [asOfDate, period]
-  );
-
-  // Use prefetched budget-wide transactions if provided; otherwise fetch
-  const loadTransactions = useCallback(async () => {
-    // Use prefetched data path
-    if (prefetchedTransactions) {
-      const cardTxns = prefetchedTransactions.filter((t: Transaction) =>
-        t.account_id === card.ynabAccountId &&
-          t.date >= calculationPeriod.start &&
-          t.date <= calculationPeriod.end
-      );
-
-      setTransactions(cardTxns);
-      setLoading(false);
-      return;
-    }
-
-    // Fallback: fetch for this card/period only
-    if (!pat || !card.ynabAccountId) {
-      setLoading(false);
-      return;
-    }
-
-    const budgetId = selectedBudget.id;
-    if (!budgetId) {
-      setLoading(false);
-      return;
-    }
-
-    const client = new YnabClient(pat);
-    if (abortRef.current) {
-      abortRef.current.abort();
-    }
-    const controller = new AbortController();
-    abortRef.current = controller;
-    setLoading(true);
-
-    try {
-      const allTxns = await client.getTransactions(budgetId, {
-        since_date: calculationPeriod.start,
-        signal: controller.signal,
-      });
-      const cardTxns = allTxns.filter((t: Transaction) =>
-        t.account_id === card.ynabAccountId &&
-          t.date >= calculationPeriod.start &&
-          t.date <= calculationPeriod.end
-      );
-      setTransactions(cardTxns);
-    } catch (error) {
-      if (!(error instanceof Error) || error.name !== 'AbortError') {
-        console.error('Failed to load transactions:', error);
-      }
-    } finally {
-      if (abortRef.current === controller) {
-        setLoading(false);
-        abortRef.current = null;
-      }
-    }
-  }, [prefetchedTransactions, pat, card.ynabAccountId, calculationPeriod, selectedBudget.id]);
-
-  useEffect(() => {
-    loadTransactions();
-  }, [loadTransactions]);
-
-  useEffect(() => {
-    return () => {
-      abortRef.current?.abort();
-    };
-  }, []);
-
-  // Calculate spending and rewards using simplified system
-  const summary = useMemo(() => {
-    const calculation = SimpleRewardsCalculator.calculateCardRewards(
-      card,
-      transactions,
-      calculationPeriod,
-      settings || undefined
-    );
-
-    const end = new Date(period.end);
-    const diff = end.getTime() - (referenceDate ?? new Date()).getTime();
-    const daysRemaining = Math.ceil(diff / (1000 * 60 * 60 * 24));
-
-    return {
-      totalSpend: calculation.totalSpend,
-      countedSpend: calculation.countedSpend,
-      eligibleSpend: calculation.eligibleSpend,
-      eligibleSpendBeforeBlocks: calculation.eligibleSpendBeforeBlocks,
-      rewardEarned: calculation.rewardEarned,
-      rewardEarnedDollars: calculation.rewardEarnedDollars,
-      daysRemaining: Math.max(0, daysRemaining),
-      minimumSpend: calculation.minimumSpend,
-      minimumSpendMet: calculation.minimumSpendMet,
-      minimumSpendProgress: calculation.minimumSpendProgress,
-      maximumSpend: calculation.maximumSpend,
-      maximumSpendExceeded: calculation.maximumSpendExceeded,
-      maximumSpendProgress: calculation.maximumSpendProgress,
-      subcategoryBreakdowns: calculation.subcategoryBreakdowns ?? [],
-    };
-  }, [calculationPeriod, card, period.end, referenceDate, settings, transactions]);
-
-  if (loading) {
-    return (
-      <div className="space-y-3">
-        <div className="bg-muted/5 rounded-lg p-3">
-          <div className="opacity-60">
-            <div className="h-6 bg-muted rounded w-20 mx-auto mb-1"></div>
-            <div className="h-3 bg-muted rounded w-24 mx-auto"></div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const { totalSpend, countedSpend, eligibleSpend, eligibleSpendBeforeBlocks, rewardEarned, rewardEarnedDollars, daysRemaining, minimumSpend, minimumSpendMet, maximumSpend, maximumSpendExceeded, subcategoryBreakdowns } = summary;
-
+}: CardSpendingSummaryContentProps) {
+  const { calculation, daysRemaining, period } = metrics;
+  const {
+    totalSpend,
+    countedSpend,
+    eligibleSpend,
+    eligibleSpendBeforeBlocks,
+    rewardEarned,
+    rewardEarnedDollars,
+    minimumSpend,
+    minimumSpendMet,
+    maximumSpend,
+    maximumSpendExceeded,
+    subcategoryBreakdowns = [],
+  } = calculation;
   const currency = settings?.currency;
   const milesValuation = settings?.milesValuation ?? 0.01;
   const hasMinimum = hasMinimumSpendRequirement(minimumSpend);
@@ -193,7 +70,9 @@ export function CardSpendingSummary({
         ))
   );
   const displayedSpend = hasBlockRounding ? countedSpend : totalSpend;
-  const rewardTileState = maximumSpendExceeded ? 'exceeded' : (!minimumSpendMet && hasMinimum ? 'warn' : (minimumSpendMet ? 'success' : 'neutral'));
+  const rewardTileState = maximumSpendExceeded
+    ? 'exceeded'
+    : (!minimumSpendMet && hasMinimum ? 'warn' : (minimumSpendMet ? 'success' : 'neutral'));
 
   const rewardTileClasses = {
     success: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300',
@@ -205,16 +84,16 @@ export function CardSpendingSummary({
   const rewardValue = (!minimumSpendMet && hasMinimum)
     ? 'No reward'
     : card.type === 'cashback'
-    ? <CurrencyAmount value={rewardEarned} currency={currency} />
-    : `${Math.round(rewardEarned).toLocaleString()}`;
+      ? <CurrencyAmount value={rewardEarned} currency={currency} />
+      : `${Math.round(rewardEarned).toLocaleString()}`;
 
   const rewardLabel = maximumSpendExceeded
     ? 'Capped at max'
     : !minimumSpendMet && hasMinimum
-    ? 'Minimum not met'
-    : card.type === 'cashback'
-    ? 'Cashback'
-    : 'Miles';
+      ? 'Minimum not met'
+      : card.type === 'cashback'
+        ? 'Cashback'
+        : 'Miles';
 
   const unearnedAmount = Math.max(
     0,
@@ -228,21 +107,20 @@ export function CardSpendingSummary({
   const daysSeverityClass = daysRemaining <= 1
     ? 'text-rose-500 dark:text-rose-300'
     : daysRemaining <= 3
-    ? 'text-orange-500 dark:text-orange-300'
-    : daysRemaining <= 7
-    ? 'text-amber-500 dark:text-amber-300'
-    : 'text-muted-foreground';
+      ? 'text-orange-500 dark:text-orange-300'
+      : daysRemaining <= 7
+        ? 'text-amber-500 dark:text-amber-300'
+        : 'text-muted-foreground';
 
   return (
     <div className="relative flex h-full flex-col gap-4">
       <RefreshBadge isRefreshing={isRefreshing} />
-      {/* Spending and Rewards Summary */}
       <div className="grid grid-cols-2 gap-2">
         <div className="rounded-lg bg-muted/10 p-3 text-left">
           <p className="text-2xl font-semibold tracking-tight">
             <CurrencyAmount value={displayedSpend} currency={currency} />
           </p>
-          <p className="text-xs text-muted-foreground uppercase">
+          <p className="text-xs uppercase text-muted-foreground">
             {showActualSpend ? 'Reward spend this period' : 'Spent this period'}
           </p>
           {showActualSpend && (
@@ -252,14 +130,13 @@ export function CardSpendingSummary({
           )}
         </div>
         <div className={`flex min-h-[68px] flex-col justify-center rounded-lg p-3 text-left transition-colors ${rewardTileClasses}`}>
-          <p className={`text-xl font-semibold tracking-tight leading-tight ${rewardTileState === 'neutral' ? 'text-foreground' : ''} sm:text-2xl`}>
+          <p className={`text-xl font-semibold leading-tight tracking-tight ${rewardTileState === 'neutral' ? 'text-foreground' : ''} sm:text-2xl`}>
             {rewardValue}
           </p>
           <p className="text-[11px] uppercase opacity-90 sm:text-xs">{rewardLabel}</p>
         </div>
       </div>
 
-      {/* Spending Progress with new visualization */}
       {(isMinimumSpendConfigured(minimumSpend) || hasMaximum) ? (
         <div className="space-y-3">
           <SpendingProgressBar
@@ -273,7 +150,6 @@ export function CardSpendingSummary({
             showWarnings={true}
             className=""
           />
-          {/* Compact status message for exceeded maximum */}
           {maximumSpendExceeded && (
             <div className="flex items-center justify-center gap-1.5 rounded-md border border-red-200 bg-red-50/50 py-1.5 text-xs font-medium text-red-600 dark:border-red-900 dark:bg-red-950/30 dark:text-red-400">
               <XCircle className="h-3.5 w-3.5" />
@@ -316,7 +192,6 @@ export function CardSpendingSummary({
         />
       )}
 
-      {/* Bottom meta info */}
       <div className="mt-auto space-y-2 pt-1 text-center">
         <div className="flex items-center justify-center gap-2">
           {card.earningRate ? (
@@ -374,5 +249,156 @@ export function CardSpendingSummary({
         </div>
       </div>
     </div>
+  );
+}
+
+interface CardSpendingSummaryProps {
+  card: CreditCard;
+  pat?: string;
+  prefetchedTransactions?: Transaction[];
+  onHideCard?: (cardId: string, hiddenUntil: string) => void;
+  showHideOption?: boolean;
+  isRefreshing?: boolean;
+  referenceDate?: Date;
+  allowHideCard?: boolean;
+}
+
+export function CardSpendingSummary({
+  card,
+  pat,
+  prefetchedTransactions,
+  onHideCard,
+  showHideOption,
+  isRefreshing,
+  referenceDate,
+  allowHideCard = true,
+}: CardSpendingSummaryProps) {
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [loading, setLoading] = useState(true);
+  const abortRef = useRef<AbortController | null>(null);
+  const { settings } = useSettings();
+  const { selectedBudget } = useSelectedBudget();
+  const flagNames = useMemo(() => storage.getFlagNames(), []);
+
+  const period = useMemo(
+    () => SimpleRewardsCalculator.calculatePeriod(card, referenceDate),
+    [card, referenceDate]
+  );
+  const asOfDate = useMemo(
+    () => formatDateValue(referenceDate ?? new Date()),
+    [referenceDate]
+  );
+  const calculationPeriod = useMemo(
+    () => ({
+      ...period,
+      end: period.end < asOfDate ? period.end : asOfDate,
+    }),
+    [asOfDate, period]
+  );
+
+  const loadTransactions = useCallback(async () => {
+    if (prefetchedTransactions) {
+      setTransactions(prefetchedTransactions);
+      setLoading(false);
+      return;
+    }
+
+    if (!pat || !card.ynabAccountId) {
+      setLoading(false);
+      return;
+    }
+
+    const budgetId = selectedBudget.id;
+    if (!budgetId) {
+      setLoading(false);
+      return;
+    }
+
+    const client = new YnabClient(pat);
+    if (abortRef.current) {
+      abortRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setLoading(true);
+
+    try {
+      const allTxns = await client.getTransactions(budgetId, {
+        since_date: calculationPeriod.start,
+        signal: controller.signal,
+      });
+      const cardTxns = allTxns.filter((transaction: Transaction) =>
+        transaction.account_id === card.ynabAccountId &&
+          transaction.date >= calculationPeriod.start &&
+          transaction.date <= calculationPeriod.end
+      );
+      setTransactions(cardTxns);
+    } catch (error) {
+      if (!(error instanceof Error) || error.name !== 'AbortError') {
+        console.error('Failed to load transactions:', error);
+      }
+    } finally {
+      if (abortRef.current === controller) {
+        setLoading(false);
+        abortRef.current = null;
+      }
+    }
+  }, [prefetchedTransactions, pat, card.ynabAccountId, calculationPeriod, selectedBudget.id]);
+
+  useEffect(() => {
+    loadTransactions();
+  }, [loadTransactions]);
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
+
+  const metrics = useMemo<PrefetchedCardMetrics>(() => {
+    const calculation = SimpleRewardsCalculator.calculateCardRewards(
+      card,
+      transactions,
+      calculationPeriod,
+      settings || undefined
+    );
+
+    const end = new Date(period.end);
+    const diff = end.getTime() - (referenceDate ?? new Date()).getTime();
+    const daysRemaining = Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+
+    return {
+      calculation,
+      calculationPeriod,
+      daysRemaining,
+      period,
+      transactions,
+    };
+  }, [calculationPeriod, card, period, referenceDate, settings, transactions]);
+
+  if (loading) {
+    return (
+      <div className="space-y-3">
+        <div className="rounded-lg bg-muted/5 p-3">
+          <div className="opacity-60">
+            <div className="mx-auto mb-1 h-6 w-20 rounded bg-muted"></div>
+            <div className="mx-auto h-3 w-24 rounded bg-muted"></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <CardSpendingSummaryContent
+      card={card}
+      flagNames={flagNames}
+      isRefreshing={isRefreshing}
+      metrics={metrics}
+      onHideCard={onHideCard}
+      showHideOption={showHideOption}
+      settings={settings}
+      allowHideCard={allowHideCard}
+    />
   );
 }

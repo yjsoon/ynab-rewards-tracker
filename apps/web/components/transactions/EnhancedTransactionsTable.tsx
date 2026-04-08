@@ -40,6 +40,13 @@ interface EnhancedTransactionsTableProps {
 type SortField = "date" | "amount" | "payee" | "account" | "reward";
 type SortDirection = "asc" | "desc";
 
+interface TransactionWithComputedReward extends Transaction {
+  blockInfo?: string;
+  calculatedReward: number;
+  card?: CreditCard;
+  isIncoming: boolean;
+}
+
 export function EnhancedTransactionsTable({
   loading,
   error,
@@ -114,16 +121,23 @@ export function EnhancedTransactionsTable({
 
   // Calculate rewards and sort transactions
   const sortedTransactions = useMemo(() => {
-    const withRewards = filteredTransactions.map((txn) => {
+    const withRewards: TransactionWithComputedReward[] = filteredTransactions.map((txn) => {
       const card = cardsByAccountId.get(txn.account_id);
       const amount = absFromMilliFn(txn.amount);
-      const { reward } = card
+      const isIncoming = txn.amount > 0;
+      const rewardResult = !isIncoming && card
         ? SimpleRewardsCalculator.calculateTransactionReward(amount, card, settings, {
             flagColor: txn.flag_color,
           })
-        : { reward: 0 };
+        : { reward: 0, blockInfo: undefined };
 
-      return { ...txn, calculatedReward: reward };
+      return {
+        ...txn,
+        blockInfo: rewardResult.blockInfo,
+        calculatedReward: rewardResult.reward,
+        card,
+        isIncoming,
+      };
     });
 
     withRewards.sort((a, b) => {
@@ -222,6 +236,10 @@ export function EnhancedTransactionsTable({
       }
     });
   }, []);
+  const uniqueAccounts = useMemo(
+    () => Array.from(new Set(transactions.map((transaction) => transaction.account_id))),
+    [transactions]
+  );
 
   if (loading) {
     return (
@@ -255,8 +273,6 @@ export function EnhancedTransactionsTable({
         }
       })()
     : null;
-
-  const uniqueAccounts = Array.from(new Set(transactions.map((t) => t.account_id)));
 
   return (
     <div className="space-y-4">
@@ -374,16 +390,8 @@ export function EnhancedTransactionsTable({
             {sortedTransactions.map((txn, index) => {
               const isExpanded = expandedRows.has(txn.id);
               const isSaving = savingTransaction === txn.id;
-              const card = cardsByAccountId.get(txn.account_id);
               const amount = absFromMilliFn(txn.amount);
-              const isIncoming = txn.amount > 0; // Positive amount = incoming (payment, refund, etc.)
-
-              // Only calculate rewards for spending transactions (negative amounts)
-              const { reward, blockInfo } = !isIncoming && card
-                ? SimpleRewardsCalculator.calculateTransactionReward(amount, card, settings, {
-                    flagColor: txn.flag_color,
-                  })
-                : { reward: 0, blockInfo: null };
+              const { blockInfo, calculatedReward: reward, card, isIncoming } = txn;
 
               return (
                 <>

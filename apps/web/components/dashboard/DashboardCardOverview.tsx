@@ -39,10 +39,13 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 
 import type {
+  AppSettings,
   CreditCard,
   DashboardViewMode,
   HiddenCard,
+  SummaryViewSubcategoriesPreference,
 } from "@/lib/storage";
+import type { YnabFlagColor } from "@/lib/ynab-constants";
 import type { Transaction } from "@/types/transaction";
 import { cn } from "@/lib/utils";
 import { SimpleRewardsCalculator } from "@/lib/rewards-engine";
@@ -61,8 +64,20 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { CardSpendingSummary } from "@/components/CardSpendingSummary";
-import { CardSummaryCompact } from "@/components/CardSummaryCompact";
+import {
+  CardSpendingSummary,
+  CardSpendingSummaryContent,
+} from "@/components/CardSpendingSummary";
+import {
+  CardSummaryCompact,
+  CardSummaryCompactContent,
+} from "@/components/CardSummaryCompact";
+import type { PrefetchedCardMetrics } from "@/lib/card-metrics";
+
+const isExpansionMap = (
+  value: SummaryViewSubcategoriesPreference | undefined
+): value is Record<string, boolean> =>
+  value !== undefined && typeof value === "object" && value !== null && !Array.isArray(value);
 
 function DashboardCardSkeleton({ viewMode }: { viewMode: DashboardViewMode }) {
   return (
@@ -94,12 +109,17 @@ function DashboardCardSkeleton({ viewMode }: { viewMode: DashboardViewMode }) {
 
 interface DashboardCardOverviewProps {
   cards: CreditCard[];
+  cardMetricsById: Record<string, PrefetchedCardMetrics>;
   cashbackCards: CreditCard[];
   milesCards: CreditCard[];
   allCards: CreditCard[];
   visibleFeaturedCards: CreditCard[];
   hiddenCards: HiddenCard[];
+  flagNames: Partial<Record<YnabFlagColor, string>>;
+  settings: AppSettings;
+  summaryViewSubcategoriesExpanded?: SummaryViewSubcategoriesPreference;
   viewMode: DashboardViewMode;
+  onToggleSummarySubcategories(cardId: string): void;
   onHideCard(cardId: string, hiddenUntil: string): void;
   onUnhideAll(): void;
   pat: string;
@@ -119,12 +139,17 @@ interface DashboardCardOverviewProps {
 
 export function DashboardCardOverview({
   cards,
+  cardMetricsById,
   cashbackCards,
   milesCards,
   allCards,
   visibleFeaturedCards,
   hiddenCards,
+  flagNames,
+  settings,
+  summaryViewSubcategoriesExpanded,
   viewMode,
+  onToggleSummarySubcategories,
   onHideCard,
   onUnhideAll,
   pat,
@@ -216,17 +241,22 @@ export function DashboardCardOverview({
       const allOrderedCards = allCards;
 
       return (
-        <CardGroup
-          category="all"
-          title=""
-          icon={null}
-          cards={allOrderedCards}
-          viewMode={viewMode}
-          pat={pat}
-          prefetchedTransactions={prefetchedTransactions}
-          onHideCard={onHideCard}
-          isCollapsed={false}
-          onToggleCollapse={() => {}}
+          <CardGroup
+            category="all"
+            title=""
+            icon={null}
+            cards={allOrderedCards}
+            cardMetricsById={cardMetricsById}
+            flagNames={flagNames}
+            settings={settings}
+            summaryViewSubcategoriesExpanded={summaryViewSubcategoriesExpanded}
+            viewMode={viewMode}
+            pat={pat}
+            prefetchedTransactions={prefetchedTransactions}
+            onToggleSummarySubcategories={onToggleSummarySubcategories}
+            onHideCard={onHideCard}
+            isCollapsed={false}
+            onToggleCollapse={() => {}}
           onReorderCards={(orderedIds) => onReorderCards('all', orderedIds)}
           isRefreshing={transactionsRefreshing}
           showTypeBadge
@@ -245,9 +275,14 @@ export function DashboardCardOverview({
             title="Cashback Cards"
             icon={<Percent className="h-5 w-5 text-green-600" aria-hidden="true" />}
             cards={cashbackCards}
+            cardMetricsById={cardMetricsById}
+            flagNames={flagNames}
+            settings={settings}
+            summaryViewSubcategoriesExpanded={summaryViewSubcategoriesExpanded}
             viewMode={viewMode}
             pat={pat}
             prefetchedTransactions={prefetchedTransactions}
+            onToggleSummarySubcategories={onToggleSummarySubcategories}
             onHideCard={onHideCard}
             isCollapsed={cashbackCollapsed}
             onToggleCollapse={() => onToggleGroup('cashback')}
@@ -263,9 +298,14 @@ export function DashboardCardOverview({
             title="Miles Cards"
             icon={<TrendingUp className="h-5 w-5 text-blue-600" aria-hidden="true" />}
             cards={milesCards}
+            cardMetricsById={cardMetricsById}
+            flagNames={flagNames}
+            settings={settings}
+            summaryViewSubcategoriesExpanded={summaryViewSubcategoriesExpanded}
             viewMode={viewMode}
             pat={pat}
             prefetchedTransactions={prefetchedTransactions}
+            onToggleSummarySubcategories={onToggleSummarySubcategories}
             onHideCard={onHideCard}
             isCollapsed={milesCollapsed}
             onToggleCollapse={() => onToggleGroup('miles')}
@@ -280,11 +320,16 @@ export function DashboardCardOverview({
   }, [
     isInitialLoading,
     cards.length,
+    cardMetricsById,
     hasVisibleCards,
     cashbackCards,
+    flagNames,
+    settings,
+    summaryViewSubcategoriesExpanded,
     viewMode,
     pat,
     prefetchedTransactions,
+    onToggleSummarySubcategories,
     onHideCard,
     milesCards,
     allCards,
@@ -329,9 +374,14 @@ interface CardGroupProps {
   title: string;
   icon: ReactNode;
   cards: CreditCard[];
+  cardMetricsById: Record<string, PrefetchedCardMetrics>;
+  flagNames: Partial<Record<YnabFlagColor, string>>;
+  settings: AppSettings;
+  summaryViewSubcategoriesExpanded?: SummaryViewSubcategoriesPreference;
   viewMode: DashboardViewMode;
   pat: string;
   prefetchedTransactions: Transaction[];
+  onToggleSummarySubcategories(cardId: string): void;
   onHideCard(cardId: string, hiddenUntil: string): void;
   isCollapsed: boolean;
   onToggleCollapse(): void;
@@ -347,9 +397,14 @@ function CardGroup({
   title,
   icon,
   cards,
+  cardMetricsById,
+  flagNames,
+  settings,
+  summaryViewSubcategoriesExpanded,
   viewMode,
   pat,
   prefetchedTransactions,
+  onToggleSummarySubcategories,
   onHideCard,
   isCollapsed,
   onToggleCollapse,
@@ -461,9 +516,14 @@ function CardGroup({
                   <SortableDashboardCard
                     key={card.id}
                     card={card}
+                    flagNames={flagNames}
+                    metrics={cardMetricsById[card.id]}
+                    settings={settings}
+                    summaryViewSubcategoriesExpanded={summaryViewSubcategoriesExpanded}
                     viewMode={viewMode}
                     pat={pat}
                     prefetchedTransactions={prefetchedTransactions}
+                    onToggleSummarySubcategories={onToggleSummarySubcategories}
                     onHideCard={onHideCard}
                     isSorting={Boolean(activeDragId)}
                     isRefreshing={isRefreshing}
@@ -485,9 +545,14 @@ function CardGroup({
 
 interface SortableDashboardCardProps {
   card: CreditCard;
+  flagNames: Partial<Record<YnabFlagColor, string>>;
+  metrics?: PrefetchedCardMetrics;
+  settings: AppSettings;
+  summaryViewSubcategoriesExpanded?: SummaryViewSubcategoriesPreference;
   viewMode: DashboardViewMode;
   pat: string;
   prefetchedTransactions: Transaction[];
+  onToggleSummarySubcategories(cardId: string): void;
   onHideCard(cardId: string, hiddenUntil: string): void;
   isSorting: boolean;
   isRefreshing: boolean;
@@ -498,9 +563,14 @@ interface SortableDashboardCardProps {
 
 function SortableDashboardCard({
   card,
+  flagNames,
+  metrics,
+  settings,
+  summaryViewSubcategoriesExpanded,
   viewMode,
   pat,
   prefetchedTransactions,
+  onToggleSummarySubcategories,
   onHideCard,
   isSorting,
   isRefreshing,
@@ -559,6 +629,9 @@ function SortableDashboardCard({
   }
 
   const accentClasses = "border border-border/70 dark:border-border/50 hover:border-primary/40";
+  const isSubcategoryExpanded = isExpansionMap(summaryViewSubcategoriesExpanded)
+    ? summaryViewSubcategoriesExpanded[card.id] ?? false
+    : Boolean(summaryViewSubcategoriesExpanded);
 
   return (
     <div ref={setNodeRef} style={style} className="focus-visible:outline-none">
@@ -679,26 +752,53 @@ function SortableDashboardCard({
         </CardHeader>
         <CardContent className="flex-1 flex flex-col">
           {viewMode === "detailed" ? (
-            <CardSpendingSummary
-              card={card}
-              pat={pat}
-              prefetchedTransactions={prefetchedTransactions}
-              onHideCard={onHideCard}
-              showHideOption
-              isRefreshing={isRefreshing}
-              referenceDate={referenceDate}
-              allowHideCard={allowHideCard}
-            />
+            metrics ? (
+              <CardSpendingSummaryContent
+                card={card}
+                flagNames={flagNames}
+                isRefreshing={isRefreshing}
+                metrics={metrics}
+                onHideCard={onHideCard}
+                showHideOption
+                settings={settings}
+                allowHideCard={allowHideCard}
+              />
+            ) : (
+              <CardSpendingSummary
+                card={card}
+                pat={pat}
+                prefetchedTransactions={prefetchedTransactions}
+                onHideCard={onHideCard}
+                showHideOption
+                isRefreshing={isRefreshing}
+                referenceDate={referenceDate}
+                allowHideCard={allowHideCard}
+              />
+            )
           ) : (
-            <CardSummaryCompact
-              card={card}
-              pat={pat}
-              prefetchedTransactions={prefetchedTransactions}
-              onHideCard={onHideCard}
-              isRefreshing={isRefreshing}
-              referenceDate={referenceDate}
-              allowHideCard={allowHideCard}
-            />
+            metrics ? (
+              <CardSummaryCompactContent
+                card={card}
+                flagNames={flagNames}
+                isRefreshing={isRefreshing}
+                isSubcategoryExpanded={isSubcategoryExpanded}
+                metrics={metrics}
+                onHideCard={onHideCard}
+                onToggleSubcategories={() => onToggleSummarySubcategories(card.id)}
+                settings={settings}
+                allowHideCard={allowHideCard}
+              />
+            ) : (
+              <CardSummaryCompact
+                card={card}
+                pat={pat}
+                prefetchedTransactions={prefetchedTransactions}
+                onHideCard={onHideCard}
+                isRefreshing={isRefreshing}
+                referenceDate={referenceDate}
+                allowHideCard={allowHideCard}
+              />
+            )
           )}
         </CardContent>
       </Card>
