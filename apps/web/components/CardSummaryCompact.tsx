@@ -6,6 +6,7 @@ import type { YnabFlagColor } from "@/lib/ynab-constants";
 import { formatDateValue } from "@/lib/dashboard-period";
 import { SimpleRewardsCalculator } from "@/lib/rewards-engine";
 import { YnabClient } from "@/lib/ynab-client";
+import { filterTransactionsForCardPeriod } from "@/lib/card-metrics";
 import { useSelectedBudget, useSettings } from "@/hooks/useLocalStorage";
 import { hasMinimumSpendRequirement } from "@/lib/minimum-spend-helpers";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
@@ -263,7 +264,13 @@ export function CardSummaryCompact({
 
   const loadTransactions = useCallback(async () => {
     if (prefetchedTransactions) {
-      setTransactions(prefetchedTransactions);
+      setTransactions(
+        filterTransactionsForCardPeriod(
+          card,
+          prefetchedTransactions,
+          calculationPeriod,
+        ),
+      );
       setLoading(false);
       return;
     }

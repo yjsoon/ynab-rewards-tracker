@@ -136,23 +136,30 @@ async function fetchTrackedTransactionsSnapshot(
   pat: string,
   budgetId: string,
   sinceDate: string,
+  options?: {
+    bypassCache?: boolean;
+  },
 ): Promise<TrackedTransactionsSnapshot> {
+  const bypassCache = options?.bypassCache === true;
   const snapshotKey = makeTrackedTransactionsSnapshotKey(
     pat,
     budgetId,
     sinceDate,
   );
   const existingRequest = trackedTransactionsInflightRequests.get(snapshotKey);
-  if (existingRequest) {
+  if (!bypassCache && existingRequest) {
     return existingRequest;
   }
 
   const request = (async () => {
     const client = new YnabClient(pat);
     const [accounts, transactions] = await Promise.all([
-      client.getAccounts<{ id: string; name: string }>(budgetId),
+      client.getAccounts<{ id: string; name: string }>(budgetId, {
+        bypassCache,
+      }),
       client.getTransactions(budgetId, {
         since_date: sinceDate,
+        bypassCache,
       }),
     ]);
 
@@ -279,47 +286,52 @@ export function useTrackedTransactions({
     setLastUpdatedAt(snapshot.fetchedAt);
   }, []);
 
-  const loadTransactions = useCallback(async () => {
-    if (!pat || !selectedBudgetId) {
-      requestIdRef.current += 1;
-      setAllTransactions([]);
-      setAccountsMap(new Map());
+  const loadTransactions = useCallback(
+    async (options?: { bypassCache?: boolean }) => {
+      const bypassCache = options?.bypassCache === true;
+      if (!pat || !selectedBudgetId) {
+        requestIdRef.current += 1;
+        setAllTransactions([]);
+        setAccountsMap(new Map());
+        setError("");
+        setHasCachedData(false);
+        setLastUpdatedAt(null);
+        return;
+      }
+
+      setLoading(true);
       setError("");
-      setHasCachedData(false);
-      setLastUpdatedAt(null);
-      return;
-    }
+      const requestId = ++requestIdRef.current;
 
-    setLoading(true);
-    setError("");
-    const requestId = ++requestIdRef.current;
+      try {
+        const snapshot = await fetchTrackedTransactionsSnapshot(
+          pat,
+          selectedBudgetId,
+          earliestTrackedWindow,
+          { bypassCache },
+        );
 
-    try {
-      const snapshot = await fetchTrackedTransactionsSnapshot(
-        pat,
-        selectedBudgetId,
-        earliestTrackedWindow,
-      );
+        if (requestIdRef.current !== requestId) {
+          return;
+        }
 
-      if (requestIdRef.current !== requestId) {
-        return;
+        applySnapshot(snapshot);
+      } catch (err) {
+        if (requestIdRef.current !== requestId) {
+          return;
+        }
+
+        const message = err instanceof Error ? err.message : String(err);
+        setError(`Failed to load transactions: ${message}`);
+        lastFetchKeyRef.current = "";
+      } finally {
+        if (requestIdRef.current === requestId) {
+          setLoading(false);
+        }
       }
-
-      applySnapshot(snapshot);
-    } catch (err) {
-      if (requestIdRef.current !== requestId) {
-        return;
-      }
-
-      const message = err instanceof Error ? err.message : String(err);
-      setError(`Failed to load transactions: ${message}`);
-      lastFetchKeyRef.current = "";
-    } finally {
-      if (requestIdRef.current === requestId) {
-        setLoading(false);
-      }
-    }
-  }, [applySnapshot, pat, selectedBudgetId, earliestTrackedWindow]);
+    },
+    [applySnapshot, pat, selectedBudgetId, earliestTrackedWindow],
+  );
 
   useEffect(() => {
     if (!pat || !selectedBudgetId) {
@@ -432,7 +444,7 @@ export function useTrackedTransactions({
 
   const refresh = useCallback(() => {
     lastFetchKeyRef.current = "";
-    void loadTransactions();
+    void loadTransactions({ bypassCache: true });
   }, [loadTransactions]);
 
   const refreshing = loading && hasCachedData;

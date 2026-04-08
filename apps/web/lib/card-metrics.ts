@@ -13,6 +13,19 @@ export interface PrefetchedCardMetrics {
   transactions: Transaction[];
 }
 
+export function filterTransactionsForCardPeriod(
+  card: Pick<CreditCard, "ynabAccountId">,
+  transactions: Transaction[],
+  period: Pick<SimplePeriod, "start" | "end">,
+): Transaction[] {
+  return transactions.filter(
+    (transaction) =>
+      transaction.account_id === card.ynabAccountId &&
+      transaction.date >= period.start &&
+      transaction.date <= period.end,
+  );
+}
+
 export function buildCardMetricsById(
   cards: CreditCard[],
   transactions: Transaction[],
@@ -41,9 +54,10 @@ export function buildCardMetricsById(
         end: period.end < asOfDate ? period.end : asOfDate,
       };
       const accountTransactions = transactionsByAccountId.get(card.ynabAccountId) ?? [];
-      const periodTransactions = accountTransactions.filter(
-        (transaction) =>
-          transaction.date >= calculationPeriod.start && transaction.date <= calculationPeriod.end
+      const periodTransactions = filterTransactionsForCardPeriod(
+        card,
+        accountTransactions,
+        calculationPeriod,
       );
       const calculation = SimpleRewardsCalculator.calculateCardRewards(
         card,

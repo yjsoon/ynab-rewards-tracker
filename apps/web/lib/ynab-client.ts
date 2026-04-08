@@ -72,6 +72,10 @@ interface YnabResponse<T> {
   data: T;
 }
 
+interface YnabRequestOptions extends RequestInit {
+  bypassCache?: boolean;
+}
+
 export class YnabClient {
   private pat: string;
 
@@ -79,13 +83,17 @@ export class YnabClient {
     this.pat = pat;
   }
 
-  private async request<T>(path: string, options?: RequestInit): Promise<T> {
+  private async request<T>(
+    path: string,
+    options?: YnabRequestOptions,
+  ): Promise<T> {
     const method = (options?.method || "GET").toUpperCase();
     const hasSignal = !!options?.signal;
+    const bypassCache = options?.bypassCache === true;
     const key = makeKey(path, this.pat, options);
 
     // Serve from short cache for GETs without signals
-    if (method === "GET" && !hasSignal) {
+    if (method === "GET" && !hasSignal && !bypassCache) {
       const cached = getCache.get(key);
       const now = Date.now();
       if (cached && cached.expiry > now) {
@@ -97,12 +105,13 @@ export class YnabClient {
     }
 
     const doFetch = async (attempt = 1): Promise<T> => {
+      const { bypassCache: _bypassCache, ...fetchOptions } = options ?? {};
       const response = await fetch(`/api/ynab/${path}`, {
-        ...options,
+        ...fetchOptions,
         headers: {
           Authorization: `Bearer ${this.pat}`,
           "Content-Type": "application/json",
-          ...options?.headers,
+          ...fetchOptions.headers,
         },
       });
 
@@ -132,32 +141,32 @@ export class YnabClient {
 
     const promise = doFetch();
 
-    if (method === "GET" && !hasSignal) {
+    if (method === "GET" && !hasSignal && !bypassCache) {
       inflightGet.set(key, promise as Promise<unknown>);
     }
 
     try {
       const data = await promise;
-      if (method === "GET" && !hasSignal) {
+      if (method === "GET" && !hasSignal && !bypassCache) {
         getCache.set(key, { expiry: Date.now() + CACHE_TTL_MS, data });
       }
       return data;
     } finally {
-      if (method === "GET" && !hasSignal) {
+      if (method === "GET" && !hasSignal && !bypassCache) {
         inflightGet.delete(key);
       }
     }
   }
 
   // Budgets
-  async getBudgets(init?: RequestInit) {
+  async getBudgets(init?: YnabRequestOptions) {
     const result = await this.request<
       YnabResponse<{ budgets: YnabBudgetSummary[] }>
     >("budgets", init);
     return result.data.budgets;
   }
 
-  async getBudget(budgetId: string, init?: RequestInit) {
+  async getBudget(budgetId: string, init?: YnabRequestOptions) {
     const result = await this.request<YnabResponse<{ budget: unknown }>>(
       `budgets/${budgetId}`,
       init,
@@ -168,11 +177,16 @@ export class YnabClient {
   // Accounts
   async getAccounts<TAccount = YnabAccountSummary>(
     budgetId: string,
-    init?: RequestInit,
+    init?: YnabRequestOptions,
   ) {
-    const cachedAccounts = storage.getBudgetAccountsCache<
-      TAccount & BudgetAccountsCacheAccount
-    >(budgetId, ACCOUNTS_CACHE_TTL_MS, this.pat);
+    const bypassCache = init?.bypassCache === true;
+    const cachedAccounts = bypassCache
+      ? null
+      : storage.getBudgetAccountsCache<TAccount & BudgetAccountsCacheAccount>(
+          budgetId,
+          ACCOUNTS_CACHE_TTL_MS,
+          this.pat,
+        );
 
     if (cachedAccounts) {
       return cachedAccounts;
@@ -191,7 +205,7 @@ export class YnabClient {
     return result.data.accounts;
   }
 
-  async getBudgetSettings(budgetId: string, init?: RequestInit) {
+  async getBudgetSettings(budgetId: string, init?: YnabRequestOptions) {
     const result = await this.request<
       YnabResponse<{ settings: Record<string, unknown> }>
     >(`budgets/${budgetId}/settings`, init);
@@ -280,7 +294,7 @@ export class YnabClient {
   }
 
   // Categories
-  async getCategories(budgetId: string, init?: RequestInit) {
+  async getCategories(budgetId: string, init?: YnabRequestOptions) {
     const result = await this.request<
       YnabResponse<{ category_groups: unknown }>
     >(`budgets/${budgetId}/categories`, init);
@@ -294,6 +308,7 @@ export class YnabClient {
       since_date?: string;
       type?: "uncategorized" | "unapproved";
       signal?: AbortSignal;
+      bypassCache?: boolean;
     },
   ) {
     const params = new URLSearchParams();
@@ -305,6 +320,7 @@ export class YnabClient {
       YnabResponse<{ transactions: Transaction[] }>
     >(`budgets/${budgetId}/transactions${query}`, {
       signal: options?.signal,
+      bypassCache: options?.bypassCache,
     });
     return result.data.transactions;
   }
@@ -312,7 +328,7 @@ export class YnabClient {
   async getTransaction(
     budgetId: string,
     transactionId: string,
-    init?: RequestInit,
+    init?: YnabRequestOptions,
   ) {
     const result = await this.request<
       YnabResponse<{ transaction: Transaction }>
@@ -321,7 +337,7 @@ export class YnabClient {
   }
 
   // Payees
-  async getPayees(budgetId: string, init?: RequestInit) {
+  async getPayees(budgetId: string, init?: YnabRequestOptions) {
     const result = await this.request<YnabResponse<{ payees: YnabPayee[] }>>(
       `budgets/${budgetId}/payees`,
       init,
