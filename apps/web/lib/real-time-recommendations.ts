@@ -5,12 +5,16 @@
 
 import type {
   CreditCard,
-  CardSubcategory,
   ThemeGroup,
   AppSettings,
 } from '@/lib/storage';
 import type { Transaction } from '@/types/transaction';
 import { SimpleRewardsCalculator } from '@/lib/rewards-engine';
+import {
+  createSubcategoryContext,
+  normaliseFlagColor,
+  resolveSubcategory,
+} from '@/lib/rewards-engine/utils/subcategories';
 
 export interface SubcategoryProgress {
   subcategoryId: string;
@@ -92,6 +96,11 @@ export class RealTimeRecommendations {
     transactions: Transaction[]
   ): Map<string, CardSpendingSummary> {
     const summaries = new Map<string, CardSpendingSummary>();
+    const cardsByAccountId = new Map<string, CreditCard>();
+    const subcategoryContexts = new Map<
+      string,
+      ReturnType<typeof createSubcategoryContext>
+    >();
 
     // Initialize summaries for each card
     cards.forEach((card) => {
@@ -100,11 +109,13 @@ export class RealTimeRecommendations {
         totalSpend: 0,
         subcategorySpends: new Map(),
       });
+      cardsByAccountId.set(card.ynabAccountId, card);
+      subcategoryContexts.set(card.id, createSubcategoryContext(card));
     });
 
     // Process transactions for current period
     transactions.forEach((txn) => {
-      const card = cards.find((c) => c.ynabAccountId === txn.account_id);
+      const card = cardsByAccountId.get(txn.account_id);
       if (!card) return;
 
       const txnDate = new Date(txn.date);
@@ -116,9 +127,11 @@ export class RealTimeRecommendations {
       const summary = summaries.get(card.id);
       if (!summary) return;
 
-      let matchedSubcategory: CardSubcategory | null = null;
-      if (card.subcategoriesEnabled && card.subcategories) {
-        matchedSubcategory = this.findMatchingSubcategory(txn, card);
+      const subcategoryContext = subcategoryContexts.get(card.id);
+      const matchedSubcategory = subcategoryContext
+        ? resolveSubcategory(subcategoryContext, normaliseFlagColor(txn.flag_color))
+        : undefined;
+      if (matchedSubcategory) {
         if (matchedSubcategory?.excludeFromRewards) {
           return; // Skip excluded subcategory transactions entirely
         }
@@ -148,37 +161,6 @@ export class RealTimeRecommendations {
     const periodEnd = new Date(period.end + 'T23:59:59.999Z');
 
     return txnDate >= periodStart && txnDate <= periodEnd;
-  }
-
-  /**
-   * Find matching subcategory for a transaction
-   */
-  private findMatchingSubcategory(
-    txn: Transaction,
-    card: CreditCard
-  ): CardSubcategory | null {
-    if (!card.subcategories) return null;
-
-    const txnColor = txn.flag_color;
-    const isUnflaggedTxn = txnColor === null || txnColor === undefined;
-
-    let matched: CardSubcategory | undefined;
-
-    matched = card.subcategories.find((sub) => {
-      if (!sub || sub.active === false) {
-        return false;
-      }
-      if (sub.flagColor === 'unflagged') {
-        return isUnflaggedTxn;
-      }
-      return sub.flagColor === txnColor;
-    });
-
-    if (!matched) {
-      matched = card.subcategories.find((sub) => sub?.active !== false && sub.flagColor === 'unflagged');
-    }
-
-    return matched ?? null;
   }
 
   /**
