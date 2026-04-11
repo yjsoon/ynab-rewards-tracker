@@ -37,7 +37,12 @@ import {
 } from '@ynab-counter/app-core/rewards-engine';
 import { createRewardCalculationFromSimple } from '@ynab-counter/app-core/rewards-engine/utils/reward-calculation';
 import { getEarliestPeriodStart } from '@ynab-counter/app-core/rewards-engine/utils/periods';
-import type { CreditCard, RewardCalculation, SubcategoryBreakdown } from '@ynab-counter/app-core/storage/types';
+import {
+  normalizePeriod,
+  type CreditCard,
+  type RewardCalculation,
+  type SubcategoryBreakdown,
+} from '@ynab-counter/app-core/storage';
 import { normalizeCurrencyCode } from '@ynab-counter/app-core/utils/currency';
 import { findBestDashboardEntry } from '@/lib/dashboardCache';
 
@@ -96,7 +101,13 @@ export function useCardSummaries(): CardSummaryResult {
     const summaries: CardSummary[] = activeCards
       .map((card) => {
         const period = SimpleRewardsCalculator.calculatePeriod(card);
-        const stored = findStoredCalculation(state.calculations, card.id, period.start, period.end);
+        const stored = findStoredCalculation(
+          state.calculations,
+          card.id,
+          period.start,
+          period.end,
+          period.label,
+        );
 
         if (stored) {
           return {
@@ -153,27 +164,22 @@ function findStoredCalculation(
   cardId: string,
   periodStart: string,
   periodEnd: string,
+  periodLabel: string,
 ) {
   return calculations.find((calc) => {
-    if (calc.cardId !== cardId) return false;
-    
-    // Handle both formats: "2025-10" (label) or "2025-10-01 → 2025-10-31" (start → end)
-    if (calc.period.includes(' → ')) {
-      const [calcStart, calcEnd] = calc.period.split(' → ');
-      return calcStart === periodStart && calcEnd === periodEnd;
+    if (calc.cardId !== cardId) {
+      return false;
     }
-    
-    // Handle label format: check length to determine comparison strategy
-    // - Length 10 (YYYY-MM-DD): billing cycle cards use start date as label
-    // - Length 7 (YYYY-MM): calendar cards use month label
-    if (calc.period.length === 10) {
-      // Billing cycle card: compare full start date
-      return calc.period === periodStart;
-    } else {
-      // Calendar card: extract YYYY-MM from periodStart to match label format
-      const periodLabel = periodStart.substring(0, 7); // "2025-10-01" -> "2025-10"
-      return calc.period === periodLabel;
+
+    const normalizedStoredPeriod = normalizePeriod(calc.period);
+    if (
+      normalizedStoredPeriod.start === periodStart &&
+      normalizedStoredPeriod.end === periodEnd
+    ) {
+      return true;
     }
+
+    return !calc.period.includes(' → ') && calc.period === periodLabel;
   });
 }
 
