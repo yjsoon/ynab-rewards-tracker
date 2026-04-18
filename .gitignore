@@ -31,6 +31,7 @@ build/
 *.swp
 .code/
 *.tsbuildinfo
+.claude/launch.json
 
 # SQLite
 *.db
