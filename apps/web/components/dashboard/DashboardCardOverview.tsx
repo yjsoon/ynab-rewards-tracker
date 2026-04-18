@@ -1,8 +1,7 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import Link from "next/link";
-import type { ReactNode } from "react";
+import type { ComponentType, ReactNode } from "react";
 import { useMemo, useCallback, useEffect, useState } from "react";
 import {
   ChevronDown,
@@ -35,15 +34,14 @@ import {
 } from "@/components/ui/card";
 import type { PrefetchedCardMetrics } from "@/lib/card-metrics";
 import { DashboardCardTile } from "@/components/dashboard/DashboardCardTile";
+import type { SortableDashboardCardGridProps } from "@/components/dashboard/SortableDashboardCardGrid";
 
-const loadSortableDashboardCardGrid = () =>
+type SortableGridComponent = ComponentType<SortableDashboardCardGridProps>;
+
+const loadSortableDashboardCardGrid = (): Promise<SortableGridComponent> =>
   import("./SortableDashboardCardGrid").then(
     (module) => module.SortableDashboardCardGrid,
   );
-
-const SortableDashboardCardGrid = dynamic(loadSortableDashboardCardGrid, {
-  ssr: false,
-});
 
 function DashboardCardSkeleton({ viewMode }: { viewMode: DashboardViewMode }) {
   return (
@@ -135,48 +133,58 @@ export function DashboardCardOverview({
 }: DashboardCardOverviewProps) {
   const hiddenCount = hiddenCards.length;
   const hasVisibleCards = visibleFeaturedCards.length > 0;
-  const canReorderCards = visibleFeaturedCards.length > 1;
 
   const isInitialLoading = transactionsLoading && !hasCachedTransactions;
-  const [isReorderMode, setIsReorderMode] = useState(false);
-  const [isPreparingReorderMode, setIsPreparingReorderMode] = useState(false);
+  const [SortableGrid, setSortableGrid] = useState<SortableGridComponent | null>(
+    null,
+  );
 
   const handleShowAll = useCallback(() => {
     onUnhideAll();
   }, [onUnhideAll]);
 
   useEffect(() => {
-    if (!canReorderCards && isReorderMode) {
-      setIsReorderMode(false);
-    }
-  }, [canReorderCards, isReorderMode]);
-
-  const handlePrepareReorderMode = useCallback(() => {
-    if (isReorderMode || isPreparingReorderMode) {
+    if (typeof window === "undefined" || SortableGrid) {
       return;
     }
 
-    void loadSortableDashboardCardGrid();
-  }, [isPreparingReorderMode, isReorderMode]);
+    let cancelled = false;
+    const load = () => {
+      void loadSortableDashboardCardGrid().then((Component) => {
+        if (!cancelled) {
+          setSortableGrid(() => Component);
+        }
+      });
+    };
 
-  const handleToggleReorderMode = useCallback(async () => {
-    if (!canReorderCards) {
-      return;
+    const idle = (
+      window as Window & {
+        requestIdleCallback?: (
+          cb: () => void,
+          opts?: { timeout?: number },
+        ) => number;
+        cancelIdleCallback?: (handle: number) => void;
+      }
+    ).requestIdleCallback;
+
+    if (idle) {
+      const handle = idle(load, { timeout: 2000 });
+      return () => {
+        cancelled = true;
+        (
+          window as Window & {
+            cancelIdleCallback?: (handle: number) => void;
+          }
+        ).cancelIdleCallback?.(handle);
+      };
     }
 
-    if (isReorderMode) {
-      setIsReorderMode(false);
-      return;
-    }
-
-    setIsPreparingReorderMode(true);
-    try {
-      await loadSortableDashboardCardGrid();
-      setIsReorderMode(true);
-    } finally {
-      setIsPreparingReorderMode(false);
-    }
-  }, [canReorderCards, isReorderMode]);
+    const timer = window.setTimeout(load, 200);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [SortableGrid]);
 
   const summaryContent = useMemo(() => {
     if (isInitialLoading && visibleFeaturedCards.length > 0) {
@@ -277,7 +285,7 @@ export function DashboardCardOverview({
           showTypeBadge
           referenceDate={referenceDate}
           allowHideCards={allowHideCards}
-          isReorderMode={isReorderMode}
+          SortableGrid={SortableGrid}
         />
       );
     }
@@ -310,7 +318,7 @@ export function DashboardCardOverview({
             isRefreshing={transactionsRefreshing}
             referenceDate={referenceDate}
             allowHideCards={allowHideCards}
-            isReorderMode={isReorderMode}
+            SortableGrid={SortableGrid}
           />
         )}
         {milesCards.length > 0 && (
@@ -339,7 +347,7 @@ export function DashboardCardOverview({
             isRefreshing={transactionsRefreshing}
             referenceDate={referenceDate}
             allowHideCards={allowHideCards}
-            isReorderMode={isReorderMode}
+            SortableGrid={SortableGrid}
           />
         )}
       </>
@@ -362,7 +370,7 @@ export function DashboardCardOverview({
     allCards,
     hiddenCount,
     handleShowAll,
-    isReorderMode,
+    SortableGrid,
     cashbackCollapsed,
     milesCollapsed,
     onToggleGroup,
@@ -388,35 +396,6 @@ export function DashboardCardOverview({
           <Badge variant="secondary">{hiddenCount} hidden</Badge>
           <Button variant="outline" size="sm" onClick={handleShowAll}>
             Show all
-          </Button>
-        </div>
-      )}
-
-      {canReorderCards && (
-        <div className="flex items-center justify-end gap-2">
-          {isReorderMode && (
-            <span className="hidden text-sm text-muted-foreground sm:inline">
-              Drag cards to save their order.
-            </span>
-          )}
-          <Button
-            type="button"
-            size="sm"
-            variant={isReorderMode ? "default" : "outline"}
-            className="gap-2"
-            disabled={isPreparingReorderMode}
-            onClick={() => {
-              void handleToggleReorderMode();
-            }}
-            onMouseEnter={handlePrepareReorderMode}
-            onFocus={handlePrepareReorderMode}
-          >
-            {isPreparingReorderMode ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <GripVertical className="h-4 w-4" />
-            )}
-            {isReorderMode ? "Done reordering" : "Reorder cards"}
           </Button>
         </div>
       )}
@@ -447,7 +426,7 @@ interface CardGroupProps {
   showTypeBadge?: boolean;
   referenceDate?: Date;
   allowHideCards: boolean;
-  isReorderMode: boolean;
+  SortableGrid: SortableGridComponent | null;
 }
 
 function CardGroup({
@@ -471,12 +450,13 @@ function CardGroup({
   showTypeBadge = false,
   referenceDate,
   allowHideCards,
-  isReorderMode,
+  SortableGrid,
 }: CardGroupProps) {
   const contentId = `${category}-card-group`;
   const ChevronIcon = isCollapsed ? ChevronRight : ChevronDown;
 
   const isAllCategory = category === "all";
+  const canReorder = cards.length > 1;
 
   return (
     <section className={isAllCategory ? "" : "space-y-4"}>
@@ -501,8 +481,8 @@ function CardGroup({
 
       {(isAllCategory || !isCollapsed) &&
         cards.length > 0 &&
-        (isReorderMode ? (
-          <SortableDashboardCardGrid
+        (SortableGrid && canReorder ? (
+          <SortableGrid
             cards={cards}
             cardMetricsById={cardMetricsById}
             contentId={contentId}
@@ -537,6 +517,7 @@ function CardGroup({
             showTypeBadge={showTypeBadge}
             referenceDate={referenceDate}
             allowHideCard={allowHideCards}
+            showGripHandle={canReorder}
           />
         ))}
 
@@ -563,6 +544,7 @@ interface StaticDashboardCardGridProps {
   showTypeBadge?: boolean;
   referenceDate?: Date;
   allowHideCard: boolean;
+  showGripHandle?: boolean;
 }
 
 function StaticDashboardCardGrid({
@@ -581,6 +563,7 @@ function StaticDashboardCardGrid({
   showTypeBadge = false,
   referenceDate,
   allowHideCard,
+  showGripHandle = false,
 }: StaticDashboardCardGridProps) {
   return (
     <div
@@ -609,6 +592,26 @@ function StaticDashboardCardGrid({
           showTypeBadge={showTypeBadge}
           referenceDate={referenceDate}
           allowHideCard={allowHideCard}
+          dragHandle={
+            showGripHandle ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 rounded-none rounded-tl-lg border-l border-t border-border/70 bg-background/80 backdrop-blur-sm px-0 text-muted-foreground cursor-grab hover:cursor-grab active:cursor-grabbing touch-none select-none shadow-sm hover:bg-background/95 hover:text-foreground"
+                aria-label={`Reorder ${card.name}`}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+              >
+                <GripVertical
+                  className="h-4 w-4 pointer-events-none"
+                  aria-hidden="true"
+                />
+              </Button>
+            ) : undefined
+          }
         />
       ))}
     </div>
