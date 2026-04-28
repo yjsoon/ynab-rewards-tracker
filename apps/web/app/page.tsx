@@ -8,7 +8,6 @@ import {
   useSelectedBudget,
   useTrackedAccountIds,
   useHiddenCards,
-  useDashboardViewMode,
   useSettings
 } from "@/hooks/useLocalStorage";
 import { SimpleRewardsCalculator } from "@/lib/rewards-engine";
@@ -28,18 +27,9 @@ import {
   shiftDashboardPeriodMonths,
 } from "@/lib/dashboard-period";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { storage } from "@/lib/storage";
-import { ChevronDown, LayoutGrid, List, RefreshCw } from "lucide-react";
+import { LayoutGrid, RefreshCw } from "lucide-react";
 
 // Constants
 const TRANSACTION_LOOKBACK_DAYS = 30;
@@ -94,11 +84,6 @@ function DashboardContent() {
   const { trackedAccountIds } = useTrackedAccountIds();
 
   const { hiddenCards, hideCard, unhideCard, isCardHidden } = useHiddenCards();
-  const {
-    viewMode: storedViewMode,
-    setViewMode: persistDashboardViewMode,
-    isLoading: isViewModeLoading
-  } = useDashboardViewMode();
   const { settings, updateSettings } = useSettings();
   const [dayBoundaryTick, setDayBoundaryTick] = useState(0);
 
@@ -209,26 +194,7 @@ function DashboardContent() {
     handleDashboardDateChange(null);
   }, [handleDashboardDateChange]);
 
-  const viewMode: DashboardViewMode = isViewModeLoading ? 'summary' : storedViewMode;
-
-  const handleViewModeChange = useCallback(
-    (mode: DashboardViewMode) => {
-      persistDashboardViewMode(mode);
-      if (typeof window === 'undefined') {
-        return;
-      }
-      const params = new URLSearchParams(window.location.search);
-      if (mode === 'detailed') {
-        params.set('view', 'detailed');
-      } else {
-        params.delete('view');
-      }
-      const query = params.toString();
-      const newUrl = query ? `${window.location.pathname}?${query}` : window.location.pathname;
-      window.history.replaceState({}, '', newUrl);
-    },
-    [persistDashboardViewMode]
-  );
+  const viewMode: DashboardViewMode = 'summary';
 
   const handleUnhideAll = useCallback(() => {
     hiddenCards.forEach((entry) => unhideCard(entry.cardId));
@@ -331,15 +297,6 @@ function DashboardContent() {
       visibleFeaturedCards,
     ]
   );
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const params = new URLSearchParams(window.location.search);
-    const mode = params.get('view');
-    if (mode === 'summary' || mode === 'detailed') {
-      persistDashboardViewMode(mode);
-    }
-  }, [persistDashboardViewMode]);
 
   // Calculate some basic stats with memoization
   const setupStatus = useMemo<SetupStatus>(
@@ -515,45 +472,17 @@ function DashboardContent() {
                 onReset={handleResetDate}
                 onDateChange={handleDashboardDateChange}
               />
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="gap-1.5 data-[state=open]:bg-red-50 data-[state=open]:text-red-700 hover:data-[state=open]:bg-red-50 hover:data-[state=open]:text-red-700 dark:data-[state=open]:bg-red-950/40 dark:data-[state=open]:text-red-300"
-                  >
-                    {viewMode === "summary" ? (
-                      <LayoutGrid className="h-4 w-4" />
-                    ) : (
-                      <List className="h-4 w-4" />
-                    )}
-                    <span className="hidden sm:inline">
-                      {viewMode === "summary" ? "Summary" : "Detailed"}
-                    </span>
-                    <ChevronDown className="h-3 w-3" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuRadioGroup
-                    value={viewMode}
-                    onValueChange={(v) => handleViewModeChange(v as DashboardViewMode)}
-                  >
-                    <DropdownMenuRadioItem value="summary">
-                      Summary view
-                    </DropdownMenuRadioItem>
-                    <DropdownMenuRadioItem value="detailed">
-                      Detailed view
-                    </DropdownMenuRadioItem>
-                  </DropdownMenuRadioGroup>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuCheckboxItem
-                    checked={groupByType}
-                    onCheckedChange={handleGroupByTypeToggle}
-                  >
-                    Group by card type
-                  </DropdownMenuCheckboxItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <Button
+                variant={groupByType ? "secondary" : "ghost"}
+                size="sm"
+                className="gap-1.5"
+                onClick={() => handleGroupByTypeToggle(!groupByType)}
+                aria-pressed={groupByType}
+                title="Group cards by type"
+              >
+                <LayoutGrid className="h-4 w-4" />
+                <span className="hidden sm:inline">Group by type</span>
+              </Button>
             </div>
             <div className="ml-auto flex shrink-0 items-center gap-2">
               <Button

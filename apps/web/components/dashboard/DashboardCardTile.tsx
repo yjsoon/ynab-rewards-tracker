@@ -33,13 +33,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  CardSpendingSummary,
-  CardSpendingSummaryContent,
-} from "@/components/CardSpendingSummary";
-import {
   CardSummaryCompact,
   CardSummaryCompactContent,
 } from "@/components/CardSummaryCompact";
+import { hasMinimumSpendRequirement } from "@/lib/minimum-spend-helpers";
 import type { PrefetchedCardMetrics } from "@/lib/card-metrics";
 
 const isExpansionMap = (
@@ -76,7 +73,6 @@ export function DashboardCardTile({
   metrics,
   settings,
   summaryViewSubcategoriesExpanded,
-  viewMode,
   pat,
   prefetchedTransactions,
   onToggleSummarySubcategories,
@@ -84,7 +80,6 @@ export function DashboardCardTile({
   isSorting = false,
   isDragging = false,
   isRefreshing,
-  showTypeBadge = false,
   referenceDate,
   allowHideCard,
   dragHandle,
@@ -132,6 +127,27 @@ export function DashboardCardTile({
     ? (summaryViewSubcategoriesExpanded[card.id] ?? false)
     : Boolean(summaryViewSubcategoriesExpanded);
 
+  // Header reward chip — shows the dollar/flight icon plus this period's earned reward, rounded
+  // to the nearest dollar (cashback) or whole mile (miles). Colour reflects card state.
+  const calc = metrics?.calculation;
+  const minimumMet = calc ? calc.minimumSpendMet : true;
+  const hasMin = calc ? hasMinimumSpendRequirement(calc.minimumSpend) : false;
+  const exceeded = calc?.maximumSpendExceeded ?? false;
+  const earnedNumber = calc?.rewardEarned ?? 0;
+  const earnedDisplay = Math.round(earnedNumber).toLocaleString();
+  const rewardChipState: "exceeded" | "warn" | "muted" = exceeded
+    ? "exceeded"
+    : hasMin && !minimumMet
+      ? "warn"
+      : "muted";
+  const rewardChipClass = {
+    exceeded: "text-red-600 dark:text-red-400",
+    warn: "text-amber-600 dark:text-amber-400",
+    muted: card.type === "cashback"
+      ? "text-emerald-700 dark:text-emerald-400"
+      : "text-blue-700 dark:text-blue-400",
+  }[rewardChipState];
+
   return (
     <Card
       role="link"
@@ -141,6 +157,7 @@ export function DashboardCardTile({
         "group relative overflow-hidden flex flex-col h-full cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-lg",
         "bg-card",
         accentClasses,
+        exceeded ? "ring-2 ring-red-300/70 dark:ring-red-900/60" : undefined,
         isDragging ? "ring-2 ring-primary/60 shadow-lg" : undefined,
       )}
       onClick={() => {
@@ -212,74 +229,57 @@ export function DashboardCardTile({
         <div className="flex min-w-0 items-center gap-2 pr-4">
           <CardTitle
             title={card.name}
-            className={cn(
-              viewMode === "detailed"
-                ? "text-lg"
-                : "text-[0.95rem] sm:text-base",
-              "min-w-0 flex-1 truncate",
-            )}
+            className="min-w-0 flex-1 truncate text-[0.95rem] sm:text-base"
           >
             {card.name}
           </CardTitle>
-          {(showTypeBadge || card.promotionalPeriod) && (
-            <div className="ml-auto flex shrink-0 items-center gap-1.5">
-              {showTypeBadge && (
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    "shrink-0 h-5 w-5 p-0 flex items-center justify-center",
-                    card.type === "cashback"
-                      ? "border-green-200 text-green-700 dark:border-green-800 dark:text-green-400"
-                      : "border-blue-200 text-blue-700 dark:border-blue-800 dark:text-blue-400",
-                  )}
-                >
-                  {card.type === "cashback" ? (
-                    <DollarSign className="h-3 w-3" />
-                  ) : (
-                    <Plane className="h-3 w-3" />
-                  )}
-                </Badge>
+          <div className="ml-auto flex shrink-0 items-center gap-1.5">
+            {card.promotionalPeriod && (
+              <Badge
+                variant="secondary"
+                className="shrink-0 h-5 px-1.5 gap-1 bg-purple-100 text-purple-700 hover:bg-purple-100 dark:bg-purple-950/50 dark:text-purple-300"
+                aria-label={`Promotional period${card.promotionalPeriod.startDate ? ` from ${card.promotionalPeriod.startDate}` : ""} until ${card.promotionalPeriod.endDate}`}
+              >
+                <Sparkles className="h-3 w-3" aria-hidden="true" />
+                <span className="text-[0.65rem] font-medium">Promo</span>
+              </Badge>
+            )}
+            {exceeded && (
+              <Badge
+                variant="outline"
+                className="shrink-0 h-5 px-1.5 gap-1 border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"
+              >
+                <span className="text-[0.65rem] font-medium">At cap</span>
+              </Badge>
+            )}
+            <span
+              className={cn(
+                "inline-flex items-center gap-0.5 text-xs font-medium",
+                rewardChipClass,
               )}
-              {card.promotionalPeriod && (
-                <Badge
-                  variant="secondary"
-                  className="shrink-0 h-5 px-1.5 gap-1 bg-purple-100 text-purple-700 hover:bg-purple-100 dark:bg-purple-950/50 dark:text-purple-300"
-                  aria-label={`Promotional period${card.promotionalPeriod.startDate ? ` from ${card.promotionalPeriod.startDate}` : ""} until ${card.promotionalPeriod.endDate}`}
-                >
-                  <Sparkles className="h-3 w-3" aria-hidden="true" />
-                  <span className="text-[0.65rem] font-medium">Promo</span>
-                </Badge>
+              title={
+                card.type === "cashback"
+                  ? `Earned this period: $${earnedNumber.toFixed(2)}`
+                  : `Earned this period: ${Math.round(earnedNumber).toLocaleString()} miles`
+              }
+              aria-label={
+                card.type === "cashback"
+                  ? `Earned $${earnedDisplay} cashback`
+                  : `Earned ${earnedDisplay} miles`
+              }
+            >
+              {card.type === "cashback" ? (
+                <DollarSign className="h-3.5 w-3.5" aria-hidden />
+              ) : (
+                <Plane className="h-3.5 w-3.5" aria-hidden />
               )}
-            </div>
-          )}
+              <span>{earnedDisplay}</span>
+            </span>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col">
-        {viewMode === "detailed" ? (
-          metrics ? (
-            <CardSpendingSummaryContent
-              card={card}
-              flagNames={flagNames}
-              isRefreshing={isRefreshing}
-              metrics={metrics}
-              onHideCard={onHideCard}
-              showHideOption
-              settings={settings}
-              allowHideCard={allowHideCard}
-            />
-          ) : (
-            <CardSpendingSummary
-              card={card}
-              pat={pat}
-              prefetchedTransactions={prefetchedTransactions}
-              onHideCard={onHideCard}
-              showHideOption
-              isRefreshing={isRefreshing}
-              referenceDate={referenceDate}
-              allowHideCard={allowHideCard}
-            />
-          )
-        ) : metrics ? (
+        {metrics ? (
           <CardSummaryCompactContent
             card={card}
             flagNames={flagNames}

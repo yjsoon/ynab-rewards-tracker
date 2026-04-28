@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Sparkles } from "lucide-react";
 import type { YnabFlagColor } from "@/lib/ynab-constants";
 import { formatDateValue } from "@/lib/dashboard-period";
 import { SimpleRewardsCalculator } from "@/lib/rewards-engine";
@@ -54,6 +53,7 @@ export function CardSummaryCompactContent({
   const {
     totalSpend,
     countedSpend,
+    eligibleSpend,
     minimumSpend,
     minimumSpendMet,
     maximumSpend,
@@ -70,7 +70,6 @@ export function CardSummaryCompactContent({
         ))
   );
   const displayedSpend = hasBlockRounding ? countedSpend : totalSpend;
-  const showActualSpend = hasBlockRounding && totalSpend - displayedSpend >= 0.01;
   const hasMinimum = hasMinimumSpendRequirement(minimumSpend);
   const minimumTarget = typeof minimumSpend === "number" && minimumSpend > 0 ? minimumSpend : 0;
   const clampedProgress = hasMinimum && minimumTarget > 0
@@ -86,82 +85,83 @@ export function CardSummaryCompactContent({
     ? subcategoryBreakdowns.map((entry) => ({ ...entry, totalSpend: entry.countedSpend }))
     : subcategoryBreakdowns;
 
-  const statusClass = hasMinimum
-    ? minimumSpendMet
-      ? "text-emerald-600 dark:text-emerald-300"
-      : "text-amber-600 dark:text-amber-300"
-    : "text-muted-foreground";
+  const minStatusClass = minimumSpendMet
+    ? "text-emerald-600 dark:text-emerald-300"
+    : "text-amber-600 dark:text-amber-300";
 
-  const statusLabel = hasMinimum
-    ? minimumSpendMet
-      ? "Met"
-      : `${progressPercent}%`
-    : undefined;
+  const daysSeverityClass = daysRemaining <= 1
+    ? "text-rose-500 dark:text-rose-300"
+    : daysRemaining <= 3
+      ? "text-orange-500 dark:text-orange-300"
+      : daysRemaining <= 7
+        ? "text-amber-600 dark:text-amber-300"
+        : "text-muted-foreground";
+
+  const blockSize = card.earningBlockSize;
+  const showBlocks = Boolean(
+    blockSize && blockSize > 0 && eligibleSpend !== undefined && eligibleSpend > 0,
+  );
 
   return (
     <div className="relative flex h-full flex-col gap-2.5">
       <RefreshBadge isRefreshing={isRefreshing} />
       <div className="flex items-center justify-between">
-        <span className="text-xs uppercase tracking-wide text-muted-foreground">
-          {showActualSpend ? "Reward spend" : "Spent"}
+        <span className="text-xs uppercase tracking-wide text-muted-foreground">Spent</span>
+        <span className="text-lg font-semibold tracking-tight">
+          <CurrencyAmount value={displayedSpend} currency={currency} />
         </span>
-        <span className="text-right">
-          <span className="text-base font-semibold">
-            <CurrencyAmount value={displayedSpend} currency={currency} />
-          </span>
-          {showActualSpend && (
-            <span className="block text-[11px] text-muted-foreground">
-              Actual: <CurrencyAmount value={totalSpend} currency={currency} />
+      </div>
+
+      <SpendingProgressBar
+        totalSpend={displayedSpend}
+        minimumSpend={minimumSpend}
+        maximumSpend={maximumSpend}
+        minimumProgressSpend={totalSpend}
+        maximumProgressSpend={displayedSpend}
+        currency={currency}
+        showLabels={false}
+        showWarnings={false}
+        className="h-2"
+      />
+
+      <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+        <span className="min-w-0 truncate">
+          {hasMinimum && (
+            <span className={cn("font-medium", minStatusClass)}>
+              {minimumSpendMet ? (
+                <>Met <CurrencyAmount value={minimumTarget} currency={currency} decimals={0} /> min</>
+              ) : (
+                <>{progressPercent}% of <CurrencyAmount value={minimumTarget} currency={currency} decimals={0} /> min</>
+              )}
             </span>
           )}
-        </span>
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <SpendingProgressBar
-          totalSpend={displayedSpend}
-          minimumSpend={minimumSpend}
-          maximumSpend={maximumSpend}
-          minimumProgressSpend={totalSpend}
-          maximumProgressSpend={displayedSpend}
-          currency={currency}
-          showLabels={false}
-          showWarnings={false}
-          className="h-2"
-        />
-
-        {hasMinimum ? (
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>
-              Minimum <CurrencyAmount value={minimumTarget} currency={currency} />
-            </span>
-            <span className={cn("font-medium", statusClass)}>
-              {statusLabel ?? (minimumSpendMet ? "Met" : `${progressPercent}%`)}
-            </span>
-          </div>
-        ) : (
-          <div className="text-xs text-muted-foreground italic">No minimum requirement</div>
-        )}
-
-        {hasMaximum && (
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>
-              Cap <CurrencyAmount value={maximumTarget} currency={currency} />
-            </span>
-            {maximumSpendExceeded ? (
-              <span className="text-red-600 dark:text-red-400">
-                +<CurrencyAmount value={exceededAmount} currency={currency} />
-              </span>
-            ) : remainingToMaximum > 0 ? (
-              <span>
-                <CurrencyAmount value={remainingToMaximum} currency={currency} /> left
+          {hasMinimum && hasMaximum && <span className="mx-1.5 text-muted-foreground/60">·</span>}
+          {hasMaximum && (
+            maximumSpendExceeded ? (
+              <span className="font-medium text-red-600 dark:text-red-400">
+                +<CurrencyAmount value={exceededAmount} currency={currency} decimals={0} /> over{" "}
+                <CurrencyAmount value={maximumTarget} currency={currency} decimals={0} /> cap
               </span>
             ) : (
-              <span>At cap</span>
-            )}
-          </div>
-        )}
+              <span>
+                <CurrencyAmount value={remainingToMaximum} currency={currency} decimals={0} /> left of{" "}
+                <CurrencyAmount value={maximumTarget} currency={currency} decimals={0} /> cap
+              </span>
+            )
+          )}
+          {!hasMinimum && !hasMaximum && (
+            <span className="italic">No spend limits</span>
+          )}
+        </span>
+        <span className={cn("shrink-0 font-medium", daysSeverityClass)}>{daysRemaining}d</span>
       </div>
+
+      {showBlocks && blockSize && eligibleSpend !== undefined && (
+        <div className="text-[11px] text-muted-foreground">
+          {Math.floor(eligibleSpend / blockSize)} ×{" "}
+          <CurrencyAmount value={blockSize} currency={currency} decimals={0} /> blocks
+        </div>
+      )}
 
       {card.subcategoriesEnabled && subcategoryBreakdowns.length > 0 && (
         <SubcategoryBreakdownCompact
@@ -175,36 +175,12 @@ export function CardSummaryCompactContent({
         />
       )}
 
-      {card.promotionalPeriod && (
-        <div className="rounded-lg border border-purple-200 bg-purple-50/50 px-3 py-2 dark:border-purple-800/50 dark:bg-purple-950/20">
-          <div className="flex items-center gap-2 text-xs font-medium text-purple-900 dark:text-purple-100">
-            <Sparkles className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
-            <span>
-              {card.promotionalPeriod.startDate
-                ? `${card.promotionalPeriod.startDate} to ${card.promotionalPeriod.endDate}`
-                : `Until ${card.promotionalPeriod.endDate}`}
-            </span>
-          </div>
-          {card.promotionalPeriod.description && (
-            <div className="mt-1 text-xs text-purple-600/80 dark:text-purple-400/80">
-              {card.promotionalPeriod.description}
-            </div>
-          )}
-        </div>
-      )}
-
-      <div className="mt-auto flex flex-col gap-1.5">
-        <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span>
-            {daysRemaining} {daysRemaining === 1 ? "day" : "days"} left in cycle
-          </span>
-        </div>
-
-        {allowHideCard && maximumSpendExceeded && onHideCard && (
+      {allowHideCard && maximumSpendExceeded && onHideCard && (
+        <div className="mt-auto pt-1">
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
-            className="h-7 px-2 text-xs -mx-2 text-muted-foreground hover:text-foreground"
+            className="w-full h-7 text-xs"
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
@@ -213,8 +189,8 @@ export function CardSummaryCompactContent({
           >
             Hide until next cycle
           </Button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
