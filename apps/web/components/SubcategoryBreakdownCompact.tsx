@@ -25,13 +25,12 @@ interface SubcategoryBreakdownCompactProps {
   flagNames: Record<string, string>;
   isExpanded?: boolean;
   onToggleExpanded?: () => void;
-  /** When true, show compact one-liner "Cap $X • Avail $Z". When false, show full detail. */
+  /** Controls decimal precision on the inline spent amount: true → 0dp, false → 2dp. */
   compactSubtitles?: boolean;
 }
 
 export function SubcategoryBreakdownCompact({
   breakdowns,
-  cardType,
   currency,
   isExpanded: controlledIsExpanded,
   onToggleExpanded,
@@ -152,15 +151,13 @@ export function SubcategoryBreakdownCompact({
 
       {/* Expanded View - Show Details */}
       {isExpanded && (
-        /* Expanded View - All Details */
-        <div className="space-y-2">
+        <div className="space-y-1">
           {sortedBreakdowns.map((entry) => {
             const borderColor = getFlagBorderColor(entry.flagColor, 0.4);
             const flagColor = getFlagHex(entry.flagColor);
 
-            // Calculate progress percentage for background fill.
-            // With a cap, show how full the cap is. Without a cap, fall back to this
-            // subcategory's share of total spend so the row still gives a visual weight.
+            // Background fill width: with a cap, show cap progress. Without one, fall back to
+            // this row's share of total subcategory spend so the bar still conveys weight.
             const hasCap = !!(entry.maximumSpend && entry.maximumSpend > 0);
             const progress = hasCap
               ? Math.min(100, (entry.totalSpend / (entry.maximumSpend as number)) * 100)
@@ -168,87 +165,52 @@ export function SubcategoryBreakdownCompact({
                 ? (entry.totalSpend / totalSpend) * 100
                 : 0;
 
+            // Cap-pressure colour for the inline percentage text.
+            let pctClass = 'text-muted-foreground';
+            if (hasCap) {
+              if (entry.maximumSpendExceeded || progress >= 90) {
+                pctClass = 'text-red-600 dark:text-red-400 font-medium';
+              } else if (progress >= 75) {
+                pctClass = 'text-amber-600 dark:text-amber-400 font-medium';
+              }
+            }
+
+            const isZero = entry.totalSpend <= 0;
+
             return (
               <div
                 key={entry.subcategoryId || `${entry.flagColor}-${entry.name}`}
-                className="relative overflow-hidden rounded-lg border p-2"
+                className={`relative overflow-hidden rounded-md border ${isZero ? 'opacity-50' : ''}`}
                 style={{ borderColor }}
               >
-                {/* Progress bar background fill */}
                 <div
                   className="absolute inset-y-0 left-0 transition-all duration-300"
                   style={{
                     width: `${progress}%`,
                     backgroundColor: flagColor,
-                    opacity: 0.15,
+                    opacity: 0.18,
                   }}
                 />
-                {/* Colored left border accent */}
-                <div
-                  className="absolute inset-y-0 left-0 w-1 rounded-l-lg"
-                  style={{ backgroundColor: flagColor }}
-                />
-                {/* Content */}
-                <div className="relative flex flex-1 items-center gap-3 pl-2">
+                <div className="relative flex min-h-[26px] items-center gap-2 px-2.5 py-1">
                   <div
-                    className="h-3 w-3 rounded-full flex-shrink-0"
+                    className="h-2.5 w-2.5 rounded-full flex-shrink-0"
                     style={{ backgroundColor: flagColor }}
                   />
-                  <div className="flex-1">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-sm font-medium">{entry.name}</span>
-                      <span className="text-sm text-muted-foreground">•</span>
-                      <span className="text-sm font-semibold">
-                        <CurrencyAmount value={entry.totalSpend} currency={currency} decimals={compactSubtitles ? 0 : 2} />
-                      </span>
-                    </div>
-                    {compactSubtitles ? (
-                      /* Summary mode: single line "Cap $X • Avail $Z" - no decimals */
-                      entry.maximumSpend && entry.maximumSpend > 0 ? (
-                        <p className="text-xs text-muted-foreground">
-                          Cap <CurrencyAmount value={entry.maximumSpend} currency={currency} decimals={0} />
-                          {' • '}
-                          Avail <CurrencyAmount value={Math.max(0, entry.maximumSpend - entry.totalSpend)} currency={currency} decimals={0} />
-                        </p>
-                      ) : null
-                    ) : (
-                      /* Detailed mode: two lines */
-                      <div className="text-xs text-muted-foreground">
-                        {entry.maximumSpend && entry.maximumSpend > 0 ? (
-                          <p>
-                            Cap <CurrencyAmount value={entry.maximumSpend} currency={currency} />
-                            {' '}
-                            <span className={entry.maximumSpendExceeded ? 'text-red-600 font-medium' : ''}>
-                              ({Math.round(progress)}%)
-                            </span>
-                          </p>
-                        ) : null}
-                        {entry.maximumSpend && entry.maximumSpend > 0 ? (
-                          <p>
-                            Avail <CurrencyAmount value={Math.max(0, entry.maximumSpend - entry.totalSpend)} currency={currency} />
-                            {entry.rewardEarned > 0 && (
-                              <>
-                                {' • '}
-                                {cardType === 'cashback' ? (
-                                  <><CurrencyAmount value={entry.rewardEarned} currency={currency} /> rebate</>
-                                ) : (
-                                  <>{Math.round(entry.rewardEarned).toLocaleString()} miles</>
-                                )}
-                              </>
-                            )}
-                          </p>
-                        ) : entry.rewardEarned > 0 ? (
-                          <p>
-                            {cardType === 'cashback' ? (
-                              <><CurrencyAmount value={entry.rewardEarned} currency={currency} /> rebate</>
-                            ) : (
-                              <>{Math.round(entry.rewardEarned).toLocaleString()} miles</>
-                            )}
-                          </p>
-                        ) : null}
-                      </div>
+                  <span className="truncate text-sm font-medium">{entry.name}</span>
+                  <span className="ml-auto whitespace-nowrap text-sm">
+                    <span className="font-semibold">
+                      <CurrencyAmount value={entry.totalSpend} currency={currency} decimals={compactSubtitles ? 0 : 2} />
+                    </span>
+                    {hasCap && (
+                      <>
+                        <span className="text-muted-foreground/70">
+                          {' / '}
+                          <CurrencyAmount value={entry.maximumSpend as number} currency={currency} decimals={0} />
+                        </span>
+                        <span className={`ml-1.5 ${pctClass}`}>{Math.round(progress)}%</span>
+                      </>
                     )}
-                  </div>
+                  </span>
                 </div>
               </div>
             );
