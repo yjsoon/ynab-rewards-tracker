@@ -158,10 +158,15 @@ export function SubcategoryBreakdownCompact({
             const borderColor = getFlagBorderColor(entry.flagColor, 0.4);
             const flagColor = getFlagHex(entry.flagColor);
 
-            // Calculate progress percentage for background fill
-            const progress = entry.maximumSpend && entry.maximumSpend > 0
-              ? Math.min(100, (entry.totalSpend / entry.maximumSpend) * 100)
-              : 0;
+            // Calculate progress percentage for background fill.
+            // With a cap, show how full the cap is. Without a cap, fall back to this
+            // subcategory's share of total spend so the row still gives a visual weight.
+            const hasCap = !!(entry.maximumSpend && entry.maximumSpend > 0);
+            const progress = hasCap
+              ? Math.min(100, (entry.totalSpend / (entry.maximumSpend as number)) * 100)
+              : totalSpend > 0
+                ? (entry.totalSpend / totalSpend) * 100
+                : 0;
 
             return (
               <div
