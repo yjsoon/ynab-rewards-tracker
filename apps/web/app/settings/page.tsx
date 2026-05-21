@@ -28,6 +28,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
+import { Separator } from '@/components/ui/separator';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
@@ -1025,140 +1026,375 @@ export default function SettingsPage() {
         </Alert>
       )}
 
-      {/* YNAB Connection */}
+      {/* YNAB Connection and Cloud Sync */}
       <Card id="settings-budget">
         <CardHeader>
-          <CardTitle>YNAB Connection</CardTitle>
+          <CardTitle>YNAB Connection & Backup</CardTitle>
           <CardDescription>
-            Connect your YNAB account to sync transactions and budgets
+            Connect YNAB first. Cloud Sync is optional if you want a backup or use Rewards Tracker on another device.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          {!pat ? (
-            <form onSubmit={handleSaveToken} className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Get your Personal Access Token from your{' '}
-                <a 
-                  href="https://app.ynab.com/settings/developer" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline"
-                >
-                  YNAB Developer Settings
-                </a>
-              </p>
-              <div className="flex gap-2">
-                <input
-                  type="password"
-                  value={tokenInput}
-                  onChange={(e) => setTokenInput(e.target.value)}
-                  placeholder="Paste your YNAB Personal Access Token"
-                  className="flex-1 px-3 py-2 border rounded-md text-base md:text-sm"
-                />
-                <Button type="submit">Save Token</Button>
+        <CardContent className="space-y-6">
+          <section className="space-y-4" aria-labelledby="ynab-connection-heading">
+            <div className="flex items-start gap-3">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
+                1
               </div>
-            </form>
-          ) : (
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 text-green-600">
-                <CheckCircle2 className="h-5 w-5" aria-hidden="true" />
-                <span className="font-medium">Token configured</span>
-              </div>
-              
-              {/* Budget Selection */}
-              {selectedBudget.id && !showBudgetSelector ? (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium">Selected Budget</p>
-                      <p className="text-lg">{selectedBudget.name}</p>
-                    </div>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => {
-                        fetchBudgets();
-                        setShowBudgetSelector(true);
-                      }}
-                    >
-                      Change Budget
-                    </Button>
-                  </div>
-                </div>
-              ) : loadingBudgets ? (
-                <p className="text-sm">Loading budgets...</p>
-              ) : (budgets.length > 0 || showBudgetSelector) ? (
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Select a budget:</label>
-                  <div className="flex gap-2">
-                    <Select
-                      value={selectedBudget.id || ''}
-                      onValueChange={(value) => {
-                        const budget = budgets.find(b => b.id === value);
-                        if (budget) handleBudgetSelect(budget.id, budget.name);
-                      }}
-                    >
-                      <SelectTrigger className="flex-1">
-                        <SelectValue placeholder="Choose a budget..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {budgets.map(budget => (
-                          <SelectItem key={budget.id} value={budget.id}>
-                            {budget.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {selectedBudget.id && (
-                      <Button 
-                        variant="ghost" 
-                        size="sm"
-                        onClick={() => setShowBudgetSelector(false)}
-                      >
-                        Cancel
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <Button 
-                  variant="outline"
-                  onClick={fetchBudgets}
-                >
-                  Load Budgets
-                </Button>
-              )}
-              
-              <div className="flex gap-2">
-                <Button 
-                  variant="outline"
-                  onClick={testConnection} 
-                  disabled={testingConnection}
-                >
-                  {testingConnection ? (
-                    <>
-                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-                      Testing...
-                    </>
-                  ) : (
-                    'Test Connection'
-                  )}
-                </Button>
-                <Button
-                  variant="destructive"
-                  onClick={() => setShowClearTokenDialog(true)}
-                >
-                  Clear Token
-                </Button>
+              <div>
+                <h2 id="ynab-connection-heading" className="text-base font-semibold">Connect YNAB</h2>
+                <p className="text-sm text-muted-foreground">
+                  Add your Personal Access Token, then choose the budget and accounts that feed rewards tracking.
+                </p>
               </div>
             </div>
-          )}
+
+            {!pat ? (
+              <form onSubmit={handleSaveToken} className="space-y-4 sm:pl-10">
+                <p className="text-sm text-muted-foreground">
+                  Get your Personal Access Token from your{' '}
+                  <a
+                    href="https://app.ynab.com/settings/developer"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline"
+                  >
+                    YNAB Developer Settings
+                  </a>
+                </p>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <input
+                    type="password"
+                    value={tokenInput}
+                    onChange={(e) => setTokenInput(e.target.value)}
+                    placeholder="Paste your YNAB Personal Access Token"
+                    className="flex-1 px-3 py-2 border rounded-md text-base md:text-sm"
+                  />
+                  <Button type="submit">Save Token</Button>
+                </div>
+              </form>
+            ) : (
+              <div className="space-y-4 sm:pl-10">
+                <div className="flex items-center gap-2 text-green-600">
+                  <CheckCircle2 className="h-5 w-5" aria-hidden="true" />
+                  <span className="font-medium">Token configured</span>
+                </div>
+
+                {/* Budget Selection */}
+                {selectedBudget.id && !showBudgetSelector ? (
+                  <div className="space-y-2">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-sm font-medium">Selected budget</p>
+                        <p className="text-lg">{selectedBudget.name}</p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          fetchBudgets();
+                          setShowBudgetSelector(true);
+                        }}
+                      >
+                        Change Budget
+                      </Button>
+                    </div>
+                  </div>
+                ) : loadingBudgets ? (
+                  <p className="text-sm">Loading budgets...</p>
+                ) : (budgets.length > 0 || showBudgetSelector) ? (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Select a budget:</label>
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <Select
+                        value={selectedBudget.id || ''}
+                        onValueChange={(value) => {
+                          const budget = budgets.find(b => b.id === value);
+                          if (budget) handleBudgetSelect(budget.id, budget.name);
+                        }}
+                      >
+                        <SelectTrigger className="flex-1">
+                          <SelectValue placeholder="Choose a budget..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {budgets.map(budget => (
+                            <SelectItem key={budget.id} value={budget.id}>
+                              {budget.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {selectedBudget.id && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setShowBudgetSelector(false)}
+                        >
+                          Cancel
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <Button
+                    variant="outline"
+                    onClick={fetchBudgets}
+                  >
+                    Load Budgets
+                  </Button>
+                )}
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={testConnection}
+                    disabled={testingConnection}
+                  >
+                    {testingConnection ? (
+                      <>
+                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                        Testing...
+                      </>
+                    ) : (
+                      'Test Connection'
+                    )}
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={() => setShowClearTokenDialog(true)}
+                  >
+                    Clear Token
+                  </Button>
+                </div>
+              </div>
+            )}
+          </section>
           {connectionMessage && (
             <Alert className="mt-4">
               <AlertCircle className="h-4 w-4" aria-hidden="true" />
               <AlertDescription>{connectionMessage}</AlertDescription>
             </Alert>
           )}
+
+          <Separator />
+
+          <section className="space-y-4" aria-labelledby="cloud-sync-heading">
+            <div className="flex items-start gap-3">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
+                2
+              </div>
+              <div>
+                <h2 id="cloud-sync-heading" className="text-base font-semibold">Optional: Cloud Sync</h2>
+                <p className="text-sm text-muted-foreground">
+                  Skip this if you only use this browser. Enable it to encrypt your settings with a 12-word sync code for backup or another device. YNAB PATs and formatter keys are never synced.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4 sm:pl-10">
+              {isCodeRemembered && (
+                <div className="flex flex-col gap-3 rounded-lg border bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+                      <Check className="h-5 w-5 text-primary" aria-hidden="true" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">
+                        {autoSyncEnabled ? 'Auto sync enabled' : 'Sync code remembered'}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {autoSyncEnabled
+                          ? cloudSyncLastSynced
+                            ? `Last sync: ${cloudSyncLastSynced}`
+                            : 'Cloud and local settings will sync automatically'
+                          : 'Auto sync is off. Use Save/Restore buttons when needed.'}
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleForgetCode}
+                    disabled={isCloudSyncBusy}
+                  >
+                    <CloudOff className="mr-2 h-3 w-3" aria-hidden="true" />
+                    Forget sync code
+                  </Button>
+                </div>
+              )}
+
+              {generatedCloudPhrase && (
+                <div className="rounded-md border bg-muted/30 p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <KeyRound className="h-4 w-4 text-primary" aria-hidden="true" />
+                      <span className="text-sm font-medium">New sync code</span>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleCopyGeneratedPhrase}
+                    >
+                      <Copy className="mr-2 h-4 w-4" aria-hidden="true" />
+                      Copy
+                    </Button>
+                  </div>
+                  <p className="mt-3 whitespace-pre-wrap break-words font-mono text-sm">
+                    {generatedCloudPhrase}
+                  </p>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm font-medium" htmlFor="cloud-sync-phrase">
+                      Sync code
+                    </label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          className="inline-flex items-center justify-center"
+                          aria-label="Sync code information"
+                        >
+                          <Info className="h-4 w-4 text-muted-foreground hover:text-foreground transition-colors" />
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-80" align="start">
+                        <p className="text-sm text-muted-foreground">
+                          Keep this code private. Anyone with it can download and decrypt your settings. Your YNAB token is never synced.
+                        </p>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                  {cloudSyncPhrase.trim() && !generatedCloudPhrase && (
+                    <div className="flex items-center gap-2">
+                      <span id="remember-sync-code-label" className="text-xs text-muted-foreground">
+                        Remember on this device
+                      </span>
+                      <Switch
+                        id="remember-sync-code"
+                        checked={Boolean(settings.rememberCloudSyncCode)}
+                        onCheckedChange={handleRememberCodeToggle}
+                        aria-labelledby="remember-sync-code-label"
+                      />
+                    </div>
+                  )}
+                </div>
+                <textarea
+                  id="cloud-sync-phrase"
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-base md:text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  rows={2}
+                  value={cloudSyncPhrase}
+                  onChange={(event) => setCloudSyncPhrase(event.target.value)}
+                  placeholder="twelve lowercase words separated by spaces"
+                />
+              </div>
+
+              <div className="rounded-md border bg-muted/20 p-3">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-medium">Auto sync</p>
+                    <p className="text-xs text-muted-foreground">
+                      On load and when this tab becomes active, compare cloud vs local and keep the most recent version.
+                    </p>
+                  </div>
+                  <Switch
+                    id="auto-sync-enabled"
+                    checked={autoSyncEnabled}
+                    onCheckedChange={handleAutoSyncToggle}
+                    disabled={!canEnableAutoSync}
+                    aria-label="Enable automatic cloud sync"
+                    title={
+                      !canEnableAutoSync
+                        ? 'Auto sync requires a remembered sync code on this device.'
+                        : 'Enable automatic cloud sync'
+                    }
+                  />
+                </div>
+                {!canEnableAutoSync && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Remember your sync code on this device to enable auto sync.
+                  </p>
+                )}
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleGenerateCloudSync}
+                  disabled={isCloudSyncBusy}
+                >
+                  <KeyRound className="mr-2 h-4 w-4" aria-hidden="true" />
+                  {isGeneratingCloudSync ? 'Generating...' : 'Generate new code'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleCloudUpload}
+                  disabled={isCloudSyncBusy || !cloudSyncPhrase.trim()}
+                >
+                  <CloudUpload className="mr-2 h-4 w-4" aria-hidden="true" />
+                  {isUploadingCloudSync ? 'Saving...' : 'Save local to cloud'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleCloudDownload}
+                  disabled={isCloudSyncBusy || !cloudSyncPhrase.trim()}
+                >
+                  <CloudDownload className="mr-2 h-4 w-4" aria-hidden="true" />
+                  {isDownloadingCloudSync ? 'Restoring...' : 'Restore cloud to local'}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Save overwrites cloud with your local settings. Restore replaces local with the cloud backup.
+              </p>
+
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleCloudDelete}
+                  disabled={isCloudSyncBusy}
+                  className="w-fit text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                >
+                  <CloudOff className="mr-2 h-3 w-3" aria-hidden="true" />
+                  {isDeletingCloudSync ? 'Deleting...' : 'Delete cloud backup'}
+                </Button>
+                {cloudSyncLastSynced && (
+                  <p className="text-xs text-muted-foreground">
+                    Last synced: {cloudSyncLastSynced}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {cloudSyncMessage && (
+              <Alert>
+                <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                <AlertDescription>{cloudSyncMessage}</AlertDescription>
+              </Alert>
+            )}
+
+            {cloudSyncError && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" aria-hidden="true" />
+                <AlertDescription>{cloudSyncError}</AlertDescription>
+              </Alert>
+            )}
+
+            {autoBackupError && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" aria-hidden="true" />
+                <AlertDescription>{autoBackupError}</AlertDescription>
+              </Alert>
+            )}
+          </section>
         </CardContent>
       </Card>
 
@@ -1263,230 +1499,6 @@ export default function SettingsPage() {
               )}
             </div>
           </form>
-        </CardContent>
-      </Card>
-
-      {/* Auto-sync upload error notification */}
-      {autoBackupError && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" aria-hidden="true" />
-          <AlertDescription>{autoBackupError}</AlertDescription>
-        </Alert>
-      )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Cloud Sync (optional)</CardTitle>
-          <CardDescription className="space-y-1">
-            <span>Encrypt your settings with a 12-word sync code and store them in Cloudflare KV. No sign-in required.</span>
-            <span className="block">API keys (YNAB PATs, formatter keys, etc.) are never synced.</span>
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {/* Manual Mode - Always show full controls */}
-            <>
-              {isCodeRemembered && (
-                <div className="flex items-center justify-between rounded-lg border bg-muted/30 p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-                      <Check className="h-5 w-5 text-primary" aria-hidden="true" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">
-                        {autoSyncEnabled ? 'Auto sync enabled' : 'Sync code remembered'}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {autoSyncEnabled
-                          ? cloudSyncLastSynced
-                            ? `Last sync: ${cloudSyncLastSynced}`
-                            : 'Cloud and local settings will sync automatically'
-                          : 'Auto sync is off. Use Save/Restore buttons when needed.'}
-                      </p>
-                    </div>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleForgetCode}
-                    disabled={isCloudSyncBusy}
-                  >
-                    <CloudOff className="mr-2 h-3 w-3" aria-hidden="true" />
-                    Forget sync code
-                  </Button>
-                </div>
-              )}
-
-              {/* Manual Controls */}
-                {generatedCloudPhrase && (
-                  <div className="rounded-md border bg-muted/30 p-4">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <KeyRound className="h-4 w-4 text-primary" aria-hidden="true" />
-                        <span className="text-sm font-medium">New sync code</span>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={handleCopyGeneratedPhrase}
-                      >
-                        <Copy className="mr-2 h-4 w-4" aria-hidden="true" />
-                        Copy
-                      </Button>
-                    </div>
-                    <p className="mt-3 whitespace-pre-wrap break-words font-mono text-sm">
-                      {generatedCloudPhrase}
-                    </p>
-                  </div>
-                )}
-
-                {/* Sync code input with inline controls */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <label className="text-sm font-medium" htmlFor="cloud-sync-phrase">
-                        Sync code
-                      </label>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <button
-                            type="button"
-                            className="inline-flex items-center justify-center"
-                            aria-label="Sync code information"
-                          >
-                            <Info className="h-4 w-4 text-muted-foreground hover:text-foreground transition-colors" />
-                          </button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-80" align="start">
-                          <p className="text-sm text-muted-foreground">
-                            Keep this code private. Anyone with it can download and decrypt your settings. Your YNAB token is never synced.
-                          </p>
-                        </PopoverContent>
-                      </Popover>
-                    </div>
-                    {cloudSyncPhrase.trim() && !generatedCloudPhrase && (
-                      <div className="flex items-center gap-2">
-                        <label htmlFor="remember-sync-code" className="text-xs text-muted-foreground cursor-pointer">
-                          Remember on this device
-                        </label>
-                        <Switch
-                          id="remember-sync-code"
-                          checked={Boolean(settings.rememberCloudSyncCode)}
-                          onCheckedChange={handleRememberCodeToggle}
-                          aria-label="Remember sync code on this device"
-                        />
-                      </div>
-                    )}
-                  </div>
-                  <textarea
-                    id="cloud-sync-phrase"
-                    className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-base md:text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                    rows={2}
-                    value={cloudSyncPhrase}
-                    onChange={(event) => setCloudSyncPhrase(event.target.value)}
-                    placeholder="twelve lowercase words separated by spaces"
-                  />
-                </div>
-
-                <div className="rounded-md border bg-muted/20 p-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium">Auto sync</p>
-                      <p className="text-xs text-muted-foreground">
-                        On load and when this tab becomes active, compare cloud vs local and keep the most recent version.
-                      </p>
-                    </div>
-                    <Switch
-                      id="auto-sync-enabled"
-                      checked={autoSyncEnabled}
-                      onCheckedChange={handleAutoSyncToggle}
-                      disabled={!canEnableAutoSync}
-                      aria-label="Enable automatic cloud sync"
-                      title={
-                        !canEnableAutoSync
-                          ? 'Auto sync requires a remembered sync code on this device.'
-                          : 'Enable automatic cloud sync'
-                      }
-                    />
-                  </div>
-                  {!canEnableAutoSync && (
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      Remember your sync code on this device to enable auto sync.
-                    </p>
-                  )}
-                </div>
-
-                {/* Action buttons - compact layout */}
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleGenerateCloudSync}
-                    disabled={isCloudSyncBusy}
-                  >
-                    <KeyRound className="mr-2 h-4 w-4" aria-hidden="true" />
-                    {isGeneratingCloudSync ? 'Generating…' : 'Generate new code'}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleCloudUpload}
-                    disabled={isCloudSyncBusy || !cloudSyncPhrase.trim()}
-                  >
-                    <CloudUpload className="mr-2 h-4 w-4" aria-hidden="true" />
-                    {isUploadingCloudSync ? 'Saving…' : 'Save local → cloud'}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleCloudDownload}
-                    disabled={isCloudSyncBusy || !cloudSyncPhrase.trim()}
-                  >
-                    <CloudDownload className="mr-2 h-4 w-4" aria-hidden="true" />
-                    {isDownloadingCloudSync ? 'Restoring…' : 'Restore cloud → local'}
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  &quot;Save&quot; overwrites cloud with your local settings. &quot;Restore&quot; replaces local with cloud backup.
-                </p>
-
-                {/* Secondary destructive action */}
-                <div className="flex items-center justify-between">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleCloudDelete}
-                    disabled={isCloudSyncBusy}
-                    className="text-destructive hover:bg-destructive hover:text-destructive-foreground"
-                  >
-                    <CloudOff className="mr-2 h-3 w-3" aria-hidden="true" />
-                    {isDeletingCloudSync ? 'Deleting…' : 'Delete cloud backup'}
-                  </Button>
-                  {cloudSyncLastSynced && (
-                    <p className="text-xs text-muted-foreground">
-                      Last synced: {cloudSyncLastSynced}
-                    </p>
-                  )}
-                </div>
-              </>
-
-            {cloudSyncMessage && (
-              <Alert>
-                <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-                <AlertDescription>{cloudSyncMessage}</AlertDescription>
-              </Alert>
-            )}
-
-            {cloudSyncError && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" aria-hidden="true" />
-                <AlertDescription>{cloudSyncError}</AlertDescription>
-              </Alert>
-            )}
-          </div>
         </CardContent>
       </Card>
 
