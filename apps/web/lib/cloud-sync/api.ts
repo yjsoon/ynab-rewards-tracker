@@ -14,6 +14,24 @@ export interface CloudSyncResponse extends CloudSyncMetadata {
   iv: string;
 }
 
+export function parseCloudSyncErrorMessage(status: number, body: string): string {
+  let parsedMessage = body;
+  try {
+    const parsed = JSON.parse(body) as { error?: unknown };
+    if (typeof parsed.error === 'string') {
+      parsedMessage = parsed.error;
+    }
+  } catch {
+    // Non-JSON error responses are already readable.
+  }
+
+  if (status === 501 && parsedMessage.includes('Cloud sync not configured')) {
+    return 'Cloud Sync is not configured for this environment. You can keep using this browser locally, or configure Cloudflare KV to enable backup and multi-device sync.';
+  }
+
+  return parsedMessage || 'Cloud sync request failed';
+}
+
 async function handleResponse<T>(response: Response): Promise<T> {
   if (response.ok) {
     if (response.status === 204) {
@@ -23,7 +41,7 @@ async function handleResponse<T>(response: Response): Promise<T> {
   }
 
   const message = await response.text();
-  throw new Error(message || 'Cloud sync request failed');
+  throw new Error(parseCloudSyncErrorMessage(response.status, message));
 }
 
 export async function uploadEncryptedSettings(payload: EncryptedSyncPayload): Promise<CloudSyncMetadata> {
