@@ -88,4 +88,18 @@ describe("YnabClient cache bypass", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  it("preserves JSON error messages from the YNAB proxy", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: async () => ({ message: "invalid token" }),
+      text: async () => "",
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new YnabClient("pat-error");
+
+    await expect(client.getBudgets()).rejects.toThrow("invalid token");
+  });
 });

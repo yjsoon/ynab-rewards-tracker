@@ -46,8 +46,10 @@ import type {
 const inflightGet = new Map<string, Promise<unknown>>();
 const getCache = new Map<string, { expiry: number; data: unknown }>();
 const CACHE_TTL_MS = 30_000; // 30s soft cache; YNAB data isn't ultra-realtime
+const MAX_GET_CACHE_ENTRIES = 100;
 const ACCOUNTS_CACHE_TTL_MS = 5 * 60 * 1000;
 const FLAG_NAMES_CACHE_TTL_MS = 5 * 60 * 1000;
+let nextClientCacheScope = 0;
 const inflightFlagNames = new Map<
   string,
   Promise<Partial<Record<YnabFlagColor, string>>>
@@ -57,15 +59,30 @@ const flagNamesCache = new Map<
   { expiry: number; data: Partial<Record<YnabFlagColor, string>> }
 >();
 
-function makeKey(path: string, pat: string, init?: RequestInit) {
-  const method = (init?.method || "GET").toUpperCase();
-  // Only cache GETs without AbortSignals
-  // Include PAT in key to prevent cross-token cache reuse
-  return `${method}:${pat}:${path}`;
+function pruneExpiredGetCache(now = Date.now()) {
+  for (const [key, cached] of getCache) {
+    if (cached.expiry <= now) {
+      getCache.delete(key);
+    }
+  }
+
+  while (getCache.size > MAX_GET_CACHE_ENTRIES) {
+    const oldestKey = getCache.keys().next().value;
+    if (!oldestKey) break;
+    getCache.delete(oldestKey);
+  }
 }
 
-function makeFlagNamesKey(budgetId: string, pat: string) {
-  return `FLAG_NAMES:${pat}:${budgetId}`;
+function makeKey(path: string, cacheScope: string, init?: RequestInit) {
+  const method = (init?.method || "GET").toUpperCase();
+  // Only cache GETs without AbortSignals
+  // Include a per-client scope to prevent cross-token cache reuse without
+  // retaining raw bearer tokens in module memory.
+  return `${method}:${cacheScope}:${path}`;
+}
+
+function makeFlagNamesKey(budgetId: string, cacheScope: string) {
+  return `FLAG_NAMES:${cacheScope}:${budgetId}`;
 }
 
 interface YnabResponse<T> {
@@ -78,9 +95,11 @@ interface YnabRequestOptions extends RequestInit {
 
 export class YnabClient {
   private pat: string;
+  private cacheScope: string;
 
   constructor(pat: string) {
     this.pat = pat;
+    this.cacheScope = `client-${++nextClientCacheScope}`;
   }
 
   private async request<T>(
@@ -90,12 +109,13 @@ export class YnabClient {
     const method = (options?.method || "GET").toUpperCase();
     const hasSignal = !!options?.signal;
     const bypassCache = options?.bypassCache === true;
-    const key = makeKey(path, this.pat, options);
+    const key = makeKey(path, this.cacheScope, options);
 
     // Serve from short cache for GETs without signals
     if (method === "GET" && !hasSignal && !bypassCache) {
-      const cached = getCache.get(key);
       const now = Date.now();
+      pruneExpiredGetCache(now);
+      const cached = getCache.get(key);
       if (cached && cached.expiry > now) {
         return cached.data as T;
       }
@@ -125,15 +145,15 @@ export class YnabClient {
           return doFetch(2);
         }
 
+        let message: string | null = null;
         try {
           const error = await response.json();
-          const message =
-            error?.message || error?.error || JSON.stringify(error);
-          throw new Error(message || "YNAB API error");
+          message = error?.message || error?.error || JSON.stringify(error);
         } catch {
           const text = await response.text().catch(() => "");
-          throw new Error(text || "YNAB API error");
+          message = text || null;
         }
+        throw new Error(message || "YNAB API error");
       }
 
       return response.json() as Promise<T>;
@@ -148,7 +168,9 @@ export class YnabClient {
     try {
       const data = await promise;
       if (method === "GET" && !hasSignal && !bypassCache) {
+        pruneExpiredGetCache();
         getCache.set(key, { expiry: Date.now() + CACHE_TTL_MS, data });
+        pruneExpiredGetCache();
       }
       return data;
     } finally {
@@ -215,7 +237,7 @@ export class YnabClient {
   async getCustomFlagNames(
     budgetId: string,
   ): Promise<Partial<Record<YnabFlagColor, string>>> {
-    const cacheKey = makeFlagNamesKey(budgetId, this.pat);
+    const cacheKey = makeFlagNamesKey(budgetId, this.cacheScope);
     const cached = flagNamesCache.get(cacheKey);
     if (cached && cached.expiry > Date.now()) {
       return cached.data;

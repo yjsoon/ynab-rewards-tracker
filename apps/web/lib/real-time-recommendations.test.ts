@@ -162,4 +162,93 @@ describe('RealTimeRecommendations', () => {
     expect(recommendation.bestCard?.cardId).toBe(card.id);
     expect(recommendation.bestCard?.currentSpend).toBe(8);
   });
+
+  it('ignores positive YNAB credits when calculating spend summaries', () => {
+    const card = createCard({ subcategoriesEnabled: false });
+    const period = SimpleRewardsCalculator.calculatePeriod(card);
+    const theme = createTheme({
+      cards: [{ cardId: card.id }],
+    });
+    const transactions = [
+      createTransaction({
+        id: 'purchase',
+        account_id: card.ynabAccountId,
+        amount: -100000,
+        date: period.start,
+      }),
+      createTransaction({
+        id: 'refund',
+        account_id: card.ynabAccountId,
+        amount: 80000,
+        date: period.start,
+      }),
+    ];
+
+    const [recommendation] = new RealTimeRecommendations().generateRecommendations(
+      [theme],
+      [card],
+      transactions
+    );
+
+    expect(recommendation.bestCard?.currentSpend).toBe(100);
+  });
+
+  it('keeps a card eligible when only one linked subcategory is maxed', () => {
+    const maxedSubcategory = createSubcategory({
+      id: 'red',
+      name: 'Red',
+      flagColor: 'red',
+      rewardValue: 1,
+      maximumSpend: 10,
+    });
+    const openSubcategory = createSubcategory({
+      id: 'blue',
+      name: 'Blue',
+      flagColor: 'blue',
+      rewardValue: 5,
+      maximumSpend: 100,
+    });
+    const card = createCard({
+      subcategories: [maxedSubcategory, openSubcategory],
+    });
+    const period = SimpleRewardsCalculator.calculatePeriod(card);
+    const theme = createTheme({
+      subcategories: [
+        { cardId: card.id, subcategoryId: maxedSubcategory.id },
+        { cardId: card.id, subcategoryId: openSubcategory.id },
+      ],
+    });
+    const transactions = [
+      createTransaction({
+        id: 'maxed-red',
+        account_id: card.ynabAccountId,
+        amount: -10000,
+        date: period.start,
+        flag_color: 'red',
+      }),
+      createTransaction({
+        id: 'open-blue',
+        account_id: card.ynabAccountId,
+        amount: -5000,
+        date: period.start,
+        flag_color: 'blue',
+      }),
+    ];
+
+    const [recommendation] = new RealTimeRecommendations().generateRecommendations(
+      [theme],
+      [card],
+      transactions
+    );
+
+    expect(recommendation.bestCard?.cardId).toBe(card.id);
+    expect(recommendation.bestCard?.recommendation).not.toBe('avoid');
+    expect(recommendation.bestCard?.effectiveRate).toBe(0.05);
+    expect(recommendation.bestCard?.subcategoryProgress).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ subcategoryId: 'red', isMaxed: true }),
+        expect.objectContaining({ subcategoryId: 'blue', isMaxed: false }),
+      ])
+    );
+  });
 });

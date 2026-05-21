@@ -80,10 +80,11 @@ export class RealTimeRecommendations {
 
     // Calculate current spending for each card
     const spendingSummaries = this.calculateSpending(cards, transactions);
+    const cardsById = new Map(cards.map((card) => [card.id, card]));
 
     return themes.map(theme => this.recommendForTheme(
       theme,
-      cards,
+      cardsById,
       spendingSummaries
     ));
   }
@@ -117,6 +118,7 @@ export class RealTimeRecommendations {
     transactions.forEach((txn) => {
       const card = cardsByAccountId.get(txn.account_id);
       if (!card) return;
+      if (txn.amount >= 0) return;
 
       const txnDate = new Date(txn.date);
       if (!this.isInCurrentPeriod(txnDate, card)) {
@@ -168,7 +170,7 @@ export class RealTimeRecommendations {
    */
   private recommendForTheme(
     theme: ThemeGroup,
-    cards: CreditCard[],
+    cardsById: Map<string, CreditCard>,
     spendingSummaries: Map<string, CardSpendingSummary>
   ): ThemeRecommendation {
     const cardOptions: CardOption[] = [];
@@ -187,7 +189,7 @@ export class RealTimeRecommendations {
     });
 
     linkedCardIds.forEach(cardId => {
-      const card = cards.find(c => c.id === cardId);
+      const card = cardsById.get(cardId);
       if (!card) return;
 
       const option = this.evaluateCard(
@@ -250,13 +252,15 @@ export class RealTimeRecommendations {
 
     // Check if this card is linked via specific subcategories to this theme
     const linkedSubs = theme.subcategories.filter(ref => ref?.cardId === card.id);
-    let hasMaxedSubcategory = false;
+    const maxedSubcategoryIds = new Set<string>();
+    let eligibleLinkedSubcategoryCount = 0;
 
     // If linked via subcategory, check if those specific subcategories are maxed
     if (linkedSubs.length > 0 && card.subcategoriesEnabled && card.subcategories) {
       for (const ref of linkedSubs) {
         const sub = card.subcategories.find(s => s.id === ref.subcategoryId);
         if (sub && sub.active && !sub.excludeFromRewards) {
+          eligibleLinkedSubcategoryCount++;
           const subSpend = spending?.subcategorySpends.get(sub.id) || 0;
           const isMaxed = sub.maximumSpend ? subSpend >= sub.maximumSpend : false;
           const progress = sub.maximumSpend ? Math.min(100, (subSpend / sub.maximumSpend) * 100) : 0;
@@ -272,7 +276,7 @@ export class RealTimeRecommendations {
           });
 
           if (isMaxed) {
-            hasMaxedSubcategory = true;
+            maxedSubcategoryIds.add(sub.id);
             reasons.push(`${sub.name} subcategory limit reached`);
           }
         }
@@ -300,8 +304,7 @@ export class RealTimeRecommendations {
 
       linkedSubs.forEach(ref => {
         const sub = card.subcategories?.find(s => s.id === ref.subcategoryId);
-        if (sub && sub.active && !sub.excludeFromRewards) {
-          // We already checked if maxed above, so this subcategory is not maxed
+        if (sub && sub.active && !sub.excludeFromRewards && !maxedSubcategoryIds.has(sub.id)) {
           const subRate = card.type === 'cashback'
             ? sub.rewardValue / 100
             : sub.rewardValue * this.milesValuation;
@@ -316,8 +319,9 @@ export class RealTimeRecommendations {
     }
 
     // If no subcategories but the card is linked, use base rate as fallback
-    // BUT not if subcategories are maxed!
-    const subcategoryMaxed = hasMaxedSubcategory;
+    // BUT not if every linked subcategory is maxed!
+    const subcategoryMaxed = eligibleLinkedSubcategoryCount > 0
+      && maxedSubcategoryIds.size >= eligibleLinkedSubcategoryCount;
     if (!subcategoryMaxed && effectiveRate === 0 && (wholeCardLinked || theme.subcategories.some(ref => ref?.cardId === card.id))) {
       if (card.type === 'cashback') {
         effectiveRate = (card.earningRate ?? 1) / 100;

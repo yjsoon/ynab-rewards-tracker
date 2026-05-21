@@ -10,6 +10,8 @@ export type CurrencyFormatterOptions = {
   decimals?: number;
 };
 
+const currencyFormatters = new Map<string, Intl.NumberFormat>();
+
 /**
  * Create an Intl.NumberFormat instance for currency formatting.
  * Requires explicit locale and currency - use platform-specific
@@ -17,14 +19,21 @@ export type CurrencyFormatterOptions = {
  */
 export function createCurrencyFormatter(options: CurrencyFormatterOptions): Intl.NumberFormat {
   const { locale, currency, decimals = 2 } = options;
+  const cacheKey = `${locale}:${currency}:${decimals}`;
+  const cached = currencyFormatters.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
 
-  return new Intl.NumberFormat(locale, {
+  const formatter = new Intl.NumberFormat(locale, {
     style: 'currency',
     currency,
     currencyDisplay: 'narrowSymbol', // Prefer narrow currency symbols (e.g., "$" for USD in many locales)
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   });
+  currencyFormatters.set(cacheKey, formatter);
+  return formatter;
 }
 
 /**
@@ -95,12 +104,28 @@ export function normalizeCurrencyCode(input: string | undefined): string {
 
   // If it's already a 3-letter ISO code, normalize to uppercase
   if (/^[a-zA-Z]{3}$/.test(trimmed)) {
-    return trimmed.toUpperCase();
+    const normalized = trimmed.toUpperCase();
+    if (isSupportedCurrencyCode(normalized)) {
+      return normalized;
+    }
   }
 
   // Fallback to USD for invalid input
   if (typeof console !== 'undefined' && console.warn) {
-    console.warn(`Invalid currency code "${trimmed}", falling back to USD`);
+  console.warn(`Invalid currency code "${trimmed}", falling back to USD`);
   }
   return 'USD';
+}
+
+function isSupportedCurrencyCode(currency: string): boolean {
+  if (typeof Intl.supportedValuesOf === 'function') {
+    return Intl.supportedValuesOf('currency').includes(currency);
+  }
+
+  try {
+    new Intl.NumberFormat('en-US', { style: 'currency', currency });
+    return true;
+  } catch {
+    return false;
+  }
 }

@@ -197,6 +197,7 @@ async function fetchTrackedTransactionsSnapshot(
 }
 
 interface UseTrackedTransactionsArgs {
+  enabled?: boolean;
   pat?: string;
   selectedBudgetId?: string;
   trackedAccountIds: string[];
@@ -230,6 +231,7 @@ interface UseTrackedTransactionsResult {
  * before revalidating older data in the background.
  */
 export function useTrackedTransactions({
+  enabled = true,
   pat,
   selectedBudgetId,
   trackedAccountIds,
@@ -289,7 +291,7 @@ export function useTrackedTransactions({
   const loadTransactions = useCallback(
     async (options?: { bypassCache?: boolean }) => {
       const bypassCache = options?.bypassCache === true;
-      if (!pat || !selectedBudgetId) {
+      if (!enabled || !pat || !selectedBudgetId) {
         requestIdRef.current += 1;
         setAllTransactions([]);
         setAccountsMap(new Map());
@@ -330,11 +332,11 @@ export function useTrackedTransactions({
         }
       }
     },
-    [applySnapshot, pat, selectedBudgetId, earliestTrackedWindow],
+    [applySnapshot, enabled, pat, selectedBudgetId, earliestTrackedWindow],
   );
 
   useEffect(() => {
-    if (!pat || !selectedBudgetId) {
+    if (!enabled || !pat || !selectedBudgetId) {
       requestIdRef.current += 1;
       lastFetchKeyRef.current = "";
       setAllTransactions([]);
@@ -380,6 +382,7 @@ export function useTrackedTransactions({
       void loadTransactions();
     }
   }, [
+    enabled,
     pat,
     selectedBudgetId,
     earliestTrackedWindow,
@@ -396,7 +399,7 @@ export function useTrackedTransactions({
   }, []);
 
   const recentTransactions = useMemo(() => {
-    if (!pat || !selectedBudgetId) {
+    if (!enabled || !pat || !selectedBudgetId) {
       return [];
     }
 
@@ -435,6 +438,7 @@ export function useTrackedTransactions({
     return filtered;
   }, [
     allTransactions,
+    enabled,
     pat,
     selectedBudgetId,
     trackedAccountIds,

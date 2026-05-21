@@ -135,7 +135,9 @@ export class SimpleRewardsCalculator {
     });
 
     let totalSpend = 0;
+    let spendByFlag: Map<YnabFlagColor, { total: number; transactions: number[] }> | undefined;
     if (context.enabled && context.activeSubcategories.length > 0) {
+      spendByFlag = new Map();
       for (const txn of periodTransactions) {
         const flagColour = normaliseFlagColor(txn.flag_color);
         const subcategory = resolveSubcategory(context, flagColour);
@@ -144,7 +146,17 @@ export class SimpleRewardsCalculator {
           continue;
         }
 
-        totalSpend += Math.abs(txn.amount) / 1000;
+        const txnSpend = Math.abs(txn.amount) / 1000;
+        totalSpend += txnSpend;
+
+        const effectiveFlag = subcategory?.flagColor ?? UNFLAGGED_FLAG.value;
+        const prev = spendByFlag.get(effectiveFlag);
+        if (prev) {
+          prev.total += txnSpend;
+          prev.transactions.push(txnSpend);
+        } else {
+          spendByFlag.set(effectiveFlag, { total: txnSpend, transactions: [txnSpend] });
+        }
       }
     } else {
       totalSpend = Math.abs(periodTransactions.reduce((sum, txn) => sum + txn.amount, 0)) / 1000;
@@ -164,26 +176,7 @@ export class SimpleRewardsCalculator {
     let subcategoryBreakdowns: SubcategoryCalculation[] | undefined;
 
     if (context.enabled && context.activeSubcategories.length > 0) {
-      const spendByFlag = new Map<YnabFlagColor, { total: number; transactions: number[] }>();
-      for (const txn of periodTransactions) {
-        const flagColour = normaliseFlagColor(txn.flag_color);
-        const subcategory = resolveSubcategory(context, flagColour);
-
-        if (subcategory?.excludeFromRewards) {
-          continue;
-        }
-
-        const effectiveFlag = subcategory?.flagColor ?? UNFLAGGED_FLAG.value;
-        const txnSpend = Math.abs(txn.amount) / 1000;
-        const prev = spendByFlag.get(effectiveFlag);
-        if (prev) {
-          prev.total += txnSpend;
-          prev.transactions.push(txnSpend);
-        } else {
-          spendByFlag.set(effectiveFlag, { total: txnSpend, transactions: [txnSpend] });
-        }
-      }
-
+      const subcategorySpends = spendByFlag ?? new Map<YnabFlagColor, { total: number; transactions: number[] }>();
       const hasCardCap = typeof maximumSpend === 'number' && maximumSpend !== null && maximumSpend > 0;
       let remainingCardCap = hasCardCap ? maximumSpend! : Number.POSITIVE_INFINITY;
 
@@ -195,7 +188,7 @@ export class SimpleRewardsCalculator {
             id: subcategory.id,
             name: subcategory.name,
             flagColor: subcategory.flagColor,
-            totalSpend: spendByFlag.get(subcategory.flagColor)?.total ?? 0,
+            totalSpend: subcategorySpends.get(subcategory.flagColor)?.total ?? 0,
             countedSpend: 0,
             eligibleSpendBeforeBlocks: 0,
             eligibleSpend: 0,
@@ -213,7 +206,7 @@ export class SimpleRewardsCalculator {
           continue;
         }
 
-        const spendBucket = spendByFlag.get(subcategory.flagColor);
+        const spendBucket = subcategorySpends.get(subcategory.flagColor);
         const totalForSubcategory = spendBucket?.total ?? 0;
         const transactionsForSubcategory = spendBucket?.transactions ?? [];
         const rewardRate = getRewardRate(card, subcategory);
