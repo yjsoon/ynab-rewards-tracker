@@ -27,6 +27,12 @@ describe('sanitizeInput', () => {
     expect(sanitizeInput('onmouseover = doEvil()')).toBe('doEvil()');
   });
 
+  it('removes arbitrary HTML tags', () => {
+    expect(sanitizeInput('<img src=x onerror=alert(1)>')).toBe('');
+    expect(sanitizeInput('<svg><animate onbegin=alert(1) /></svg>')).toBe('');
+    expect(sanitizeInput('<b>Issuer</b>')).toBe('Issuer');
+  });
+
   it('preserves safe content', () => {
     expect(sanitizeInput('Hello World')).toBe('Hello World');
     expect(sanitizeInput('Bank of America')).toBe('Bank of America');

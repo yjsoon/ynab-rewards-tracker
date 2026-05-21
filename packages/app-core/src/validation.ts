@@ -14,6 +14,7 @@ export function sanitizeInput(input: string): string {
     .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '')
     .replace(/javascript:/gi, '')
     .replace(/on\w+\s*=/gi, '')
+    .replace(/<[^>]*>/g, '')
     .trim();
 }
 

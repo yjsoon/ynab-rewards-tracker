@@ -245,7 +245,14 @@ function DashboardContent() {
     [settings.cardOrdering]
   );
 
+  const shouldLoadTrackedTransactions =
+    activeTab === 'featured' &&
+    !!pat &&
+    !!selectedBudget.id &&
+    trackedAccountIds.length > 0;
+
   const { allTransactions, loading, hasCachedData, refreshing, lastUpdatedAt, refresh } = useTrackedTransactions({
+    enabled: shouldLoadTrackedTransactions,
     pat,
     selectedBudgetId: selectedBudget.id,
     trackedAccountIds,
@@ -490,7 +497,7 @@ function DashboardContent() {
                 size="sm"
                 variant="ghost"
                 onClick={refresh}
-                disabled={refreshing || loading}
+                disabled={!shouldLoadTrackedTransactions || refreshing || loading}
                 className="rounded-full px-2.5"
                 title={lastUpdatedAt ? `Last updated: ${formatLastUpdated(lastUpdatedAt)}` : "Refresh data"}
                 aria-label="Refresh dashboard data"

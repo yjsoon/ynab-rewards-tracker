@@ -17,6 +17,26 @@ import { storage } from '@/lib/storage';
 export function useAutoBackup() {
   const { settings, updateSettings } = useSettings();
   const debounceTimerRef = useRef<NodeJS.Timeout | undefined>(undefined);
+  const pendingPromiseRef = useRef<Promise<void> | null>(null);
+  const pendingResolveRef = useRef<(() => void) | null>(null);
+  const pendingRejectRef = useRef<((reason?: unknown) => void) | null>(null);
+  const uploadInFlightRef = useRef(false);
+
+  const settlePending = useCallback((error?: unknown) => {
+    const resolve = pendingResolveRef.current;
+    const reject = pendingRejectRef.current;
+
+    pendingPromiseRef.current = null;
+    pendingResolveRef.current = null;
+    pendingRejectRef.current = null;
+
+    if (error) {
+      reject?.(error);
+      return;
+    }
+
+    resolve?.();
+  }, []);
 
   const autoBackup = useCallback(async () => {
     // Automatic upload requires both auto-sync preference and a remembered sync code.
@@ -29,44 +49,58 @@ export function useAutoBackup() {
       return;
     }
 
-    // Clear existing debounce timer
+    if (uploadInFlightRef.current) {
+      return pendingPromiseRef.current ?? Promise.resolve();
+    }
+
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
     }
 
-    // Debounce: wait 2 seconds after last save
-    return new Promise<void>((resolve, reject) => {
-      debounceTimerRef.current = setTimeout(async () => {
-        try {
-          const normalised = normaliseMnemonic(settings.cloudSyncMnemonic!);
-          if (!isValidMnemonic(normalised)) {
-            const error = new Error('Invalid stored mnemonic');
-            console.error('Auto-sync upload:', error);
-            reject(error);
-            return;
-          }
+    if (!pendingPromiseRef.current) {
+      pendingPromiseRef.current = new Promise<void>((resolve, reject) => {
+        pendingResolveRef.current = resolve;
+        pendingRejectRef.current = reject;
+      });
+    }
 
-          // Export current settings
-          const exportedSettings = storage.exportSettings();
-          const payload = JSON.parse(exportedSettings);
-
-          const keyId = await computeKeyId(normalised);
-          const { ciphertext, iv } = await encryptJson(normalised, payload);
-          const { updatedAt } = await uploadEncryptedSettings({ keyId, ciphertext, iv });
-
-          // Keep metadata aligned to avoid false local-vs-cloud drift checks.
-          updateSettings({ cloudSyncKeyId: keyId, cloudSyncLastSyncedAt: updatedAt });
-
-          console.log('Auto-sync: Uploaded latest local settings to cloud');
-          resolve();
-        } catch (error) {
-          // Reject so caller can show error toast
-          console.error('Auto-sync upload failed:', error);
-          reject(error);
+    // Debounce: wait 2 seconds after last save, then resolve/reject every
+    // caller in this debounce window with the same upload result.
+    debounceTimerRef.current = setTimeout(async () => {
+      uploadInFlightRef.current = true;
+      try {
+        const normalised = normaliseMnemonic(settings.cloudSyncMnemonic!);
+        if (!isValidMnemonic(normalised)) {
+          const error = new Error('Invalid stored mnemonic');
+          console.error('Auto-sync upload:', error);
+          settlePending(error);
+          return;
         }
-      }, 2000); // 2 second debounce
-    });
-  }, [settings, updateSettings]);
+
+        // Export current settings
+        const exportedSettings = storage.exportSettings();
+        const payload = JSON.parse(exportedSettings);
+
+        const keyId = await computeKeyId(normalised);
+        const { ciphertext, iv } = await encryptJson(normalised, payload);
+        const { updatedAt } = await uploadEncryptedSettings({ keyId, ciphertext, iv });
+
+        // Keep metadata aligned to avoid false local-vs-cloud drift checks.
+        updateSettings({ cloudSyncKeyId: keyId, cloudSyncLastSyncedAt: updatedAt });
+
+        console.log('Auto-sync: Uploaded latest local settings to cloud');
+        settlePending();
+      } catch (error) {
+        // Reject so caller can show error toast
+        console.error('Auto-sync upload failed:', error);
+        settlePending(error);
+      } finally {
+        uploadInFlightRef.current = false;
+      }
+    }, 2000); // 2 second debounce
+
+    return pendingPromiseRef.current;
+  }, [settings, updateSettings, settlePending]);
 
   return { autoBackup };
 }

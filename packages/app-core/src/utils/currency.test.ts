@@ -23,6 +23,14 @@ describe('createCurrencyFormatter', () => {
   });
 });
 
+describe('createCurrencyFormatter cache', () => {
+  it('reuses formatter instances for matching options', () => {
+    const first = createCurrencyFormatter({ locale: 'en-US', currency: 'USD' });
+    const second = createCurrencyFormatter({ locale: 'en-US', currency: 'USD' });
+    expect(second).toBe(first);
+  });
+});
+
 describe('formatCurrency', () => {
   it('formats USD correctly', () => {
     expect(formatCurrency(1234.56, { locale: 'en-US', currency: 'USD' })).toBe('$1,234.56');
@@ -99,5 +107,6 @@ describe('normalizeCurrencyCode', () => {
   it('falls back to USD for invalid input', () => {
     expect(normalizeCurrencyCode('invalid')).toBe('USD');
     expect(normalizeCurrencyCode('XXXX')).toBe('USD');
+    expect(normalizeCurrencyCode('FOO')).toBe('USD');
   });
 });

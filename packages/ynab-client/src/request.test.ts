@@ -46,6 +46,21 @@ describe('requestJson', () => {
       expect(result).toEqual(mockData);
     });
 
+    it('clears timeout handles after successful timed requests', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ data: { budgets: [] } }),
+      });
+
+      await requestJson({
+        ...defaultOptions,
+        timeoutMs: 1000,
+      });
+
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
     it('includes authorization header', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -249,6 +264,30 @@ describe('requestJson', () => {
       });
 
       expect(mockFetch).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  describe('cancellation', () => {
+    it('does not retry when cancelled during a retry delay', async () => {
+      const controller = new AbortController();
+      mockFetch.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+
+      const request = requestJson({
+        ...defaultOptions,
+        signal: controller.signal,
+        maxRetries: 1,
+        backoffMs: () => 10000,
+      });
+
+      await Promise.resolve();
+      await Promise.resolve();
+      controller.abort();
+
+      await expect(request).rejects.toMatchObject({
+        code: 'network_error',
+      });
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(vi.getTimerCount()).toBe(0);
     });
   });
 

@@ -61,6 +61,10 @@ export async function requestJson<T>(options: RequestOptions): Promise<T> {
   let lastError: YnabApiError | null = null;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (signal?.aborted) {
+      throw createYnabError('network_error', undefined, 'Request was cancelled');
+    }
+
     try {
       const response = await executeRequest({
         url,
@@ -77,7 +81,7 @@ export async function requestJson<T>(options: RequestOptions): Promise<T> {
       if (response.status === 429 && attempt < maxRetries) {
         const retryAfter = parseRetryAfter(response.headers.get('Retry-After'));
         const waitMs = retryAfter ?? backoffMs(attempt, { status: 429, code: 'rate_limited' });
-        await sleep(waitMs);
+        await sleep(waitMs, signal);
         continue;
       }
 
@@ -109,9 +113,13 @@ export async function requestJson<T>(options: RequestOptions): Promise<T> {
 
       // Retry transient errors (network errors and timeouts)
       const isRetryable = classified.code === 'network_error' || classified.code === 'timeout';
+      if (signal?.aborted) {
+        throw classified;
+      }
+
       if (isRetryable && attempt < maxRetries) {
         const waitMs = backoffMs(attempt, { code: classified.code });
-        await sleep(waitMs);
+        await sleep(waitMs, signal);
         continue;
       }
 
@@ -137,7 +145,8 @@ interface ExecuteRequestOptions {
 async function executeRequest(options: ExecuteRequestOptions): Promise<Response> {
   const { url, accessToken, fetchImpl, method, headers, body, signal, timeoutMs } = options;
 
-  const mergedSignal = timeoutMs ? mergeAbortSignals(signal, timeoutMs) : signal;
+  const mergedAbort = timeoutMs ? mergeAbortSignals(signal, timeoutMs) : null;
+  const requestSignal = mergedAbort?.signal ?? signal;
 
   try {
     return await fetchImpl(url, {
@@ -148,21 +157,26 @@ async function executeRequest(options: ExecuteRequestOptions): Promise<Response>
         ...headers,
       },
       body,
-      signal: mergedSignal,
+      signal: requestSignal,
     });
   } catch (error) {
     // Check if abort was due to our timeout (signal.reason will be our TimeoutError)
-    if (mergedSignal?.aborted && (mergedSignal.reason as Error)?.name === 'TimeoutError') {
+    if (requestSignal?.aborted && (requestSignal.reason as Error)?.name === 'TimeoutError') {
       throw createYnabError('timeout');
     }
     throw classifyError(error);
+  } finally {
+    mergedAbort?.cleanup();
   }
 }
 
 /**
  * Merge an optional external signal with a timeout signal.
  */
-function mergeAbortSignals(externalSignal: AbortSignal | undefined, timeoutMs: number): AbortSignal {
+function mergeAbortSignals(
+  externalSignal: AbortSignal | undefined,
+  timeoutMs: number,
+): { signal: AbortSignal; cleanup: () => void } {
   const controller = new AbortController();
 
   const timeoutId = setTimeout(() => {
@@ -173,20 +187,32 @@ function mergeAbortSignals(externalSignal: AbortSignal | undefined, timeoutMs: n
     controller.abort(timeoutError);
   }, timeoutMs);
 
+  let removeExternalAbortListener = () => {};
+
   // Clean up timeout if external signal aborts first
   if (externalSignal) {
     if (externalSignal.aborted) {
       clearTimeout(timeoutId);
       controller.abort(externalSignal.reason);
     } else {
-      externalSignal.addEventListener('abort', () => {
+      const onExternalAbort = () => {
         clearTimeout(timeoutId);
         controller.abort(externalSignal.reason);
-      }, { once: true });
+      };
+      externalSignal.addEventListener('abort', onExternalAbort, { once: true });
+      removeExternalAbortListener = () => {
+        externalSignal.removeEventListener('abort', onExternalAbort);
+      };
     }
   }
 
-  return controller.signal;
+  return {
+    signal: controller.signal,
+    cleanup: () => {
+      clearTimeout(timeoutId);
+      removeExternalAbortListener();
+    },
+  };
 }
 
 /**
@@ -260,6 +286,33 @@ async function safeJsonParse(response: Response): Promise<{ error?: { detail?: s
   }
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) {
+    return Promise.reject(createYnabError('network_error', undefined, 'Request was cancelled'));
+  }
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+
+    const onAbort = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
+      signal?.removeEventListener('abort', onAbort);
+      reject(createYnabError('network_error', undefined, 'Request was cancelled'));
+    };
+
+    const timeoutId = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+
+    signal?.addEventListener('abort', onAbort, { once: true });
+    if (signal?.aborted) {
+      onAbort();
+      return;
+    }
+  });
 }
