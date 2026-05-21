@@ -26,14 +26,22 @@ import type { Transaction } from '@/types/transaction';
 interface SpendingStatusProps {
   card: CreditCard;
   pat?: string;
+  prefetchedTransactions?: Transaction[];
+  transactionsLoading?: boolean;
 }
 
-export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
+export default function SpendingStatus({
+  card,
+  pat,
+  prefetchedTransactions,
+  transactionsLoading,
+}: SpendingStatusProps) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const { settings } = useSettings();
   const { selectedBudget } = useSelectedBudget();
   const abortRef = useRef<AbortController | null>(null);
+  const hasPrefetchedTransactions = Array.isArray(prefetchedTransactions);
 
   // Calculate current period
   const period = useMemo(() => SimpleRewardsCalculator.calculatePeriod(card), [card]);
@@ -48,6 +56,10 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
 
   // Fetch transactions
   const fetchTransactions = useCallback(async () => {
+    if (hasPrefetchedTransactions) {
+      return;
+    }
+
     if (!pat || !card.ynabAccountId) {
       return;
     }
@@ -103,11 +115,32 @@ export default function SpendingStatus({ card, pat }: SpendingStatusProps) {
         setLoading(false);
       }
     }
-  }, [pat, card.ynabAccountId, period, selectedBudget.id]);
+  }, [hasPrefetchedTransactions, pat, card.ynabAccountId, period, selectedBudget.id]);
 
   useEffect(() => {
+    if (hasPrefetchedTransactions) {
+      setTransactions(
+        prefetchedTransactions.filter(
+          (t) =>
+            t.account_id === card.ynabAccountId &&
+            t.date >= period.start &&
+            t.date <= period.end
+        )
+      );
+      setLoading(Boolean(transactionsLoading));
+      return;
+    }
+
     fetchTransactions();
-  }, [fetchTransactions]);
+  }, [
+    card.ynabAccountId,
+    fetchTransactions,
+    hasPrefetchedTransactions,
+    period.end,
+    period.start,
+    prefetchedTransactions,
+    transactionsLoading,
+  ]);
 
   useEffect(() => {
     return () => {

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { StorageService } from "./service";
 
@@ -72,5 +72,24 @@ describe("StorageService budget accounts cache", () => {
       service.getBudgetAccountsCache("budget-1", 5 * 60 * 1000, "pat-a"),
     ).toBeNull();
     expect(service.getBudgetAccountsCache("budget-1")).toEqual(accounts);
+  });
+
+  it("throws and avoids reporting success when localStorage writes fail", () => {
+    const localStorageMock = createLocalStorageMock();
+    vi.spyOn(localStorageMock, "setItem").mockImplementation(() => {
+      throw new DOMException("Quota exceeded", "QuotaExceededError");
+    });
+
+    Object.defineProperty(globalThis, "localStorage", {
+      value: localStorageMock,
+      configurable: true,
+      writable: true,
+    });
+
+    const service = new StorageService();
+
+    expect(() => service.updateSettings({ currency: "SGD" })).toThrow(
+      "Quota exceeded",
+    );
   });
 });

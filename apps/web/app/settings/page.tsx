@@ -363,12 +363,13 @@ export default function SettingsPage() {
     });
   }, [trackedAccountIds, cardsByAccountId, saveCard]);
 
-  const fetchAccounts = useCallback(async (budgetId: string) => {
-    if (!pat) return;
+  const fetchAccounts = useCallback(async (budgetId: string, tokenOverride?: string) => {
+    const token = tokenOverride ?? pat;
+    if (!token) return;
 
     setLoadingAccounts(true);
     try {
-      const client = new YnabClient(pat);
+      const client = new YnabClient(token);
       const fetchedAccounts = await client.getAccounts<YnabAccount>(budgetId);
       const openAccounts = fetchedAccounts.filter((acc) => !acc.closed && acc.on_budget);
       setAccounts(openAccounts);
@@ -380,24 +381,25 @@ export default function SettingsPage() {
     }
   }, [pat, syncCardsWithAccounts]);
 
-  const handleBudgetSelect = useCallback((budgetId: string, budgetName: string) => {
+  const handleBudgetSelect = useCallback((budgetId: string, budgetName: string, tokenOverride?: string) => {
     persistSelectedBudget(budgetId, budgetName);
     setShowBudgetSelector(false);
-    fetchAccounts(budgetId);
+    fetchAccounts(budgetId, tokenOverride);
   }, [fetchAccounts, persistSelectedBudget]);
 
-  const fetchBudgets = useCallback(async () => {
-    if (!pat) return;
+  const fetchBudgets = useCallback(async (tokenOverride?: string) => {
+    const token = tokenOverride ?? pat;
+    if (!token) return;
 
     setLoadingBudgets(true);
     try {
-      const client = new YnabClient(pat);
+      const client = new YnabClient(token);
       const fetchedBudgets = await client.getBudgets();
       setBudgets(fetchedBudgets);
       setConnectionMessage(''); // Clear "Fetching budgets..." message on success
 
       if (fetchedBudgets.length === 1) {
-        handleBudgetSelect(fetchedBudgets[0].id, fetchedBudgets[0].name);
+        handleBudgetSelect(fetchedBudgets[0].id, fetchedBudgets[0].name, token);
       }
     } catch (error) {
       setConnectionMessage(`Failed to fetch budgets: ${getErrorMessage(error)}`);
@@ -458,12 +460,13 @@ export default function SettingsPage() {
       return;
     }
 
-    setPAT(tokenInput);
+    const nextToken = tokenInput;
+    setPAT(nextToken);
     setConnectionMessage('Token saved! Fetching budgets...');
     setTokenInput('');
     
     // Immediately fetch budgets after saving token
-    fetchBudgets();
+    fetchBudgets(nextToken);
   }
 
   function handleAccountToggle(accountId: string, accountName: string) {
@@ -1123,7 +1126,7 @@ export default function SettingsPage() {
               ) : (
                 <Button 
                   variant="outline"
-                  onClick={fetchBudgets}
+                  onClick={() => fetchBudgets()}
                 >
                   Load Budgets
                 </Button>

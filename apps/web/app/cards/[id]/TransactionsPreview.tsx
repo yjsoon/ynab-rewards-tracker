@@ -18,19 +18,40 @@ import { useSettings } from "@/hooks/useLocalStorage";
 import { SimpleRewardsCalculator } from "@/lib/rewards-engine";
 import { absFromMilli } from "@/lib/utils";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
+import type { ConnectionState } from "@/hooks/useCardTransactions";
+import type { Transaction } from "@/types/transaction";
 
 interface Props {
   card: CreditCard;
   lookbackDays?: number;
+  prefetchedTransactions?: Transaction[];
+  transactionsLoading?: boolean;
+  transactionsError?: string;
+  onRefresh?: () => Promise<void>;
+  connection?: ConnectionState;
 }
 
 const LOOKBACK_DAYS = 90;
 
-export default function TransactionsPreview({ card, lookbackDays = LOOKBACK_DAYS }: Props) {
-  const { transactions, loading, error, refresh, connection } = useCardTransactions(
+export default function TransactionsPreview({
+  card,
+  lookbackDays = LOOKBACK_DAYS,
+  prefetchedTransactions,
+  transactionsLoading,
+  transactionsError,
+  onRefresh,
+  connection: prefetchedConnection,
+}: Props) {
+  const hasPrefetchedTransactions = Array.isArray(prefetchedTransactions);
+  const cardTransactions = useCardTransactions(
     card,
-    { lookbackDays }
+    { enabled: !hasPrefetchedTransactions, lookbackDays }
   );
+  const transactions = prefetchedTransactions ?? cardTransactions.transactions;
+  const loading = transactionsLoading ?? cardTransactions.loading;
+  const error = transactionsError ?? cardTransactions.error;
+  const refresh = onRefresh ?? cardTransactions.refresh;
+  const connection = prefetchedConnection ?? cardTransactions.connection;
 
   const needSetup = !connection.hasPat || !connection.hasBudget;
 

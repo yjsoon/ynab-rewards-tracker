@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useCreditCards, useYnabPAT } from '@/hooks/useLocalStorage';
@@ -11,9 +11,13 @@ import {
   CreditCard as CreditCardIcon
 } from 'lucide-react';
 import type { CreditCard } from '@/lib/storage';
+import { SimpleRewardsCalculator } from '@/lib/rewards-engine';
+import { useCardTransactions } from '@/hooks/useCardTransactions';
 import TransactionsPreview from './TransactionsPreview';
 import SpendingStatus from './SpendingStatus';
 import CardSettings from './CardSettings';
+
+const TRANSACTION_LOOKBACK_DAYS = 90;
 
 export default function CardDetailPage() {
   const params = useParams();
@@ -27,7 +31,22 @@ export default function CardDetailPage() {
   const { pat } = useYnabPAT();
   
   const [card, setCard] = useState<CreditCard | null>(null);
-  // Transactions preview handled in child component
+
+  const sharedSinceDate = useMemo(() => {
+    if (!card) return undefined;
+
+    const lookbackDate = new Date();
+    lookbackDate.setDate(lookbackDate.getDate() - TRANSACTION_LOOKBACK_DAYS);
+    const lookbackStart = lookbackDate.toISOString().split('T')[0];
+    const periodStart = SimpleRewardsCalculator.calculatePeriod(card).start;
+
+    return periodStart < lookbackStart ? periodStart : lookbackStart;
+  }, [card]);
+
+  const cardTransactions = useCardTransactions(card, {
+    lookbackDays: TRANSACTION_LOOKBACK_DAYS,
+    sinceDate: sharedSinceDate,
+  });
 
   useEffect(() => {
     const foundCard = cards.find(c => c.id === cardId);
@@ -79,6 +98,8 @@ export default function CardDetailPage() {
         <SpendingStatus
           card={card}
           pat={pat}
+          prefetchedTransactions={cardTransactions.transactions}
+          transactionsLoading={cardTransactions.loading}
         />
       )}
 
@@ -108,7 +129,15 @@ export default function CardDetailPage() {
         </TabsContent>
 
         <TabsContent value="transactions" className="mt-6">
-          <TransactionsPreview card={card} />
+          <TransactionsPreview
+            card={card}
+            lookbackDays={TRANSACTION_LOOKBACK_DAYS}
+            prefetchedTransactions={cardTransactions.transactions}
+            transactionsLoading={cardTransactions.loading}
+            transactionsError={cardTransactions.error}
+            onRefresh={cardTransactions.refresh}
+            connection={cardTransactions.connection}
+          />
         </TabsContent>
       </Tabs>
     </div>

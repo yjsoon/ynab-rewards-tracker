@@ -50,7 +50,7 @@ export function getMinimumSpendStatus(minimumSpend: number | null | undefined):
   if (!isMinimumSpendConfigured(minimumSpend)) {
     return 'not-configured';
   }
-  return minimumSpend === 0 ? 'no-minimum' : 'has-minimum';
+  return hasMinimumSpendRequirement(minimumSpend) ? 'has-minimum' : 'no-minimum';
 }
 
 /**
@@ -60,7 +60,7 @@ export function formatMinimumSpendText(minimumSpend: number | null | undefined):
   if (!isMinimumSpendConfigured(minimumSpend)) {
     return 'Not configured';
   }
-  if (minimumSpend === 0) {
+  if (!hasMinimumSpendRequirement(minimumSpend)) {
     return 'No minimum required';
   }
   return `$${minimumSpend.toLocaleString()} required`;
@@ -114,7 +114,7 @@ export function getMaximumSpendStatus(maximumSpend: number | null | undefined):
   if (!isMaximumSpendConfigured(maximumSpend)) {
     return 'not-configured';
   }
-  return maximumSpend === 0 ? 'no-limit' : 'has-limit';
+  return hasMaximumSpendLimit(maximumSpend) ? 'has-limit' : 'no-limit';
 }
 
 /**
@@ -124,7 +124,7 @@ export function formatMaximumSpendText(maximumSpend: number | null | undefined):
   if (!isMaximumSpendConfigured(maximumSpend)) {
     return 'Not configured';
   }
-  if (maximumSpend === 0) {
+  if (!hasMaximumSpendLimit(maximumSpend)) {
     return 'No limit';
   }
   return `$${maximumSpend.toLocaleString()} limit`;

@@ -7,10 +7,12 @@ import type { Transaction } from '@/types/transaction';
 import { useSelectedBudget, useYnabPAT } from './useLocalStorage';
 
 interface UseCardTransactionsOptions {
+  enabled?: boolean;
   lookbackDays?: number;
+  sinceDate?: string;
 }
 
-interface ConnectionState {
+export interface ConnectionState {
   hasPat: boolean;
   hasBudget: boolean;
 }
@@ -29,7 +31,7 @@ export function useCardTransactions(
   card: CreditCard | null,
   options: UseCardTransactionsOptions = {}
 ): UseCardTransactionsResult {
-  const { lookbackDays = DEFAULT_LOOKBACK_DAYS } = options;
+  const { enabled = true, lookbackDays = DEFAULT_LOOKBACK_DAYS, sinceDate } = options;
   const { pat } = useYnabPAT();
   const { selectedBudget, isLoading: budgetLoading } = useSelectedBudget();
 
@@ -39,7 +41,7 @@ export function useCardTransactions(
   const abortRef = useRef<AbortController | null>(null);
 
   const fetchTransactions = useCallback(async () => {
-    if (!card) {
+    if (!enabled || !card) {
       if (abortRef.current) {
         abortRef.current.abort();
         abortRef.current = null;
@@ -77,11 +79,11 @@ export function useCardTransactions(
       const controller = new AbortController();
       abortRef.current = controller;
 
-      const sinceDate = new Date();
-      sinceDate.setDate(sinceDate.getDate() - lookbackDays);
+      const lookbackDate = new Date();
+      lookbackDate.setDate(lookbackDate.getDate() - lookbackDays);
 
       const allTransactions = await client.getTransactions(selectedBudget.id, {
-        since_date: sinceDate.toISOString().split('T')[0],
+        since_date: sinceDate ?? lookbackDate.toISOString().split('T')[0],
         signal: controller.signal,
       });
 
@@ -107,7 +109,7 @@ export function useCardTransactions(
     } finally {
       setLoading(false);
     }
-  }, [card, pat, lookbackDays, selectedBudget.id, budgetLoading]);
+  }, [enabled, card, pat, lookbackDays, sinceDate, selectedBudget.id, budgetLoading]);
 
   useEffect(() => {
     fetchTransactions();

@@ -159,9 +159,11 @@ export class StorageService {
       this.cachedStorage = normalized;
       this.hasCachedStorage = true;
     } catch (error) {
+      this.invalidateCache();
       if (process.env.NODE_ENV === "development") {
         console.error("Failed to set localStorage:", error);
       }
+      throw error;
     }
   }
 
