@@ -20,6 +20,7 @@ export function useAutoBackup() {
   const pendingPromiseRef = useRef<Promise<void> | null>(null);
   const pendingResolveRef = useRef<(() => void) | null>(null);
   const pendingRejectRef = useRef<((reason?: unknown) => void) | null>(null);
+  const uploadInFlightRef = useRef(false);
 
   const settlePending = useCallback((error?: unknown) => {
     const resolve = pendingResolveRef.current;
@@ -48,6 +49,10 @@ export function useAutoBackup() {
       return;
     }
 
+    if (uploadInFlightRef.current) {
+      return pendingPromiseRef.current ?? Promise.resolve();
+    }
+
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
     }
@@ -62,6 +67,7 @@ export function useAutoBackup() {
     // Debounce: wait 2 seconds after last save, then resolve/reject every
     // caller in this debounce window with the same upload result.
     debounceTimerRef.current = setTimeout(async () => {
+      uploadInFlightRef.current = true;
       try {
         const normalised = normaliseMnemonic(settings.cloudSyncMnemonic!);
         if (!isValidMnemonic(normalised)) {
@@ -88,6 +94,8 @@ export function useAutoBackup() {
         // Reject so caller can show error toast
         console.error('Auto-sync upload failed:', error);
         settlePending(error);
+      } finally {
+        uploadInFlightRef.current = false;
       }
     }, 2000); // 2 second debounce
 

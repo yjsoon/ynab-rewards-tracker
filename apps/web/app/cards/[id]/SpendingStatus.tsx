@@ -94,6 +94,7 @@ export default function SpendingStatus({
         const accountTransactions = allTransactions.filter(
           (t: Transaction) =>
             t.account_id === card.ynabAccountId &&
+            t.amount < 0 &&
             t.date >= period.start &&
             t.date <= period.end
         );
@@ -123,6 +124,7 @@ export default function SpendingStatus({
         prefetchedTransactions.filter(
           (t) =>
             t.account_id === card.ynabAccountId &&
+            t.amount < 0 &&
             t.date >= period.start &&
             t.date <= period.end
         )

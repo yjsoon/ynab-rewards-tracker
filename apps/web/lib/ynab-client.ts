@@ -49,6 +49,7 @@ const CACHE_TTL_MS = 30_000; // 30s soft cache; YNAB data isn't ultra-realtime
 const MAX_GET_CACHE_ENTRIES = 100;
 const ACCOUNTS_CACHE_TTL_MS = 5 * 60 * 1000;
 const FLAG_NAMES_CACHE_TTL_MS = 5 * 60 * 1000;
+const MAX_FLAG_NAMES_CACHE_ENTRIES = 50;
 let nextClientCacheScope = 0;
 const inflightFlagNames = new Map<
   string,
@@ -70,6 +71,20 @@ function pruneExpiredGetCache(now = Date.now()) {
     const oldestKey = getCache.keys().next().value;
     if (!oldestKey) break;
     getCache.delete(oldestKey);
+  }
+}
+
+function pruneExpiredFlagNamesCache(now = Date.now()) {
+  for (const [key, cached] of flagNamesCache) {
+    if (cached.expiry <= now) {
+      flagNamesCache.delete(key);
+    }
+  }
+
+  while (flagNamesCache.size > MAX_FLAG_NAMES_CACHE_ENTRIES) {
+    const oldestKey = flagNamesCache.keys().next().value;
+    if (!oldestKey) break;
+    flagNamesCache.delete(oldestKey);
   }
 }
 
@@ -238,6 +253,7 @@ export class YnabClient {
     budgetId: string,
   ): Promise<Partial<Record<YnabFlagColor, string>>> {
     const cacheKey = makeFlagNamesKey(budgetId, this.cacheScope);
+    pruneExpiredFlagNamesCache();
     const cached = flagNamesCache.get(cacheKey);
     if (cached && cached.expiry > Date.now()) {
       return cached.data;
@@ -296,6 +312,7 @@ export class YnabClient {
           expiry: Date.now() + FLAG_NAMES_CACHE_TTL_MS,
           data: candidates,
         });
+        pruneExpiredFlagNamesCache();
 
         return candidates;
       } catch (error) {
