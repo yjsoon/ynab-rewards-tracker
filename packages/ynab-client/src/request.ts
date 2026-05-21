@@ -292,28 +292,27 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   }
 
   return new Promise((resolve, reject) => {
-    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     let settled = false;
 
     const onAbort = () => {
       if (settled) return;
       settled = true;
-      if (timeoutId) clearTimeout(timeoutId);
+      clearTimeout(timeoutId);
       signal?.removeEventListener('abort', onAbort);
       reject(createYnabError('network_error', undefined, 'Request was cancelled'));
     };
+
+    const timeoutId = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
 
     signal?.addEventListener('abort', onAbort, { once: true });
     if (signal?.aborted) {
       onAbort();
       return;
     }
-
-    timeoutId = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      signal?.removeEventListener('abort', onAbort);
-      resolve();
-    }, ms);
   });
 }
