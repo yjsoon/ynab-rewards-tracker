@@ -201,6 +201,7 @@ export default function SettingsPage() {
   const [showClearDialog, setShowClearDialog] = useState(false);
   const [showClearTokenDialog, setShowClearTokenDialog] = useState(false);
   const hasRequestedBudgetsRef = useRef(false);
+  const skipConnectionFetchForPatRef = useRef<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [cloudSyncPhrase, setCloudSyncPhrase] = useState('');
@@ -436,6 +437,12 @@ export default function SettingsPage() {
   useEffect(() => {
     if (!pat) {
       hasRequestedBudgetsRef.current = false;
+      skipConnectionFetchForPatRef.current = null;
+      return;
+    }
+
+    if (skipConnectionFetchForPatRef.current === pat) {
+      skipConnectionFetchForPatRef.current = null;
       return;
     }
 
@@ -482,6 +489,8 @@ export default function SettingsPage() {
       const client = new YnabClient(nextToken);
       const fetchedBudgets = await client.getBudgets();
       setBudgets(fetchedBudgets);
+      hasRequestedBudgetsRef.current = true;
+      skipConnectionFetchForPatRef.current = nextToken;
 
       const matchingBudget = fetchedBudgets.find((budget) => budget.id === selectedBudget.id);
       if (matchingBudget) {
