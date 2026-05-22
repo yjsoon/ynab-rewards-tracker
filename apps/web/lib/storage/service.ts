@@ -239,8 +239,13 @@ export class StorageService {
 
   setSelectedBudget(budgetId: string, budgetName: string): void {
     const storage = this.getStorage();
-    storage.ynab.selectedBudgetId = budgetId;
-    storage.ynab.selectedBudgetName = budgetName;
+    if (budgetId && budgetName) {
+      storage.ynab.selectedBudgetId = budgetId;
+      storage.ynab.selectedBudgetName = budgetName;
+    } else {
+      delete storage.ynab.selectedBudgetId;
+      delete storage.ynab.selectedBudgetName;
+    }
     this.setStorage(storage);
   }
 
@@ -801,17 +806,19 @@ export class StorageService {
 
   importSettings(jsonString: string): void {
     try {
-      const imported = JSON.parse(jsonString);
+      const imported = JSON.parse(jsonString) as Partial<MutableStorageData>;
       const storage = this.getStorage() as MutableStorageData;
 
       // Fix #5: Preserve sensitive local-only data (more explicit checks with optional chaining)
-      const pat = storage.ynab.pat;
+      const localYnab = { ...storage.ynab };
+      const pat = localYnab.pat;
       const cloudSyncMnemonic = storage.settings?.cloudSyncMnemonic;
       const rememberCloudSyncCode = storage.settings?.rememberCloudSyncCode;
       const autoSyncEnabled = storage.settings?.autoSyncEnabled;
       const formatterApiKeys = storage.settings?.statementFormatter?.apiKeys;
 
       Object.assign(storage, imported);
+      storage.ynab = this.mergeImportedYnabConnection(imported.ynab, localYnab, storage.cards);
 
       // Restore PAT if it exists (non-empty string)
       if (pat && typeof pat === "string") {
@@ -844,6 +851,71 @@ export class StorageService {
     } catch (error) {
       throw new Error("Invalid settings file");
     }
+  }
+
+  private mergeImportedYnabConnection(
+    importedYnab: Partial<YnabConnection> | undefined,
+    localYnab: YnabConnection,
+    cards: CreditCard[],
+  ): YnabConnection {
+    const imported =
+      importedYnab && typeof importedYnab === "object" ? importedYnab : {};
+
+    const next: YnabConnection = { ...imported };
+    const importedBudgetId = this.nonEmptyString(imported.selectedBudgetId);
+    const importedBudgetName = this.nonEmptyString(imported.selectedBudgetName);
+    const localBudgetId = this.nonEmptyString(localYnab.selectedBudgetId);
+    const localBudgetName = this.nonEmptyString(localYnab.selectedBudgetName);
+
+    if (importedBudgetId && importedBudgetName) {
+      next.selectedBudgetId = importedBudgetId;
+      next.selectedBudgetName = importedBudgetName;
+    } else if (localBudgetId && localBudgetName) {
+      next.selectedBudgetId = localBudgetId;
+      next.selectedBudgetName = localBudgetName;
+    } else {
+      delete next.selectedBudgetId;
+      delete next.selectedBudgetName;
+    }
+
+    const importedTrackedIds = this.normaliseAccountIds(imported.trackedAccountIds);
+    const cardAccountIds = this.normaliseAccountIds(
+      cards.map((card) => card.ynabAccountId),
+    );
+    const localTrackedIds = this.normaliseAccountIds(localYnab.trackedAccountIds);
+    const trackedAccountIds =
+      importedTrackedIds.length > 0
+        ? importedTrackedIds
+        : cardAccountIds.length > 0
+          ? cardAccountIds
+          : localTrackedIds;
+
+    if (trackedAccountIds.length > 0) {
+      next.trackedAccountIds = trackedAccountIds;
+    } else {
+      delete next.trackedAccountIds;
+    }
+
+    return next;
+  }
+
+  private nonEmptyString(value: unknown): string | undefined {
+    return typeof value === "string" && value.trim() ? value : undefined;
+  }
+
+  private normaliseAccountIds(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return Array.from(
+      new Set(
+        value.filter(
+          (entry): entry is string =>
+            typeof entry === "string" && entry.trim().length > 0,
+        ),
+      ),
+    ).sort();
   }
 
   clearAll(): void {

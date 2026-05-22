@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { StorageService } from "./service";
+import type { CreditCard } from "./types";
 
 type LocalStorageMock = {
   getItem(key: string): string | null;
@@ -91,5 +92,130 @@ describe("StorageService budget accounts cache", () => {
     expect(() => service.updateSettings({ currency: "SGD" })).toThrow(
       "Quota exceeded",
     );
+  });
+});
+
+describe("StorageService importSettings", () => {
+  beforeEach(() => {
+    const localStorageMock = createLocalStorageMock();
+
+    Object.defineProperty(globalThis, "window", {
+      value: {
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      },
+      configurable: true,
+      writable: true,
+    });
+
+    Object.defineProperty(globalThis, "localStorage", {
+      value: localStorageMock,
+      configurable: true,
+      writable: true,
+    });
+  });
+
+  const importedBase = {
+    cards: [],
+    rules: [],
+    tagMappings: [],
+    calculations: [],
+    themeGroups: [],
+    settings: {
+      theme: "dark",
+    },
+  };
+
+  function buildCard(accountId: string): CreditCard {
+    return {
+      id: `card-${accountId}`,
+      name: "Rewards Card",
+      issuer: "Bank",
+      type: "cashback",
+      ynabAccountId: accountId,
+      featured: true,
+      earningRate: 1,
+    };
+  }
+
+  it("preserves the local PAT, budget, and tracked accounts when a cloud payload has no YNAB selection", () => {
+    const service = new StorageService();
+
+    service.setPAT("local-pat");
+    service.setSelectedBudget("budget-local", "Local Budget");
+    service.setTrackedAccountIds(["account-local"]);
+
+    service.importSettings(JSON.stringify({ ...importedBase, ynab: {} }));
+
+    expect(service.getPAT()).toBe("local-pat");
+    expect(service.getSelectedBudget()).toEqual({
+      id: "budget-local",
+      name: "Local Budget",
+    });
+    expect(service.getTrackedAccountIds()).toEqual(["account-local"]);
+  });
+
+  it("treats empty imported budget fields as absent and reconstructs tracked accounts from imported cards", () => {
+    const service = new StorageService();
+
+    service.setPAT("local-pat");
+    service.setSelectedBudget("budget-local", "Local Budget");
+
+    service.importSettings(
+      JSON.stringify({
+        ...importedBase,
+        ynab: {
+          selectedBudgetId: "",
+          selectedBudgetName: "",
+          trackedAccountIds: [],
+        },
+        cards: [buildCard("account-card")],
+      }),
+    );
+
+    expect(service.getPAT()).toBe("local-pat");
+    expect(service.getSelectedBudget()).toEqual({
+      id: "budget-local",
+      name: "Local Budget",
+    });
+    expect(service.getTrackedAccountIds()).toEqual(["account-card"]);
+  });
+
+  it("uses valid YNAB connection fields from the imported payload", () => {
+    const service = new StorageService();
+
+    service.setPAT("local-pat");
+    service.setSelectedBudget("budget-local", "Local Budget");
+    service.setTrackedAccountIds(["account-local"]);
+
+    service.importSettings(
+      JSON.stringify({
+        ...importedBase,
+        ynab: {
+          selectedBudgetId: "budget-cloud",
+          selectedBudgetName: "Cloud Budget",
+          trackedAccountIds: ["account-cloud"],
+        },
+      }),
+    );
+
+    expect(service.getPAT()).toBe("local-pat");
+    expect(service.getSelectedBudget()).toEqual({
+      id: "budget-cloud",
+      name: "Cloud Budget",
+    });
+    expect(service.getTrackedAccountIds()).toEqual(["account-cloud"]);
+  });
+
+  it("removes stored budget fields when setSelectedBudget is called with an empty value", () => {
+    const service = new StorageService();
+
+    service.setSelectedBudget("budget-local", "Local Budget");
+    service.setSelectedBudget("", "");
+
+    expect(service.getSelectedBudget()).toEqual({
+      id: undefined,
+      name: undefined,
+    });
   });
 });
