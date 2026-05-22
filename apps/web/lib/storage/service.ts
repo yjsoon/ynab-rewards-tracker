@@ -859,9 +859,11 @@ export class StorageService {
     cards: CreditCard[],
   ): YnabConnection {
     const imported =
-      importedYnab && typeof importedYnab === "object" ? importedYnab : {};
+      importedYnab && typeof importedYnab === "object" && !Array.isArray(importedYnab)
+        ? importedYnab
+        : {};
 
-    const next: YnabConnection = { ...imported };
+    const next: YnabConnection = { ...localYnab, ...imported };
     const importedBudgetId = this.nonEmptyString(imported.selectedBudgetId);
     const importedBudgetName = this.nonEmptyString(imported.selectedBudgetName);
     const localBudgetId = this.nonEmptyString(localYnab.selectedBudgetId);
@@ -900,7 +902,12 @@ export class StorageService {
   }
 
   private nonEmptyString(value: unknown): string | undefined {
-    return typeof value === "string" && value.trim() ? value : undefined;
+    if (typeof value !== "string") {
+      return undefined;
+    }
+
+    const trimmed = value.trim();
+    return trimmed ? trimmed : undefined;
   }
 
   private normaliseAccountIds(value: unknown): string[] {
@@ -910,10 +917,9 @@ export class StorageService {
 
     return Array.from(
       new Set(
-        value.filter(
-          (entry): entry is string =>
-            typeof entry === "string" && entry.trim().length > 0,
-        ),
+        value
+          .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+          .filter((entry) => entry.length > 0),
       ),
     ).sort();
   }

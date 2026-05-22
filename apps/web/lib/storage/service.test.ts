@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { STORAGE_KEY } from "@ynab-counter/app-core/storage";
 
 import { StorageService } from "./service";
 import type { CreditCard } from "./types";
@@ -27,6 +28,15 @@ function createLocalStorageMock(): LocalStorageMock {
       store.clear();
     },
   };
+}
+
+function readStoredYnab(): Record<string, unknown> {
+  const stored = localStorage.getItem(STORAGE_KEY);
+  if (!stored) {
+    throw new Error("Expected storage to be populated");
+  }
+
+  return JSON.parse(stored).ynab;
 }
 
 describe("StorageService budget accounts cache", () => {
@@ -155,6 +165,43 @@ describe("StorageService importSettings", () => {
     expect(service.getTrackedAccountIds()).toEqual(["account-local"]);
   });
 
+  it("preserves local YNAB metadata when importing partial connection settings", () => {
+    const service = new StorageService();
+
+    service.setPAT("local-pat");
+    service.setSelectedBudget("budget-local", "Local Budget");
+
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (!stored) {
+      throw new Error("Expected storage to be populated");
+    }
+
+    const storage = JSON.parse(stored);
+    storage.ynab.lastSync = "2026-05-22T01:02:03.000Z";
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(storage));
+
+    new StorageService().importSettings(JSON.stringify({ ...importedBase, ynab: {} }));
+
+    expect(readStoredYnab().lastSync).toBe("2026-05-22T01:02:03.000Z");
+  });
+
+  it("ignores array-shaped imported YNAB settings", () => {
+    const service = new StorageService();
+
+    service.setPAT("local-pat");
+    service.setSelectedBudget("budget-local", "Local Budget");
+    service.setTrackedAccountIds(["account-local"]);
+
+    service.importSettings(JSON.stringify({ ...importedBase, ynab: [] }));
+
+    expect(service.getPAT()).toBe("local-pat");
+    expect(service.getSelectedBudget()).toEqual({
+      id: "budget-local",
+      name: "Local Budget",
+    });
+    expect(service.getTrackedAccountIds()).toEqual(["account-local"]);
+  });
+
   it("treats empty imported budget fields as absent and reconstructs tracked accounts from imported cards", () => {
     const service = new StorageService();
 
@@ -205,6 +252,29 @@ describe("StorageService importSettings", () => {
       name: "Cloud Budget",
     });
     expect(service.getTrackedAccountIds()).toEqual(["account-cloud"]);
+  });
+
+  it("trims imported YNAB budget and tracked account fields", () => {
+    const service = new StorageService();
+
+    service.setPAT("local-pat");
+
+    service.importSettings(
+      JSON.stringify({
+        ...importedBase,
+        ynab: {
+          selectedBudgetId: " budget-cloud ",
+          selectedBudgetName: " Cloud Budget ",
+          trackedAccountIds: [" account-b ", "account-a", "account-a ", "  ", 123],
+        },
+      }),
+    );
+
+    expect(service.getSelectedBudget()).toEqual({
+      id: "budget-cloud",
+      name: "Cloud Budget",
+    });
+    expect(service.getTrackedAccountIds()).toEqual(["account-a", "account-b"]);
   });
 
   it("removes stored budget fields when setSelectedBudget is called with an empty value", () => {

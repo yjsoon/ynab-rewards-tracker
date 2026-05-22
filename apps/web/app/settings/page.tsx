@@ -484,11 +484,10 @@ export default function SettingsPage() {
       setBudgets(fetchedBudgets);
 
       const matchingBudget = fetchedBudgets.find((budget) => budget.id === selectedBudget.id);
-      setPAT(nextToken);
-      setTokenInput('');
-
       if (matchingBudget) {
         persistSelectedBudget(matchingBudget.id, matchingBudget.name);
+        setPAT(nextToken);
+        setTokenInput('');
         setConnectionMessage('Token saved! Refreshing selected budget...');
         fetchAccounts(matchingBudget.id, nextToken);
         return;
@@ -498,6 +497,8 @@ export default function SettingsPage() {
       persistTrackedAccountIds([]);
       setAccounts([]);
       setShowBudgetSelector(true);
+      setPAT(nextToken);
+      setTokenInput('');
       setConnectionMessage('Token saved. Select a budget available to this token.');
     } catch (error) {
       setConnectionMessage(`Failed to replace token: ${getErrorMessage(error)}`);
