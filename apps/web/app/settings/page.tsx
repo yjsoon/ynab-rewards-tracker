@@ -201,6 +201,7 @@ export default function SettingsPage() {
   const [showClearDialog, setShowClearDialog] = useState(false);
   const [showClearTokenDialog, setShowClearTokenDialog] = useState(false);
   const hasRequestedBudgetsRef = useRef(false);
+  const skipConnectionFetchForPatRef = useRef<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [cloudSyncPhrase, setCloudSyncPhrase] = useState('');
@@ -436,6 +437,12 @@ export default function SettingsPage() {
   useEffect(() => {
     if (!pat) {
       hasRequestedBudgetsRef.current = false;
+      skipConnectionFetchForPatRef.current = null;
+      return;
+    }
+
+    if (skipConnectionFetchForPatRef.current === pat) {
+      skipConnectionFetchForPatRef.current = null;
       return;
     }
 
@@ -454,20 +461,59 @@ export default function SettingsPage() {
 
   async function handleSaveToken(e: React.FormEvent) {
     e.preventDefault();
-    
-    const validation = validateYnabToken(tokenInput);
+
+    const nextToken = tokenInput.trim();
+    const validation = validateYnabToken(nextToken);
     if (!validation.valid) {
       setConnectionMessage(`❌ ${validation.error}`);
       return;
     }
 
-    const nextToken = tokenInput;
+    if (selectedBudget.id) {
+      await handleReplaceToken(nextToken);
+      return;
+    }
+
     setPAT(nextToken);
     setConnectionMessage('Token saved! Fetching budgets...');
     setTokenInput('');
-    
-    // Immediately fetch budgets after saving token
+
     fetchBudgets(nextToken);
+  }
+
+  async function handleReplaceToken(nextToken: string) {
+    setLoadingBudgets(true);
+    setConnectionMessage('Checking access to your selected budget...');
+
+    try {
+      const client = new YnabClient(nextToken);
+      const fetchedBudgets = await client.getBudgets();
+      setBudgets(fetchedBudgets);
+      hasRequestedBudgetsRef.current = true;
+      skipConnectionFetchForPatRef.current = nextToken;
+
+      const matchingBudget = fetchedBudgets.find((budget) => budget.id === selectedBudget.id);
+      if (matchingBudget) {
+        persistSelectedBudget(matchingBudget.id, matchingBudget.name);
+        setPAT(nextToken);
+        setTokenInput('');
+        setConnectionMessage('Token saved! Refreshing selected budget...');
+        fetchAccounts(matchingBudget.id, nextToken);
+        return;
+      }
+
+      persistSelectedBudget('', '');
+      persistTrackedAccountIds([]);
+      setAccounts([]);
+      setShowBudgetSelector(true);
+      setPAT(nextToken);
+      setTokenInput('');
+      setConnectionMessage('Token saved. Select a budget available to this token.');
+    } catch (error) {
+      setConnectionMessage(`Failed to replace token: ${getErrorMessage(error)}`);
+    } finally {
+      setLoadingBudgets(false);
+    }
   }
 
   function handleAccountToggle(accountId: string, accountName: string) {
@@ -1081,6 +1127,25 @@ export default function SettingsPage() {
                   <CheckCircle2 className="h-5 w-5" aria-hidden="true" />
                   <span className="font-medium">Token configured</span>
                 </div>
+
+                <form onSubmit={handleSaveToken} className="space-y-2 rounded-lg border bg-muted/20 p-3">
+                  <label className="text-sm font-medium" htmlFor="replace-token-input">
+                    Replace token
+                  </label>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <input
+                      id="replace-token-input"
+                      type="password"
+                      value={tokenInput}
+                      onChange={(e) => setTokenInput(e.target.value)}
+                      placeholder="Paste a new YNAB Personal Access Token"
+                      className="flex-1 px-3 py-2 border rounded-md text-base md:text-sm"
+                    />
+                    <Button type="submit" disabled={!tokenInput.trim()}>
+                      Replace Token
+                    </Button>
+                  </div>
+                </form>
 
                 {/* Budget Selection */}
                 {selectedBudget.id && !showBudgetSelector ? (
