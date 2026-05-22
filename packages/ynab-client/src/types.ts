@@ -2,7 +2,7 @@
  * YNAB API response types (DTOs)
  */
 
-export interface YnabBudgetSummary {
+export interface YnabPlanSummary {
   id: string;
   name: string;
   last_modified_on: string;
@@ -20,6 +20,8 @@ export interface YnabBudgetSummary {
     display_symbol: boolean;
   };
 }
+
+export type YnabBudgetSummary = YnabPlanSummary;
 
 export interface YnabAccountSummary {
   id: string;
@@ -83,6 +85,7 @@ export interface YnabCategoryGroup {
   id: string;
   name: string;
   hidden: boolean;
+  internal?: boolean;
   deleted?: boolean;
   categories: YnabCategory[];
 }
@@ -93,6 +96,7 @@ export interface YnabCategory {
   category_group_name?: string;
   name: string;
   hidden: boolean;
+  internal?: boolean;
   original_category_group_id?: string | null;
   note?: string | null;
   budgeted?: number;

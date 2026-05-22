@@ -198,17 +198,19 @@ export class YnabClient {
   // Budgets
   async getBudgets(init?: YnabRequestOptions) {
     const result = await this.request<
-      YnabResponse<{ budgets: YnabBudgetSummary[] }>
-    >("budgets", init);
-    return result.data.budgets;
+      YnabResponse<{ plans?: YnabBudgetSummary[]; budgets?: YnabBudgetSummary[] }>
+    >("plans", init);
+    return result.data.plans ?? result.data.budgets ?? [];
   }
 
   async getBudget(budgetId: string, init?: YnabRequestOptions) {
-    const result = await this.request<YnabResponse<{ budget: unknown }>>(
-      `budgets/${budgetId}`,
+    const result = await this.request<
+      YnabResponse<{ plan?: unknown; budget?: unknown }>
+    >(
+      `plans/${budgetId}`,
       init,
     );
-    return result.data.budget;
+    return result.data.plan ?? result.data.budget ?? null;
   }
 
   // Accounts
@@ -230,7 +232,7 @@ export class YnabClient {
     }
 
     const result = await this.request<YnabResponse<{ accounts: TAccount[] }>>(
-      `budgets/${budgetId}/accounts`,
+      `plans/${budgetId}/accounts`,
       init,
     );
     storage.setBudgetAccountsCache(
@@ -245,7 +247,7 @@ export class YnabClient {
   async getBudgetSettings(budgetId: string, init?: YnabRequestOptions) {
     const result = await this.request<
       YnabResponse<{ settings: Record<string, unknown> }>
-    >(`budgets/${budgetId}/settings`, init);
+    >(`plans/${budgetId}/settings`, init);
     return result.data.settings;
   }
 
@@ -336,7 +338,7 @@ export class YnabClient {
   async getCategories(budgetId: string, init?: YnabRequestOptions) {
     const result = await this.request<
       YnabResponse<{ category_groups: unknown }>
-    >(`budgets/${budgetId}/categories`, init);
+    >(`plans/${budgetId}/categories`, init);
     return result.data.category_groups;
   }
 
@@ -357,7 +359,7 @@ export class YnabClient {
     const query = params.toString() ? `?${params.toString()}` : "";
     const result = await this.request<
       YnabResponse<{ transactions: Transaction[] }>
-    >(`budgets/${budgetId}/transactions${query}`, {
+    >(`plans/${budgetId}/transactions${query}`, {
       signal: options?.signal,
       bypassCache: options?.bypassCache,
     });
@@ -371,14 +373,14 @@ export class YnabClient {
   ) {
     const result = await this.request<
       YnabResponse<{ transaction: Transaction }>
-    >(`budgets/${budgetId}/transactions/${transactionId}`, init);
+    >(`plans/${budgetId}/transactions/${transactionId}`, init);
     return result.data.transaction;
   }
 
   // Payees
   async getPayees(budgetId: string, init?: YnabRequestOptions) {
     const result = await this.request<YnabResponse<{ payees: YnabPayee[] }>>(
-      `budgets/${budgetId}/payees`,
+      `plans/${budgetId}/payees`,
       init,
     );
     return result.data.payees;

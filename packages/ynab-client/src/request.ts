@@ -8,7 +8,7 @@ import type { YnabApiErrorCode } from './errors';
 export const DEFAULT_BASE_URL = 'https://api.ynab.com/v1';
 
 export interface RequestOptions {
-  /** API path (e.g., '/budgets' or '/budgets/{id}/accounts') */
+  /** API path (e.g., '/plans' or '/plans/{id}/accounts') */
   path: string;
   /** YNAB Personal Access Token */
   accessToken: string;

@@ -69,6 +69,10 @@ describe("YnabClient cache bypass", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/ynab/plans/budget-1/transactions?since_date=2026-04-01",
+      expect.any(Object),
+    );
   });
 
   it("skips the persisted account cache when bypassCache is set", async () => {
@@ -87,6 +91,10 @@ describe("YnabClient cache bypass", () => {
     await client.getAccounts("budget-2", { bypassCache: true });
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/ynab/plans/budget-2/accounts",
+      expect.any(Object),
+    );
   });
 
   it("preserves JSON error messages from the YNAB proxy", async () => {

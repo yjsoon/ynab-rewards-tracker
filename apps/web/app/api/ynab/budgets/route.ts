@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
   const token = authHeader.substring(7); // Remove "Bearer " prefix
 
   try {
-    const response = await fetch(`${YNAB_API_BASE}/budgets`, {
+    const response = await fetch(`${YNAB_API_BASE}/plans`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Accept': 'application/json',

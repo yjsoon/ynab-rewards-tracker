@@ -83,7 +83,7 @@ export default function RecommendationsPage() {
       const sinceDate = getEarliestPeriodStart(cards);
 
       const response = await fetch(
-        `/api/ynab/budgets/${selectedBudget.id}/transactions?since_date=${sinceDate}`,
+        `/api/ynab/plans/${selectedBudget.id}/transactions?since_date=${sinceDate}`,
         {
           headers: {
             'Authorization': `Bearer ${pat}`,

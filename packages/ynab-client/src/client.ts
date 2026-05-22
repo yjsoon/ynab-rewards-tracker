@@ -64,21 +64,26 @@ export class YnabClient {
   }
 
   /**
-   * Get all budgets for the authenticated user.
+   * Get all plans for the authenticated user.
+   *
+   * The method keeps the app's existing "budget" terminology stable while
+   * using YNAB's current /plans API on the wire.
    */
   async getBudgets(options?: { signal?: AbortSignal }): Promise<YnabBudgetSummary[]> {
-    const response = await this.request<YnabApiResponse<{ budgets: YnabBudgetSummary[] }>>(
-      '/budgets',
+    const response = await this.request<
+      YnabApiResponse<{ plans?: YnabBudgetSummary[]; budgets?: YnabBudgetSummary[] }>
+    >(
+      '/plans',
       options,
     );
-    return response.data.budgets;
+    return response.data.plans ?? response.data.budgets ?? [];
   }
 
   /**
-   * Get all accounts for a budget.
+   * Get all accounts for a plan.
    */
   async getAccounts(budgetId: string, options?: ListOptions): Promise<YnabAccountSummary[]> {
-    const path = buildPath(`/budgets/${budgetId}/accounts`, options);
+    const path = buildPath(`/plans/${budgetId}/accounts`, options);
     const response = await this.request<YnabApiResponse<{ accounts: YnabAccountSummary[] }>>(
       path,
       options,
@@ -87,10 +92,10 @@ export class YnabClient {
   }
 
   /**
-   * Get all category groups and categories for a budget.
+   * Get all category groups and categories for a plan.
    */
   async getCategories(budgetId: string, options?: ListOptions): Promise<YnabCategoryGroup[]> {
-    const path = buildPath(`/budgets/${budgetId}/categories`, options);
+    const path = buildPath(`/plans/${budgetId}/categories`, options);
     const response = await this.request<YnabApiResponse<{ category_groups: YnabCategoryGroup[] }>>(
       path,
       options,
@@ -99,10 +104,10 @@ export class YnabClient {
   }
 
   /**
-   * Get all payees for a budget.
+   * Get all payees for a plan.
    */
   async getPayees(budgetId: string, options?: ListOptions): Promise<YnabPayee[]> {
-    const path = buildPath(`/budgets/${budgetId}/payees`, options);
+    const path = buildPath(`/plans/${budgetId}/payees`, options);
     const response = await this.request<YnabApiResponse<{ payees: YnabPayee[] }>>(
       path,
       options,
@@ -111,7 +116,7 @@ export class YnabClient {
   }
 
   /**
-   * Get transactions for a budget, optionally filtered.
+   * Get transactions for a plan, optionally filtered.
    */
   async getTransactions(
     budgetId: string,
@@ -195,6 +200,6 @@ function buildTransactionsPath(budgetId: string, options?: TransactionFilterOpti
   }
 
   const query = params.toString();
-  const basePath = `/budgets/${budgetId}/transactions`;
+  const basePath = `/plans/${budgetId}/transactions`;
   return query ? `${basePath}?${query}` : basePath;
 }
