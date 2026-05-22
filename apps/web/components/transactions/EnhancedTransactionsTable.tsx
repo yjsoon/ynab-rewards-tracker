@@ -225,7 +225,7 @@ export function EnhancedTransactionsTable({
 
       try {
         const response = await fetch(
-          `/api/ynab/budgets/${selectedBudgetId}/transactions/${transactionId}`,
+          `/api/ynab/plans/${selectedBudgetId}/transactions/${transactionId}`,
           {
             method: "PATCH",
             headers: {

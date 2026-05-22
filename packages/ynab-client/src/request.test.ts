@@ -19,7 +19,7 @@ describe('defaultBackoff', () => {
 describe('requestJson', () => {
   const mockFetch = vi.fn();
   const defaultOptions = {
-    path: '/budgets',
+    path: '/plans',
     accessToken: 'test-token',
     fetchImpl: mockFetch,
   };
@@ -35,7 +35,7 @@ describe('requestJson', () => {
 
   describe('successful requests', () => {
     it('returns parsed JSON on success', async () => {
-      const mockData = { data: { budgets: [] } };
+      const mockData = { data: { plans: [] } };
       mockFetch.mockResolvedValueOnce({
         ok: true,
         status: 200,
@@ -50,7 +50,7 @@ describe('requestJson', () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: () => Promise.resolve({ data: { budgets: [] } }),
+        json: () => Promise.resolve({ data: { plans: [] } }),
       });
 
       await requestJson({
@@ -71,7 +71,7 @@ describe('requestJson', () => {
       await requestJson(defaultOptions);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://api.ynab.com/v1/budgets',
+        'https://api.ynab.com/v1/plans',
         expect.objectContaining({
           headers: expect.objectContaining({
             'Authorization': 'Bearer test-token',

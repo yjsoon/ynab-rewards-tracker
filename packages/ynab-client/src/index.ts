@@ -23,6 +23,7 @@ export type { RequestOptions } from './request';
 // DTO types
 export type {
   YnabApiResponse,
+  YnabPlanSummary,
   YnabBudgetSummary,
   YnabAccountSummary,
   YnabPayee,
