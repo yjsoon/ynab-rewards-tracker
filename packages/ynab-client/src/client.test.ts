@@ -73,4 +73,21 @@ describe('YnabClient', () => {
       },
     ]);
   });
+
+  it('throws when the plans response shape is unexpected', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: { default_plan: null } }),
+    });
+
+    const client = new YnabClient({
+      accessToken: 'test-token',
+      fetchImpl,
+    });
+
+    await expect(client.getBudgets()).rejects.toThrow(
+      'Unexpected YNAB plans response: missing plans array',
+    );
+  });
 });

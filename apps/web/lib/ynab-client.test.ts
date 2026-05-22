@@ -110,4 +110,32 @@ describe("YnabClient cache bypass", () => {
 
     await expect(client.getBudgets()).rejects.toThrow("invalid token");
   });
+
+  it("throws when the plans response shape is unexpected", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { default_plan: null } }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new YnabClient("pat-plans");
+
+    await expect(client.getBudgets()).rejects.toThrow(
+      "Unexpected YNAB plans response: missing plans array",
+    );
+  });
+
+  it("throws when the plan response shape is unexpected", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { server_knowledge: 1 } }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new YnabClient("pat-plan");
+
+    await expect(client.getBudget("budget-1")).rejects.toThrow(
+      "Unexpected YNAB plan response: missing plan object",
+    );
+  });
 });

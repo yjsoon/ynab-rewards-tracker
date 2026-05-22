@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     console.error('Proxy error:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch budgets' },
+      { error: 'Failed to fetch YNAB plans' },
       { status: 500 }
     );
   }

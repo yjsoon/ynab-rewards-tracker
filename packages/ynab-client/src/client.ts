@@ -76,7 +76,7 @@ export class YnabClient {
       '/plans',
       options,
     );
-    return response.data.plans ?? response.data.budgets ?? [];
+    return extractPlans(response.data);
   }
 
   /**
@@ -165,6 +165,18 @@ export class YnabClient {
       signal: options?.signal,
     });
   }
+}
+
+function extractPlans(data: { plans?: YnabBudgetSummary[]; budgets?: YnabBudgetSummary[] }): YnabBudgetSummary[] {
+  if (Array.isArray(data.plans)) {
+    return data.plans;
+  }
+
+  if (Array.isArray(data.budgets)) {
+    return data.budgets;
+  }
+
+  throw new Error('Unexpected YNAB plans response: missing plans array');
 }
 
 /**

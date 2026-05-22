@@ -104,6 +104,30 @@ interface YnabResponse<T> {
   data: T;
 }
 
+function extractPlans(data: { plans?: YnabBudgetSummary[]; budgets?: YnabBudgetSummary[] }) {
+  if (Array.isArray(data.plans)) {
+    return data.plans;
+  }
+
+  if (Array.isArray(data.budgets)) {
+    return data.budgets;
+  }
+
+  throw new Error("Unexpected YNAB plans response: missing plans array");
+}
+
+function extractPlan(data: { plan?: unknown; budget?: unknown }) {
+  if ("plan" in data) {
+    return data.plan;
+  }
+
+  if ("budget" in data) {
+    return data.budget;
+  }
+
+  throw new Error("Unexpected YNAB plan response: missing plan object");
+}
+
 interface YnabRequestOptions extends RequestInit {
   bypassCache?: boolean;
 }
@@ -200,7 +224,7 @@ export class YnabClient {
     const result = await this.request<
       YnabResponse<{ plans?: YnabBudgetSummary[]; budgets?: YnabBudgetSummary[] }>
     >("plans", init);
-    return result.data.plans ?? result.data.budgets ?? [];
+    return extractPlans(result.data);
   }
 
   async getBudget(budgetId: string, init?: YnabRequestOptions) {
@@ -210,7 +234,7 @@ export class YnabClient {
       `plans/${budgetId}`,
       init,
     );
-    return result.data.plan ?? result.data.budget ?? null;
+    return extractPlan(result.data);
   }
 
   // Accounts
