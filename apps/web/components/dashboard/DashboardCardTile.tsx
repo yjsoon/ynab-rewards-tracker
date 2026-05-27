@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import {
   DollarSign,
@@ -80,6 +81,7 @@ export function DashboardCardTile({
   allowHideCard,
   dragHandle,
 }: DashboardCardTileProps) {
+  const router = useRouter();
   const accentClasses =
     "border border-border/70 dark:border-border/50";
   const isSubcategoryExpanded = isExpansionMap(summaryViewSubcategoriesExpanded)
@@ -139,7 +141,7 @@ export function DashboardCardTile({
           >
             <DropdownMenuItem
               onClick={() => {
-                window.location.href = `/cards/${card.id}?tab=settings&edit=1`;
+                router.push(`/cards/${card.id}?tab=settings&edit=1`);
               }}
             >
               <Settings2 className="h-4 w-4 mr-2" />
@@ -161,7 +163,7 @@ export function DashboardCardTile({
             )}
             <DropdownMenuItem
               onClick={() => {
-                window.location.href = `/cards/${card.id}`;
+                router.push(`/cards/${card.id}`);
               }}
             >
               <ReceiptText className="h-4 w-4 mr-2" />
