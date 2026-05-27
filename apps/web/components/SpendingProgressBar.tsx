@@ -102,6 +102,19 @@ export function SpendingProgressBar({
   const remainingToMinimum = hasMinimum ? Math.max(0, minimumSpend - spendForMinimum) : 0;
   const remainingToMaximum = hasMaximum ? Math.max(0, maximumSpend - spendForMaximum) : 0;
   const exceededAmount = hasMaximum && spendForMaximum >= maximumSpend ? spendForMaximum - maximumSpend : 0;
+  const roundedProgressPercent = Math.round(progressPercent);
+  const progressAriaLabel =
+    spendingZone === 'exceeded'
+      ? exceededAmount > 0
+        ? `Spending cap exceeded by ${formatDollars(exceededAmount, { currency })}`
+        : 'Spending cap reached'
+      : spendingZone === 'earning'
+        ? hasMaximum
+          ? `Earning rewards: ${roundedProgressPercent}% of cap used`
+          : `Earning rewards: ${roundedProgressPercent}%`
+        : spendingZone === 'pending'
+          ? `Working towards minimum: ${roundedProgressPercent}%`
+          : `Spending progress: ${roundedProgressPercent}%`;
 
   return (
     <div className={cn("space-y-2", className)}>
@@ -145,20 +158,10 @@ export function SpendingProgressBar({
         <div
           className="h-3 w-full overflow-hidden rounded-full bg-muted-foreground/10 dark:bg-white/15 shadow-inner"
           role="progressbar"
-          aria-valuenow={Math.round(progressPercent)}
+          aria-valuenow={roundedProgressPercent}
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-label={
-            spendingZone === 'exceeded'
-              ? `Spending cap exceeded: ${Math.round(progressPercent)}%`
-              : spendingZone === 'earning'
-                ? hasMaximum
-                  ? `Earning rewards: ${Math.round(progressPercent)}% of cap used`
-                  : `Earning rewards: ${Math.round(progressPercent)}%`
-                : spendingZone === 'pending'
-                  ? `Working towards minimum: ${Math.round(progressPercent)}%`
-                  : `Spending progress: ${Math.round(progressPercent)}%`
-          }
+          aria-label={progressAriaLabel}
         >
           {/* Progress fill */}
           <div
