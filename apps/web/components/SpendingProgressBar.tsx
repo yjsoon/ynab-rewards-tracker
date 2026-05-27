@@ -142,7 +142,24 @@ export function SpendingProgressBar({
       {/* Progress bar container */}
       <div className="relative">
         {/* Background bar */}
-        <div className="h-3 w-full overflow-hidden rounded-full bg-muted-foreground/10 dark:bg-white/15 shadow-inner">
+        <div
+          className="h-3 w-full overflow-hidden rounded-full bg-muted-foreground/10 dark:bg-white/15 shadow-inner"
+          role="progressbar"
+          aria-valuenow={Math.round(progressPercent)}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={
+            spendingZone === 'exceeded'
+              ? `Spending cap exceeded: ${Math.round(progressPercent)}%`
+              : spendingZone === 'earning'
+                ? hasMaximum
+                  ? `Earning rewards: ${Math.round(progressPercent)}% of cap used`
+                  : `Earning rewards: ${Math.round(progressPercent)}%`
+                : spendingZone === 'pending'
+                  ? `Working towards minimum: ${Math.round(progressPercent)}%`
+                  : `Spending progress: ${Math.round(progressPercent)}%`
+          }
+        >
           {/* Progress fill */}
           <div
             className={cn(

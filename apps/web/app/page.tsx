@@ -104,10 +104,9 @@ function DashboardContent() {
     };
   }, [dayBoundaryTick]);
 
-  const currentTime = useMemo(
-    () => Date.now() + dayBoundaryTick * 0,
-    [dayBoundaryTick]
-  );
+  // dayBoundaryTick is in the dep array so this re-evaluates at each day rollover.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const currentTime = useMemo(() => Date.now(), [dayBoundaryTick]);
   const liveDashboardPeriod = useMemo(
     () => resolveDashboardPeriod(null, null, new Date(currentTime)),
     [currentTime]

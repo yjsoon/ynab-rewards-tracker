@@ -1,3 +1,4 @@
+import { formatLocalDate } from '../rewards-engine/date-utils';
 import type {
   MutableCalculation,
   MutableCard,
@@ -54,10 +55,9 @@ export function applyStorageMigrations(data: MutableStorageData): void {
         if (mutableCard.promotionalPeriod && !mutableCard.promotionalPeriod.startDate) {
           const now = new Date();
           const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-          const isoDate = prevMonth.toISOString().split('T')[0];
           mutableCard.promotionalPeriod = {
             ...mutableCard.promotionalPeriod,
-            startDate: isoDate,
+            startDate: formatLocalDate(prevMonth),
           };
         }
         return mutableCard as CreditCard;
