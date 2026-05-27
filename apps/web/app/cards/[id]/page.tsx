@@ -97,15 +97,17 @@ export default function CardDetailPage() {
       </div>
 
       <Collapsible open={transactionsOpen} onOpenChange={setTransactionsOpen} className="mt-8">
-        <CollapsibleTrigger className="flex items-center gap-2 w-full text-left group">
-          <ChevronDown
-            className={cn(
-              'h-5 w-5 text-muted-foreground transition-transform',
-              !transactionsOpen && '-rotate-90'
-            )}
-          />
-          <h2 className="text-lg font-semibold">Recent Transactions</h2>
-        </CollapsibleTrigger>
+        <h2>
+          <CollapsibleTrigger className="flex items-center gap-2 w-full text-left text-lg font-semibold">
+            <ChevronDown
+              className={cn(
+                'h-5 w-5 text-muted-foreground transition-transform',
+                !transactionsOpen && '-rotate-90'
+              )}
+            />
+            Recent Transactions
+          </CollapsibleTrigger>
+        </h2>
         <CollapsibleContent className="pt-4">
           <TransactionsPreview
             card={card}
