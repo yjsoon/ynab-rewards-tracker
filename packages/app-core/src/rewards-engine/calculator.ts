@@ -9,7 +9,7 @@ import type {
   AppSettings,
   TransactionWithRewards
 } from '../storage/types';
-import { parseYnabDate } from './date-utils';
+import { formatLocalDate } from './date-utils';
 import { calculateCardPeriod, getRecentCardPeriods } from './utils/periods';
 
 export interface CalculationPeriod {
@@ -31,11 +31,13 @@ export class RewardsCalculator {
     // Get valuation rates from settings (default 1 cent per mile/point)
     const milesValuation = settings?.milesValuation || 0.01;
 
-    // Filter transactions to this period
-    const eligibleTransactions = transactions.filter(txn => {
-      const txnDate = parseYnabDate(txn.date);
-      return txnDate >= period.startDate && txnDate <= period.endDate;
-    });
+    // Filter transactions to this period using string comparison on YNAB's
+    // YYYY-MM-DD dates, which is ordering-equivalent to Date comparison.
+    const periodStartStr = formatLocalDate(period.startDate);
+    const periodEndStr = formatLocalDate(period.endDate);
+    const eligibleTransactions = transactions.filter(
+      txn => txn.date >= periodStartStr && txn.date <= periodEndStr,
+    );
 
     // Calculate total spend
     const totalSpend = Math.abs(
