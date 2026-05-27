@@ -189,7 +189,7 @@ export function DashboardCardTile({
           >
             <DropdownMenuItem
               onClick={() => {
-                window.location.href = `/cards/${card.id}?tab=settings&edit=1`;
+                window.location.href = `/cards/${card.id}?edit=1`;
               }}
             >
               <Settings2 className="h-4 w-4 mr-2" />

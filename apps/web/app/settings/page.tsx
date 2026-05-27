@@ -174,7 +174,7 @@ function TrackedAccountCard({ account, isTracked, linkedCard, onToggle }: Tracke
           className="mt-4 w-full justify-center"
           asChild
         >
-          <Link href={`/cards/${linkedCard.id}?tab=settings`} aria-label={`View ${linkedCard.name} details`}>
+          <Link href={`/cards/${linkedCard.id}`} aria-label={`View ${linkedCard.name} details`}>
             View card details
           </Link>
         </Button>
