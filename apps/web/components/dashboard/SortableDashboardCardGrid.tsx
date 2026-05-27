@@ -71,7 +71,6 @@ export function SortableDashboardCardGrid({
   referenceDate,
   allowHideCard,
 }: SortableDashboardCardGridProps) {
-  const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, {
@@ -128,12 +127,7 @@ export function SortableDashboardCardGrid({
     <DndContext
       sensors={sensors}
       collisionDetection={closestCenter}
-      onDragStart={({ active }) => setActiveDragId(String(active.id))}
-      onDragCancel={() => setActiveDragId(null)}
-      onDragEnd={(event) => {
-        handleDragEnd(event);
-        setActiveDragId(null);
-      }}
+      onDragEnd={handleDragEnd}
     >
       <SortableContext items={orderedIds} strategy={rectSortingStrategy}>
         <div
@@ -166,7 +160,6 @@ export function SortableDashboardCardGrid({
                 prefetchedTransactions={prefetchedTransactions}
                 onToggleSummarySubcategories={onToggleSummarySubcategories}
                 onHideCard={onHideCard}
-                isSorting={Boolean(activeDragId)}
                 isRefreshing={isRefreshing}
                 showTypeBadge={showTypeBadge}
                 referenceDate={referenceDate}
@@ -191,7 +184,6 @@ interface SortableDashboardCardProps {
   prefetchedTransactions: Transaction[];
   onToggleSummarySubcategories(cardId: string): void;
   onHideCard(cardId: string, hiddenUntil: string): void;
-  isSorting: boolean;
   isRefreshing: boolean;
   showTypeBadge?: boolean;
   referenceDate?: Date;
@@ -209,7 +201,6 @@ function SortableDashboardCard({
   prefetchedTransactions,
   onToggleSummarySubcategories,
   onHideCard,
-  isSorting,
   isRefreshing,
   showTypeBadge = false,
   referenceDate,
@@ -249,7 +240,6 @@ function SortableDashboardCard({
         prefetchedTransactions={prefetchedTransactions}
         onToggleSummarySubcategories={onToggleSummarySubcategories}
         onHideCard={onHideCard}
-        isSorting={isSorting}
         isDragging={isDragging}
         isRefreshing={isRefreshing}
         showTypeBadge={showTypeBadge}

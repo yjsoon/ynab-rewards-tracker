@@ -1,8 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import type { KeyboardEvent, ReactNode } from "react";
-import { useCallback, useEffect, useRef } from "react";
+import type { ReactNode } from "react";
 import {
   DollarSign,
   EyeOff,
@@ -58,7 +56,6 @@ export interface DashboardCardTileProps {
   prefetchedTransactions: Transaction[];
   onToggleSummarySubcategories(cardId: string): void;
   onHideCard(cardId: string, hiddenUntil: string): void;
-  isSorting?: boolean;
   isDragging?: boolean;
   isRefreshing: boolean;
   showTypeBadge?: boolean;
@@ -77,52 +74,14 @@ export function DashboardCardTile({
   prefetchedTransactions,
   onToggleSummarySubcategories,
   onHideCard,
-  isSorting = false,
   isDragging = false,
   isRefreshing,
   referenceDate,
   allowHideCard,
   dragHandle,
 }: DashboardCardTileProps) {
-  const suppressClickRef = useRef(false);
-  const router = useRouter();
-
-  const handleNavigate = useCallback(() => {
-    router.push(`/cards/${card.id}`);
-  }, [router, card.id]);
-
-  const handleKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLDivElement>) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        if (!suppressClickRef.current) {
-          handleNavigate();
-        }
-      }
-    },
-    [handleNavigate],
-  );
-
-  useEffect(() => {
-    if (isSorting) {
-      suppressClickRef.current = true;
-      return;
-    }
-
-    if (typeof window === "undefined") {
-      suppressClickRef.current = false;
-      return;
-    }
-
-    const timeout = window.setTimeout(() => {
-      suppressClickRef.current = false;
-    }, 150);
-
-    return () => window.clearTimeout(timeout);
-  }, [isSorting]);
-
   const accentClasses =
-    "border border-border/70 dark:border-border/50 hover:border-primary/40";
+    "border border-border/70 dark:border-border/50";
   const isSubcategoryExpanded = isExpansionMap(summaryViewSubcategoriesExpanded)
     ? (summaryViewSubcategoriesExpanded[card.id] ?? false)
     : Boolean(summaryViewSubcategoriesExpanded);
@@ -150,22 +109,13 @@ export function DashboardCardTile({
 
   return (
     <Card
-      role="link"
-      tabIndex={0}
-      aria-label={`View details for ${card.name}`}
       className={cn(
-        "group relative overflow-hidden flex flex-col h-full cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-lg",
+        "group relative overflow-hidden flex flex-col h-full",
         "bg-card",
         accentClasses,
         exceeded ? "ring-2 ring-red-300/70 dark:ring-red-900/60" : undefined,
         isDragging ? "ring-2 ring-primary/60 shadow-lg" : undefined,
       )}
-      onClick={() => {
-        if (!suppressClickRef.current) {
-          handleNavigate();
-        }
-      }}
-      onKeyDown={handleKeyDown}
     >
       <div className="absolute top-0 right-0 z-20">
         <DropdownMenu>
@@ -215,7 +165,7 @@ export function DashboardCardTile({
               }}
             >
               <ReceiptText className="h-4 w-4 mr-2" />
-              View transactions
+              View card details
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
