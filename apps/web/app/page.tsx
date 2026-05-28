@@ -104,6 +104,7 @@ function DashboardContent() {
     };
   }, [dayBoundaryTick]);
 
+  // dayBoundaryTick is in the dep array so this re-evaluates at each day rollover.
   const currentTime = useMemo(
     () => Date.now() + dayBoundaryTick * 0,
     [dayBoundaryTick]

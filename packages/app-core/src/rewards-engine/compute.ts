@@ -54,6 +54,18 @@ export async function computeCurrentPeriod(
     }
   }
 
+  // Pre-index active rules by cardId so each card lookup is O(1) instead of O(rules).
+  const activeRulesByCardId = new Map<string, RewardRule[]>();
+  for (const rule of allRules) {
+    if (!rule.active) continue;
+    const bucket = activeRulesByCardId.get(rule.cardId);
+    if (bucket) {
+      bucket.push(rule);
+    } else {
+      activeRulesByCardId.set(rule.cardId, [rule]);
+    }
+  }
+
   for (let i = 0; i < trackedCards.length; i++) {
     const card = trackedCards[i];
     const period = periods[i];
@@ -72,7 +84,7 @@ export async function computeCurrentPeriod(
       continue;
     }
 
-    const rules = allRules.filter(r => r.cardId === card.id && r.active);
+    const rules = activeRulesByCardId.get(card.id) ?? [];
     if (rules.length === 0 && card.earningRate && card.earningRate > 0) {
       const simpleCalc = SimpleRewardsCalculator.calculateCardRewards(card, forCard, simplePeriod, settings);
       results.push(createRewardCalculationFromSimple(card, simpleCalc));

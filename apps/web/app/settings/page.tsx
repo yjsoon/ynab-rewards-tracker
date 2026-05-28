@@ -1099,6 +1099,12 @@ export default function SettingsPage() {
 
             {!pat ? (
               <form onSubmit={handleSaveToken} className="space-y-4 sm:pl-10">
+                <label
+                  htmlFor="pat-input"
+                  className="block text-sm font-medium"
+                >
+                  Personal Access Token
+                </label>
                 <p className="text-sm text-muted-foreground">
                   Get your Personal Access Token from your{' '}
                   <a
@@ -1112,7 +1118,9 @@ export default function SettingsPage() {
                 </p>
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <input
+                    id="pat-input"
                     type="password"
+                    autoComplete="off"
                     value={tokenInput}
                     onChange={(e) => setTokenInput(e.target.value)}
                     placeholder="Paste your YNAB Personal Access Token"

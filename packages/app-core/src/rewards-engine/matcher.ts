@@ -2,15 +2,11 @@
  * Transaction matching utilities for rewards calculation
  */
 
+import { formatLocalDate } from './date-utils';
 import type { Transaction, TransactionWithRewards } from '../storage/types';
 
 function absFromMilli(amount: number): number {
   return Math.abs(amount) / 1000;
-}
-
-function parseYnabDate(dateString: string): Date {
-  const [year, month, day] = dateString.split('-').map(Number);
-  return new Date(year, month - 1, day);
 }
 
 export class TransactionMatcher {
@@ -28,17 +24,18 @@ export class TransactionMatcher {
   }
 
   /**
-   * Filter transactions by date range
+   * Filter transactions by date range. YNAB stores dates as YYYY-MM-DD strings,
+   * which compare lexicographically in the same order as Date objects, so we
+   * convert the bounds once and skip per-transaction Date parsing.
    */
   static filterByDateRange(
     transactions: TransactionWithRewards[],
     startDate: Date,
     endDate: Date
   ): TransactionWithRewards[] {
-    return transactions.filter(txn => {
-      const txnDate = parseYnabDate(txn.date);
-      return txnDate >= startDate && txnDate <= endDate;
-    });
+    const startStr = formatLocalDate(startDate);
+    const endStr = formatLocalDate(endDate);
+    return transactions.filter(txn => txn.date >= startStr && txn.date <= endStr);
   }
 
   /**
