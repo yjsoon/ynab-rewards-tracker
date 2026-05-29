@@ -2,17 +2,16 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import Link from 'next/link';
 import { useCreditCards, useYnabPAT } from '@/hooks/useLocalStorage';
-import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
-  ArrowLeft,
-  CreditCard as CreditCardIcon
+  CreditCard as CreditCardIcon,
+  ChevronDown,
 } from 'lucide-react';
 import type { CreditCard } from '@/lib/storage';
 import { SimpleRewardsCalculator } from '@/lib/rewards-engine';
 import { useCardTransactions } from '@/hooks/useCardTransactions';
+import { cn } from '@/lib/utils';
 import TransactionsPreview from './TransactionsPreview';
 import SpendingStatus from './SpendingStatus';
 import CardSettings from './CardSettings';
@@ -24,13 +23,13 @@ export default function CardDetailPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const cardId = params.id as string;
-  const defaultTab = searchParams.get('tab') || 'transactions';
   const startEditing = searchParams.get('edit') === '1' || searchParams.get('edit') === 'true';
-  
+
   const { cards } = useCreditCards();
   const { pat } = useYnabPAT();
-  
+
   const [card, setCard] = useState<CreditCard | null>(null);
+  const [transactionsOpen, setTransactionsOpen] = useState(false);
 
   const sharedSinceDate = useMemo(() => {
     if (!card) return undefined;
@@ -53,7 +52,6 @@ export default function CardDetailPage() {
     if (foundCard) {
       setCard(foundCard);
     } else if (cards.length > 0) {
-      // Card not found, redirect to dashboard
       router.push('/');
     }
   }, [cards, cardId, router]);
@@ -71,29 +69,16 @@ export default function CardDetailPage() {
     );
   }
 
-  // No-op: child component handles its own data fetching
-
   return (
     <div className="max-w-6xl mx-auto p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" asChild>
-            <Link href="/" aria-label="Back to dashboard">
-              <ArrowLeft className="h-5 w-5" aria-hidden="true" />
-            </Link>
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold">{card.name}</h1>
-            <p className="text-muted-foreground mt-1">
-              {card.type === 'cashback' ? 'Cashback Rewards' : 'Miles Rewards'} •
-              {card.featured ? ' Featured on dashboard' : ' Hidden from dashboard'}
-            </p>
-          </div>
-        </div>
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold">{card.name}</h1>
+        <p className="text-muted-foreground mt-1">
+          {card.type === 'cashback' ? 'Cashback Rewards' : 'Miles Rewards'} •
+          {card.featured ? ' Featured on dashboard' : ' Hidden from dashboard'}
+        </p>
       </div>
 
-      {/* Primary Spending Status - Most Important */}
       {pat && (
         <SpendingStatus
           card={card}
@@ -103,32 +88,27 @@ export default function CardDetailPage() {
         />
       )}
 
-      {/* Secondary content in tabs */}
-      <Tabs defaultValue={defaultTab} className="mt-8">
-        <TabsList className="grid w-full grid-cols-2 h-12 p-1 bg-muted/50">
-          <TabsTrigger
-            value="settings"
-            className="data-[state=active]:bg-background data-[state=active]:shadow-md data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground font-medium transition-all"
-          >
-            Settings
-          </TabsTrigger>
-          <TabsTrigger
-            value="transactions"
-            className="data-[state=active]:bg-background data-[state=active]:shadow-md data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground font-medium transition-all"
-          >
-            Transactions
-          </TabsTrigger>
-        </TabsList>
+      <div className="mt-8">
+        <CardSettings
+          card={card}
+          onUpdate={(updatedCard) => setCard(updatedCard)}
+          initialEditing={startEditing}
+        />
+      </div>
 
-        <TabsContent value="settings" className="mt-6">
-          <CardSettings
-            card={card}
-            onUpdate={(updatedCard) => setCard(updatedCard)}
-            initialEditing={startEditing}
-          />
-        </TabsContent>
-
-        <TabsContent value="transactions" className="mt-6">
+      <Collapsible open={transactionsOpen} onOpenChange={setTransactionsOpen} className="mt-8">
+        <h2>
+          <CollapsibleTrigger className="flex items-center gap-2 w-full text-left text-lg font-semibold">
+            <ChevronDown
+              className={cn(
+                'h-5 w-5 text-muted-foreground transition-transform',
+                !transactionsOpen && '-rotate-90'
+              )}
+            />
+            Recent Transactions
+          </CollapsibleTrigger>
+        </h2>
+        <CollapsibleContent className="pt-4">
           <TransactionsPreview
             card={card}
             lookbackDays={TRANSACTION_LOOKBACK_DAYS}
@@ -138,8 +118,8 @@ export default function CardDetailPage() {
             onRefresh={cardTransactions.refresh}
             connection={cardTransactions.connection}
           />
-        </TabsContent>
-      </Tabs>
+        </CollapsibleContent>
+      </Collapsible>
     </div>
   );
 }

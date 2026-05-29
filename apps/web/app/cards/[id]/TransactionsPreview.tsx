@@ -3,13 +3,7 @@
 import { useMemo } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Calendar } from "lucide-react";
 import type { CreditCard } from "@/lib/storage";
@@ -70,20 +64,12 @@ export default function TransactionsPreview({
 
   return (
     <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle>Recent Transactions</CardTitle>
-            <CardDescription>
-              View your recent card transactions
-            </CardDescription>
-          </div>
+      <CardContent className="pt-6">
+        <div className="mb-4 flex justify-end">
           <Button variant="outline" size="sm" onClick={refresh} disabled={loading}>
             Refresh
           </Button>
         </div>
-      </CardHeader>
-      <CardContent>
         {needSetup ? (
           <div className="text-center py-12 text-muted-foreground">
             <Calendar className="h-12 w-12 mx-auto mb-4" />

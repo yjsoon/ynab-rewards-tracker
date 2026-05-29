@@ -333,10 +333,6 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
                       <div
                         key={subcategory.id}
                         className="flex items-center justify-between gap-4 rounded-lg border border-border/40 bg-muted/10 p-3 overflow-hidden"
-                        style={{
-                          borderLeftWidth: '3px',
-                          borderLeftColor: isExcluded ? '#f97316' : flagColor,
-                        }}
                       >
                         <div className="flex flex-1 items-center gap-3">
                           <div className="flex items-center gap-2">

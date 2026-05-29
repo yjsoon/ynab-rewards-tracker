@@ -142,7 +142,7 @@ export function DashboardCardTile({
           >
             <DropdownMenuItem
               onClick={() => {
-                router.push(`/cards/${card.id}?tab=settings&edit=1`);
+                router.push(`/cards/${card.id}?edit=1`);
               }}
             >
               <Settings2 className="h-4 w-4 mr-2" />

@@ -202,12 +202,6 @@ const SubcategoryItem = memo(function SubcategoryItem({
           : 'border-border/30 bg-muted/30 opacity-60',
         localExcluded && 'ring-1 ring-orange-500/20'
       )}
-      style={{
-        borderLeftWidth: '3px',
-        borderLeftColor: localExcluded
-          ? '#f97316'
-          : (FLAG_COLOR_MAP[subcategory.flagColor] || '#6b7280')
-      }}
     >
       {!isUnflagged && (
         <button
