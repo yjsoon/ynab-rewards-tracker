@@ -1,6 +1,6 @@
 # Rewards Tracker for YNAB
 
-A client-side rewards tracker spanning a production-ready web app and an in-progress mobile companion. Both platforms analyse YNAB transactions to track credit card rewards with user-defined rules. All user data lives in browser or device storage — no server database is used. The mobile app is actively integrating live storage/sync flows and continues to rely on demo data until current work (tracked in bd) is completed.
+A client-side rewards tracker spanning a production-ready web app and an in-progress mobile companion. Both platforms analyse YNAB transactions to track credit card rewards with user-defined rules. All user data lives in browser or device storage — no server database is used. The mobile app is actively integrating live storage/sync flows and continues to rely on demo data until that work is completed.
 
 ## Platforms Overview
 
@@ -44,12 +44,12 @@ A client-side rewards tracker spanning a production-ready web app and an in-prog
 | YNAB Authentication & Sync | Fully functional | StorageContext and PAT flows under active development; live sync not yet validated end-to-end |
 | Rewards Calculation Engine | Production usage | Shares engine, but mobile still mixes demo data with partial live wiring |
 | Storage Persistence | Browser localStorage service | AsyncStorage + SecureStore integration in progress |
-| Card & Rule Management | Complete CRUD | UI missing; tracked in bd |
+| Card & Rule Management | Complete CRUD | UI missing |
 | Transactions & Analytics | Full parity; Recommendations hidden | Transactions tab pending live wiring; Recommendations tab temporarily hidden |
 
-All actionable work should be tracked in **bd**. This document is an architectural reference—do not maintain TODOs here. When new tasks arise, log or update a bd issue instead.
+This document is an architectural reference—do not maintain TODOs here.
 
-> Note: Until bd issues confirm the live storage/sync flow is complete, assume the mobile app falls back to `useDemoRewards`.
+> Note: Until the live storage/sync flow is confirmed complete, assume the mobile app falls back to `useDemoRewards`.
 
 ## Core Features
 
@@ -106,28 +106,6 @@ The production web app currently delivers the following capabilities. The mobile
 ## Project Structure
 
 ```
-
-## Issue Tracking with bd
-
-This repository uses the bd CLI (from the Beads project) for issue tracking. The database is initialized at `.beads/ynab-counter.db` and bd auto-discovers it from the repo root.
-
-Common commands:
-- Show ready work: `bd ready`
-- List all issues: `bd list`
-- Show details: `bd show ynab-counter-<id>`
-- Create a new issue:
-  - `bd create "Title" -d "Description" -l mobile,P0,ui -p 0 -t feature`
-- Close/reopen: `bd close ynab-counter-<id>` / `bd reopen ynab-counter-<id>`
-- Blocked view: `bd blocked`
-
-Labels and priorities:
-- Labels in use: `mobile`, `P0`, `P1`, `P2`, `ui`, `infra`
-- Priority flag `-p` ranges 0 (highest) to 4 (lowest)
-
-Notes:
-- bd walks up like git to find `.beads/`
-- Issues are per-repo; use `bd list` and `bd ready` to navigate work
-- For advanced usage, see Beads documentation: https://github.com/steveyegge/beads
 apps/
 ├── web/                      # Next.js production app
 │   ├── app/                  # App Router routes (dashboard, cards, settings, API)
@@ -252,7 +230,7 @@ pnpm --filter ./apps/mobile android    # Launch Android emulator via Expo
 
 ## Roadmap & Task Management
 
-Roadmaps and priorities are maintained in bd. Use the CLI (`bd ready`, `bd list`, `bd show`, `bd close`, `bd reopen`) to inspect and update the backlog. Keep this document focused on architecture; do not add checklists or TODO items here.
+Keep this document focused on architecture; do not add checklists or TODO items here.
 
 ## Contributing Guidelines
 - TypeScript-first development
