@@ -20,6 +20,7 @@ import {
   Settings2
 } from 'lucide-react';
 import type { CreditCard } from '@/lib/storage';
+import { toIsoDateString } from '@/lib/date';
 import {
   formatMinimumSpendText,
   formatMaximumSpendText,
@@ -790,7 +791,7 @@ export function CardSettingsEditor({
                       // Auto-populate start date to today if not already set
                       if (!promotionalPeriodStart) {
                         const today = new Date();
-                        const isoDate = today.toISOString().split('T')[0];
+                        const isoDate = toIsoDateString(today);
                         onFieldChange('promotionalPeriodStart', isoDate);
                       }
                     } else {

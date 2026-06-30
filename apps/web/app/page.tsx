@@ -387,9 +387,10 @@ function DashboardContent() {
       const allCategoryIds = category === 'all'
         ? cards.map((card) => card.id)
         : cards.filter((card) => card.type === category).map((card) => card.id);
+      const allCategoryIdsSet = new Set(allCategoryIds);
       const seen = new Set<string>();
       const dedupedOrdered = orderedIds.filter((id) => {
-        if (seen.has(id) || !allCategoryIds.includes(id)) {
+        if (seen.has(id) || !allCategoryIdsSet.has(id)) {
           return false;
         }
         seen.add(id);
@@ -398,18 +399,27 @@ function DashboardContent() {
       const remaining = allCategoryIds.filter((id) => !seen.has(id));
 
       const nextOrdering = [...dedupedOrdered, ...remaining];
+
+      let cashbackOrdering: string[] | undefined;
+      let milesOrdering: string[] | undefined;
+      if (category === 'all') {
+        const cardTypeById = new Map(cards.map((card) => [card.id, card.type]));
+        cashbackOrdering = nextOrdering.filter(
+          (id) => cardTypeById.get(id) === 'cashback'
+        );
+        milesOrdering = nextOrdering.filter(
+          (id) => cardTypeById.get(id) === 'miles'
+        );
+      }
+
       updateSettings({
         cardOrdering: {
           ...(settings.cardOrdering ?? {}),
           [category]: nextOrdering,
           ...(category === 'all'
             ? {
-                cashback: nextOrdering.filter((id) =>
-                  cards.some((card) => card.id === id && card.type === 'cashback')
-                ),
-                miles: nextOrdering.filter((id) =>
-                  cards.some((card) => card.id === id && card.type === 'miles')
-                ),
+                cashback: cashbackOrdering,
+                miles: milesOrdering,
               }
             : {}),
         },

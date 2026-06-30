@@ -1,12 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   CreditCard,
-  RewardRule,
-  RewardCalculation,
   AppSettings,
   ThemeGroup,
   HiddenCard,
-  DashboardViewMode,
   StatementFormatterSettings,
 } from '@/lib/storage';
 import { storage } from '@/lib/storage';
@@ -14,8 +11,6 @@ import { useStorageContext } from '@/contexts/StorageContext';
 
 const EMPTY_STRING_ARRAY: string[] = [];
 const EMPTY_CARD_LIST: CreditCard[] = [];
-const EMPTY_RULE_LIST: RewardRule[] = [];
-const EMPTY_CALCULATION_LIST: RewardCalculation[] = [];
 const EMPTY_SELECTED_BUDGET: { id?: string; name?: string } = {};
 const EMPTY_THEME_GROUP_LIST: ThemeGroup[] = [];
 const EMPTY_HIDDEN_CARD_LIST: HiddenCard[] = [];
@@ -132,49 +127,6 @@ export function useTrackedAccountIds() {
   return { trackedAccountIds, setTrackedAccountIds, isAccountTracked, isLoading };
 }
 
-export function useRewardRules(cardId?: string) {
-  const { value: rules, triggerRefresh, isLoading } = useStorageResource(
-    () => (cardId ? storage.getCardRules(cardId) : storage.getRules()),
-    EMPTY_RULE_LIST,
-    cardId
-  );
-  const saveRule = useCallback((rule: RewardRule) => {
-    storage.saveRule(rule);
-    triggerRefresh();
-  }, [triggerRefresh]);
-
-  const deleteRule = useCallback((ruleId: string) => {
-    storage.deleteRule(ruleId);
-    triggerRefresh();
-  }, [triggerRefresh]);
-
-  return { rules, saveRule, deleteRule, isLoading };
-}
-
-export function useRewardCalculations(cardId?: string) {
-  const { value: calculations, triggerRefresh, isLoading } = useStorageResource(
-    () => (cardId ? storage.getCardCalculations(cardId) : storage.getCalculations()),
-    EMPTY_CALCULATION_LIST,
-    cardId
-  );
-  const saveCalculation = useCallback((calculation: RewardCalculation) => {
-    storage.saveCalculation(calculation);
-    triggerRefresh();
-  }, [triggerRefresh]);
-
-  const deleteCalculation = useCallback((cardId: string, ruleId: string, period: string) => {
-    storage.deleteCalculation(cardId, ruleId, period);
-    triggerRefresh();
-  }, [triggerRefresh]);
-
-  const clearCalculations = useCallback(() => {
-    storage.clearCalculations();
-    triggerRefresh();
-  }, [triggerRefresh]);
-
-  return { calculations, saveCalculation, deleteCalculation, clearCalculations, isLoading };
-}
-
 export function useThemeGroups() {
   const { value: themeGroups, triggerRefresh, isLoading } = useStorageResource(
     () => storage.getThemeGroups(),
@@ -219,20 +171,6 @@ export function useHiddenCards() {
   );
 
   return { hiddenCards, hideCard, unhideCard, isCardHidden, isLoading };
-}
-
-export function useDashboardViewMode() {
-  const {
-    value: viewMode,
-    triggerRefresh,
-    isLoading,
-  } = useStorageResource(() => storage.getDashboardViewMode(), 'summary' as DashboardViewMode);
-  const setViewMode = useCallback((mode: DashboardViewMode) => {
-    storage.setDashboardViewMode(mode);
-    triggerRefresh();
-  }, [triggerRefresh]);
-
-  return { viewMode, setViewMode, isLoading };
 }
 
 export function useSettings() {

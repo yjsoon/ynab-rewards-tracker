@@ -11,6 +11,7 @@ import {
 import type { CreditCard } from '@/lib/storage';
 import { SimpleRewardsCalculator } from '@/lib/rewards-engine';
 import { useCardTransactions } from '@/hooks/useCardTransactions';
+import { toIsoDateString } from '@/lib/date';
 import { cn } from '@/lib/utils';
 import TransactionsPreview from './TransactionsPreview';
 import SpendingStatus from './SpendingStatus';
@@ -36,7 +37,7 @@ export default function CardDetailPage() {
 
     const lookbackDate = new Date();
     lookbackDate.setDate(lookbackDate.getDate() - TRANSACTION_LOOKBACK_DAYS);
-    const lookbackStart = lookbackDate.toISOString().split('T')[0];
+    const lookbackStart = toIsoDateString(lookbackDate);
     const periodStart = SimpleRewardsCalculator.calculatePeriod(card).start;
 
     return periodStart < lookbackStart ? periodStart : lookbackStart;

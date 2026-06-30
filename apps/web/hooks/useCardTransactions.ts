@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CreditCard } from '@/lib/storage';
 import { YnabClient } from '@/lib/ynab-client';
+import { toIsoDateString } from '@/lib/date';
 import type { Transaction } from '@/types/transaction';
 import { useSelectedBudget, useYnabPAT } from './useLocalStorage';
 
@@ -83,7 +84,7 @@ export function useCardTransactions(
       lookbackDate.setDate(lookbackDate.getDate() - lookbackDays);
 
       const allTransactions = await client.getTransactions(selectedBudget.id, {
-        since_date: sinceDate ?? lookbackDate.toISOString().split('T')[0],
+        since_date: sinceDate ?? toIsoDateString(lookbackDate),
         signal: controller.signal,
       });
 

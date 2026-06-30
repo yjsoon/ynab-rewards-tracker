@@ -21,6 +21,7 @@ import {
   shouldWarnAboutOutdatedUpload as checkOutdatedUpload,
 } from '@/lib/cloud-sync/decision-helpers';
 import { YnabClient } from '@/lib/ynab-client';
+import { toIsoDateString } from '@/lib/date';
 import type { CreditCard } from '@/lib/storage';
 import { validateYnabToken } from '@/lib/validation';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
@@ -560,7 +561,7 @@ export default function SettingsPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `ynab-rewards-settings-${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `ynab-rewards-settings-${toIsoDateString(new Date())}.json`;
     a.click();
     URL.revokeObjectURL(url);
   }

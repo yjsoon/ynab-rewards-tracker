@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { YnabClient } from "@/lib/ynab-client";
 import { storage } from "@/lib/storage";
 import { SimpleRewardsCalculator } from "@/lib/rewards-engine";
+import { toIsoDateString } from "@/lib/date";
 import type { CreditCard, CachedTransaction } from "@/lib/storage";
 import type { Transaction } from "@/types/transaction";
 
@@ -262,7 +263,7 @@ export function useTrackedTransactions({
     if (featuredCards.length === 0) {
       const fallback = new Date(anchorDate);
       fallback.setDate(fallback.getDate() - lookbackDays);
-      return fallback.toISOString().split("T")[0];
+      return toIsoDateString(fallback);
     }
 
     const earliestMillis = featuredCards
@@ -273,7 +274,7 @@ export function useTrackedTransactions({
         Number.POSITIVE_INFINITY,
       );
 
-    return new Date(earliestMillis).toISOString().split("T")[0];
+    return toIsoDateString(new Date(earliestMillis));
   }, [featuredCards, lookbackDays, referenceDate]);
 
   const applySnapshot = useCallback((snapshot: TrackedTransactionsSnapshot) => {
