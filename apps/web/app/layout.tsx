@@ -20,11 +20,14 @@ const plexMono = IBM_Plex_Mono({
   variable: "--font-mono"
 });
 
+export const viewport = {
+  themeColor: "#2a6478",
+};
+
 export const metadata = {
   title: "Rewards Tracker for YNAB",
   description: "Track credit card rewards using your YNAB data.",
   manifest: "/manifest.json",
-  themeColor: "#2a6478",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",

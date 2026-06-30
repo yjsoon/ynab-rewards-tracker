@@ -52,6 +52,7 @@ interface TransactionWithComputedReward extends Transaction {
   calculatedReward: number;
   card?: CreditCard;
   isIncoming: boolean;
+  sortTimestamp: number;
 }
 
 export function EnhancedTransactionsTable({
@@ -160,6 +161,7 @@ export function EnhancedTransactionsTable({
           calculatedReward: rewardResult.reward,
           card,
           isIncoming,
+          sortTimestamp: new Date(txn.date).getTime(),
         };
       });
 
@@ -168,7 +170,7 @@ export function EnhancedTransactionsTable({
 
       switch (sortField) {
         case "date":
-          comparison = new Date(a.date).getTime() - new Date(b.date).getTime();
+          comparison = a.sortTimestamp - b.sortTimestamp;
           break;
         case "amount":
           comparison = Math.abs(a.amount) - Math.abs(b.amount);

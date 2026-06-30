@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback, useMemo } from 'react';
 
 interface StorageContextType {
   refreshTrigger: number;
@@ -17,8 +17,17 @@ export function StorageProvider({ children }: { children: ReactNode }) {
     setRefreshTrigger(prev => prev + 1);
   }, []);
 
+  // Keep the context value identity stable across provider re-renders so
+  // consumers only re-render when refreshTrigger actually changes. triggerRefresh
+  // is already stable (useCallback []); it stays in the deps to satisfy
+  // exhaustive-deps and guard against future additions to the value.
+  const value = useMemo(
+    () => ({ refreshTrigger, triggerRefresh }),
+    [refreshTrigger, triggerRefresh]
+  );
+
   return (
-    <StorageContext.Provider value={{ refreshTrigger, triggerRefresh }}>
+    <StorageContext.Provider value={value}>
       {children}
     </StorageContext.Provider>
   );
