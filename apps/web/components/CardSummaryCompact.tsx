@@ -118,7 +118,7 @@ export function CardSummaryCompactContent({
     <div className="relative flex h-full flex-col gap-2.5">
       <RefreshBadge isRefreshing={isRefreshing} />
       <div className="flex items-baseline justify-between gap-2">
-        <span className="min-w-0 truncate text-xs uppercase tracking-wide text-muted-foreground">
+        <span className="min-w-0 truncate text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
           {heroVariant === "cap-left" && (
             <>
               Left of <CurrencyAmount value={maximumTarget} currency={currency} decimals={0} /> cap
@@ -138,7 +138,7 @@ export function CardSummaryCompactContent({
         </span>
         <span
           className={cn(
-            "shrink-0 text-lg font-semibold tracking-tight",
+            "shrink-0 text-xl font-semibold leading-none tracking-tight",
             heroVariant === "cap-over" && "text-red-600 dark:text-red-400",
             heroVariant === "cap-left" && nearCap && "text-amber-600 dark:text-amber-400"
           )}

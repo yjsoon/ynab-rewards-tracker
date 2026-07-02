@@ -303,7 +303,7 @@ export function DashboardCardOverview({
             category="cashback"
             title="Cashback Cards"
             icon={
-              <Percent className="h-5 w-5 text-green-600" aria-hidden="true" />
+              <Percent className="h-4 w-4 text-green-600" aria-hidden="true" />
             }
             cards={cashbackCards}
             cardMetricsById={cardMetricsById}
@@ -332,7 +332,7 @@ export function DashboardCardOverview({
             title="Miles Cards"
             icon={
               <TrendingUp
-                className="h-5 w-5 text-blue-600"
+                className="h-4 w-4 text-blue-600"
                 aria-hidden="true"
               />
             }
@@ -396,7 +396,7 @@ export function DashboardCardOverview({
   );
 
   return (
-    <div className="space-y-6 mb-8">
+    <div className="space-y-4 mb-8">
       {transactionsRefreshing && (
         <div className="flex items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50/50 py-2 px-4 text-sm text-blue-700 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-300">
           <Loader2 className="h-4 w-4 animate-spin" />
@@ -413,7 +413,7 @@ export function DashboardCardOverview({
       )}
 
       {hiddenCount > 0 && (
-        <div className="flex flex-wrap items-center gap-2 text-xs">
+        <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
           <span className="inline-flex items-center gap-1.5 text-muted-foreground">
             <EyeOff className="h-3.5 w-3.5" aria-hidden="true" />
             Hidden until next cycle:
@@ -424,7 +424,7 @@ export function DashboardCardOverview({
               type="button"
               onClick={() => onUnhideCard(entry.cardId)}
               title={`Show ${cardNameById.get(entry.cardId)} again`}
-              className="group inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/40 px-2.5 py-1 font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              className="group inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-muted/40 px-2 py-0.5 font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
               {cardNameById.get(entry.cardId)}
               <X
@@ -505,23 +505,28 @@ function CardGroup({
   const canReorder = cards.length > 1;
 
   return (
-    <section className={isAllCategory ? "" : "space-y-4"}>
+    <section className={isAllCategory ? "" : "space-y-2.5"}>
       {!isAllCategory && (
         <div className="flex items-center gap-2">
-          <h2 className="flex items-center gap-2 text-xl font-semibold">
+          <h2 className="flex items-center text-[13px] font-semibold uppercase tracking-wider text-muted-foreground">
             <button
               type="button"
               onClick={onToggleCollapse}
               aria-expanded={!isCollapsed}
               aria-controls={contentId}
-              className="flex items-center gap-2 text-left transition-colors hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 rounded-md px-1 py-1"
+              className="flex items-center gap-1.5 text-left transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 rounded-md px-1 py-1"
             >
-              <ChevronIcon className="h-5 w-5" aria-hidden="true" />
+              <ChevronIcon className="h-4 w-4" aria-hidden="true" />
               {icon}
               <span>{title}</span>
             </button>
           </h2>
-          <Badge variant="secondary">{cards.length}</Badge>
+          <Badge
+            variant="secondary"
+            className="h-5 min-w-5 justify-center px-1.5 text-[11px] tabular-nums"
+          >
+            {cards.length}
+          </Badge>
         </div>
       )}
 

@@ -184,7 +184,7 @@ export function DashboardCardTile({
         <div className="flex min-w-0 items-center gap-2 pr-4">
           <CardTitle
             title={card.name}
-            className="min-w-0 flex-1 truncate text-[0.95rem] sm:text-base"
+            className="min-w-0 flex-1 truncate text-sm font-semibold tracking-tight sm:text-[0.95rem]"
           >
             {card.name}
           </CardTitle>

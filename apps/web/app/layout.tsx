@@ -1,4 +1,4 @@
-import { Work_Sans, IBM_Plex_Mono } from "next/font/google";
+import { Inter, IBM_Plex_Mono } from "next/font/google";
 
 import { Providers } from "./providers";
 import { Navigation } from "@/components/Navigation";
@@ -7,7 +7,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
-const workSans = Work_Sans({
+const inter = Inter({
   subsets: ["latin"],
   display: "swap",
   variable: "--font-sans"
@@ -55,7 +55,7 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${workSans.variable} ${plexMono.variable}`}>
+      className={`${inter.variable} ${plexMono.variable}`}>
       <body className="font-sans antialiased">
         <ThemeProvider
           attribute="class"

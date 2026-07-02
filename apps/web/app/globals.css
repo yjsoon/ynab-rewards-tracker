@@ -65,5 +65,7 @@
   }
   body {
     @apply bg-background text-foreground;
+    /* Inter alternates: open digits and curved lowercase l for friendlier small-size reading */
+    font-feature-settings: "cv05", "cv08", "cv11";
   }
 }

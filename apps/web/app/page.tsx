@@ -27,9 +27,17 @@ import {
   shiftDashboardPeriodMonths,
 } from "@/lib/dashboard-period";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { storage } from "@/lib/storage";
-import { LayoutGrid, RefreshCw } from "lucide-react";
+import { RefreshCw, SlidersHorizontal } from "lucide-react";
 
 // Constants
 const TRANSACTION_LOOKBACK_DAYS = 30;
@@ -442,90 +450,98 @@ function DashboardContent() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-6 py-8">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
-        <div className="flex min-w-0 items-center gap-4">
-          <h1 className="text-3xl font-bold">Dashboard</h1>
-          <div className="shrink-0 flex items-center rounded-lg border bg-muted/30 p-0.5">
-            <button
-              type="button"
-              onClick={() => handleTabChange('featured')}
-              className={cn(
-                "whitespace-nowrap px-3 py-1.5 text-sm font-medium rounded-md transition-colors",
-                activeTab === 'featured'
-                  ? "bg-background shadow-sm text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              Featured
-            </button>
-            <button
-              type="button"
-              onClick={() => handleTabChange('all')}
-              className={cn(
-                "whitespace-nowrap px-3 py-1.5 text-sm font-medium rounded-md transition-colors",
-                activeTab === 'all'
-                  ? "bg-background shadow-sm text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              All Cards
-            </button>
-          </div>
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-5 sm:py-6">
+      <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2">
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Dashboard</h1>
+        <div className="shrink-0 flex items-center rounded-lg border bg-muted/30 p-0.5">
+          <button
+            type="button"
+            onClick={() => handleTabChange('featured')}
+            className={cn(
+              "whitespace-nowrap px-2.5 py-1 text-[13px] font-medium rounded-md transition-colors",
+              activeTab === 'featured'
+                ? "bg-background shadow-sm text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            Featured
+          </button>
+          <button
+            type="button"
+            onClick={() => handleTabChange('all')}
+            className={cn(
+              "whitespace-nowrap px-2.5 py-1 text-[13px] font-medium rounded-md transition-colors",
+              activeTab === 'all'
+                ? "bg-background shadow-sm text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            All Cards
+          </button>
         </div>
         {activeTab === 'featured' && (
-          <div className="flex w-full items-center justify-between gap-2 md:ml-auto md:w-auto md:shrink-0 md:justify-end">
-            <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto pb-1 sm:gap-2 sm:overflow-visible sm:pb-0">
-              <DashboardPeriodNavigator
-                dateValue={dashboardPeriod.dateValue}
-                monthLabel={dashboardPeriod.monthLabel}
-                asOfLabel={dashboardPeriod.asOfLabel}
-                triggerLabel={dashboardPeriod.triggerLabel}
-                maxDateValue={liveDashboardPeriod.dateValue}
-                isToday={dashboardPeriod.isToday}
-                onPreviousDay={handlePreviousDay}
-                onNextDay={handleNextDay}
-                onPreviousMonth={handlePreviousMonth}
-                onNextMonth={handleNextMonth}
-                onReset={handleResetDate}
-                onDateChange={handleDashboardDateChange}
+          <div className="ml-auto flex shrink-0 items-center gap-1">
+            <DashboardPeriodNavigator
+              dateValue={dashboardPeriod.dateValue}
+              monthLabel={dashboardPeriod.monthLabel}
+              asOfLabel={dashboardPeriod.asOfLabel}
+              triggerLabel={dashboardPeriod.triggerLabel}
+              maxDateValue={liveDashboardPeriod.dateValue}
+              isToday={dashboardPeriod.isToday}
+              onPreviousDay={handlePreviousDay}
+              onNextDay={handleNextDay}
+              onPreviousMonth={handlePreviousMonth}
+              onNextMonth={handleNextMonth}
+              onReset={handleResetDate}
+              onDateChange={handleDashboardDateChange}
+            />
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={refresh}
+              disabled={!shouldLoadTrackedTransactions || refreshing || loading}
+              className="rounded-full px-2.5"
+              title={lastUpdatedAt ? `Last updated: ${formatLastUpdated(lastUpdatedAt)}` : "Refresh data"}
+              aria-label="Refresh dashboard data"
+            >
+              <RefreshCw
+                className={cn(
+                  "h-4 w-4",
+                  (refreshing || loading) && "animate-spin"
+                )}
               />
-              <Button
-                variant={groupByType ? "secondary" : "ghost"}
-                size="sm"
-                className="gap-1.5"
-                onClick={() => handleGroupByTypeToggle(!groupByType)}
-                aria-pressed={groupByType}
-                title="Group cards by type"
-              >
-                <LayoutGrid className="h-4 w-4" />
-                <span className="hidden sm:inline">Group by type</span>
-              </Button>
-            </div>
-            <div className="ml-auto flex shrink-0 items-center gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                onClick={refresh}
-                disabled={!shouldLoadTrackedTransactions || refreshing || loading}
-                className="rounded-full px-2.5"
-                title={lastUpdatedAt ? `Last updated: ${formatLastUpdated(lastUpdatedAt)}` : "Refresh data"}
-                aria-label="Refresh dashboard data"
-              >
-                <RefreshCw
-                  className={cn(
-                    "h-4 w-4",
-                    (refreshing || loading) && "animate-spin"
-                  )}
-                />
-              </Button>
-              {lastUpdatedAt && !refreshing && !loading && (
-                <span className="text-xs text-muted-foreground hidden sm:inline">
-                  {formatLastUpdated(lastUpdatedAt)}
-                </span>
-              )}
-            </div>
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="rounded-full px-2.5"
+                  aria-label="View options"
+                  title="View options"
+                >
+                  <SlidersHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52">
+                <DropdownMenuCheckboxItem
+                  checked={groupByType}
+                  onCheckedChange={handleGroupByTypeToggle}
+                >
+                  Group cards by type
+                </DropdownMenuCheckboxItem>
+                {lastUpdatedAt && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                      Updated {formatLastUpdated(lastUpdatedAt)}
+                    </DropdownMenuLabel>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         )}
       </div>

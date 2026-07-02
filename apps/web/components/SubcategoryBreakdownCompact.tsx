@@ -93,7 +93,7 @@ export function SubcategoryBreakdownCompact({
         aria-controls={contentId}
         className="group flex w-full items-center justify-between rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
       >
-        <span className="text-sm font-semibold text-muted-foreground transition-colors group-hover:text-foreground">
+        <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground transition-colors group-hover:text-foreground">
           Subcategories
         </span>
         <ChevronDown
@@ -220,23 +220,23 @@ export function SubcategoryBreakdownCompact({
                       transitionDelay: isExpanded ? `${index * ROW_STAGGER_MS}ms` : '0ms',
                     }}
                   />
-                  <div className="relative flex min-h-[26px] items-center gap-2 px-2.5 py-1">
+                  <div className="relative flex min-h-[26px] items-center gap-1 px-1.5 py-1">
                     <div
-                      className="h-2.5 w-2.5 rounded-full flex-shrink-0"
+                      className="h-2 w-2 rounded-full flex-shrink-0"
                       style={{ backgroundColor: flagColor }}
                     />
-                    <span className="truncate text-sm font-medium">{entry.name}</span>
-                    <span className="ml-auto whitespace-nowrap text-sm">
+                    <span className="truncate text-[13px] font-medium">{entry.name}</span>
+                    <span className="ml-auto whitespace-nowrap text-[13px]">
                       <span className="font-semibold">
                         <CurrencyAmount value={entry.totalSpend} currency={currency} decimals={compactSubtitles ? 0 : 2} />
                       </span>
                       {hasCap && (
                         <>
-                          <span className="text-muted-foreground/70">
-                            {' / '}
+                          <span className="text-[11px] text-muted-foreground/70">
+                            {'/'}
                             <CurrencyAmount value={entry.maximumSpend as number} currency={currency} decimals={0} />
                           </span>
-                          <span className={`ml-1.5 ${pctClass}`}>{Math.round(progress)}%</span>
+                          <span className={`ml-1 ${pctClass}`}>{Math.round(progress)}%</span>
                         </>
                       )}
                     </span>

@@ -20,7 +20,7 @@ export function CurrencyAmount({
   const symbolClasses = cn("text-current opacity-70", symbolClassName);
 
   return (
-    <span className={cn("tabular-nums font-mono", className)}>
+    <span className={cn("tabular-nums", className)}>
       {showPlus && value > 0 ? (
         <span className={symbolClasses} aria-hidden="true">
           +

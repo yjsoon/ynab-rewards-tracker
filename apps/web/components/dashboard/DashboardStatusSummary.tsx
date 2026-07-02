@@ -86,12 +86,12 @@ export function DashboardStatusSummary({
   const chips = STATUS_CHIPS.filter((chip) => displayCounts[chip.key] > 0);
 
   return (
-    <div className="flex flex-wrap items-center gap-2 text-xs">
+    <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
       {chips.map((chip) => (
         <span
           key={chip.key}
           className={cn(
-            "inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-card px-2.5 py-1 font-medium",
+            "inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-card px-2 py-0.5 font-medium tabular-nums",
             chip.textClass
           )}
         >
