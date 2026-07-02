@@ -451,7 +451,7 @@ function DashboardContent() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-5 sm:py-6">
-      <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2">
+      <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
         <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Dashboard</h1>
         <div className="shrink-0 flex items-center rounded-lg border bg-muted/30 p-0.5">
           <button
