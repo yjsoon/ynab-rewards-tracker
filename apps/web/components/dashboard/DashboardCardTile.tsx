@@ -37,6 +37,7 @@ import {
   CardSummaryCompactContent,
 } from "@/components/CardSummaryCompact";
 import { hasMinimumSpendRequirement } from "@/lib/minimum-spend-helpers";
+import { getCardAttentionStatus } from "@/lib/card-metrics";
 import type { PrefetchedCardMetrics } from "@/lib/card-metrics";
 
 const isExpansionMap = (
@@ -95,6 +96,7 @@ export function DashboardCardTile({
   const minimumMet = calc ? calc.minimumSpendMet : true;
   const hasMin = calc ? hasMinimumSpendRequirement(calc.minimumSpend) : false;
   const exceeded = calc?.maximumSpendExceeded ?? false;
+  const nearCap = calc ? getCardAttentionStatus(card, calc) === "near-cap" : false;
   const earnedNumber = calc?.rewardEarned ?? 0;
   const earnedDisplay = Math.round(earnedNumber).toLocaleString();
   const rewardChipState: "exceeded" | "warn" | "muted" = exceeded
@@ -117,6 +119,7 @@ export function DashboardCardTile({
         "bg-card",
         accentClasses,
         exceeded ? "ring-2 ring-red-300/70 dark:ring-red-900/60" : undefined,
+        nearCap ? "ring-2 ring-amber-300/70 dark:ring-amber-800/60" : undefined,
         isDragging ? "ring-2 ring-primary/60 shadow-lg" : undefined,
       )}
     >
@@ -207,6 +210,16 @@ export function DashboardCardTile({
                 <span className="text-[0.65rem] font-medium">At cap</span>
               </Badge>
             )}
+            {nearCap && (
+              <Badge
+                variant="outline"
+                className="shrink-0 h-5 px-1.5 gap-1 border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300"
+                aria-label="Spending is approaching the configured cap for this period"
+              >
+                <AlertCircle className="h-3 w-3" aria-hidden="true" />
+                <span className="text-[0.65rem] font-medium">Near cap</span>
+              </Badge>
+            )}
             <span
               className={cn(
                 "inline-flex items-center gap-0.5 text-xs font-medium",
@@ -233,7 +246,13 @@ export function DashboardCardTile({
           </div>
         </div>
       </CardHeader>
-      <CardContent className="flex-1 flex flex-col">
+      <CardContent
+        className={cn(
+          "flex-1 flex flex-col",
+          // Keep the last content row clear of the corner drag handle overlay
+          dragHandle && "pb-9",
+        )}
+      >
         {metrics ? (
           <CardSummaryCompactContent
             card={card}

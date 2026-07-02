@@ -2,6 +2,7 @@
 
 import { cn, formatDollars } from '@/lib/utils';
 import { CurrencyAmount } from '@/components/CurrencyAmount';
+import { NEAR_CAP_RATIO } from '@/lib/card-metrics';
 import { AlertCircle, CheckCircle2, XCircle } from 'lucide-react';
 
 interface SpendingProgressBarProps {
@@ -57,8 +58,10 @@ export function SpendingProgressBar({
 
     const minimumMet = !hasMinimum || spendForMinimum >= minimumSpend;
     const maximumExceeded = hasMaximum && spendForMaximum >= maximumSpend;
+    const nearingMaximum = hasMaximum && spendForMaximum >= maximumSpend * NEAR_CAP_RATIO;
 
     if (maximumExceeded) return 'exceeded'; // Red zone - no rewards
+    if (minimumMet && nearingMaximum) return 'nearing'; // Orange zone - cap approaching
     if (minimumMet) return 'earning'; // Green zone - earning rewards
     return 'pending'; // Yellow zone - not earning yet
   };
@@ -81,6 +84,8 @@ export function SpendingProgressBar({
     switch (spendingZone) {
       case 'exceeded':
         return 'bg-gradient-to-r from-red-500 to-red-600 dark:from-red-600 dark:to-red-700';
+      case 'nearing':
+        return 'bg-gradient-to-r from-amber-500 to-orange-500 dark:from-amber-600 dark:to-orange-600';
       case 'earning':
         return 'bg-gradient-to-r from-emerald-500 to-emerald-600 dark:from-emerald-600 dark:to-emerald-700';
       case 'pending':
@@ -108,13 +113,15 @@ export function SpendingProgressBar({
       ? exceededAmount > 0
         ? `Spending cap exceeded by ${formatDollars(exceededAmount, { currency })}`
         : 'Spending cap reached'
-      : spendingZone === 'earning'
-        ? hasMaximum
-          ? `Earning rewards: ${roundedProgressPercent}% of cap used`
-          : `Earning rewards: ${roundedProgressPercent}%`
-        : spendingZone === 'pending'
-          ? `Working towards minimum: ${roundedProgressPercent}%`
-          : `Spending progress: ${roundedProgressPercent}%`;
+      : spendingZone === 'nearing'
+        ? `Nearing cap: ${roundedProgressPercent}% of cap used`
+        : spendingZone === 'earning'
+          ? hasMaximum
+            ? `Earning rewards: ${roundedProgressPercent}% of cap used`
+            : `Earning rewards: ${roundedProgressPercent}%`
+          : spendingZone === 'pending'
+            ? `Working towards minimum: ${roundedProgressPercent}%`
+            : `Spending progress: ${roundedProgressPercent}%`;
 
   return (
     <div className={cn("space-y-2", className)}>
@@ -127,6 +134,7 @@ export function SpendingProgressBar({
           <span className={cn(
             "flex items-center gap-1",
             spendingZone === 'exceeded' && "text-red-600 dark:text-red-400",
+            spendingZone === 'nearing' && "text-orange-600 dark:text-orange-400",
             spendingZone === 'earning' && "text-emerald-600 dark:text-emerald-400",
             spendingZone === 'pending' && "text-amber-600 dark:text-amber-400"
           )}>
@@ -134,6 +142,12 @@ export function SpendingProgressBar({
               <>
                 <XCircle className="h-3 w-3" />
                 No rewards zone
+              </>
+            )}
+            {spendingZone === 'nearing' && (
+              <>
+                <AlertCircle className="h-3 w-3" />
+                Nearing cap
               </>
             )}
             {spendingZone === 'earning' && (
@@ -226,6 +240,11 @@ export function SpendingProgressBar({
                   <CurrencyAmount value={remainingToMaximum} currency={currency} /> until cap
                 </span>
               )}
+              {spendingZone === 'nearing' && remainingToMaximum > 0 && (
+                <span className="text-orange-600 dark:text-orange-400 font-medium">
+                  <CurrencyAmount value={remainingToMaximum} currency={currency} /> until cap
+                </span>
+              )}
               {spendingZone === 'exceeded' && exceededAmount > 0 && (
                 <span className="text-red-600 dark:text-red-400 font-medium">
                   <CurrencyAmount value={exceededAmount} currency={currency} /> over limit
@@ -236,8 +255,8 @@ export function SpendingProgressBar({
         </div>
       )}
 
-      {/* No limits message */}
-      {!hasLimits && (
+      {/* No limits message (compact contexts render their own copy) */}
+      {!hasLimits && showLabels && (
         <div className="text-center text-xs text-muted-foreground">
           No spending limits configured
         </div>

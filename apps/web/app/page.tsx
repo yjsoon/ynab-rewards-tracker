@@ -553,6 +553,7 @@ function DashboardContent() {
           viewMode={viewMode}
           onToggleSummarySubcategories={handleToggleSummarySubcategories}
           onHideCard={hideCard}
+          onUnhideCard={unhideCard}
           onUnhideAll={handleUnhideAll}
           pat={pat}
           prefetchedTransactions={allTransactions}

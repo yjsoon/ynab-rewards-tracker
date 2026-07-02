@@ -5,7 +5,11 @@ import type { YnabFlagColor } from "@/lib/ynab-constants";
 import { formatDateValue } from "@/lib/dashboard-period";
 import { SimpleRewardsCalculator } from "@/lib/rewards-engine";
 import { YnabClient } from "@/lib/ynab-client";
-import { filterTransactionsForCardPeriod } from "@/lib/card-metrics";
+import {
+  NEAR_CAP_RATIO,
+  cardUsesBlockRounding,
+  filterTransactionsForCardPeriod,
+} from "@/lib/card-metrics";
 import { useSelectedBudget, useSettings } from "@/hooks/useLocalStorage";
 import { hasMinimumSpendRequirement } from "@/lib/minimum-spend-helpers";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
@@ -61,14 +65,7 @@ export function CardSummaryCompactContent({
     subcategoryBreakdowns = [],
   } = calculation;
   const currency = settings?.currency;
-  const hasBlockRounding = Boolean(
-    (typeof card.earningBlockSize === "number" && card.earningBlockSize > 0) ||
-      (card.subcategoriesEnabled &&
-        card.subcategories?.some(
-          (subcategory) =>
-            typeof subcategory.milesBlockSize === "number" && subcategory.milesBlockSize > 0
-        ))
-  );
+  const hasBlockRounding = cardUsesBlockRounding(card);
   const displayedSpend = hasBlockRounding ? countedSpend : totalSpend;
   const hasMinimum = hasMinimumSpendRequirement(minimumSpend);
   const minimumTarget = typeof minimumSpend === "number" && minimumSpend > 0 ? minimumSpend : 0;
@@ -81,6 +78,21 @@ export function CardSummaryCompactContent({
   const maximumTarget = hasMaximum ? maximumSpend : 0;
   const remainingToMaximum = hasMaximum ? Math.max(0, maximumTarget - displayedSpend) : 0;
   const exceededAmount = hasMaximum ? Math.max(0, displayedSpend - maximumTarget) : 0;
+  const remainingToMinimum = hasMinimum ? Math.max(0, minimumTarget - totalSpend) : 0;
+  const nearCap =
+    hasMaximum &&
+    !maximumSpendExceeded &&
+    displayedSpend / maximumTarget >= NEAR_CAP_RATIO;
+
+  // Hero row leads with the number checked daily: room left before the cap (or to
+  // the minimum), falling back to plain spend when neither limit applies.
+  const heroVariant: "cap-left" | "cap-over" | "min-left" | "spent" = hasMaximum
+    ? maximumSpendExceeded
+      ? "cap-over"
+      : "cap-left"
+    : hasMinimum && !minimumSpendMet
+      ? "min-left"
+      : "spent";
   const displayedSubcategoryBreakdowns = hasBlockRounding
     ? subcategoryBreakdowns.map((entry) => ({ ...entry, totalSpend: entry.countedSpend }))
     : subcategoryBreakdowns;
@@ -105,10 +117,53 @@ export function CardSummaryCompactContent({
   return (
     <div className="relative flex h-full flex-col gap-2.5">
       <RefreshBadge isRefreshing={isRefreshing} />
-      <div className="flex items-center justify-between">
-        <span className="text-xs uppercase tracking-wide text-muted-foreground">Spent</span>
-        <span className="text-lg font-semibold tracking-tight">
-          <CurrencyAmount value={displayedSpend} currency={currency} />
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="min-w-0 truncate text-xs uppercase tracking-wide text-muted-foreground">
+          {heroVariant === "cap-left" && (
+            <>
+              Left of <CurrencyAmount value={maximumTarget} currency={currency} decimals={0} /> cap
+            </>
+          )}
+          {heroVariant === "cap-over" && (
+            <>
+              Over <CurrencyAmount value={maximumTarget} currency={currency} decimals={0} /> cap
+            </>
+          )}
+          {heroVariant === "min-left" && (
+            <>
+              To <CurrencyAmount value={minimumTarget} currency={currency} decimals={0} /> min
+            </>
+          )}
+          {heroVariant === "spent" && "Spent"}
+        </span>
+        <span
+          className={cn(
+            "shrink-0 text-lg font-semibold tracking-tight",
+            heroVariant === "cap-over" && "text-red-600 dark:text-red-400",
+            heroVariant === "cap-left" && nearCap && "text-amber-600 dark:text-amber-400"
+          )}
+          title={
+            heroVariant === "cap-left"
+              ? `${remainingToMaximum.toFixed(2)} left before the cap`
+              : heroVariant === "cap-over"
+                ? `${exceededAmount.toFixed(2)} over the cap`
+                : heroVariant === "min-left"
+                  ? `${remainingToMinimum.toFixed(2)} more to meet the minimum`
+                  : `Spent ${displayedSpend.toFixed(2)} this period`
+          }
+        >
+          {heroVariant === "cap-left" && (
+            <CurrencyAmount value={remainingToMaximum} currency={currency} decimals={0} />
+          )}
+          {heroVariant === "cap-over" && (
+            <CurrencyAmount value={exceededAmount} currency={currency} decimals={0} showPlus />
+          )}
+          {heroVariant === "min-left" && (
+            <CurrencyAmount value={remainingToMinimum} currency={currency} decimals={0} />
+          )}
+          {heroVariant === "spent" && (
+            <CurrencyAmount value={displayedSpend} currency={currency} />
+          )}
         </span>
       </div>
 
@@ -126,7 +181,15 @@ export function CardSummaryCompactContent({
 
       <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
         <span className="min-w-0 truncate">
-          {hasMinimum && (
+          {heroVariant !== "spent" && (
+            <span>
+              Spent <CurrencyAmount value={displayedSpend} currency={currency} decimals={0} />
+            </span>
+          )}
+          {heroVariant !== "spent" && hasMinimum && heroVariant !== "min-left" && (
+            <span className="mx-1.5 text-muted-foreground/60">·</span>
+          )}
+          {hasMinimum && heroVariant !== "min-left" && (
             <span className={cn("font-medium", minStatusClass)}>
               {minimumSpendMet ? (
                 <>Met <CurrencyAmount value={minimumTarget} currency={currency} decimals={0} /> min</>
@@ -135,19 +198,8 @@ export function CardSummaryCompactContent({
               )}
             </span>
           )}
-          {hasMinimum && hasMaximum && <span className="mx-1.5 text-muted-foreground/60">·</span>}
-          {hasMaximum && (
-            maximumSpendExceeded ? (
-              <span className="font-medium text-red-600 dark:text-red-400">
-                +<CurrencyAmount value={exceededAmount} currency={currency} decimals={0} /> over{" "}
-                <CurrencyAmount value={maximumTarget} currency={currency} decimals={0} /> cap
-              </span>
-            ) : (
-              <span>
-                <CurrencyAmount value={remainingToMaximum} currency={currency} decimals={0} /> left of{" "}
-                <CurrencyAmount value={maximumTarget} currency={currency} decimals={0} /> cap
-              </span>
-            )
+          {heroVariant === "min-left" && (
+            <span className={cn("ml-1.5 font-medium", minStatusClass)}>· {progressPercent}% of min</span>
           )}
           {!hasMinimum && !hasMaximum && (
             <span className="italic">No spend limits</span>

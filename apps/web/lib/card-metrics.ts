@@ -2,8 +2,58 @@ import { SimpleRewardsCalculator, type SimplifiedCalculation, type SimplePeriod 
 import type { AppSettings, CreditCard } from "@/lib/storage";
 import type { Transaction } from "@/types/transaction";
 import { formatDateValue } from "@/lib/dashboard-period";
+import { hasMinimumSpendRequirement } from "@/lib/minimum-spend-helpers";
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
+
+/** Spend ratio against the cap at which a card is flagged as "near cap". */
+export const NEAR_CAP_RATIO = 0.8;
+
+export type CardAttentionStatus =
+  | "at-cap"
+  | "near-cap"
+  | "below-minimum"
+  | "earning"
+  | "no-limits";
+
+export function cardUsesBlockRounding(card: CreditCard): boolean {
+  return Boolean(
+    (typeof card.earningBlockSize === "number" && card.earningBlockSize > 0) ||
+      (card.subcategoriesEnabled &&
+        card.subcategories?.some(
+          (subcategory) =>
+            typeof subcategory.milesBlockSize === "number" && subcategory.milesBlockSize > 0
+        ))
+  );
+}
+
+/** Spend figure shown against caps: counted spend for block-rounded cards, raw spend otherwise. */
+export function getDisplayedSpend(card: CreditCard, calculation: SimplifiedCalculation): number {
+  return cardUsesBlockRounding(card) ? calculation.countedSpend : calculation.totalSpend;
+}
+
+export function getCardAttentionStatus(
+  card: CreditCard,
+  calculation: SimplifiedCalculation
+): CardAttentionStatus {
+  const hasMaximum =
+    typeof calculation.maximumSpend === "number" && calculation.maximumSpend > 0;
+  const hasMinimum = hasMinimumSpendRequirement(calculation.minimumSpend);
+
+  if (hasMaximum && calculation.maximumSpendExceeded) {
+    return "at-cap";
+  }
+  if (hasMaximum) {
+    const spend = getDisplayedSpend(card, calculation);
+    if (spend / (calculation.maximumSpend as number) >= NEAR_CAP_RATIO) {
+      return "near-cap";
+    }
+  }
+  if (hasMinimum && !calculation.minimumSpendMet) {
+    return "below-minimum";
+  }
+  return hasMaximum || hasMinimum ? "earning" : "no-limits";
+}
 
 export interface PrefetchedCardMetrics {
   calculation: SimplifiedCalculation;

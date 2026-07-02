@@ -7,10 +7,12 @@ import {
   ChevronDown,
   ChevronRight,
   CreditCard as CreditCardIcon,
+  EyeOff,
   GripVertical,
   Loader2,
   Percent,
   TrendingUp,
+  X,
 } from "lucide-react";
 
 import type {
@@ -34,6 +36,7 @@ import {
 } from "@/components/ui/card";
 import type { PrefetchedCardMetrics } from "@/lib/card-metrics";
 import { DashboardCardTile } from "@/components/dashboard/DashboardCardTile";
+import { DashboardStatusSummary } from "@/components/dashboard/DashboardStatusSummary";
 import type { SortableDashboardCardGridProps } from "@/components/dashboard/SortableDashboardCardGrid";
 
 type SortableGridComponent = ComponentType<SortableDashboardCardGridProps>;
@@ -85,6 +88,7 @@ interface DashboardCardOverviewProps {
   viewMode: DashboardViewMode;
   onToggleSummarySubcategories(cardId: string): void;
   onHideCard(cardId: string, hiddenUntil: string): void;
+  onUnhideCard(cardId: string): void;
   onUnhideAll(): void;
   pat: string;
   prefetchedTransactions: Transaction[];
@@ -117,6 +121,7 @@ export function DashboardCardOverview({
   viewMode,
   onToggleSummarySubcategories,
   onHideCard,
+  onUnhideCard,
   onUnhideAll,
   pat,
   prefetchedTransactions,
@@ -382,8 +387,16 @@ export function DashboardCardOverview({
     allowHideCards,
   ]);
 
+  const cardNameById = useMemo(
+    () => new Map(cards.map((card) => [card.id, card.name])),
+    [cards],
+  );
+  const namedHiddenCards = hiddenCards.filter((entry) =>
+    cardNameById.has(entry.cardId),
+  );
+
   return (
-    <div className="space-y-8 mb-8">
+    <div className="space-y-6 mb-8">
       {transactionsRefreshing && (
         <div className="flex items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50/50 py-2 px-4 text-sm text-blue-700 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-300">
           <Loader2 className="h-4 w-4 animate-spin" />
@@ -391,12 +404,45 @@ export function DashboardCardOverview({
         </div>
       )}
 
+      {!isInitialLoading && hasVisibleCards && (
+        <DashboardStatusSummary
+          cards={visibleFeaturedCards}
+          cardMetricsById={cardMetricsById}
+          settings={settings}
+        />
+      )}
+
       {hiddenCount > 0 && (
-        <div className="flex items-center gap-2 mb-4">
-          <Badge variant="secondary">{hiddenCount} hidden</Badge>
-          <Button variant="outline" size="sm" onClick={handleShowAll}>
-            Show all
-          </Button>
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+            <EyeOff className="h-3.5 w-3.5" aria-hidden="true" />
+            Hidden until next cycle:
+          </span>
+          {namedHiddenCards.map((entry) => (
+            <button
+              key={entry.cardId}
+              type="button"
+              onClick={() => onUnhideCard(entry.cardId)}
+              title={`Show ${cardNameById.get(entry.cardId)} again`}
+              className="group inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/40 px-2.5 py-1 font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              {cardNameById.get(entry.cardId)}
+              <X
+                className="h-3 w-3 opacity-50 transition-opacity group-hover:opacity-100"
+                aria-hidden="true"
+              />
+            </button>
+          ))}
+          {hiddenCount > 1 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-xs"
+              onClick={handleShowAll}
+            >
+              Show all
+            </Button>
+          )}
         </div>
       )}
 
