@@ -1,5 +1,7 @@
 "use client";
 
+import { Fragment } from "react";
+
 import { CurrencyAmount } from "@/components/CurrencyAmount";
 import { cn } from "@/lib/utils";
 import {
@@ -15,37 +17,38 @@ interface DashboardStatusSummaryProps {
   settings: AppSettings;
 }
 
-interface StatusChip {
+interface StatusSlot {
   key: CardAttentionStatus;
-  label: (count: number) => string;
+  describe: (count: number) => string;
   dotClass: string;
   textClass: string;
 }
 
-const STATUS_CHIPS: StatusChip[] = [
-  {
-    key: "at-cap",
-    label: (count) => `${count} at cap`,
-    dotClass: "bg-red-500",
-    textClass: "text-red-700 dark:text-red-300",
-  },
-  {
-    key: "near-cap",
-    label: (count) => `${count} near cap`,
-    dotClass: "bg-amber-500",
-    textClass: "text-amber-700 dark:text-amber-300",
-  },
+// Lifecycle order: working towards the minimum, earning, approaching the cap, done.
+const STATUS_SLOTS: StatusSlot[] = [
   {
     key: "below-minimum",
-    label: (count) => `${count} below min`,
+    describe: (count) => `${count} below minimum spend`,
     dotClass: "bg-sky-500",
     textClass: "text-sky-700 dark:text-sky-300",
   },
   {
     key: "earning",
-    label: (count) => `${count} earning`,
+    describe: (count) => `${count} earning rewards`,
     dotClass: "bg-emerald-500",
     textClass: "text-emerald-700 dark:text-emerald-300",
+  },
+  {
+    key: "near-cap",
+    describe: (count) => `${count} near cap`,
+    dotClass: "bg-amber-500",
+    textClass: "text-amber-700 dark:text-amber-300",
+  },
+  {
+    key: "at-cap",
+    describe: (count) => `${count} at cap`,
+    dotClass: "bg-red-500",
+    textClass: "text-red-700 dark:text-red-300",
   },
 ];
 
@@ -78,30 +81,49 @@ export function DashboardStatusSummary({
     return null;
   }
 
-  // Cards without limits earn unconditionally, so fold them into the earning chip.
-  const displayCounts = {
-    ...counts,
-    earning: counts.earning + counts["no-limits"],
-  };
-  const chips = STATUS_CHIPS.filter((chip) => displayCounts[chip.key] > 0);
+  // Cards without limits earn unconditionally, so fold them into the earning slot.
+  counts.earning += counts["no-limits"];
+
+  const clusterLabel = STATUS_SLOTS.map((slot) => slot.describe(counts[slot.key])).join(", ");
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-      {chips.map((chip) => (
-        <span
-          key={chip.key}
-          className={cn(
-            "inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-card px-2 py-0.5 font-medium tabular-nums",
-            chip.textClass
-          )}
-        >
-          <span
-            className={cn("h-1.5 w-1.5 rounded-full", chip.dotClass)}
-            aria-hidden="true"
-          />
-          {chip.label(displayCounts[chip.key])}
-        </span>
-      ))}
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+      <span
+        className="inline-flex items-center gap-1.5 font-semibold tabular-nums"
+        role="img"
+        aria-label={clusterLabel}
+        title={clusterLabel}
+      >
+        {STATUS_SLOTS.map((slot, index) => {
+          const count = counts[slot.key];
+          return (
+            <Fragment key={slot.key}>
+              {index > 0 && (
+                <span className="font-normal text-muted-foreground/40" aria-hidden="true">
+                  /
+                </span>
+              )}
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1",
+                  count === 0 ? "text-muted-foreground/50" : slot.textClass
+                )}
+                title={slot.describe(count)}
+              >
+                <span
+                  className={cn(
+                    "h-1.5 w-1.5 rounded-full",
+                    slot.dotClass,
+                    count === 0 && "opacity-40"
+                  )}
+                  aria-hidden="true"
+                />
+                {count}
+              </span>
+            </Fragment>
+          );
+        })}
+      </span>
       <span
         className="ml-auto text-muted-foreground"
         title="Estimated rewards earned this period across visible cards, with miles converted to dollars"
