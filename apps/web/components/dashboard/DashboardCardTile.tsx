@@ -3,7 +3,6 @@
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import {
-  AlertCircle,
   DollarSign,
   EyeOff,
   MoreHorizontal,
@@ -198,26 +197,6 @@ export function DashboardCardTile({
               >
                 <Sparkles className="h-3 w-3" aria-hidden="true" />
                 <span className="text-[0.65rem] font-medium">Promo</span>
-              </Badge>
-            )}
-            {exceeded && (
-              <Badge
-                variant="outline"
-                className="shrink-0 h-5 px-1.5 gap-1 border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"
-                aria-label="Spending has reached the configured cap for this period"
-              >
-                <AlertCircle className="h-3 w-3" aria-hidden="true" />
-                <span className="text-[0.65rem] font-medium">At cap</span>
-              </Badge>
-            )}
-            {nearCap && (
-              <Badge
-                variant="outline"
-                className="shrink-0 h-5 px-1.5 gap-1 border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300"
-                aria-label="Spending is approaching the configured cap for this period"
-              >
-                <AlertCircle className="h-3 w-3" aria-hidden="true" />
-                <span className="text-[0.65rem] font-medium">Near cap</span>
               </Badge>
             )}
             <span

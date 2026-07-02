@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { useId, useState } from 'react';
+import type { MouseEvent } from 'react';
+import { ChevronDown } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { CurrencyAmount } from './CurrencyAmount';
 import { getFlagHex, getFlagBorderColor } from '@/lib/flag-colors';
 
@@ -29,6 +30,8 @@ interface SubcategoryBreakdownCompactProps {
   compactSubtitles?: boolean;
 }
 
+const ROW_STAGGER_MS = 45;
+
 export function SubcategoryBreakdownCompact({
   breakdowns,
   currency,
@@ -37,10 +40,17 @@ export function SubcategoryBreakdownCompact({
   compactSubtitles = false,
 }: SubcategoryBreakdownCompactProps) {
   const [internalIsExpanded, setInternalIsExpanded] = useState(false);
+  const contentId = useId();
 
   // Use controlled state if provided, otherwise use internal state
   const isExpanded = controlledIsExpanded !== undefined ? controlledIsExpanded : internalIsExpanded;
   const handleToggle = onToggleExpanded || (() => setInternalIsExpanded(!internalIsExpanded));
+
+  const onToggleClick = (event: MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    handleToggle();
+  };
 
   if (breakdowns.length === 0) return null;
 
@@ -75,37 +85,37 @@ export function SubcategoryBreakdownCompact({
 
   return (
     <div className="space-y-1.5 rounded-md border border-border/60 bg-muted/5 p-2">
-      {/* Header with toggle */}
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-muted-foreground">Subcategories</p>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-6 px-2 text-xs touch-action-manipulation"
-          style={{ touchAction: 'manipulation' }}
-          onClick={(e) => {
-            e.stopPropagation();
-            e.preventDefault();
-            handleToggle();
-          }}
-        >
-          {isExpanded ? (
-            <>
-              <ChevronUp className="mr-1 h-3 w-3" />
-              Less
-            </>
-          ) : (
-            <>
-              <ChevronDown className="mr-1 h-3 w-3" />
-              More
-            </>
+      {/* Header — the whole row toggles the breakdown */}
+      <button
+        type="button"
+        onClick={onToggleClick}
+        aria-expanded={isExpanded}
+        aria-controls={contentId}
+        className="group flex w-full items-center justify-between rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+      >
+        <span className="text-sm font-semibold text-muted-foreground transition-colors group-hover:text-foreground">
+          Subcategories
+        </span>
+        <ChevronDown
+          className={cn(
+            'h-4 w-4 text-muted-foreground transition-transform duration-300 ease-out group-hover:text-foreground',
+            isExpanded && 'rotate-180',
           )}
-        </Button>
-      </div>
+          aria-hidden="true"
+        />
+      </button>
 
-      {/* Stacked Bar Visualization */}
-      <div className="space-y-1">
-        <div className="flex h-6 w-full overflow-hidden rounded-md bg-muted/30 border border-border/40">
+      {/* Stacked bar — tapping it toggles the breakdown too */}
+      <button
+        type="button"
+        onClick={onToggleClick}
+        aria-expanded={isExpanded}
+        aria-controls={contentId}
+        aria-label={isExpanded ? 'Hide subcategory details' : 'Show subcategory details'}
+        title={isExpanded ? 'Hide subcategory details' : 'Show subcategory details'}
+        className="block w-full cursor-pointer rounded-md transition-transform duration-150 ease-out hover:scale-[1.015] active:scale-[0.985] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+      >
+        <span className="flex h-6 w-full overflow-hidden rounded-md bg-muted/30 border border-border/40">
           {segments.map((segment, index) => {
             const color = getFlagHex(segment.flagColor);
             const width = segment.spendSharePercentage;
@@ -122,9 +132,9 @@ export function SubcategoryBreakdownCompact({
               : `${segment.name}: $${segment.totalSpend.toFixed(2)} spent (no cap)`;
 
             return (
-              <div
+              <span
                 key={segment.subcategoryId || `${segment.flagColor}-${index}`}
-                className="relative flex items-center justify-center transition-all hover:opacity-80"
+                className="relative flex items-center justify-center"
                 style={{
                   width: `${width}%`,
                   backgroundColor: color,
@@ -143,80 +153,100 @@ export function SubcategoryBreakdownCompact({
                     {displayText}
                   </span>
                 )}
-              </div>
+              </span>
             );
           })}
+        </span>
+      </button>
+
+      {/* Detail rows — animated open/close with a gentle stagger */}
+      <div
+        id={contentId}
+        className={cn(
+          'grid transition-[grid-template-rows] duration-300 ease-out',
+          isExpanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]',
+        )}
+      >
+        <div className="overflow-hidden">
+          <div className="space-y-1 pb-0.5">
+            {sortedBreakdowns.map((entry, index) => {
+              const borderColor = getFlagBorderColor(entry.flagColor, 0.4);
+              const flagColor = getFlagHex(entry.flagColor);
+
+              // Background fill width: with a cap, show cap progress. Without one, fall back to
+              // this row's share of total subcategory spend so the bar still conveys weight.
+              const hasCap = !!(entry.maximumSpend && entry.maximumSpend > 0);
+              const progress = hasCap
+                ? Math.min(100, (entry.totalSpend / (entry.maximumSpend as number)) * 100)
+                : totalSpend > 0
+                  ? (entry.totalSpend / totalSpend) * 100
+                  : 0;
+
+              // Cap-pressure colour for the inline percentage text.
+              let pctClass = 'text-muted-foreground';
+              if (hasCap) {
+                if (entry.maximumSpendExceeded || progress >= 90) {
+                  pctClass = 'text-red-600 dark:text-red-400 font-medium';
+                } else if (progress >= 75) {
+                  pctClass = 'text-amber-600 dark:text-amber-400 font-medium';
+                }
+              }
+
+              const isZero = entry.totalSpend <= 0;
+
+              return (
+                <div
+                  key={entry.subcategoryId || `${entry.flagColor}-${entry.name}`}
+                  className={cn(
+                    'relative overflow-hidden rounded-md border transition-all duration-300 ease-out',
+                    isExpanded
+                      ? isZero
+                        ? 'translate-y-0 opacity-50'
+                        : 'translate-y-0 opacity-100'
+                      : 'translate-y-1 opacity-0',
+                  )}
+                  style={{
+                    borderColor,
+                    transitionDelay: isExpanded ? `${index * ROW_STAGGER_MS}ms` : '0ms',
+                  }}
+                >
+                  <div
+                    className="absolute inset-y-0 left-0 transition-[width] duration-500 ease-out"
+                    style={{
+                      // Fill grows in from zero as the section opens
+                      width: isExpanded ? `${progress}%` : '0%',
+                      backgroundColor: flagColor,
+                      opacity: 0.18,
+                      transitionDelay: isExpanded ? `${index * ROW_STAGGER_MS}ms` : '0ms',
+                    }}
+                  />
+                  <div className="relative flex min-h-[26px] items-center gap-2 px-2.5 py-1">
+                    <div
+                      className="h-2.5 w-2.5 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: flagColor }}
+                    />
+                    <span className="truncate text-sm font-medium">{entry.name}</span>
+                    <span className="ml-auto whitespace-nowrap text-sm">
+                      <span className="font-semibold">
+                        <CurrencyAmount value={entry.totalSpend} currency={currency} decimals={compactSubtitles ? 0 : 2} />
+                      </span>
+                      {hasCap && (
+                        <>
+                          <span className="text-muted-foreground/70">
+                            {' / '}
+                            <CurrencyAmount value={entry.maximumSpend as number} currency={currency} decimals={0} />
+                          </span>
+                          <span className={`ml-1.5 ${pctClass}`}>{Math.round(progress)}%</span>
+                        </>
+                      )}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
-
-      {/* Expanded View - Show Details */}
-      {isExpanded && (
-        <div className="space-y-1">
-          {sortedBreakdowns.map((entry) => {
-            const borderColor = getFlagBorderColor(entry.flagColor, 0.4);
-            const flagColor = getFlagHex(entry.flagColor);
-
-            // Background fill width: with a cap, show cap progress. Without one, fall back to
-            // this row's share of total subcategory spend so the bar still conveys weight.
-            const hasCap = !!(entry.maximumSpend && entry.maximumSpend > 0);
-            const progress = hasCap
-              ? Math.min(100, (entry.totalSpend / (entry.maximumSpend as number)) * 100)
-              : totalSpend > 0
-                ? (entry.totalSpend / totalSpend) * 100
-                : 0;
-
-            // Cap-pressure colour for the inline percentage text.
-            let pctClass = 'text-muted-foreground';
-            if (hasCap) {
-              if (entry.maximumSpendExceeded || progress >= 90) {
-                pctClass = 'text-red-600 dark:text-red-400 font-medium';
-              } else if (progress >= 75) {
-                pctClass = 'text-amber-600 dark:text-amber-400 font-medium';
-              }
-            }
-
-            const isZero = entry.totalSpend <= 0;
-
-            return (
-              <div
-                key={entry.subcategoryId || `${entry.flagColor}-${entry.name}`}
-                className={`relative overflow-hidden rounded-md border ${isZero ? 'opacity-50' : ''}`}
-                style={{ borderColor }}
-              >
-                <div
-                  className="absolute inset-y-0 left-0 transition-all duration-300"
-                  style={{
-                    width: `${progress}%`,
-                    backgroundColor: flagColor,
-                    opacity: 0.18,
-                  }}
-                />
-                <div className="relative flex min-h-[26px] items-center gap-2 px-2.5 py-1">
-                  <div
-                    className="h-2.5 w-2.5 rounded-full flex-shrink-0"
-                    style={{ backgroundColor: flagColor }}
-                  />
-                  <span className="truncate text-sm font-medium">{entry.name}</span>
-                  <span className="ml-auto whitespace-nowrap text-sm">
-                    <span className="font-semibold">
-                      <CurrencyAmount value={entry.totalSpend} currency={currency} decimals={compactSubtitles ? 0 : 2} />
-                    </span>
-                    {hasCap && (
-                      <>
-                        <span className="text-muted-foreground/70">
-                          {' / '}
-                          <CurrencyAmount value={entry.maximumSpend as number} currency={currency} decimals={0} />
-                        </span>
-                        <span className={`ml-1.5 ${pctClass}`}>{Math.round(progress)}%</span>
-                      </>
-                    )}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }
