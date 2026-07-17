@@ -188,15 +188,10 @@ export function SpendingProgressBar({
           />
         </div>
 
-        {/* Minimum spend marker — matches the amber "to go" hero while still pending */}
+        {/* Minimum spend marker */}
         {hasMinimum && minimumPosition !== null && (
           <div
-            className={cn(
-              "absolute top-0 h-3 w-0.5",
-              spendingZone === 'pending'
-                ? "bg-amber-600 dark:bg-amber-400"
-                : "bg-foreground/40"
-            )}
+            className="absolute top-0 h-3 w-0.5 bg-foreground/40"
             style={{
               left: `${minimumPosition}%`,
               transform: minimumPosition === 100 ? 'translateX(-100%)' : undefined
