@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowUpRight, Gauge, OctagonAlert } from "lucide-react";
 import type { YnabFlagColor } from "@/lib/ynab-constants";
 import { formatDateValue } from "@/lib/dashboard-period";
 import { SimpleRewardsCalculator } from "@/lib/rewards-engine";
@@ -93,6 +94,33 @@ export function CardSummaryCompactContent({
     : hasMinimum && !minimumSpendMet
       ? "min-left"
       : "spent";
+
+  // The hero lockup pairs the amount with a directional glyph and a qualifier word so
+  // its meaning is legible without reading the label: a goal to spend into (amber,
+  // rising arrow), headroom to protect (gauge, heats up near the cap), or money
+  // already spent (no glyph — nothing to act on). Goal/headroom amounts are
+  // hypothetical, so they render rounded and a weight lighter than realised spend.
+  const capUrgent = heroVariant === "cap-left" && nearCap;
+  const heroTone =
+    heroVariant === "cap-over"
+      ? "text-red-600 dark:text-red-400"
+      : heroVariant === "min-left" || capUrgent
+        ? "text-amber-600 dark:text-amber-400"
+        : "text-foreground";
+  const heroSuffix = {
+    "min-left": "to go",
+    "cap-left": "left",
+    "cap-over": "over",
+    spent: "spent",
+  }[heroVariant];
+  const heroTitle =
+    heroVariant === "cap-left"
+      ? `${remainingToMaximum.toFixed(2)} left before the cap`
+      : heroVariant === "cap-over"
+        ? `${exceededAmount.toFixed(2)} over the cap`
+        : heroVariant === "min-left"
+          ? `${remainingToMinimum.toFixed(2)} more to meet the minimum`
+          : `Spent ${displayedSpend.toFixed(2)} this period`;
   const displayedSubcategoryBreakdowns = hasBlockRounding
     ? subcategoryBreakdowns.map((entry) => ({ ...entry, totalSpend: entry.countedSpend }))
     : subcategoryBreakdowns;
@@ -119,51 +147,61 @@ export function CardSummaryCompactContent({
       <RefreshBadge isRefreshing={isRefreshing} />
       <div className="flex items-baseline justify-between gap-2">
         <span className="min-w-0 truncate text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-          {heroVariant === "cap-left" && (
+          {(heroVariant === "cap-left" || heroVariant === "cap-over") && (
             <>
-              Left of <CurrencyAmount value={maximumTarget} currency={currency} decimals={0} /> cap
-            </>
-          )}
-          {heroVariant === "cap-over" && (
-            <>
-              Over <CurrencyAmount value={maximumTarget} currency={currency} decimals={0} /> cap
+              <CurrencyAmount value={maximumTarget} currency={currency} decimals={0} /> cap
             </>
           )}
           {heroVariant === "min-left" && (
             <>
-              To <CurrencyAmount value={minimumTarget} currency={currency} decimals={0} /> min
+              <CurrencyAmount value={minimumTarget} currency={currency} decimals={0} /> min
             </>
           )}
-          {heroVariant === "spent" && "Spent"}
+          {heroVariant === "spent" && "This period"}
         </span>
         <span
-          className={cn(
-            "shrink-0 text-xl font-semibold leading-none tracking-tight",
-            heroVariant === "cap-over" && "text-red-600 dark:text-red-400",
-            heroVariant === "cap-left" && nearCap && "text-amber-600 dark:text-amber-400"
-          )}
-          title={
-            heroVariant === "cap-left"
-              ? `${remainingToMaximum.toFixed(2)} left before the cap`
-              : heroVariant === "cap-over"
-                ? `${exceededAmount.toFixed(2)} over the cap`
-                : heroVariant === "min-left"
-                  ? `${remainingToMinimum.toFixed(2)} more to meet the minimum`
-                  : `Spent ${displayedSpend.toFixed(2)} this period`
-          }
+          className={cn("flex shrink-0 items-baseline gap-1", heroTone)}
+          title={heroTitle}
+          aria-label={heroTitle}
         >
+          {heroVariant === "min-left" && (
+            <ArrowUpRight className="h-4 w-4 self-center" aria-hidden />
+          )}
           {heroVariant === "cap-left" && (
-            <CurrencyAmount value={remainingToMaximum} currency={currency} decimals={0} />
+            <Gauge className="h-4 w-4 self-center" aria-hidden />
           )}
           {heroVariant === "cap-over" && (
-            <CurrencyAmount value={exceededAmount} currency={currency} decimals={0} showPlus />
+            <OctagonAlert className="h-4 w-4 self-center" aria-hidden />
           )}
-          {heroVariant === "min-left" && (
-            <CurrencyAmount value={remainingToMinimum} currency={currency} decimals={0} />
-          )}
-          {heroVariant === "spent" && (
-            <CurrencyAmount value={displayedSpend} currency={currency} />
-          )}
+          <span
+            className={cn(
+              "text-xl leading-none tracking-tight tabular-nums",
+              heroVariant === "spent" || heroVariant === "cap-over"
+                ? "font-semibold"
+                : "font-medium"
+            )}
+          >
+            {heroVariant === "cap-left" && (
+              <CurrencyAmount value={remainingToMaximum} currency={currency} decimals={0} />
+            )}
+            {heroVariant === "cap-over" && (
+              <CurrencyAmount value={exceededAmount} currency={currency} decimals={0} showPlus />
+            )}
+            {heroVariant === "min-left" && (
+              <CurrencyAmount value={remainingToMinimum} currency={currency} decimals={0} />
+            )}
+            {heroVariant === "spent" && (
+              <CurrencyAmount value={displayedSpend} currency={currency} />
+            )}
+          </span>
+          <span
+            className={cn(
+              "text-[11px] font-medium",
+              heroVariant === "spent" ? "text-muted-foreground" : "opacity-70"
+            )}
+          >
+            {heroSuffix}
+          </span>
         </span>
       </div>
 

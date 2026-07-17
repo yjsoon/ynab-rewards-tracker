@@ -188,10 +188,15 @@ export function SpendingProgressBar({
           />
         </div>
 
-        {/* Minimum spend marker */}
+        {/* Minimum spend marker — matches the amber "to go" hero while still pending */}
         {hasMinimum && minimumPosition !== null && (
           <div
-            className="absolute top-0 h-3 w-0.5 bg-foreground/40"
+            className={cn(
+              "absolute top-0 h-3 w-0.5",
+              spendingZone === 'pending'
+                ? "bg-amber-600 dark:bg-amber-400"
+                : "bg-foreground/40"
+            )}
             style={{
               left: `${minimumPosition}%`,
               transform: minimumPosition === 100 ? 'translateX(-100%)' : undefined
@@ -232,22 +237,22 @@ export function SpendingProgressBar({
             <div>
               {spendingZone === 'pending' && remainingToMinimum > 0 && (
                 <span className="text-amber-600 dark:text-amber-400">
-                  <CurrencyAmount value={remainingToMinimum} currency={currency} /> to minimum
+                  <CurrencyAmount value={remainingToMinimum} currency={currency} /> to go
                 </span>
               )}
               {spendingZone === 'earning' && hasMaximum && remainingToMaximum > 0 && (
                 <span className="text-emerald-600 dark:text-emerald-400">
-                  <CurrencyAmount value={remainingToMaximum} currency={currency} /> until cap
+                  <CurrencyAmount value={remainingToMaximum} currency={currency} /> left of cap
                 </span>
               )}
               {spendingZone === 'nearing' && remainingToMaximum > 0 && (
                 <span className="text-orange-600 dark:text-orange-400 font-medium">
-                  <CurrencyAmount value={remainingToMaximum} currency={currency} /> until cap
+                  <CurrencyAmount value={remainingToMaximum} currency={currency} /> left of cap
                 </span>
               )}
               {spendingZone === 'exceeded' && exceededAmount > 0 && (
                 <span className="text-red-600 dark:text-red-400 font-medium">
-                  <CurrencyAmount value={exceededAmount} currency={currency} /> over limit
+                  <CurrencyAmount value={exceededAmount} currency={currency} /> over cap
                 </span>
               )}
             </div>
