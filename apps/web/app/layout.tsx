@@ -5,6 +5,7 @@ import { Navigation } from "@/components/Navigation";
 import { Footer } from "@/components/Footer";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ThemeProvider } from "@/components/theme-provider";
+import { ModuleLoadRecovery } from "@/components/ModuleLoadRecovery";
 import "./globals.css";
 
 const inter = Inter({
@@ -62,6 +63,7 @@ export default function RootLayout({
           defaultTheme="system"
           enableSystem
           disableTransitionOnChange>
+          <ModuleLoadRecovery />
           <ErrorBoundary>
             <Providers>
               <div className="flex min-h-screen flex-col">
