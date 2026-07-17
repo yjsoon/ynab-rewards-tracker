@@ -96,15 +96,18 @@ export function CardSummaryCompactContent({
       : "spent";
 
   // The hero lockup pairs the amount with a directional glyph and a qualifier word so
-  // its meaning is legible without reading the label: a goal to spend into (amber,
-  // rising arrow), headroom to protect (gauge, heats up near the cap), or money
-  // already spent (no glyph — nothing to act on). Goal/headroom amounts are
-  // hypothetical, so they render rounded and a weight lighter than realised spend.
+  // its meaning is legible without reading the label: a goal to spend into (rising
+  // arrow), headroom to protect (gauge, heats up near the cap), or money already
+  // spent (no glyph — nothing to act on). Goal/headroom amounts are hypothetical,
+  // so they render rounded and a weight lighter than realised spend. Colour on the
+  // number is reserved for urgency (near/over cap) — the min goal keeps a neutral
+  // number since the amber progress bar and "% of min" fragment already carry
+  // that state, with only the arrow glyph keeping the goal accent.
   const capUrgent = heroVariant === "cap-left" && nearCap;
   const heroTone =
     heroVariant === "cap-over"
       ? "text-red-600 dark:text-red-400"
-      : heroVariant === "min-left" || capUrgent
+      : capUrgent
         ? "text-amber-600 dark:text-amber-400"
         : "text-foreground";
   const heroSuffix = {
@@ -165,7 +168,10 @@ export function CardSummaryCompactContent({
           aria-label={heroTitle}
         >
           {heroVariant === "min-left" && (
-            <ArrowUpRight className="h-4 w-4 self-center" aria-hidden />
+            <ArrowUpRight
+              className="h-4 w-4 self-center text-amber-600 dark:text-amber-400"
+              aria-hidden
+            />
           )}
           {heroVariant === "cap-left" && (
             <Gauge className="h-4 w-4 self-center" aria-hidden />
