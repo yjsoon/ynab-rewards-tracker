@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- Concave four-point brand spark. Matches SparkIcon in
+       apps/web/components/icons/BrandIcons.tsx; brand gold #F5B942 -->
+  <path d="M12 3 C12.9 8.4 15.6 11.1 21 12 C15.6 12.9 12.9 15.6 12 21 C11.1 15.6 8.4 12.9 3 12 C8.4 11.1 11.1 8.4 12 3 Z" fill="#F5B942"/>
+</svg>

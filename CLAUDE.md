@@ -182,6 +182,12 @@ TagMapping {
 - PAT never included in exports/backups
 - No server-side data storage
 
+### Brand & Icons
+- Master vector and brand guidelines: `design/brand/` (see its README)
+- Raster app icons are generated, never hand-edited: `node scripts/generate-icons.mjs`
+- In-app brand marks come from `apps/web/components/icons/BrandIcons.tsx`; use these over generic lucide icons for brand moments
+- Brand gold is the `--spark` token (Tailwind `text-spark`); brand crimson is `--primary`
+
 ## Development
 
 ### Prerequisites
