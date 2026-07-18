@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Full-bleed brand background -->
+  <rect width="512" height="512" fill="#D92D2D"/>
+
+  <!-- White card tilted -8deg; magnetic stripe doubles as a progress bar -->
+  <g transform="rotate(-8 245 284)">
+    <rect x="97" y="188" width="296" height="192" rx="30" fill="#FFFFFF"/>
+    <!-- Faint remaining track (full stripe) -->
+    <rect x="129" y="244" width="232" height="44" rx="22" fill="#F3D3D3"/>
+    <!-- Progress fill: ~68% of the stripe, rounded terminal -->
+    <rect x="129" y="244" width="158" height="44" rx="22" fill="#D92D2D"/>
+  </g>
+
+  <!-- Gold reward spark floating in the crimson field, tip overlapping the card's top-right corner -->
+  <path d="M 380 92
+           C 388 126 396 134 428 140
+           C 396 146 388 154 380 188
+           C 372 154 364 146 332 140
+           C 364 134 372 126 380 92 Z"
+        fill="#F5B942"/>
+</svg>

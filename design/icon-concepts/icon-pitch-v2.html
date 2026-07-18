@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rewards Tracker — Icon Pitch, Round 2</title>
+<style>
+  :root {
+    --bg: #FAF7F6;
+    --ink: #221A1B;
+    --muted: #7A6D6E;
+    --card: #FFFFFF;
+    --line: #E8DEDD;
+    --accent: #D92D2D;
+    --strip-light: #F2EDEC;
+    --strip-dark: #1A1618;
+    --chip-line: #D9CECD;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141012;
+      --ink: #F1EAE9;
+      --muted: #9C8D8E;
+      --card: #1D181A;
+      --line: #322A2C;
+      --strip-light: #EFE9E8;
+      --strip-dark: #100D0F;
+      --chip-line: #453A3C;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #141012;
+    --ink: #F1EAE9;
+    --muted: #9C8D8E;
+    --card: #1D181A;
+    --line: #322A2C;
+    --strip-light: #EFE9E8;
+    --strip-dark: #100D0F;
+    --chip-line: #453A3C;
+  }
+  :root[data-theme="light"] {
+    --bg: #FAF7F6;
+    --ink: #221A1B;
+    --muted: #7A6D6E;
+    --card: #FFFFFF;
+    --line: #E8DEDD;
+    --strip-light: #F2EDEC;
+    --strip-dark: #1A1618;
+    --chip-line: #D9CECD;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.55;
+    margin: 0;
+    padding: 48px 20px 80px;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; }
+  .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent);
+    margin: 0 0 12px;
+  }
+  h1 {
+    font-size: clamp(28px, 5vw, 40px);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    margin: 0 0 12px;
+    text-wrap: balance;
+  }
+  .lede { color: var(--muted); max-width: 62ch; margin: 0 0 40px; }
+  .lede strong { color: var(--ink); }
+
+  .concept {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 28px;
+    margin-bottom: 28px;
+    display: grid;
+    grid-template-columns: 216px 1fr;
+    gap: 28px;
+  }
+  @media (max-width: 640px) {
+    .concept { grid-template-columns: 1fr; }
+  }
+  .hero-tile {
+    width: 216px; height: 216px;
+    border-radius: 48px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .hero-tile svg { display: block; width: 100%; height: 100%; }
+  .c-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin: 0 0 6px; }
+  .c-letter {
+    font-weight: 800;
+    font-size: 13px;
+    color: var(--accent);
+    border: 1.5px solid var(--accent);
+    border-radius: 50%;
+    width: 26px; height: 26px;
+    display: inline-flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    transform: translateY(3px);
+  }
+  h2 { font-size: 22px; font-weight: 750; letter-spacing: -0.01em; margin: 0; }
+  .c-dir {
+    font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--muted); font-weight: 600;
+  }
+  .c-body p { margin: 10px 0; font-size: 15px; }
+  .verdict { color: var(--muted); font-size: 14px; }
+  .verdict strong { color: var(--ink); font-weight: 650; }
+
+  .ladders { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+  .strip {
+    display: flex; align-items: center; gap: 18px;
+    border-radius: 10px;
+    padding: 12px 16px;
+  }
+  .strip.on-light { background: var(--strip-light); }
+  .strip.on-dark { background: var(--strip-dark); }
+  .strip svg { display: block; }
+  .strip .s64 { width: 64px; height: 64px; border-radius: 14px; overflow: hidden; }
+  .strip .s32 { width: 32px; height: 32px; border-radius: 7px; overflow: hidden; }
+  .strip .s16 { width: 16px; height: 16px; border-radius: 3.5px; overflow: hidden; }
+  .strip .s64 svg, .strip .s32 svg, .strip .s16 svg { width: 100%; height: 100%; }
+  .strip-label {
+    margin-left: auto;
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em;
+    font-weight: 600;
+  }
+  .on-light .strip-label { color: #8A7B7C; }
+  .on-dark .strip-label { color: #6E6265; }
+
+  .chips { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: 12px; color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .chip i {
+    width: 16px; height: 16px; border-radius: 4px; display: inline-block;
+    border: 1px solid var(--chip-line);
+  }
+
+  .next {
+    margin-top: 44px;
+    padding-top: 24px;
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 14.5px;
+    max-width: 66ch;
+  }
+  .next strong { color: var(--ink); }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="v2-straight" viewBox="0 0 512 512">
+      <rect width="512" height="512" fill="#D92D2D"/>
+      <rect x="96" y="208" width="320" height="200" rx="30" fill="#FFFFFF"/>
+      <rect x="124" y="248" width="264" height="44" rx="22" fill="#F4DBDB"/>
+      <rect x="124" y="248" width="178" height="44" rx="22" fill="#F5B942"/>
+      <rect x="124" y="330" width="58" height="44" rx="10" fill="#D92D2D"/>
+      <path d="M 392 104 C 398 136 410 144 440 150 C 410 156 398 164 392 196 C 386 164 374 156 344 150 C 374 144 386 136 392 104 Z" fill="#F5B942"/>
+    </symbol>
+    <symbol id="v2-tilted" viewBox="0 0 512 512">
+      <rect width="512" height="512" fill="#D92D2D"/>
+      <g transform="rotate(-8 245 284)">
+        <rect x="97" y="188" width="296" height="192" rx="30" fill="#FFFFFF"/>
+        <rect x="129" y="244" width="232" height="44" rx="22" fill="#F3D3D3"/>
+        <rect x="129" y="244" width="158" height="44" rx="22" fill="#D92D2D"/>
+      </g>
+      <path d="M 380 92 C 388 126 396 134 428 140 C 396 146 388 154 380 188 C 372 154 364 146 332 140 C 364 134 372 126 380 92 Z" fill="#F5B942"/>
+    </symbol>
+    <symbol id="v2-darkback" viewBox="0 0 512 512">
+      <linearGradient id="v2-ember" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#D92D2D"/>
+        <stop offset="1" stop-color="#FF6A45"/>
+      </linearGradient>
+      <rect width="512" height="512" fill="#D92D2D"/>
+      <rect x="88" y="164" width="320" height="212" rx="30" fill="#1D1B20"/>
+      <rect x="112" y="204" width="272" height="48" rx="24" fill="#FFFFFF" opacity="0.14"/>
+      <rect x="102" y="194" width="212" height="68" rx="34" fill="#FF6A45" opacity="0.20"/>
+      <rect x="112" y="204" width="192" height="48" rx="24" fill="url(#v2-ember)"/>
+      <rect x="112" y="294" width="176" height="34" rx="10" fill="#FFFFFF" opacity="0.08"/>
+      <path d="M398 104 Q398 148 442 148 Q398 148 398 192 Q398 148 354 148 Q398 148 398 104 Z" fill="#F5B942"/>
+    </symbol>
+    <symbol id="v2-minimal" viewBox="0 0 512 512">
+      <rect width="512" height="512" fill="#D92D2D"/>
+      <rect x="82" y="146" width="348" height="220" rx="36" fill="#FFFFFF"/>
+      <rect x="118" y="198" width="276" height="48" rx="24" fill="#F3D4D4"/>
+      <rect x="118" y="198" width="168" height="48" rx="24" fill="#D92D2D"/>
+      <path d="M286 164 L300 208 L344 222 L300 236 L286 280 L272 236 L228 222 L272 208 Z" fill="#F5B942"/>
+    </symbol>
+  </defs>
+</svg>
+
+<div class="wrap">
+  <p class="eyebrow">Rewards Tracker · Icon pitch · Round 2</p>
+  <h1>The stripe becomes the progress bar</h1>
+  <p class="lede">Your brief back to the studio: keep the card, make the spark <strong>separate from the card</strong>, and swap the abstract ring for something the app actually has — so the <strong>magnetic stripe is now a linear progress bar</strong>, partially filled toward the next reward. Every variation uses a warm gold spark (#F5B942) so it reads against both the white card and the crimson field. Four takes, labelled E–H to keep them distinct from round one.</p>
+
+  <!-- E · Level Gold Ledger -->
+  <section class="concept">
+    <div>
+      <div class="hero-tile"><svg><use href="#v2-straight"/></svg></div>
+      <div class="chips">
+        <span class="chip"><i style="background:#D92D2D"></i>#D92D2D</span>
+        <span class="chip"><i style="background:#FFFFFF"></i>#FFFFFF</span>
+        <span class="chip"><i style="background:#F5B942"></i>#F5B942</span>
+        <span class="chip"><i style="background:#F4DBDB"></i>#F4DBDB</span>
+      </div>
+    </div>
+    <div class="c-body">
+      <div class="c-head"><span class="c-letter">E</span><h2>Level Gold Ledger</h2><span class="c-dir">Straight-on · calm</span></div>
+      <p>A perfectly level white card, stripe recast as a chunky gold progress bar at ~67% with a faint blush track, chip knockout below for card identity, gold spark floating clear of the top-right corner. The spark and the earned progress share one gold — they read as a single "value" system.</p>
+      <p class="verdict"><strong>For:</strong> calmest and most iconic; gold-on-white progress reads instantly. <strong>Against:</strong> the most reserved of the four — less kinetic energy than the tilted takes.</p>
+      <div class="ladders">
+        <div class="strip on-light">
+          <span class="s64"><svg><use href="#v2-straight"/></svg></span>
+          <span class="s32"><svg><use href="#v2-straight"/></svg></span>
+          <span class="s16"><svg><use href="#v2-straight"/></svg></span>
+          <span class="strip-label">Light UI</span>
+        </div>
+        <div class="strip on-dark">
+          <span class="s64"><svg><use href="#v2-straight"/></svg></span>
+          <span class="s32"><svg><use href="#v2-straight"/></svg></span>
+          <span class="s16"><svg><use href="#v2-straight"/></svg></span>
+          <span class="strip-label">Dark UI</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- F · Gold Spark Swipe -->
+  <section class="concept">
+    <div>
+      <div class="hero-tile"><svg><use href="#v2-tilted"/></svg></div>
+      <div class="chips">
+        <span class="chip"><i style="background:#D92D2D"></i>#D92D2D</span>
+        <span class="chip"><i style="background:#FFFFFF"></i>#FFFFFF</span>
+        <span class="chip"><i style="background:#F5B942"></i>#F5B942</span>
+        <span class="chip"><i style="background:#F3D3D3"></i>#F3D3D3</span>
+      </div>
+    </div>
+    <div class="c-body">
+      <div class="c-head"><span class="c-letter">F</span><h2>Gold Spark Swipe</h2><span class="c-dir">Tilted · round-one evolved</span></div>
+      <p>The −8° tilt you liked from round one, with the chip swapped for the stripe-progress bar (crimson fill on blush track) and the spark now gold, floating in the field with its lower tip just overlapping the card's corner for depth.</p>
+      <p class="verdict"><strong>For:</strong> keeps round one's energy while fixing both feedback points; crimson-fill bar ties card to brand. <strong>Against:</strong> at 16px the tilted bar reads slightly less crisply than the level versions.</p>
+      <div class="ladders">
+        <div class="strip on-light">
+          <span class="s64"><svg><use href="#v2-tilted"/></svg></span>
+          <span class="s32"><svg><use href="#v2-tilted"/></svg></span>
+          <span class="s16"><svg><use href="#v2-tilted"/></svg></span>
+          <span class="strip-label">Light UI</span>
+        </div>
+        <div class="strip on-dark">
+          <span class="s64"><svg><use href="#v2-tilted"/></svg></span>
+          <span class="s32"><svg><use href="#v2-tilted"/></svg></span>
+          <span class="s16"><svg><use href="#v2-tilted"/></svg></span>
+          <span class="strip-label">Dark UI</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- G · Ember Stripe, Back Face -->
+  <section class="concept">
+    <div>
+      <div class="hero-tile"><svg><use href="#v2-darkback"/></svg></div>
+      <div class="chips">
+        <span class="chip"><i style="background:#D92D2D"></i>#D92D2D</span>
+        <span class="chip"><i style="background:#1D1B20"></i>#1D1B20</span>
+        <span class="chip"><i style="background:linear-gradient(90deg,#D92D2D,#FF6A45)"></i>#D92D2D→#FF6A45</span>
+        <span class="chip"><i style="background:#F5B942"></i>#F5B942</span>
+      </div>
+    </div>
+    <div class="c-body">
+      <div class="c-head"><span class="c-letter">G</span><h2>Ember Stripe, Back Face</h2><span class="c-dir">Card back · premium dark</span></div>
+      <p>Owns the wit that the magnetic stripe actually lives on the card's <em>back</em>: a charcoal card back with the stripe glowing as a crimson-to-ember progress bar, a whispered signature panel below, and the gold spark breaking the top-right corner.</p>
+      <p class="verdict"><strong>For:</strong> most premium and most distinctive silhouette; the glow makes progress feel alive. <strong>Against:</strong> busiest of the set; the signature panel disappears below 32px (harmless, but the wit goes with it).</p>
+      <div class="ladders">
+        <div class="strip on-light">
+          <span class="s64"><svg><use href="#v2-darkback"/></svg></span>
+          <span class="s32"><svg><use href="#v2-darkback"/></svg></span>
+          <span class="s16"><svg><use href="#v2-darkback"/></svg></span>
+          <span class="strip-label">Light UI</span>
+        </div>
+        <div class="strip on-dark">
+          <span class="s64"><svg><use href="#v2-darkback"/></svg></span>
+          <span class="s32"><svg><use href="#v2-darkback"/></svg></span>
+          <span class="s16"><svg><use href="#v2-darkback"/></svg></span>
+          <span class="strip-label">Dark UI</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- H · Spark Terminal -->
+  <section class="concept">
+    <div>
+      <div class="hero-tile"><svg><use href="#v2-minimal"/></svg></div>
+      <div class="chips">
+        <span class="chip"><i style="background:#D92D2D"></i>#D92D2D</span>
+        <span class="chip"><i style="background:#FFFFFF"></i>#FFFFFF</span>
+        <span class="chip"><i style="background:#F5B942"></i>#F5B942</span>
+        <span class="chip"><i style="background:#F3D4D4"></i>#F3D4D4</span>
+      </div>
+    </div>
+    <div class="c-body">
+      <div class="c-head"><span class="c-letter">H</span><h2>Spark Terminal</h2><span class="c-dir">Maximum reduction</span></div>
+      <p>Four shapes, nothing else: card slab, faint track, crimson fill — and the gold spark sitting <em>exactly where the fill ends</em>. The spark is the progress terminal: rewards are sparking right where you currently are. The two feedback points fused into one idea.</p>
+      <p class="verdict"><strong>For:</strong> the cleverest mark of the set and the best story; unbeatable 16px legibility. <strong>Against:</strong> the straight-edged spark is styled differently from E–G's concave sparks — if chosen, we'd harmonise it (or keep the sharper look deliberately).</p>
+      <div class="ladders">
+        <div class="strip on-light">
+          <span class="s64"><svg><use href="#v2-minimal"/></svg></span>
+          <span class="s32"><svg><use href="#v2-minimal"/></svg></span>
+          <span class="s16"><svg><use href="#v2-minimal"/></svg></span>
+          <span class="strip-label">Light UI</span>
+        </div>
+        <div class="strip on-dark">
+          <span class="s64"><svg><use href="#v2-minimal"/></svg></span>
+          <span class="s32"><svg><use href="#v2-minimal"/></svg></span>
+          <span class="s16"><svg><use href="#v2-minimal"/></svg></span>
+          <span class="strip-label">Dark UI</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <p class="next"><strong>To ship one:</strong> pick a letter (E–H), with any tweaks — fill percentage, spark position, colours, tilt. I'll refine the vector, export every size the project needs (favicon-16, favicon, icon-192, icon-512, apple-touch-icon, mobile icon), and update the manifest theme colour to match.</p>
+</div>
+</body>
+</html>
