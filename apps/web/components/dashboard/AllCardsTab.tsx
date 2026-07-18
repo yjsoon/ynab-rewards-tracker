@@ -30,6 +30,7 @@ import {
   CheckCircle,
   ChevronDown,
 } from 'lucide-react';
+import { EmptyCardsIcon } from '@/components/icons/BrandIcons';
 import { storage, type CardSubcategory, type CreditCard } from '@/lib/storage';
 import { type CardEditState as SingleCardEditState } from '@/components/CardSettingsEditor';
 import { CardSettingsCompact } from '@/components/CardSettingsCompact';
@@ -289,7 +290,7 @@ export function AllCardsTab({ initialCardId }: AllCardsTabProps) {
     return (
       <Card>
         <CardContent className="flex flex-col items-center justify-center py-12">
-          <CreditCardIcon className="h-12 w-12 text-muted-foreground mb-4" />
+          <EmptyCardsIcon className="h-12 w-12 text-muted-foreground mb-4" />
           <p className="text-lg text-muted-foreground mb-4">No cards configured yet</p>
           <p className="text-sm text-muted-foreground">
             Add cards in Settings to start managing them

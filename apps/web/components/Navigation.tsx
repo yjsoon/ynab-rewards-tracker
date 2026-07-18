@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Home, Settings, CreditCard, Sparkles, ReceiptText, Menu, X, ScanText } from 'lucide-react';
+import { Home, Settings, ReceiptText, Menu, X, ScanText } from 'lucide-react';
+import { BrandMark, SparkIcon } from '@/components/icons/BrandIcons';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { cn } from '@/lib/utils';
 import { featureFlags } from '@ynab-counter/app-core/config/featureFlags';
@@ -18,10 +19,10 @@ export function Navigation() {
 
   const navLinks = [
     { href: '/', label: 'Dashboard', icon: Home },
-    ...(featureFlags.recommendations ? [{ href: '/recommendations', label: 'Recommendations', icon: Sparkles }] : []),
+    ...(featureFlags.recommendations ? [{ href: '/recommendations', label: 'Recommendations', icon: SparkIcon }] : []),
     { href: '/formatter', label: 'Formatter', icon: ScanText },
     { href: '/transactions', label: 'Transactions', icon: ReceiptText },
-    { href: '/agent-api', label: 'Agent API', icon: Sparkles },
+    { href: '/agent-api', label: 'Agent API', icon: SparkIcon },
   ];
   const mobileLinks = [...navLinks, { href: '/settings', label: 'Settings', icon: Settings }];
 
@@ -47,7 +48,7 @@ export function Navigation() {
         <div className={cn("flex items-center justify-between", NAV_HEIGHT_CLASS)}>
           <div className="flex items-center gap-6">
             <Link href="/" className="flex items-center space-x-2 font-bold text-lg">
-              <CreditCard className="h-6 w-6" />
+              <BrandMark className="h-6 w-6" />
               <span>Rewards Tracker</span>
             </Link>
             
