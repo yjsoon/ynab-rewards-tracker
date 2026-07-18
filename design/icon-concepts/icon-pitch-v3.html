@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rewards Tracker — Icon Pitch, Round 3</title>
+<style>
+  :root {
+    --bg: #FAF7F6;
+    --ink: #221A1B;
+    --muted: #7A6D6E;
+    --card: #FFFFFF;
+    --line: #E8DEDD;
+    --accent: #D92D2D;
+    --strip-light: #F2EDEC;
+    --strip-dark: #1A1618;
+    --chip-line: #D9CECD;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141012;
+      --ink: #F1EAE9;
+      --muted: #9C8D8E;
+      --card: #1D181A;
+      --line: #322A2C;
+      --strip-light: #EFE9E8;
+      --strip-dark: #100D0F;
+      --chip-line: #453A3C;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #141012;
+    --ink: #F1EAE9;
+    --muted: #9C8D8E;
+    --card: #1D181A;
+    --line: #322A2C;
+    --strip-light: #EFE9E8;
+    --strip-dark: #100D0F;
+    --chip-line: #453A3C;
+  }
+  :root[data-theme="light"] {
+    --bg: #FAF7F6;
+    --ink: #221A1B;
+    --muted: #7A6D6E;
+    --card: #FFFFFF;
+    --line: #E8DEDD;
+    --strip-light: #F2EDEC;
+    --strip-dark: #1A1618;
+    --chip-line: #D9CECD;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.55;
+    margin: 0;
+    padding: 48px 20px 80px;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; }
+  .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent);
+    margin: 0 0 12px;
+  }
+  h1 {
+    font-size: clamp(28px, 5vw, 40px);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    margin: 0 0 12px;
+    text-wrap: balance;
+  }
+  .lede { color: var(--muted); max-width: 62ch; margin: 0 0 40px; }
+  .lede strong { color: var(--ink); }
+
+  .concept {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 28px;
+    margin-bottom: 28px;
+    display: grid;
+    grid-template-columns: 216px 1fr;
+    gap: 28px;
+  }
+  .concept.pick { border: 2px solid var(--accent); }
+  @media (max-width: 640px) {
+    .concept { grid-template-columns: 1fr; }
+  }
+  .pick-tag {
+    display: inline-block;
+    background: var(--accent);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    border-radius: 999px;
+    padding: 3px 10px;
+    transform: translateY(-2px);
+  }
+  .hero-tile {
+    width: 216px; height: 216px;
+    border-radius: 48px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .hero-tile svg { display: block; width: 100%; height: 100%; }
+  .c-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin: 0 0 6px; }
+  .c-letter {
+    font-weight: 800;
+    font-size: 12px;
+    color: var(--accent);
+    border: 1.5px solid var(--accent);
+    border-radius: 999px;
+    min-width: 26px; height: 26px;
+    padding: 0 7px;
+    display: inline-flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    transform: translateY(3px);
+  }
+  h2 { font-size: 22px; font-weight: 750; letter-spacing: -0.01em; margin: 0; }
+  .c-dir {
+    font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--muted); font-weight: 600;
+  }
+  .c-body p { margin: 10px 0; font-size: 15px; }
+  .verdict { color: var(--muted); font-size: 14px; }
+  .verdict strong { color: var(--ink); font-weight: 650; }
+
+  .ladders { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+  .strip {
+    display: flex; align-items: center; gap: 18px;
+    border-radius: 10px;
+    padding: 12px 16px;
+  }
+  .strip.on-light { background: var(--strip-light); }
+  .strip.on-dark { background: var(--strip-dark); }
+  .strip svg { display: block; }
+  .strip .s64 { width: 64px; height: 64px; border-radius: 14px; overflow: hidden; }
+  .strip .s32 { width: 32px; height: 32px; border-radius: 7px; overflow: hidden; }
+  .strip .s16 { width: 16px; height: 16px; border-radius: 3.5px; overflow: hidden; }
+  .strip .s64 svg, .strip .s32 svg, .strip .s16 svg { width: 100%; height: 100%; }
+  .strip-label {
+    margin-left: auto;
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em;
+    font-weight: 600;
+  }
+  .on-light .strip-label { color: #8A7B7C; }
+  .on-dark .strip-label { color: #6E6265; }
+
+  .chips { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: 12px; color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .chip i {
+    width: 16px; height: 16px; border-radius: 4px; display: inline-block;
+    border: 1px solid var(--chip-line);
+  }
+
+  .next {
+    margin-top: 44px;
+    padding-top: 24px;
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 14.5px;
+    max-width: 66ch;
+  }
+  .next strong { color: var(--ink); }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="v3-h1" viewBox="0 0 512 512">
+      <rect width="512" height="512" fill="#D92D2D"/>
+      <rect x="82" y="152" width="348" height="220" rx="44" fill="#FFFFFF"/>
+      <rect x="118" y="226" width="276" height="48" rx="24" fill="#F3D4D4"/>
+      <rect x="118" y="226" width="168" height="48" rx="24" fill="#D92D2D"/>
+      <path d="M286 188 C298 238 298 238 348 250 C298 262 298 262 286 312 C274 262 274 262 224 250 C274 238 274 238 286 188 Z" fill="#F5B942"/>
+    </symbol>
+    <symbol id="v3-h2" viewBox="0 0 512 512">
+      <rect width="512" height="512" fill="#FAF6F2"/>
+      <rect x="82" y="146" width="348" height="220" rx="36" fill="#D92D2D"/>
+      <rect x="118" y="198" width="276" height="48" rx="24" fill="#E56A6A"/>
+      <rect x="118" y="198" width="168" height="48" rx="24" fill="#F5B942"/>
+      <path d="M286 164 C292 200 308 216 344 222 C308 228 292 244 286 280 C280 244 264 228 228 222 C264 216 280 200 286 164 Z" fill="#F5B942"/>
+    </symbol>
+    <symbol id="v3-h3" viewBox="0 0 512 512">
+      <linearGradient id="h3-ember" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#D92D2D"/>
+        <stop offset="1" stop-color="#FF6A45"/>
+      </linearGradient>
+      <rect width="512" height="512" fill="#D92D2D"/>
+      <rect x="82" y="146" width="348" height="220" rx="36" fill="#1D1B20"/>
+      <rect x="118" y="232" width="276" height="48" rx="24" fill="#FFFFFF" opacity="0.14"/>
+      <rect x="118" y="232" width="168" height="48" rx="24" fill="url(#h3-ember)"/>
+      <path d="M286 194 C292 234 308 250 348 256 C308 262 292 278 286 318 C280 278 264 262 224 256 C264 250 280 234 286 194 Z" fill="#F5B942"/>
+    </symbol>
+    <symbol id="v3-g2" viewBox="0 0 512 512">
+      <linearGradient id="g2-ember" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#D92D2D"/>
+        <stop offset="1" stop-color="#FF6A45"/>
+      </linearGradient>
+      <rect width="512" height="512" fill="#D92D2D"/>
+      <rect x="88" y="150" width="320" height="212" rx="30" fill="#1D1B20"/>
+      <rect x="112" y="190" width="272" height="52" rx="26" fill="#FFFFFF" opacity="0.14"/>
+      <rect x="112" y="190" width="192" height="52" rx="26" fill="url(#g2-ember)"/>
+      <rect x="112" y="284" width="176" height="34" rx="10" fill="#FFFFFF" opacity="0.08"/>
+      <path d="M408 100 C408 132.5 425.5 150 458 150 C425.5 150 408 167.5 408 200 C408 167.5 390.5 150 358 150 C390.5 150 408 132.5 408 100 Z" fill="#F5B942"/>
+    </symbol>
+  </defs>
+</svg>
+
+<div class="wrap">
+  <p class="eyebrow">Rewards Tracker · Icon pitch · Round 3</p>
+  <h1>Riffs on Spark Terminal, plus the studio pick</h1>
+  <p class="lede">You asked for riffs on <strong>H (Spark Terminal)</strong> — the spark sitting exactly where the progress fill ends — and one more direction of the studio's choosing. Three takes on H below, plus a refinement of <strong>G (Ember Stripe, Back Face)</strong>, the studio's pick for its silhouette. H3 fuses the two and is our recommendation.</p>
+
+  <!-- H1 · Concave Terminal -->
+  <section class="concept">
+    <div>
+      <div class="hero-tile"><svg><use href="#v3-h1"/></svg></div>
+      <div class="chips">
+        <span class="chip"><i style="background:#D92D2D"></i>#D92D2D</span>
+        <span class="chip"><i style="background:#FFFFFF"></i>#FFFFFF</span>
+        <span class="chip"><i style="background:#F5B942"></i>#F5B942</span>
+        <span class="chip"><i style="background:#F3D4D4"></i>#F3D4D4</span>
+      </div>
+    </div>
+    <div class="c-body">
+      <div class="c-head"><span class="c-letter">H1</span><h2>Concave Terminal</h2><span class="c-dir">The polish pass</span></div>
+      <p>H exactly as you know it, with the craft tightened: the spark redrawn with concave curved edges so it flares like a glint rather than a diamond, slab corners softened to a friendlier radius, and the stripe dropped below the slab's midline so the spark's upward flare balances the composition.</p>
+      <p class="verdict"><strong>For:</strong> the safest evolution — same idea, better drawn. <strong>Against:</strong> stripe sits low; the asymmetry is deliberate but worth a second look at wallpaper scale.</p>
+      <div class="ladders">
+        <div class="strip on-light">
+          <span class="s64"><svg><use href="#v3-h1"/></svg></span>
+          <span class="s32"><svg><use href="#v3-h1"/></svg></span>
+          <span class="s16"><svg><use href="#v3-h1"/></svg></span>
+          <span class="strip-label">Light UI</span>
+        </div>
+        <div class="strip on-dark">
+          <span class="s64"><svg><use href="#v3-h1"/></svg></span>
+          <span class="s32"><svg><use href="#v3-h1"/></svg></span>
+          <span class="s16"><svg><use href="#v3-h1"/></svg></span>
+          <span class="strip-label">Dark UI</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- H2 · Gilded Slab -->
+  <section class="concept">
+    <div>
+      <div class="hero-tile"><svg><use href="#v3-h2"/></svg></div>
+      <div class="chips">
+        <span class="chip"><i style="background:#FAF6F2"></i>#FAF6F2</span>
+        <span class="chip"><i style="background:#D92D2D"></i>#D92D2D</span>
+        <span class="chip"><i style="background:#F5B942"></i>#F5B942</span>
+        <span class="chip"><i style="background:#E56A6A"></i>#E56A6A</span>
+      </div>
+    </div>
+    <div class="c-body">
+      <div class="c-head"><span class="c-letter">H2</span><h2>Gilded Slab</h2><span class="c-dir">The inversion</span></div>
+      <p>The palette flipped: a crimson card on a warm near-white field, with the progress fill now gold — so the fill and the spark merge into one continuous "gold value" gesture streaking across the card. The card becomes the brand object itself.</p>
+      <p class="verdict"><strong>For:</strong> most distinctive on a light home screen; fill + spark reading as one gold stroke is a strong story. <strong>Against:</strong> light field is rarer for app icons (blends into light backgrounds); the merged spark reads slightly comet-like — a feature or a bug depending on taste.</p>
+      <div class="ladders">
+        <div class="strip on-light">
+          <span class="s64"><svg><use href="#v3-h2"/></svg></span>
+          <span class="s32"><svg><use href="#v3-h2"/></svg></span>
+          <span class="s16"><svg><use href="#v3-h2"/></svg></span>
+          <span class="strip-label">Light UI</span>
+        </div>
+        <div class="strip on-dark">
+          <span class="s64"><svg><use href="#v3-h2"/></svg></span>
+          <span class="s32"><svg><use href="#v3-h2"/></svg></span>
+          <span class="s16"><svg><use href="#v3-h2"/></svg></span>
+          <span class="strip-label">Dark UI</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- H3 · Night Terminal Spark -->
+  <section class="concept pick">
+    <div>
+      <div class="hero-tile"><svg><use href="#v3-h3"/></svg></div>
+      <div class="chips">
+        <span class="chip"><i style="background:#D92D2D"></i>#D92D2D</span>
+        <span class="chip"><i style="background:#1D1B20"></i>#1D1B20</span>
+        <span class="chip"><i style="background:linear-gradient(90deg,#D92D2D,#FF6A45)"></i>#D92D2D→#FF6A45</span>
+        <span class="chip"><i style="background:#F5B942"></i>#F5B942</span>
+      </div>
+    </div>
+    <div class="c-body">
+      <div class="c-head"><span class="c-letter">H3</span><h2>Night Terminal Spark</h2><span class="c-dir">The fusion</span><span class="pick-tag">Studio recommendation</span></div>
+      <p>H's composition in G's materials: charcoal card on the crimson field, the stripe filled with the crimson-to-ember gradient, and the gold concave spark landing exactly at the terminal — where it glows against the dark card. Signature panel and halo cut; five shapes, one gradient.</p>
+      <p class="verdict"><strong>For:</strong> your favourite idea plus the premium dark materials; the gold-on-charcoal terminal is the strongest single moment in any concept so far, and it holds beautifully at 16px. <strong>Against:</strong> hard to name one — if pressed, dark cards photograph less cheerfully in App Store screenshots.</p>
+      <div class="ladders">
+        <div class="strip on-light">
+          <span class="s64"><svg><use href="#v3-h3"/></svg></span>
+          <span class="s32"><svg><use href="#v3-h3"/></svg></span>
+          <span class="s16"><svg><use href="#v3-h3"/></svg></span>
+          <span class="strip-label">Light UI</span>
+        </div>
+        <div class="strip on-dark">
+          <span class="s64"><svg><use href="#v3-h3"/></svg></span>
+          <span class="s32"><svg><use href="#v3-h3"/></svg></span>
+          <span class="s16"><svg><use href="#v3-h3"/></svg></span>
+          <span class="strip-label">Dark UI</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- G2 · Corner Break -->
+  <section class="concept">
+    <div>
+      <div class="hero-tile"><svg><use href="#v3-g2"/></svg></div>
+      <div class="chips">
+        <span class="chip"><i style="background:#D92D2D"></i>#D92D2D</span>
+        <span class="chip"><i style="background:#1D1B20"></i>#1D1B20</span>
+        <span class="chip"><i style="background:linear-gradient(90deg,#D92D2D,#FF6A45)"></i>#D92D2D→#FF6A45</span>
+        <span class="chip"><i style="background:#F5B942"></i>#F5B942</span>
+      </div>
+    </div>
+    <div class="c-body">
+      <div class="c-head"><span class="c-letter">G2</span><h2>Corner Break</h2><span class="c-dir">The studio pick, refined</span></div>
+      <p>G with its known issues fixed: the spark redrawn crisp and centred exactly on the card's top-right corner so it breaks the silhouette across charcoal and crimson, the heavy glow halo removed (the gradient reads cleaner alone), the card recentred, and the stripe grown slightly for 16px legibility. Signature panel kept — it sells "back of card" at large sizes and vanishes politely below 32px.</p>
+      <p class="verdict"><strong>For:</strong> the most distinctive outline of any concept — the corner-break spark makes it recognisable even in a dock of red icons. <strong>Against:</strong> the spark isn't tied to the progress metaphor as tightly as H3's terminal spark.</p>
+      <div class="ladders">
+        <div class="strip on-light">
+          <span class="s64"><svg><use href="#v3-g2"/></svg></span>
+          <span class="s32"><svg><use href="#v3-g2"/></svg></span>
+          <span class="s16"><svg><use href="#v3-g2"/></svg></span>
+          <span class="strip-label">Light UI</span>
+        </div>
+        <div class="strip on-dark">
+          <span class="s64"><svg><use href="#v3-g2"/></svg></span>
+          <span class="s32"><svg><use href="#v3-g2"/></svg></span>
+          <span class="s16"><svg><use href="#v3-g2"/></svg></span>
+          <span class="strip-label">Dark UI</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <p class="next"><strong>To ship one:</strong> name it (H1, H2, H3, or G2) with any final tweaks. I'll produce the full export set — favicon-16, favicon, icon-192, icon-512, apple-touch-icon, and the mobile app icon — and update the manifest theme colour to match.</p>
+</div>
+</body>
+</html>

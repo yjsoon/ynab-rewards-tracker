@@ -22,7 +22,7 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const viewport = {
-  themeColor: "#2a6478",
+  themeColor: "#D92D2D",
 };
 
 export const metadata = {

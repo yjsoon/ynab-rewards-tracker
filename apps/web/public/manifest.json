@@ -4,8 +4,8 @@
   "description": "Track credit card rewards using your YNAB data",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#2a6478",
-  "theme_color": "#2a6478",
+  "background_color": "#D92D2D",
+  "theme_color": "#D92D2D",
   "icons": [
     {
       "src": "/icon-192.png",
