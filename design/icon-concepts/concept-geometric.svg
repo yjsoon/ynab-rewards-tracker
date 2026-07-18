@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Full-bleed brand background -->
+  <rect width="512" height="512" fill="#D92D2D"/>
+
+  <!-- Credit card, tilted 8 degrees, with chip knocked out in background red -->
+  <g transform="rotate(-8 245 284)">
+    <rect x="97" y="188" width="296" height="192" rx="30" fill="#FFFFFF"/>
+    <rect x="137" y="228" width="64" height="48" rx="10" fill="#D92D2D"/>
+  </g>
+
+  <!-- Reward spark: four-point star floating off the card's top-right corner -->
+  <path d="M 368 88
+           C 376 128 392 144 432 152
+           C 392 160 376 176 368 216
+           C 360 176 344 160 304 152
+           C 344 144 360 128 368 88 Z"
+        fill="#FFFFFF"/>
+</svg>

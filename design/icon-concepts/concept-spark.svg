@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Background: solid brand crimson, full bleed (platform applies its own mask) -->
+  <rect width="512" height="512" fill="#D92D2D"/>
+  <!-- Hero: chunky four-point reward spark, centred, tips at r=152 with fat concave waists -->
+  <path fill="#FFFFFF" d="M256 104
+    C272 196 316 240 408 256
+    C316 272 272 316 256 408
+    C240 316 196 272 104 256
+    C196 240 240 196 256 104
+    Z"/>
+  <!-- Companion accent: tiny echo spark nestled in the upper-right gap -->
+  <path fill="#FFFFFF" d="M378 100
+    C382.2 124.2 393.8 135.8 418 140
+    C393.8 144.2 382.2 155.8 378 180
+    C373.8 155.8 362.2 144.2 338 140
+    C362.2 135.8 373.8 124.2 378 100
+    Z"/>
+</svg>
