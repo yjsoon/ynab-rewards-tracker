@@ -37,20 +37,31 @@ export function BrandMark(props: SVGProps<SVGSVGElement>) {
   );
 }
 
-/** Full-colour miniature of the app icon (rounded tile) for hero spots. */
-export function BrandTile(props: SVGProps<SVGSVGElement>) {
+/** Full-colour brand card (no icon-tile background) for hero spots.
+ *  Credit-card aspect ratio; hairline edge keeps it defined on dark
+ *  grounds. Size with a height class and w-auto. */
+export function BrandCard(props: SVGProps<SVGSVGElement>) {
   return (
-    <svg viewBox="0 0 512 512" aria-hidden="true" {...props}>
+    <svg viewBox="80 140 352 232" aria-hidden="true" {...props}>
       <defs>
-        <linearGradient id="brand-tile-ember" x1="0" y1="0" x2="1" y2="0">
+        <linearGradient id="brand-card-ember" x1="0" y1="0" x2="1" y2="0">
           <stop offset="0" stopColor="#D92D2D" />
           <stop offset="1" stopColor="#FF6A45" />
         </linearGradient>
       </defs>
-      <rect width="512" height="512" rx="115" fill="#D92D2D" />
-      <rect x="82" y="146" width="348" height="220" rx="36" fill="#1D1B20" />
+      <rect
+        x="82"
+        y="146"
+        width="348"
+        height="220"
+        rx="36"
+        fill="#1D1B20"
+        stroke="#FFFFFF"
+        strokeOpacity="0.08"
+        strokeWidth="2"
+      />
       <rect x="118" y="204" width="276" height="48" rx="24" fill="#FFFFFF" opacity="0.14" />
-      <rect x="118" y="204" width="168" height="48" rx="24" fill="url(#brand-tile-ember)" />
+      <rect x="118" y="204" width="168" height="48" rx="24" fill="url(#brand-card-ember)" />
       <rect x="118" y="298" width="116" height="26" rx="13" fill="#FFFFFF" opacity="0.12" />
       <path
         d="M286 166 C292 206 308 222 348 228 C308 234 292 250 286 290 C280 250 264 234 224 228 C264 222 280 206 286 166 Z"

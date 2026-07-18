@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Wallet, CheckCircle2 } from "lucide-react";
-import { BrandTile } from "@/components/icons/BrandIcons";
+import { BrandCard } from "@/components/icons/BrandIcons";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -18,7 +18,7 @@ export function DashboardLanding() {
     <div className="min-h-[80vh] flex items-center justify-center p-6">
       <div className="max-w-6xl w-full">
         <div className="text-center mb-12">
-          <BrandTile className="h-16 w-16 mx-auto mb-4 drop-shadow-md" aria-hidden="true" />
+          <BrandCard className="h-16 w-auto mx-auto mb-4 drop-shadow-md" aria-hidden="true" />
           <h1 className="text-4xl font-bold mb-2">
             <span>Rewards Tracker</span>
             <span className="text-muted-foreground font-normal">
