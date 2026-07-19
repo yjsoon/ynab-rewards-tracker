@@ -50,6 +50,14 @@ jobs:
             });
           ' <<< "${response}")"
           echo "CF_PREVIEW_DOMAIN=${preview_domain}" >> "${GITHUB_ENV}"
+          PREVIEW_DOMAIN="${preview_domain}" node -e '
+            const fs = require("node:fs");
+            const configPath = "apps/web/wrangler.toml";
+            const config = fs.readFileSync(configPath, "utf8");
+            const updated = config.replace("__CF_PREVIEW_DOMAIN__", process.env.PREVIEW_DOMAIN);
+            if (updated === config) throw new Error("Preview-domain placeholder was not found");
+            fs.writeFileSync(configPath, updated);
+          '
 
       - name: Deploy to Cloudflare Workers
         working-directory: apps/web
