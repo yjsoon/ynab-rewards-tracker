@@ -7,7 +7,7 @@
     "build": "next build",
     "build:cloudflare": "pnpm exec opennextjs-cloudflare build",
     "preview:cloudflare": "pnpm build:cloudflare && wrangler dev",
-    "deploy:cloudflare": "pnpm build:cloudflare && wrangler deploy",
+    "deploy:cloudflare": "pnpm build:cloudflare && pnpm exec opennextjs-cloudflare deploy",
     "start": "next start",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"

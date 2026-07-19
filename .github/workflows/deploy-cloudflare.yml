@@ -32,9 +32,31 @@ jobs:
         working-directory: apps/web
         run: pnpm build:cloudflare
 
+      - name: Resolve Cloudflare preview domain
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          response="$(curl --fail --silent --show-error \
+            --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/subdomain")"
+          preview_domain="$(node -e '
+            const chunks = [];
+            process.stdin.on("data", (chunk) => chunks.push(chunk));
+            process.stdin.on("end", () => {
+              const payload = JSON.parse(Buffer.concat(chunks).toString());
+              if (!payload.success || !payload.result?.subdomain) process.exit(1);
+              process.stdout.write(payload.result.subdomain);
+            });
+          ' <<< "${response}")"
+          echo "CF_PREVIEW_DOMAIN=${preview_domain}" >> "${GITHUB_ENV}"
+
       - name: Deploy to Cloudflare Workers
         working-directory: apps/web
-        run: pnpm exec wrangler deploy
+        run: pnpm exec opennextjs-cloudflare deploy
         env:
+          CF_WORKER_NAME: yjab-web
+          CF_WORKERS_SCRIPTS_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

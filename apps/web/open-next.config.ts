@@ -14,6 +14,14 @@ const config: OpenNextConfig = {
 
   edgeExternals: ["node:crypto"],
 
+  cloudflare: {
+    skewProtection: {
+      enabled: true,
+      maxNumberOfVersions: 20,
+      maxVersionAgeDays: 7,
+    },
+  },
+
   middleware: {
     external: true,
     override: {
