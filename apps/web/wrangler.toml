@@ -25,8 +25,11 @@ preview_id = "daa5caf25fb14a9bbfd1f4be2a8eb69b"
 CF_WORKER_NAME = "yjab-web"
 CF_PREVIEW_DOMAIN = "__CF_PREVIEW_DOMAIN__"
 # Environment variables (non-secret)
+CLOUDFLARE_ACCOUNT_ID = "810a0c404daff0737f4a2a97a7aab092"
+CLOUDFLARE_KV_NAMESPACE_ID = "4f5e97d2a1184897993e3a04a09eb200"
+CLOUDFLARE_KV_PREVIEW_NAMESPACE_ID = "daa5caf25fb14a9bbfd1f4be2a8eb69b"
 # OPENROUTER_REFERRER = "https://yj-ab.app"
 # OPENROUTER_TITLE = "Rewards Tracker Statement Formatter"
 
 # Secrets (set via `wrangler secret put <NAME>`):
-# - CLOUDFLARE_API_TOKEN (only needed if keeping REST API fallback)
+# - CLOUDFLARE_API_TOKEN (required for Cloud Sync writes and deletes)

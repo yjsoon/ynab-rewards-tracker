@@ -1,16 +1,10 @@
 import { NextResponse } from 'next/server';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 
-// REST API fallback config (for Netlify or local dev without wrangler)
-const CLOUDFLARE_ACCOUNT_ID = process.env.CLOUDFLARE_ACCOUNT_ID;
-const CLOUDFLARE_KV_NAMESPACE_ID = process.env.CLOUDFLARE_KV_NAMESPACE_ID;
-const CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN;
-
 const VERSION = 1;
 
 interface CloudflareError {
-  success: boolean;
-  errors: Array<{ code: number; message: string }>;
+  errors?: Array<{ message?: unknown }>;
 }
 
 class CloudflareKVError extends Error {
@@ -54,16 +48,58 @@ async function getNativeKV(): Promise<KVNamespace | null> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// REST API fallback (used on Netlify or local dev)
+// REST API configuration (used for mutations and as a read fallback)
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function requestCloudflareKV(key: string, init: RequestInit): Promise<Response> {
-  if (!CLOUDFLARE_ACCOUNT_ID || !CLOUDFLARE_KV_NAMESPACE_ID || !CLOUDFLARE_API_TOKEN) {
-    return new Response('Cloud sync not configured', { status: 501 });
+function getStringEnvValue(env: Record<string, unknown> | undefined, key: string): string | undefined {
+  const value = env?.[key];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+async function getCloudflareRESTConfig(requestUrl: string): Promise<{
+  accountId?: string;
+  namespaceId?: string;
+  apiToken?: string;
+}> {
+  let workerEnv: Record<string, unknown> | undefined;
+
+  try {
+    const ctx = await getCloudflareContext();
+    workerEnv = ctx?.env as Record<string, unknown> | undefined;
+  } catch {
+    // Not running on Cloudflare
+  }
+
+  const hostname = new URL(requestUrl).hostname;
+  const usePreviewNamespace =
+    hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+  const namespaceEnvKey = usePreviewNamespace
+    ? 'CLOUDFLARE_KV_PREVIEW_NAMESPACE_ID'
+    : 'CLOUDFLARE_KV_NAMESPACE_ID';
+
+  return {
+    accountId: getStringEnvValue(workerEnv, 'CLOUDFLARE_ACCOUNT_ID') ?? process.env.CLOUDFLARE_ACCOUNT_ID,
+    namespaceId:
+      getStringEnvValue(workerEnv, namespaceEnvKey) ?? process.env[namespaceEnvKey],
+    apiToken: getStringEnvValue(workerEnv, 'CLOUDFLARE_API_TOKEN') ?? process.env.CLOUDFLARE_API_TOKEN,
+  };
+}
+
+async function requestCloudflareKV(key: string, requestUrl: string, init: RequestInit): Promise<Response> {
+  const { accountId, namespaceId, apiToken } = await getCloudflareRESTConfig(requestUrl);
+
+  if (!accountId || !namespaceId || !apiToken) {
+    return Response.json(
+      {
+        success: false,
+        errors: [{ code: 501, message: 'Cloud sync not configured' }],
+      },
+      { status: 501 }
+    );
   }
 
   const endpoint = new URL(
-    `https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/storage/kv/namespaces/${CLOUDFLARE_KV_NAMESPACE_ID}/values/${encodeURIComponent(
+    `https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces/${namespaceId}/values/${encodeURIComponent(
       key
     )}`
   );
@@ -71,7 +107,7 @@ async function requestCloudflareKV(key: string, init: RequestInit): Promise<Resp
   const response = await fetch(endpoint, {
     ...init,
     headers: {
-      Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`,
+      Authorization: `Bearer ${apiToken}`,
       'Content-Type': 'text/plain',
       ...(init.headers || {}),
     },
@@ -89,29 +125,36 @@ async function requestCloudflareKV(key: string, init: RequestInit): Promise<Resp
   return response;
 }
 
-async function storeValueREST(key: string, value: string): Promise<void> {
-  const response = await requestCloudflareKV(key, {
+async function getCloudflareErrorMessage(response: Response, fallback: string): Promise<string> {
+  const bodyText = await response.text().catch(() => '');
+
+  if (!bodyText) {
+    return fallback;
+  }
+
+  try {
+    const parsed = JSON.parse(bodyText) as CloudflareError;
+    const message = parsed.errors?.[0]?.message;
+    return typeof message === 'string' && message.length > 0 ? message : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+async function storeValueREST(key: string, value: string, requestUrl: string): Promise<void> {
+  const response = await requestCloudflareKV(key, requestUrl, {
     method: 'PUT',
     body: value,
   });
 
   if (!response.ok) {
-    const bodyText = await response.text().catch(() => '');
-    let message = 'Failed to store cloud sync data';
-    if (bodyText) {
-      try {
-        const parsed = JSON.parse(bodyText) as CloudflareError;
-        message = parsed?.errors?.[0]?.message || bodyText || message;
-      } catch {
-        message = bodyText;
-      }
-    }
+    const message = await getCloudflareErrorMessage(response, 'Failed to store cloud sync data');
     throw new CloudflareKVError(`Cloudflare (${response.status}): ${message}`, response.status || 502);
   }
 }
 
-async function retrieveValueREST(key: string): Promise<string | null> {
-  const response = await requestCloudflareKV(key, {
+async function retrieveValueREST(key: string, requestUrl: string): Promise<string | null> {
+  const response = await requestCloudflareKV(key, requestUrl, {
     method: 'GET',
   });
 
@@ -120,15 +163,15 @@ async function retrieveValueREST(key: string): Promise<string | null> {
   }
 
   if (!response.ok) {
-    const body = await response.text();
-    throw new CloudflareKVError(`Cloudflare (${response.status}): ${body || 'Failed to retrieve cloud sync data'}`, response.status || 502);
+    const message = await getCloudflareErrorMessage(response, 'Failed to retrieve cloud sync data');
+    throw new CloudflareKVError(`Cloudflare (${response.status}): ${message}`, response.status || 502);
   }
 
   return response.text();
 }
 
-async function deleteValueREST(key: string): Promise<void> {
-  const response = await requestCloudflareKV(key, {
+async function deleteValueREST(key: string, requestUrl: string): Promise<void> {
+  const response = await requestCloudflareKV(key, requestUrl, {
     method: 'DELETE',
   });
 
@@ -137,30 +180,20 @@ async function deleteValueREST(key: string): Promise<void> {
   }
 
   if (!response.ok) {
-    const body = await response.text();
-    throw new CloudflareKVError(`Cloudflare (${response.status}): ${body || 'Failed to delete cloud sync data'}`, response.status || 502);
+    const message = await getCloudflareErrorMessage(response, 'Failed to delete cloud sync data');
+    throw new CloudflareKVError(`Cloudflare (${response.status}): ${message}`, response.status || 502);
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Unified KV operations (prefer native, fall back to REST)
+// KV operations (native reads, REST mutations)
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function storeValue(key: string, value: string): Promise<void> {
-  const kv = await getNativeKV();
-  if (kv) {
-    try {
-      await kv.put(key, value);
-      return;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to store cloud sync data';
-      throw new CloudflareKVError(`KV error: ${message}`, 502);
-    }
-  }
-  await storeValueREST(key, value);
+async function storeValue(key: string, value: string, requestUrl: string): Promise<void> {
+  await storeValueREST(key, value, requestUrl);
 }
 
-async function retrieveValue(key: string): Promise<string | null> {
+async function retrieveValue(key: string, requestUrl: string): Promise<string | null> {
   const kv = await getNativeKV();
   if (kv) {
     try {
@@ -170,21 +203,11 @@ async function retrieveValue(key: string): Promise<string | null> {
       throw new CloudflareKVError(`KV error: ${message}`, 502);
     }
   }
-  return retrieveValueREST(key);
+  return retrieveValueREST(key, requestUrl);
 }
 
-async function deleteValue(key: string): Promise<void> {
-  const kv = await getNativeKV();
-  if (kv) {
-    try {
-      await kv.delete(key);
-      return;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to delete cloud sync data';
-      throw new CloudflareKVError(`KV error: ${message}`, 502);
-    }
-  }
-  await deleteValueREST(key);
+async function deleteValue(key: string, requestUrl: string): Promise<void> {
+  await deleteValueREST(key, requestUrl);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -202,7 +225,7 @@ export async function POST(request: Request) {
 
     const updatedAt = new Date().toISOString();
     const payload = JSON.stringify({ ciphertext, iv, version: VERSION, updatedAt });
-    await storeValue(keyId, payload);
+    await storeValue(keyId, payload, request.url);
 
     return NextResponse.json({ updatedAt, version: VERSION });
   } catch (error) {
@@ -223,7 +246,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const stored = await retrieveValue(keyId);
+    const stored = await retrieveValue(keyId, request.url);
     if (!stored) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
@@ -253,7 +276,7 @@ export async function DELETE(request: Request) {
   }
 
   try {
-    await deleteValue(keyId);
+    await deleteValue(keyId, request.url);
     return NextResponse.json({ success: true });
   } catch (error) {
     if (error instanceof CloudflareKVError) {
