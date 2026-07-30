@@ -38,14 +38,30 @@ export function Footer() {
               </a>
               <span className="ml-0.5">.</span>
             </span>
-            <span className="hidden sm:inline">•</span>
+          </div>
+          <nav
+            aria-label="Utilities"
+            className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm text-muted-foreground"
+          >
+            <Link
+              href="/formatter"
+              className="font-medium underline underline-offset-4 hover:text-primary"
+            >
+              Formatter
+            </Link>
+            <Link
+              href="/transactions"
+              className="font-medium underline underline-offset-4 hover:text-primary"
+            >
+              Transactions
+            </Link>
             <Link
               href="/agent-api"
               className="font-medium underline underline-offset-4 hover:text-primary"
             >
               Agent API
             </Link>
-          </div>
+          </nav>
           <p className="text-xs text-center text-muted-foreground">
             Rewards Tracker for YNAB is not affiliated with or endorsed by{" "}
             <a

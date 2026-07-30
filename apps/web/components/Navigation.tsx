@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Home, Settings, ReceiptText, Menu, X, ScanText } from 'lucide-react';
+import { Settings, Menu, X } from 'lucide-react';
 import { BrandMark, SparkIcon } from '@/components/icons/BrandIcons';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { cn } from '@/lib/utils';
@@ -18,11 +18,7 @@ export function Navigation() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navLinks = [
-    { href: '/', label: 'Dashboard', icon: Home },
     ...(featureFlags.recommendations ? [{ href: '/recommendations', label: 'Recommendations', icon: SparkIcon }] : []),
-    { href: '/formatter', label: 'Formatter', icon: ScanText },
-    { href: '/transactions', label: 'Transactions', icon: ReceiptText },
-    { href: '/agent-api', label: 'Agent API', icon: SparkIcon },
   ];
   const mobileLinks = [...navLinks, { href: '/settings', label: 'Settings', icon: Settings }];
 
