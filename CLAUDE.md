@@ -17,7 +17,7 @@ A client-side rewards tracker spanning a production-ready web app and an in-prog
 - Tailwind CSS + shadcn/ui + Radix UI primitives
 - `next-themes` for light/dark/system modes
 - Browser `localStorage` persistence via storage service
-- Cloud sync via Cloudflare KV (native binding reads and REST mutations in production)
+- Cloud sync via native Cloudflare KV bindings in production
 - YNAB API proxied through `/api/ynab/*` routes (bearer PAT)
 - Agent API docs at `/agent-api` (uses Cloud Sync + PAT per request)
 - React hooks + Context API for state management
@@ -228,7 +228,7 @@ pnpm --filter ./apps/mobile android    # Launch Android emulator via Expo
 - Hosted on **Cloudflare Workers** via OpenNext adapter
 - Auto-deploys on push to `main` via GitHub Actions
 - Live at https://rewards.soon.sg
-- Cloud sync reads use the native Cloudflare KV binding; writes and deletes use the KV REST API
+- Cloud sync uses native Cloudflare KV bindings through the custom Worker entrypoint
 - Manual deploy: `pnpm --filter ./apps/web deploy:cloudflare`
 
 ### Mobile App
