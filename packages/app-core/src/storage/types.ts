@@ -62,6 +62,7 @@ export interface DashboardTransactionsCachePayload {
   sinceDate: string;
   fetchedAt: string;
   trackedAccountIds: string[];
+  isComplete?: boolean;
   transactions: Transaction[];
   accounts: Array<{ id: string; name: string }>;
 }

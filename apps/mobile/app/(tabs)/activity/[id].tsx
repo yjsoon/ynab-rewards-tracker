@@ -71,6 +71,7 @@ function cacheWithFlag(
     sinceDate: cacheEntry.sinceDate,
     fetchedAt: cacheEntry.fetchedAt,
     trackedAccountIds: cacheEntry.trackedAccountIds,
+    isComplete: cacheEntry.isComplete,
     accounts: cacheEntry.accounts,
     transactions: cacheEntry.transactions.map((transaction) => (
       transaction.id === transactionId

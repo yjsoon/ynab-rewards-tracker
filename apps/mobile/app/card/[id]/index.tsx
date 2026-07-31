@@ -83,6 +83,7 @@ function noRewardCopy(transaction: TransactionProjection): string {
     case 'below_block': return 'Below earning block';
     case 'below_minimum': return 'Minimum not met';
     case 'cap_reached': return 'Cap reached';
+    case 'period_incomplete': return 'Reward not confirmed';
     case 'zero_rate': return 'No earning rate';
     case 'zero_amount': return 'No reward';
     default: return 'No reward';

@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 
 import { useStorage } from '@/contexts/StorageContext';
-import { findBestDashboardEntry } from '@/lib/dashboardCache';
+import {
+  findBestDashboardEntry,
+  shouldRefreshDashboardCache,
+} from '@/lib/dashboardCache';
 import {
   buildRewardsDashboard,
   projectTransactions,
@@ -39,6 +42,20 @@ const ATTENTION_STATUSES = new Set<CardDashboardProjection['status']>([
   'near_cap',
   'capped',
 ]);
+
+let automaticDashboardRefresh: Promise<void> | undefined;
+
+function requestAutomaticDashboardRefresh(
+  sync: (options: { sinceDate: string }) => Promise<void>,
+  sinceDate: string,
+): Promise<void> {
+  if (!automaticDashboardRefresh) {
+    automaticDashboardRefresh = sync({ sinceDate }).finally(() => {
+      automaticDashboardRefresh = undefined;
+    });
+  }
+  return automaticDashboardRefresh;
+}
 
 function applyOrdering(
   cards: CardDashboardProjection[],
@@ -233,8 +250,9 @@ export function useRewardsDashboard(referenceDate?: Date): RewardsDashboardModel
       state.cards,
       state.settings,
       new Map(cacheEntry?.accounts.map((account) => [account.id, account.name] as const) ?? []),
+      { periodDataComplete: cacheEntry?.isComplete !== false },
     ),
-    [cacheEntry?.accounts, cachedTransactions, state.cards, state.settings],
+    [cacheEntry?.accounts, cacheEntry?.isComplete, cachedTransactions, state.cards, state.settings],
   );
 
   const orderedCards = useMemo(
@@ -274,17 +292,22 @@ export function useRewardsDashboard(referenceDate?: Date): RewardsDashboardModel
       state.selectedBudget.id &&
       state.trackedAccountIds.length > 0,
   );
+  const cacheMatchesSelection = Boolean(
+    cacheEntry && sameAccountSet(cacheEntry.trackedAccountIds, state.trackedAccountIds),
+  );
   const syncState = getSyncState({
     isSyncing: state.isSyncing,
     connectionStatus: state.connectionStatus,
     connectionError: state.connectionError,
     hasCache: Boolean(cacheEntry),
-    cacheMatchesSelection: Boolean(
-      cacheEntry && sameAccountSet(cacheEntry.trackedAccountIds, state.trackedAccountIds),
-    ),
+    cacheMatchesSelection,
     hasConnection: canSync,
   });
   const lastUpdatedAt = cacheEntry?.fetchedAt ?? state.metadata.lastSuccessfulSync;
+  const requiredSinceDate = useMemo(
+    () => getEarliestPeriodStart(state.cards, asOf),
+    [asOf, state.cards],
+  );
 
   const refresh = useCallback(async () => {
     if (!canSync || state.isSyncing) {
@@ -292,12 +315,57 @@ export function useRewardsDashboard(referenceDate?: Date): RewardsDashboardModel
     }
     try {
       await actions.syncBudgetsAndAccounts({
-        sinceDate: getEarliestPeriodStart(state.cards),
+        sinceDate: requiredSinceDate,
       });
     } catch {
       // StorageContext keeps cached data visible and exposes retry state.
     }
-  }, [actions, canSync, state.cards, state.isSyncing]);
+  }, [actions, canSync, requiredSinceDate, state.isSyncing]);
+
+  const autoRefreshAttemptRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (
+      referenceDate ||
+      !status.isHydrated ||
+      !canSync ||
+      state.isSyncing
+    ) {
+      return;
+    }
+
+    const trustedCache = cacheMatchesSelection ? cacheEntry : undefined;
+    if (!shouldRefreshDashboardCache(trustedCache, requiredSinceDate, asOf)) {
+      return;
+    }
+
+    const attemptKey = [
+      currentTimestamp,
+      trustedCache?.fetchedAt ?? 'missing',
+      trustedCache?.sinceDate ?? 'missing',
+      requiredSinceDate,
+    ].join(':');
+    if (autoRefreshAttemptRef.current === attemptKey) {
+      return;
+    }
+    autoRefreshAttemptRef.current = attemptKey;
+    void requestAutomaticDashboardRefresh(
+      actions.syncBudgetsAndAccounts,
+      requiredSinceDate,
+    ).catch(() => {
+      // Keep the cached dashboard visible; foregrounding again permits another attempt.
+    });
+  }, [
+    actions,
+    asOf,
+    cacheEntry,
+    cacheMatchesSelection,
+    canSync,
+    currentTimestamp,
+    referenceDate,
+    requiredSinceDate,
+    state.isSyncing,
+    status.isHydrated,
+  ]);
 
   return {
     dashboard,

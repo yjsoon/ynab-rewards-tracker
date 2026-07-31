@@ -736,4 +736,25 @@ describe('projectTransactions', () => {
       reward: { amount: 0, dollars: 0 },
     });
   });
+
+  it('does not infer threshold outcomes from an incomplete transaction period', () => {
+    const card = createCard({ minimumSpend: 100 });
+    const [projection] = projectTransactions(
+      [createTransaction({ amount: -10_000 })],
+      [card],
+      {},
+      undefined,
+      { periodDataComplete: false },
+    );
+
+    expect(projection).toMatchObject({
+      status: 'no_reward',
+      noRewardReason: 'period_incomplete',
+      reward: {
+        rate: 2,
+        amount: 0,
+        dollars: 0,
+      },
+    });
+  });
 });

@@ -1,5 +1,7 @@
 import type { DashboardTransactionsCacheEntry } from './types';
 
+export const DASHBOARD_CACHE_FRESH_WINDOW_MS = 30 * 60 * 1000;
+
 function normaliseAccountIds(ids: string[]): string {
   if (ids.length === 0) {
     return '';
@@ -55,4 +57,40 @@ export function buildAccountsMap(entry: DashboardTransactionsCacheEntry | undefi
   }
 
   return new Map(entry.accounts.map((account) => [account.id, account.name] as const));
+}
+
+function localDateKey(date: Date): string {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-');
+}
+
+/**
+ * Decide whether opening the dashboard needs a transaction refresh. Besides a
+ * conventional freshness window, a cache fetched before local midnight is
+ * stale immediately so a new reward period never presents as current.
+ */
+export function shouldRefreshDashboardCache(
+  entry: DashboardTransactionsCacheEntry | undefined,
+  requiredSinceDate: string,
+  now = new Date(),
+  freshWindowMs = DASHBOARD_CACHE_FRESH_WINDOW_MS,
+): boolean {
+  if (!entry || entry.sinceDate > requiredSinceDate) {
+    return true;
+  }
+
+  const fetchedAt = new Date(entry.fetchedAt);
+  const fetchedTimestamp = fetchedAt.getTime();
+  if (!Number.isFinite(fetchedTimestamp)) {
+    return true;
+  }
+
+  if (localDateKey(fetchedAt) !== localDateKey(now)) {
+    return true;
+  }
+
+  return now.getTime() - fetchedTimestamp > freshWindowMs;
 }

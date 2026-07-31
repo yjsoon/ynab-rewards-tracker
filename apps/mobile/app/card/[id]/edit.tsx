@@ -163,6 +163,37 @@ function validDateInput(value: string): boolean {
     date.getDate() === day;
 }
 
+function rewardConfigurationSignature(card: CreditCard): string {
+  return JSON.stringify({
+    type: card.type,
+    earningRate: card.earningRate ?? null,
+    earningBlockSize: card.earningBlockSize ?? null,
+    minimumSpend: card.minimumSpend ?? null,
+    maximumSpend: card.maximumSpend ?? null,
+    billingCycle: card.billingCycle?.type === 'billing'
+      ? { type: 'billing', dayOfMonth: card.billingCycle.dayOfMonth ?? 1 }
+      : { type: 'calendar' },
+    promotionalPeriod: card.promotionalPeriod
+      ? {
+          startDate: card.promotionalPeriod.startDate ?? null,
+          endDate: card.promotionalPeriod.endDate,
+        }
+      : null,
+    subcategoriesEnabled: card.subcategoriesEnabled ?? false,
+    subcategories: (card.subcategories ?? []).map((tier) => ({
+      id: tier.id,
+      flagColor: tier.flagColor,
+      rewardValue: tier.rewardValue,
+      milesBlockSize: tier.milesBlockSize ?? null,
+      minimumSpend: tier.minimumSpend ?? null,
+      maximumSpend: tier.maximumSpend ?? null,
+      priority: tier.priority,
+      active: tier.active,
+      excludeFromRewards: tier.excludeFromRewards ?? false,
+    })),
+  });
+}
+
 function validateForm(source: CreditCard, form: CardForm): ValidationResult {
   const name = form.name.trim();
   const issuer = form.issuer.trim();
@@ -657,8 +688,13 @@ export default function EditCardScreen() {
       state.selectedBudget.id,
       state.trackedAccountIds,
     );
+    const rewardConfigurationChanged = rewardConfigurationSignature(sourceCard)
+      !== rewardConfigurationSignature(validation.card);
     const needsFullPeriodRefresh = Boolean(
-      cacheEntry && nextPeriodStart < cacheEntry.sinceDate,
+      cacheEntry && (
+        nextPeriodStart < cacheEntry.sinceDate
+        || (cacheEntry.isComplete === false && rewardConfigurationChanged)
+      ),
     );
     let cardSaved = false;
     try {

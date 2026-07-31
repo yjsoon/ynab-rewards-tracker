@@ -855,7 +855,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
       setDashboardCachedData: async (payload) => {
         const entry: DashboardTransactionsCacheEntry = {
           ...payload,
-          isComplete: true,
+          isComplete: payload.isComplete ?? true,
           transactions: payload.transactions,
         };
         setState((prev) => ({

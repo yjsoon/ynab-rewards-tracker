@@ -181,6 +181,10 @@ export type AccountNameLookup =
   | ReadonlyMap<string, string>
   | Readonly<Record<string, string>>;
 
+export interface TransactionProjectionOptions {
+  periodDataComplete?: boolean;
+}
+
 /**
  * Project configured reward tiers into a stable UI model without mutating the
  * card or calculator output. Configuration priority is preserved.
@@ -695,44 +699,47 @@ export function projectTransactions(
   cards: CreditCard[],
   settings: AppSettings = {},
   accountNames?: AccountNameLookup,
+  options: TransactionProjectionOptions = {},
 ): TransactionProjection[] {
   const cardsByAccount = new Map(
     cards.map((card) => [card.ynabAccountId, card] as const),
   );
   const periodRewards = new Map<string, TransactionRewardResult>();
 
-  for (const card of cards) {
-    const transactionsByPeriod = new Map<
-      string,
-      { period: CalculationPeriod; transactions: Transaction[] }
-    >();
-    for (const transaction of transactions) {
-      if (transaction.account_id !== card.ynabAccountId || transaction.amount >= 0) {
-        continue;
+  if (options.periodDataComplete !== false) {
+    for (const card of cards) {
+      const transactionsByPeriod = new Map<
+        string,
+        { period: CalculationPeriod; transactions: Transaction[] }
+      >();
+      for (const transaction of transactions) {
+        if (transaction.account_id !== card.ynabAccountId || transaction.amount >= 0) {
+          continue;
+        }
+        const period = SimpleRewardsCalculator.calculatePeriod(
+          card,
+          parseYnabDate(transaction.date),
+        );
+        const existing = transactionsByPeriod.get(period.start);
+        if (existing) {
+          existing.transactions.push(transaction);
+        } else {
+          transactionsByPeriod.set(period.start, { period, transactions: [transaction] });
+        }
       }
-      const period = SimpleRewardsCalculator.calculatePeriod(
-        card,
-        parseYnabDate(transaction.date),
-      );
-      const existing = transactionsByPeriod.get(period.start);
-      if (existing) {
-        existing.transactions.push(transaction);
-      } else {
-        transactionsByPeriod.set(period.start, { period, transactions: [transaction] });
-      }
-    }
 
-    for (const { period, transactions: periodTransactions } of transactionsByPeriod.values()) {
-      const calculation = SimpleRewardsCalculator.calculateCardRewards(
-        card,
-        periodTransactions,
-        period,
-        settings,
-      );
-      for (const transaction of periodTransactions) {
-        const reward = calculation.transactionRewards[transaction.id];
-        if (reward) {
-          periodRewards.set(`${card.id}:${transaction.id}`, reward);
+      for (const { period, transactions: periodTransactions } of transactionsByPeriod.values()) {
+        const calculation = SimpleRewardsCalculator.calculateCardRewards(
+          card,
+          periodTransactions,
+          period,
+          settings,
+        );
+        for (const transaction of periodTransactions) {
+          const reward = calculation.transactionRewards[transaction.id];
+          if (reward) {
+            periodRewards.set(`${card.id}:${transaction.id}`, reward);
+          }
         }
       }
     }
@@ -742,12 +749,22 @@ export function projectTransactions(
     const card = cardsByAccount.get(transaction.account_id) ?? null;
     const amount = Math.abs(transaction.amount) / MILLIUNITS_PER_UNIT;
     const incoming = transaction.amount > 0;
-    const rewardResult = !incoming && card
+    const calculatedReward = !incoming && card
       ? periodRewards.get(`${card.id}:${transaction.id}`) ??
         SimpleRewardsCalculator.calculateTransactionReward(amount, card, settings, {
           flagColor: transaction.flag_color,
         })
       : null;
+    const rewardResult = calculatedReward &&
+      options.periodDataComplete === false &&
+      calculatedReward.reward > 0
+      ? {
+          ...calculatedReward,
+          reward: 0,
+          rewardDollars: 0,
+          reason: 'period_incomplete' as const,
+        }
+      : calculatedReward;
     const status: TransactionProjectionStatus = incoming
       ? 'incoming'
       : !card

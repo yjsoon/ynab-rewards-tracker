@@ -222,12 +222,13 @@ export function useActivityModel(query = ''): ActivityModel {
       state.cards,
       state.settings,
       accountNames,
+      { periodDataComplete: cacheEntry?.isComplete !== false },
     )
       .filter((projection) => (
         trackedAccounts.size === 0 || trackedAccounts.has(projection.transaction.account_id)
       ))
       .sort((left, right) => right.transaction.date.localeCompare(left.transaction.date)),
-    [accountNames, cacheEntry?.transactions, state.cards, state.settings, trackedAccounts],
+    [accountNames, cacheEntry?.isComplete, cacheEntry?.transactions, state.cards, state.settings, trackedAccounts],
   );
   const transactions = useMemo(
     () => projected.filter((projection) => matchesQuery(projection, query)),

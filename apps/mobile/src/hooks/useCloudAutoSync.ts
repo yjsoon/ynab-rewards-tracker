@@ -38,6 +38,14 @@ function isMissingBackup(error: unknown): boolean {
   return error instanceof Error && error.message.includes('No cloud backup was found');
 }
 
+async function readLocalSnapshot(): Promise<{
+  payload: StorageData;
+  settings: StorageData['settings'];
+}> {
+  const raw = JSON.parse(await storage.exportSettings()) as StorageData;
+  return { payload: createCloudSyncPayload(raw), settings: raw.settings };
+}
+
 /**
  * Reconciles the same encrypted settings payload used by the web app. Cached
  * YNAB data and secrets never enter the comparison or upload.
@@ -112,33 +120,38 @@ export function useCloudAutoSync(): void {
       const phrase = await loadRememberedCloudSyncCode();
       if (!phrase) return;
 
-      const raw = JSON.parse(await storage.exportSettings()) as StorageData;
-      const localPayload = createCloudSyncPayload(raw);
-
       let restored: Awaited<ReturnType<typeof restoreSettingsFromCloud<unknown>>>;
       try {
         restored = await restoreSettingsFromCloud<unknown>(phrase);
       } catch (error) {
         if (!isMissingBackup(error)) throw error;
-        const seeded = await saveSettingsToCloud(phrase, localPayload);
+        const latestLocal = await readLocalSnapshot();
+        const seeded = await saveSettingsToCloud(phrase, latestLocal.payload);
+        const afterSeed = await storage.getSettings();
         await actions.setSettings({
           cloudSyncKeyId: seeded.keyId,
           cloudSyncLastSyncedAt: seeded.updatedAt,
-          cloudSyncLocalChangedAt: undefined,
+          cloudSyncLocalChangedAt:
+            afterSeed.cloudSyncLocalChangedAt === latestLocal.settings.cloudSyncLocalChangedAt
+              ? undefined
+              : afterSeed.cloudSyncLocalChangedAt,
         });
         return;
       }
 
       const cloudPayload = parseCloudSyncPayload(restored.data);
-      const lastLocalSync = state.settings.cloudSyncLastSyncedAt
-        ? Date.parse(state.settings.cloudSyncLastSyncedAt)
+      const latestLocal = await readLocalSnapshot();
+      const localPayload = latestLocal.payload;
+      const localSettings = latestLocal.settings;
+      const lastLocalSync = localSettings.cloudSyncLastSyncedAt
+        ? Date.parse(localSettings.cloudSyncLastSyncedAt)
         : Number.NaN;
       const cloudUpdated = Date.parse(restored.updatedAt);
-      const sameKey = state.settings.cloudSyncKeyId === restored.keyId;
+      const sameKey = localSettings.cloudSyncKeyId === restored.keyId;
       const orderKnown = sameKey && Number.isFinite(lastLocalSync) && Number.isFinite(cloudUpdated);
       // A marker exists only between a local payload mutation and a confirmed
       // push/import. Do not compare device and server clocks to decide dirtiness.
-      const localIsDirty = Boolean(state.settings.cloudSyncLocalChangedAt);
+      const localIsDirty = Boolean(localSettings.cloudSyncLocalChangedAt);
       const cloudIsNewer = orderKnown && cloudUpdated > lastLocalSync;
 
       if (cloudIsNewer && localIsDirty) {
@@ -148,11 +161,17 @@ export function useCloudAutoSync(): void {
       }
 
       if (cloudIsNewer) {
-        await storage.importSettings(JSON.stringify(cloudPayload));
+        await storage.importSettings(JSON.stringify(cloudPayload), {
+          expectedCloudSyncLocalChangedAt: localSettings.cloudSyncLocalChangedAt ?? null,
+        });
+        const afterImport = await storage.getSettings();
         await storage.updateSettings({
           cloudSyncKeyId: restored.keyId,
           cloudSyncLastSyncedAt: restored.updatedAt,
-          cloudSyncLocalChangedAt: undefined,
+          cloudSyncLocalChangedAt:
+            afterImport.cloudSyncLocalChangedAt === localSettings.cloudSyncLocalChangedAt
+              ? undefined
+              : afterImport.cloudSyncLocalChangedAt,
           rememberCloudSyncCode: true,
           autoSyncEnabled: true,
         });
@@ -168,22 +187,31 @@ export function useCloudAutoSync(): void {
 
       if (payloadsDiffer) {
         const pushed = await saveSettingsToCloud(phrase, localPayload);
+        const afterPush = await storage.getSettings();
         await actions.setSettings({
           cloudSyncKeyId: pushed.keyId,
           cloudSyncLastSyncedAt: pushed.updatedAt,
-          cloudSyncLocalChangedAt: undefined,
+          cloudSyncLocalChangedAt:
+            afterPush.cloudSyncLocalChangedAt === localSettings.cloudSyncLocalChangedAt
+              ? undefined
+              : afterPush.cloudSyncLocalChangedAt,
         });
         return;
       }
 
       if (
-        state.settings.cloudSyncKeyId !== restored.keyId ||
-        state.settings.cloudSyncLastSyncedAt !== restored.updatedAt
+        localSettings.cloudSyncKeyId !== restored.keyId ||
+        localSettings.cloudSyncLastSyncedAt !== restored.updatedAt ||
+        localSettings.cloudSyncLocalChangedAt !== undefined
       ) {
+        const latestSettings = await storage.getSettings();
         await actions.setSettings({
           cloudSyncKeyId: restored.keyId,
           cloudSyncLastSyncedAt: restored.updatedAt,
-          cloudSyncLocalChangedAt: undefined,
+          cloudSyncLocalChangedAt:
+            latestSettings.cloudSyncLocalChangedAt === localSettings.cloudSyncLocalChangedAt
+              ? undefined
+              : latestSettings.cloudSyncLocalChangedAt,
         });
       }
     })().catch((error: unknown) => {
@@ -199,9 +227,6 @@ export function useCloudAutoSync(): void {
   }, [
     actions,
     enabled,
-    state.settings.cloudSyncKeyId,
-    state.settings.cloudSyncLastSyncedAt,
-    state.settings.cloudSyncLocalChangedAt,
   ]);
 
   useEffect(() => {

@@ -660,7 +660,8 @@ class StorageService {
       sinceDate: payload.sinceDate,
       fetchedAt: payload.fetchedAt,
       trackedAccountIds: [...payload.trackedAccountIds].sort(),
-      isComplete: allSanitized.length <= StorageService.DASHBOARD_CACHE_LIMIT,
+      isComplete: payload.isComplete
+        ?? allSanitized.length <= StorageService.DASHBOARD_CACHE_LIMIT,
       transactions: sanitized,
       accounts: payload.accounts,
     };
@@ -721,7 +722,10 @@ class StorageService {
     return JSON.stringify(exportData, null, 2);
   }
 
-  async importSettings(jsonString: string): Promise<void> {
+  async importSettings(
+    jsonString: string,
+    options?: { expectedCloudSyncLocalChangedAt?: string | null },
+  ): Promise<void> {
     try {
       const imported = JSON.parse(jsonString) as Partial<MutableStorageData>;
       if (!imported || typeof imported !== 'object' || Array.isArray(imported)) {
@@ -729,6 +733,13 @@ class StorageService {
       }
 
       const storage = await this.load() as MutableStorageData;
+      if (
+        options &&
+        (storage.settings.cloudSyncLocalChangedAt ?? null) !==
+          (options.expectedCloudSyncLocalChangedAt ?? null)
+      ) {
+        throw new Error('Local settings changed during Cloud Sync. Try again to reconcile.');
+      }
       const localSettings = { ...storage.settings };
       const localFormatterApiKeys = storage.settings.statementFormatter?.apiKeys;
 

@@ -121,6 +121,8 @@ export function getRewardStatusCopy(projection: TransactionProjection): string {
           return 'Minimum not met · no reward';
         case 'cap_reached':
           return 'Cap reached · no reward';
+        case 'period_incomplete':
+          return 'Reward not confirmed';
         case 'zero_rate':
           return 'No earning rate';
         case 'zero_amount':
@@ -156,6 +158,8 @@ export function getRewardExplanation(
           return 'The reward is locked until the period minimum spend is met.';
         case 'cap_reached':
           return 'The card or reward category has reached its period spending cap.';
+        case 'period_incomplete':
+          return 'Older activity is not stored on this device, so this reward cannot be confirmed.';
         case 'zero_rate':
           return 'No earning rate is configured for this transaction.';
         case 'zero_amount':

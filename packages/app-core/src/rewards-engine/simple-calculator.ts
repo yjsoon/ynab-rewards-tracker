@@ -76,7 +76,8 @@ export type TransactionRewardReason =
   | 'zero_rate'
   | 'below_block'
   | 'below_minimum'
-  | 'cap_reached';
+  | 'cap_reached'
+  | 'period_incomplete';
 
 export interface TransactionRewardBlock {
   size: number;
