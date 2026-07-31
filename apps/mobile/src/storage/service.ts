@@ -302,18 +302,22 @@ class StorageService {
     }
   }
 
-  async clearPAT(): Promise<void> {
+  async clearPAT(expectedGeneration = this.operationGeneration): Promise<void> {
+    this.assertGeneration(expectedGeneration);
     try {
       const storage = await this.load() as MutableStorageData;
+      this.assertGeneration(expectedGeneration);
       if (storage.ynab.pat) {
         delete storage.ynab.pat;
       }
       this.wipeConnectionState(storage);
-      await this.save(storage);
+      await this.save(storage, expectedGeneration);
     } finally {
       // Delete after loading so an embedded legacy PAT cannot be migrated back
       // into SecureStore during the clear operation.
-      await this.deleteSecurePAT();
+      if (this.isGenerationCurrent(expectedGeneration)) {
+        await this.deleteSecurePAT();
+      }
     }
   }
 

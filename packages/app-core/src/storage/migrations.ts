@@ -51,8 +51,12 @@ export function applyStorageMigrations(data: MutableStorageData): void {
           const { milesBlockSize, ...cleanCard } = mutableCard;
           return cleanCard as CreditCard;
         }
-        // Migrate promotional periods without startDate: default to 1st of previous month
-        if (mutableCard.promotionalPeriod && !mutableCard.promotionalPeriod.startDate) {
+        // Legacy promotions omitted the field entirely. New saves persist null
+        // to represent the intentional "use current card period" behaviour.
+        if (
+          mutableCard.promotionalPeriod
+          && !Object.prototype.hasOwnProperty.call(mutableCard.promotionalPeriod, 'startDate')
+        ) {
           const now = new Date();
           const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
           mutableCard.promotionalPeriod = {

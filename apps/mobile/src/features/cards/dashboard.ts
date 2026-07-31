@@ -14,6 +14,7 @@ import {
   type TransactionProjection,
 } from '@ynab-counter/app-core/rewards-engine';
 import { getEarliestPeriodStart } from '@ynab-counter/app-core/rewards-engine/utils/periods';
+import { LatestKeyedTaskQueue } from '@ynab-counter/app-core/utils';
 import type {
   CreditCard,
   DashboardTransactionsCacheEntry,
@@ -43,18 +44,14 @@ const ATTENTION_STATUSES = new Set<CardDashboardProjection['status']>([
   'capped',
 ]);
 
-let automaticDashboardRefresh: Promise<void> | undefined;
+const automaticDashboardRefreshes = new LatestKeyedTaskQueue<string>();
 
 function requestAutomaticDashboardRefresh(
+  key: string,
   sync: (options: { sinceDate: string }) => Promise<void>,
   sinceDate: string,
 ): Promise<void> {
-  if (!automaticDashboardRefresh) {
-    automaticDashboardRefresh = sync({ sinceDate }).finally(() => {
-      automaticDashboardRefresh = undefined;
-    });
-  }
-  return automaticDashboardRefresh;
+  return automaticDashboardRefreshes.run(key, () => sync({ sinceDate }));
 }
 
 function applyOrdering(
@@ -328,6 +325,15 @@ export function useRewardsDashboard(referenceDate?: Date): RewardsDashboardModel
     () => getEarliestPeriodStart(state.cards, asOf),
     [asOf, state.cards],
   );
+  const automaticRefreshKey = useMemo(
+    () => JSON.stringify([
+      state.pat,
+      state.selectedBudget.id,
+      [...state.trackedAccountIds].sort(),
+      requiredSinceDate,
+    ]),
+    [requiredSinceDate, state.pat, state.selectedBudget.id, state.trackedAccountIds],
+  );
 
   const refresh = useCallback(async () => {
     if (!canSync || state.isSyncing) {
@@ -370,6 +376,7 @@ export function useRewardsDashboard(referenceDate?: Date): RewardsDashboardModel
     }
     autoRefreshAttemptRef.current = attemptKey;
     void requestAutomaticDashboardRefresh(
+      automaticRefreshKey,
       actions.syncBudgetsAndAccounts,
       requiredSinceDate,
     ).catch(() => {
@@ -378,6 +385,7 @@ export function useRewardsDashboard(referenceDate?: Date): RewardsDashboardModel
   }, [
     actions,
     asOf,
+    automaticRefreshKey,
     cacheEntry,
     cacheMatchesSelection,
     canSync,

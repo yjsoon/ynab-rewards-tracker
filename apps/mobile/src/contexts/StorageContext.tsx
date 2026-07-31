@@ -976,12 +976,28 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         await initialiseConnection(trimmed, state.trackedAccountIds, storedSelection.id);
       },
       clearPAT: async () => {
-        await storage.clearPAT();
-        setState(withoutConnection);
+        invalidatePendingOperations();
+        const storageGeneration = storage.captureGeneration();
+        const localChange = localChangeSettings();
+        await storage.updateSettings(localChange, storageGeneration);
+        await storage.clearPAT(storageGeneration);
+        if (!storage.isGenerationCurrent(storageGeneration)) return;
+        setState((prev) => ({
+          ...withoutConnection(prev),
+          settings: { ...prev.settings, ...localChange },
+        }));
       },
       disconnect: async () => {
-        await storage.clearPAT();
-        setState(withoutConnection);
+        invalidatePendingOperations();
+        const storageGeneration = storage.captureGeneration();
+        const localChange = localChangeSettings();
+        await storage.updateSettings(localChange, storageGeneration);
+        await storage.clearPAT(storageGeneration);
+        if (!storage.isGenerationCurrent(storageGeneration)) return;
+        setState((prev) => ({
+          ...withoutConnection(prev),
+          settings: { ...prev.settings, ...localChange },
+        }));
       },
       setSelectedBudget: async (budgetId: string, budgetName: string) => {
         const localChange = localChangeSettings();

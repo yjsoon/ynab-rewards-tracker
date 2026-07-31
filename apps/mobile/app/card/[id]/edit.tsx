@@ -285,7 +285,7 @@ function validateForm(source: CreditCard, form: CardForm): ValidationResult {
       : { type: 'calendar' },
     promotionalPeriod: form.promotionEnabled
       ? {
-          startDate: form.promotionStart.trim() || undefined,
+          startDate: form.promotionStart.trim() || null,
           endDate: form.promotionEnd.trim(),
           description: form.promotionDescription.trim() || undefined,
         }

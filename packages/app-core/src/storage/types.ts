@@ -94,7 +94,9 @@ export interface CreditCard {
     dayOfMonth?: number;
   };
   promotionalPeriod?: {
-    startDate?: string; // ISO 8601 date (YYYY-MM-DD), optional - defaults to current period start
+    // Null is the persisted sentinel for an intentionally omitted start date.
+    // Missing is reserved for legacy records that still require migration.
+    startDate?: string | null; // ISO 8601 date (YYYY-MM-DD), optional - defaults to current period start
     endDate: string; // ISO 8601 date (YYYY-MM-DD)
     description?: string; // Optional description (e.g., "5x groceries Q4 2024")
   };
