@@ -73,6 +73,7 @@ function cacheWithFlag(
     fetchedAt: cacheEntry.fetchedAt,
     trackedAccountIds: cacheEntry.trackedAccountIds,
     isComplete: cacheEntry.isComplete,
+    requiresFullRefresh: cacheEntry.requiresFullRefresh,
     accounts: cacheEntry.accounts,
     transactions: cacheEntry.transactions.map((transaction) => (
       transaction.id === transactionId
@@ -241,6 +242,24 @@ export default function TransactionDetailScreen() {
 
       if ((cacheEntryRef.current?.isComplete ?? cacheEntry.isComplete) === false) {
         try {
+          const latestEntry = cacheEntryRef.current ?? cacheEntry;
+          if (latestEntry.requiresFullRefresh !== true) {
+            const stalePayload: DashboardTransactionsCachePayload = {
+              budgetId: latestEntry.budgetId,
+              sinceDate: latestEntry.sinceDate,
+              fetchedAt: latestEntry.fetchedAt,
+              trackedAccountIds: latestEntry.trackedAccountIds,
+              isComplete: latestEntry.isComplete,
+              requiresFullRefresh: true,
+              transactions: latestEntry.transactions,
+              accounts: latestEntry.accounts,
+            };
+            cacheEntryRef.current = {
+              ...latestEntry,
+              requiresFullRefresh: true,
+            };
+            await actions.setDashboardCachedData(stalePayload);
+          }
           await actions.syncBudgetsAndAccounts({
             sinceDate: getEarliestPeriodStart(state.cards),
           });

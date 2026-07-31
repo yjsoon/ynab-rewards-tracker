@@ -183,6 +183,8 @@ export type AccountNameLookup =
 
 export interface TransactionProjectionOptions {
   periodDataComplete?: boolean;
+  /** Earliest transaction date represented by the supplied cache window. */
+  periodDataSinceDate?: string;
 }
 
 /**
@@ -233,7 +235,9 @@ export function projectRewardCategories(
     const maximumProgressSpend = blockSize !== null
       ? countedSpend
       : totalSpend;
-    const maximumReached = maximumTarget !== null && maximumProgressSpend >= maximumTarget;
+    const maximumReached = categoryCalculation?.maximumSpendExceeded ?? (
+      maximumTarget !== null && maximumProgressSpend >= maximumTarget
+    );
     const eligibleSpendBeforeBlocks = categoryCalculation?.eligibleSpendBeforeBlocks ?? 0;
 
     return {
@@ -269,14 +273,18 @@ export function projectRewardCategories(
         target: maximumTarget,
         remaining: maximumTarget === null
           ? null
-          : Math.max(0, maximumTarget - maximumProgressSpend),
+          : maximumReached
+            ? 0
+            : Math.max(0, maximumTarget - maximumProgressSpend),
         over: maximumTarget === null
           ? null
           : Math.max(0, maximumProgressSpend - maximumTarget),
         progress: maximumTarget === null
           ? null
-          : Math.min(1, maximumProgressSpend / maximumTarget),
-        met: maximumTarget === null ? null : maximumReached,
+          : maximumReached
+            ? 1
+            : Math.min(1, maximumProgressSpend / maximumTarget),
+        met: maximumTarget === null && !maximumReached ? null : maximumReached,
         reached: maximumReached,
       },
       blockInfo: blockSize === null
@@ -335,7 +343,7 @@ function getBlockSizes(card: CreditCard): number[] {
     sizes.add(card.earningBlockSize);
   }
 
-  if (card.subcategoriesEnabled) {
+  if (card.type === 'miles' && card.subcategoriesEnabled) {
     for (const subcategory of card.subcategories ?? []) {
       if (
         subcategory.active !== false &&
@@ -705,41 +713,47 @@ export function projectTransactions(
     cards.map((card) => [card.ynabAccountId, card] as const),
   );
   const periodRewards = new Map<string, TransactionRewardResult>();
+  const periodCompleteness = new Map<string, boolean>();
 
-  if (options.periodDataComplete !== false) {
-    for (const card of cards) {
-      const transactionsByPeriod = new Map<
-        string,
-        { period: CalculationPeriod; transactions: Transaction[] }
-      >();
-      for (const transaction of transactions) {
-        if (transaction.account_id !== card.ynabAccountId || transaction.amount >= 0) {
-          continue;
-        }
-        const period = SimpleRewardsCalculator.calculatePeriod(
-          card,
-          parseYnabDate(transaction.date),
-        );
-        const existing = transactionsByPeriod.get(period.start);
-        if (existing) {
-          existing.transactions.push(transaction);
-        } else {
-          transactionsByPeriod.set(period.start, { period, transactions: [transaction] });
-        }
+  for (const card of cards) {
+    const transactionsByPeriod = new Map<
+      string,
+      { period: CalculationPeriod; transactions: Transaction[] }
+    >();
+    for (const transaction of transactions) {
+      if (transaction.account_id !== card.ynabAccountId || transaction.amount >= 0) {
+        continue;
       }
+      const period = SimpleRewardsCalculator.calculatePeriod(
+        card,
+        parseYnabDate(transaction.date),
+      );
+      const periodIsComplete = options.periodDataComplete !== false && (
+        !options.periodDataSinceDate || period.start >= options.periodDataSinceDate
+      );
+      periodCompleteness.set(`${card.id}:${transaction.id}`, periodIsComplete);
+      if (!periodIsComplete) {
+        continue;
+      }
+      const existing = transactionsByPeriod.get(period.start);
+      if (existing) {
+        existing.transactions.push(transaction);
+      } else {
+        transactionsByPeriod.set(period.start, { period, transactions: [transaction] });
+      }
+    }
 
-      for (const { period, transactions: periodTransactions } of transactionsByPeriod.values()) {
-        const calculation = SimpleRewardsCalculator.calculateCardRewards(
-          card,
-          periodTransactions,
-          period,
-          settings,
-        );
-        for (const transaction of periodTransactions) {
-          const reward = calculation.transactionRewards[transaction.id];
-          if (reward) {
-            periodRewards.set(`${card.id}:${transaction.id}`, reward);
-          }
+    for (const { period, transactions: periodTransactions } of transactionsByPeriod.values()) {
+      const calculation = SimpleRewardsCalculator.calculateCardRewards(
+        card,
+        periodTransactions,
+        period,
+        settings,
+      );
+      for (const transaction of periodTransactions) {
+        const reward = calculation.transactionRewards[transaction.id];
+        if (reward) {
+          periodRewards.set(`${card.id}:${transaction.id}`, reward);
         }
       }
     }
@@ -755,8 +769,11 @@ export function projectTransactions(
           flagColor: transaction.flag_color,
         })
       : null;
+    const periodIsComplete = card
+      ? periodCompleteness.get(`${card.id}:${transaction.id}`) ?? true
+      : true;
     const rewardResult = calculatedReward &&
-      options.periodDataComplete === false &&
+      !periodIsComplete &&
       calculatedReward.reward > 0
       ? {
           ...calculatedReward,

@@ -240,9 +240,19 @@ export function useRewardsDashboard(referenceDate?: Date): RewardsDashboardModel
       cachedTransactions,
       state.settings,
       asOf,
-      cacheEntry?.isComplete === false ? state.calculations : [],
+      cacheEntry?.isComplete === false && cacheEntry.requiresFullRefresh !== true
+        ? state.calculations
+        : [],
     ),
-    [asOf, cacheEntry?.isComplete, cachedTransactions, state.calculations, state.cards, state.settings],
+    [
+      asOf,
+      cacheEntry?.isComplete,
+      cacheEntry?.requiresFullRefresh,
+      cachedTransactions,
+      state.calculations,
+      state.cards,
+      state.settings,
+    ],
   );
   const transactions = useMemo(
     () => projectTransactions(
@@ -250,9 +260,19 @@ export function useRewardsDashboard(referenceDate?: Date): RewardsDashboardModel
       state.cards,
       state.settings,
       new Map(cacheEntry?.accounts.map((account) => [account.id, account.name] as const) ?? []),
-      { periodDataComplete: cacheEntry?.isComplete !== false },
+      {
+        periodDataComplete: cacheEntry?.isComplete !== false
+          && cacheEntry?.requiresFullRefresh !== true,
+      },
     ),
-    [cacheEntry?.accounts, cacheEntry?.isComplete, cachedTransactions, state.cards, state.settings],
+    [
+      cacheEntry?.accounts,
+      cacheEntry?.isComplete,
+      cacheEntry?.requiresFullRefresh,
+      cachedTransactions,
+      state.cards,
+      state.settings,
+    ],
   );
 
   const orderedCards = useMemo(
@@ -299,7 +319,7 @@ export function useRewardsDashboard(referenceDate?: Date): RewardsDashboardModel
     isSyncing: state.isSyncing,
     connectionStatus: state.connectionStatus,
     connectionError: state.connectionError,
-    hasCache: Boolean(cacheEntry),
+    hasCache: Boolean(cacheEntry && cacheEntry.requiresFullRefresh !== true),
     cacheMatchesSelection,
     hasConnection: canSync,
   });
@@ -342,6 +362,7 @@ export function useRewardsDashboard(referenceDate?: Date): RewardsDashboardModel
       currentTimestamp,
       trustedCache?.fetchedAt ?? 'missing',
       trustedCache?.sinceDate ?? 'missing',
+      trustedCache?.requiresFullRefresh ? 'required' : 'normal',
       requiredSinceDate,
     ].join(':');
     if (autoRefreshAttemptRef.current === attemptKey) {

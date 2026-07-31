@@ -662,6 +662,7 @@ class StorageService {
       trackedAccountIds: [...payload.trackedAccountIds].sort(),
       isComplete: payload.isComplete
         ?? allSanitized.length <= StorageService.DASHBOARD_CACHE_LIMIT,
+      requiresFullRefresh: payload.requiresFullRefresh ?? false,
       transactions: sanitized,
       accounts: payload.accounts,
     };

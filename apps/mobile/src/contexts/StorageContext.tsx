@@ -856,6 +856,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         const entry: DashboardTransactionsCacheEntry = {
           ...payload,
           isComplete: payload.isComplete ?? true,
+          requiresFullRefresh: payload.requiresFullRefresh ?? false,
           transactions: payload.transactions,
         };
         setState((prev) => ({

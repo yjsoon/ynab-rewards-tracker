@@ -326,6 +326,69 @@ describe('buildRewardsDashboard', () => {
     });
   });
 
+  it('surfaces a card-wide cap on a tier whose own cap has headroom', () => {
+    const card = createCard({
+      maximumSpend: 50,
+      subcategoriesEnabled: true,
+      subcategories: [{
+        id: 'bonus',
+        name: 'Bonus',
+        flagColor: 'orange',
+        rewardValue: 5,
+        maximumSpend: 100,
+        priority: 0,
+        active: true,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      }],
+    });
+    const result = buildRewardsDashboard(
+      [card],
+      [createTransaction({ amount: -50_000, flag_color: 'orange' })],
+      {},
+      referenceDate,
+    );
+
+    expect(result.cards[0].rewardCategories[0].maximum).toMatchObject({
+      target: 100,
+      remaining: 0,
+      progress: 1,
+      reached: true,
+    });
+  });
+
+  it('ignores preserved miles-only tier blocks after a card changes to cashback', () => {
+    const card = createCard({
+      type: 'cashback',
+      subcategoriesEnabled: true,
+      subcategories: [{
+        id: 'bonus',
+        name: 'Bonus',
+        flagColor: 'orange',
+        rewardValue: 5,
+        milesBlockSize: 5,
+        priority: 0,
+        active: true,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      }],
+    });
+    const result = buildRewardsDashboard(
+      [card],
+      [createTransaction({ amount: -12_000, flag_color: 'orange' })],
+      {},
+      referenceDate,
+    );
+
+    expect(result.cards[0]).toMatchObject({
+      spend: { total: 12, counted: 12, eligible: 12 },
+      blockInfo: null,
+    });
+    expect(result.cards[0].reward.amount).toBeCloseTo(0.6);
+    expect(result.cards[0].reward.dollars).toBeCloseTo(0.6);
+    expect(result.cards[0].rewardCategories[0].blockInfo).toBeNull();
+  });
+
   it('keeps block-counted category cap headroom available for a later full block', () => {
     const card = createCard({
       type: 'miles',
@@ -755,6 +818,40 @@ describe('projectTransactions', () => {
         amount: 0,
         dollars: 0,
       },
+    });
+  });
+
+  it('evaluates cache completeness for each transaction billing period', () => {
+    const card = createCard({
+      minimumSpend: 100,
+      earningBlockSize: 5,
+      billingCycle: { type: 'billing', dayOfMonth: 15 },
+    });
+    const projections = projectTransactions(
+      [
+        createTransaction({ id: 'historical', date: '2026-01-10', amount: -100_000 }),
+        createTransaction({ id: 'structural', date: '2026-01-11', amount: -3_000 }),
+        createTransaction({ id: 'covered', date: '2026-01-20', amount: -100_000 }),
+      ],
+      [card],
+      {},
+      undefined,
+      { periodDataSinceDate: '2026-01-15' },
+    );
+
+    expect(projections[0]).toMatchObject({
+      status: 'no_reward',
+      noRewardReason: 'period_incomplete',
+      reward: { amount: 0, dollars: 0 },
+    });
+    expect(projections[1]).toMatchObject({
+      status: 'no_reward',
+      noRewardReason: 'below_block',
+    });
+    expect(projections[2]).toMatchObject({
+      status: 'earning',
+      noRewardReason: null,
+      reward: { amount: 2, dollars: 2 },
     });
   });
 });

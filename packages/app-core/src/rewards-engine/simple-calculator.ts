@@ -111,6 +111,15 @@ export class SimpleRewardsCalculator {
     const flagColour = normaliseFlagColor(options?.flagColor);
     const subcategory = resolveSubcategory(context, flagColour);
 
+    if (context.enabled && !subcategory) {
+      return {
+        reward: 0,
+        rewardDollars: 0,
+        rewardRate: 0,
+        reason: 'zero_rate',
+      };
+    }
+
     if (subcategory?.excludeFromRewards) {
       return {
         reward: 0,
@@ -267,156 +276,149 @@ export class SimpleRewardsCalculator {
       >();
       const hasCardCap = typeof maximumSpend === 'number' && maximumSpend !== null && maximumSpend > 0;
       let remainingCardCap = hasCardCap ? maximumSpend! : Number.POSITIVE_INFINITY;
+      type TierState = {
+        subcategory: (typeof context.activeSubcategories)[number];
+        total: number;
+        rewardRate: number;
+        blockSize: number | null;
+        minimum: number | null;
+        maximum: number | null;
+        minimumMet: boolean;
+        remainingCap: number;
+        countedBeforeBlocks: number;
+        counted: number;
+        blocks: number;
+      };
+      const tierStates = new Map<string, TierState>(context.activeSubcategories.map((subcategory) => {
+        const total = subcategorySpends.get(subcategory.flagColor)?.total ?? 0;
+        const minimum = typeof subcategory.minimumSpend === 'number'
+          ? subcategory.minimumSpend
+          : null;
+        const maximum = typeof subcategory.maximumSpend === 'number' && subcategory.maximumSpend > 0
+          ? subcategory.maximumSpend
+          : null;
+        return [subcategory.id, {
+          subcategory,
+          total,
+          rewardRate: subcategory.excludeFromRewards ? 0 : getRewardRate(card, subcategory),
+          blockSize: subcategory.excludeFromRewards ? null : getBlockSize(card, subcategory),
+          minimum,
+          maximum,
+          minimumMet: !subcategory.excludeFromRewards &&
+            minimumSpendMet &&
+            (!minimum || total >= minimum),
+          remainingCap: maximum ?? Number.POSITIVE_INFINITY,
+          countedBeforeBlocks: 0,
+          counted: 0,
+          blocks: 0,
+        }];
+      }));
 
-      subcategoryBreakdowns = [];
-
-      for (const subcategory of context.activeSubcategories) {
-        if (subcategory.excludeFromRewards) {
-          subcategoryBreakdowns.push({
-            id: subcategory.id,
-            name: subcategory.name,
-            flagColor: subcategory.flagColor,
-            totalSpend: subcategorySpends.get(subcategory.flagColor)?.total ?? 0,
-            countedSpend: 0,
-            eligibleSpendBeforeBlocks: 0,
-            eligibleSpend: 0,
-            rewardRate: 0,
-            rewardEarned: 0,
-            rewardEarnedDollars: 0,
-            minimumSpend: subcategory.minimumSpend,
-            minimumSpendMet: false,
-            maximumSpend: subcategory.maximumSpend,
-            maximumSpendExceeded: false,
-            blockSize: null,
-            active: subcategory.active !== false,
-            excluded: true,
-          });
+      // A card cap belongs to the card, not to tier priority. Consume it once
+      // across the globally chronological transaction sequence.
+      for (const transaction of periodTransactions) {
+        const subcategory = resolveSubcategory(
+          context,
+          normaliseFlagColor(transaction.flag_color),
+        );
+        if (!subcategory || subcategory.excludeFromRewards) {
+          continue;
+        }
+        const tier = tierStates.get(subcategory.id);
+        if (!tier || tier.rewardRate <= 0) {
           continue;
         }
 
-        const spendBucket = subcategorySpends.get(subcategory.flagColor);
-        const totalForSubcategory = spendBucket?.total ?? 0;
-        const transactionsForSubcategory = spendBucket?.transactions ?? [];
-        const rewardRate = getRewardRate(card, subcategory);
-        const blockSize = getBlockSize(card, subcategory);
-
-        let subEligibleBeforeBlocks = 0;
-        let subEligible = 0;
-        let subCountedBeforeBlocks = 0;
-        let subCounted = 0;
-        let countedBlocks = 0;
-        let blocksEarned = 0;
-        let subReward = 0;
-        let subRewardDollars = 0;
-
-        const minimumNeeded = typeof subcategory.minimumSpend === 'number' ? subcategory.minimumSpend : null;
-        const maximumAllowed = typeof subcategory.maximumSpend === 'number' && subcategory.maximumSpend > 0
-          ? subcategory.maximumSpend
-          : null;
-        const subMinimumMet = minimumSpendMet && (!minimumNeeded || totalForSubcategory >= minimumNeeded);
-
-        if (rewardRate > 0 && totalForSubcategory > 0) {
-          let remainingSubcategoryCap = maximumAllowed ?? Number.POSITIVE_INFINITY;
-
-          for (const { transaction, spend: txnSpend } of transactionsForSubcategory) {
-            if (remainingCardCap <= 0 || remainingSubcategoryCap <= 0) {
-              const standalone = transactionRewards[transaction.id];
-              transactionRewards[transaction.id] = {
-                ...standalone,
-                reward: 0,
-                rewardDollars: 0,
-                reason: 'cap_reached',
-              };
-              continue;
-            }
-            if (txnSpend <= 0) {
-              continue;
-            }
-
-            const spendContribution = Math.min(txnSpend, remainingCardCap, remainingSubcategoryCap);
-            if (spendContribution <= 0) {
-              continue;
-            }
-
-            subCountedBeforeBlocks += spendContribution;
-            const blockResult = applyBlock(spendContribution, blockSize);
-            subCounted += blockResult.amount;
-            countedBlocks += blockResult.blocks;
-
-            if (hasCardCap) {
-              remainingCardCap = Math.max(0, remainingCardCap - blockResult.amount);
-            }
-            if (maximumAllowed) {
-              remainingSubcategoryCap = Math.max(
-                0,
-                remainingSubcategoryCap - blockResult.amount,
-              );
-            }
-
-            const constrained = this.calculateTransactionReward(
-              spendContribution,
-              card,
-              settings,
-              { flagColor: transaction.flag_color },
-            );
-            transactionRewards[transaction.id] = !subMinimumMet && constrained.reward > 0
-              ? {
-                  ...constrained,
-                  reward: 0,
-                  rewardDollars: 0,
-                  reason: 'below_minimum',
-                }
-              : constrained;
-          }
-
-          countedSpend += subCounted;
-
-          if (subMinimumMet) {
-            subEligibleBeforeBlocks = subCountedBeforeBlocks;
-            subEligible = subCounted;
-            blocksEarned = countedBlocks;
-          }
+        if (remainingCardCap <= 0 || tier.remainingCap <= 0) {
+          const standalone = transactionRewards[transaction.id];
+          transactionRewards[transaction.id] = {
+            ...standalone,
+            reward: 0,
+            rewardDollars: 0,
+            reason: 'cap_reached',
+          };
+          continue;
         }
 
-        if (subMinimumMet && rewardRate > 0 && totalForSubcategory > 0) {
+        const transactionSpend = Math.abs(transaction.amount) / 1000;
+        const spendContribution = Math.min(
+          transactionSpend,
+          remainingCardCap,
+          tier.remainingCap,
+        );
+        const blockResult = applyBlock(spendContribution, tier.blockSize);
+        tier.countedBeforeBlocks += spendContribution;
+        tier.counted += blockResult.amount;
+        tier.blocks += blockResult.blocks;
+        if (hasCardCap) {
+          remainingCardCap = Math.max(0, remainingCardCap - blockResult.amount);
+        }
+        if (tier.maximum) {
+          tier.remainingCap = Math.max(0, tier.remainingCap - blockResult.amount);
+        }
+
+        const constrained = this.calculateTransactionReward(
+          spendContribution,
+          card,
+          settings,
+          { flagColor: transaction.flag_color },
+        );
+        transactionRewards[transaction.id] = !tier.minimumMet && constrained.reward > 0
+          ? {
+              ...constrained,
+              reward: 0,
+              rewardDollars: 0,
+              reason: 'below_minimum',
+            }
+          : constrained;
+      }
+
+      const cardCapHit = hasCardCap && remainingCardCap <= 0;
+      subcategoryBreakdowns = context.activeSubcategories.map((subcategory) => {
+        const tier = tierStates.get(subcategory.id)!;
+        const tierEligibleBeforeBlocks = tier.minimumMet ? tier.countedBeforeBlocks : 0;
+        const tierEligible = tier.minimumMet ? tier.counted : 0;
+        let tierReward = 0;
+        let tierRewardDollars = 0;
+        if (tier.minimumMet && tier.rewardRate > 0 && tierEligible > 0) {
           if (card.type === 'cashback') {
-            subReward = subEligible * (rewardRate / 100);
-            subRewardDollars = subReward;
+            tierReward = tierEligible * (tier.rewardRate / 100);
+            tierRewardDollars = tierReward;
           } else {
-            subReward = subEligible * rewardRate;
-            subRewardDollars = subReward * milesValuation;
+            tierReward = tierEligible * tier.rewardRate;
+            tierRewardDollars = tierReward * milesValuation;
           }
-
-          eligibleSpendBeforeBlocks += subEligibleBeforeBlocks;
-          eligibleSpend += subEligible;
-          rewardEarned += subReward;
-          rewardEarnedDollars += subRewardDollars;
         }
 
-        const cardCapHit = hasCardCap && remainingCardCap <= 0;
-        const subMaxExceeded = maximumAllowed ? subCounted >= maximumAllowed : false;
+        countedSpend += tier.counted;
+        eligibleSpendBeforeBlocks += tierEligibleBeforeBlocks;
+        eligibleSpend += tierEligible;
+        rewardEarned += tierReward;
+        rewardEarnedDollars += tierRewardDollars;
 
-        subcategoryBreakdowns.push({
+        return {
           id: subcategory.id,
           name: subcategory.name,
           flagColor: subcategory.flagColor,
-          totalSpend: totalForSubcategory,
-          countedSpend: subCounted,
-          eligibleSpendBeforeBlocks: subEligibleBeforeBlocks,
-          eligibleSpend: subEligible,
-          rewardRate,
-          rewardEarned: subReward,
-          rewardEarnedDollars: subRewardDollars,
-          minimumSpend: minimumNeeded,
-          minimumSpendMet: subMinimumMet,
-          maximumSpend: maximumAllowed,
-          maximumSpendExceeded: subMaxExceeded || cardCapHit,
-          blockSize,
-          blocksEarned: blocksEarned || undefined,
+          totalSpend: tier.total,
+          countedSpend: tier.counted,
+          eligibleSpendBeforeBlocks: tierEligibleBeforeBlocks,
+          eligibleSpend: tierEligible,
+          rewardRate: tier.rewardRate,
+          rewardEarned: tierReward,
+          rewardEarnedDollars: tierRewardDollars,
+          minimumSpend: tier.minimum,
+          minimumSpendMet: tier.minimumMet,
+          maximumSpend: tier.maximum,
+          maximumSpendExceeded: (
+            tier.maximum !== null && tier.counted >= tier.maximum
+          ) || (!subcategory.excludeFromRewards && cardCapHit),
+          blockSize: tier.blockSize,
+          blocksEarned: tier.minimumMet && tier.blocks > 0 ? tier.blocks : undefined,
           active: subcategory.active !== false,
-          excluded: false,
-        });
-      }
+          excluded: Boolean(subcategory.excludeFromRewards),
+        };
+      });
     } else {
       if (typeof card.earningRate === 'number') {
         const hasCardCap = typeof maximumSpend === 'number' && maximumSpend !== null && maximumSpend > 0;

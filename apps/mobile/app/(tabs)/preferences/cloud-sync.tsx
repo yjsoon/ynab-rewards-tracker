@@ -145,16 +145,22 @@ export default function CloudSyncScreen() {
         'Restore encrypted settings?',
         `The backup from ${new Date(restored.updatedAt).toLocaleString()} contains ${payload.cards.length} card${payload.cards.length === 1 ? '' : 's'}. It will replace local card configuration; your YNAB token stays on this iPhone.`,
         [
-          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Cancel',
+            style: 'cancel',
+            onPress: () => setOperation(undefined),
+          },
           {
             text: 'Restore',
             onPress: () => {
-              void applyRestore(payload, restored).catch((error: unknown) => {
-                setMessage({
-                  text: error instanceof Error ? error.message : 'Couldn’t restore settings',
-                  tone: 'attention',
-                });
-              });
+              void applyRestore(payload, restored)
+                .catch((error: unknown) => {
+                  setMessage({
+                    text: error instanceof Error ? error.message : 'Couldn’t restore settings',
+                    tone: 'attention',
+                  });
+                })
+                .finally(() => setOperation(undefined));
             },
           },
         ],
@@ -164,7 +170,6 @@ export default function CloudSyncScreen() {
         text: error instanceof Error ? error.message : 'Couldn’t restore from Cloud Sync',
         tone: 'attention',
       });
-    } finally {
       setOperation(undefined);
     }
   };

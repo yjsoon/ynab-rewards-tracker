@@ -78,7 +78,7 @@ export function shouldRefreshDashboardCache(
   now = new Date(),
   freshWindowMs = DASHBOARD_CACHE_FRESH_WINDOW_MS,
 ): boolean {
-  if (!entry || entry.sinceDate > requiredSinceDate) {
+  if (!entry || entry.requiresFullRefresh === true || entry.sinceDate > requiredSinceDate) {
     return true;
   }
 

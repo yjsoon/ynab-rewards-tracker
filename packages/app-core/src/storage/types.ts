@@ -63,6 +63,7 @@ export interface DashboardTransactionsCachePayload {
   fetchedAt: string;
   trackedAccountIds: string[];
   isComplete?: boolean;
+  requiresFullRefresh?: boolean;
   transactions: Transaction[];
   accounts: Array<{ id: string; name: string }>;
 }
@@ -256,6 +257,7 @@ export interface DashboardTransactionsCacheEntry {
   fetchedAt: string;
   trackedAccountIds: string[];
   isComplete?: boolean;
+  requiresFullRefresh?: boolean;
   transactions: CachedTransaction[];
   accounts: Array<{ id: string; name: string }>;
 }

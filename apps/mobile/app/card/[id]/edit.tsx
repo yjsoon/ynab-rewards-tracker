@@ -581,7 +581,6 @@ export default function EditCardScreen() {
   const sourceCard = state.cards.find((card) => card.id === cardId);
   const [form, setForm] = useState<CardForm | undefined>(() => sourceCard ? createForm(sourceCard) : undefined);
   const initialisedCardIdRef = useRef<string | undefined>(sourceCard?.id);
-  const pendingRefreshSinceDateRef = useRef<string | undefined>(undefined);
   const [error, setError] = useState<string>();
   const [saving, setSaving] = useState(false);
   const accountName = useMemo(
@@ -697,12 +696,8 @@ export default function EditCardScreen() {
         || (cacheEntry.isComplete === false && rewardConfigurationChanged)
       ),
     );
-    const refreshSinceDate = pendingRefreshSinceDateRef.current
-      && pendingRefreshSinceDateRef.current < nextPeriodStart
-      ? pendingRefreshSinceDateRef.current
-      : nextPeriodStart;
     const needsFullPeriodRefresh = newlyRequiresFullPeriodRefresh
-      || Boolean(pendingRefreshSinceDateRef.current);
+      || cacheEntry?.requiresFullRefresh === true;
     const canRefresh = Boolean(
       state.pat && state.selectedBudget.id && state.trackedAccountIds.length > 0,
     );
@@ -711,12 +706,22 @@ export default function EditCardScreen() {
       await actions.setCards(nextCards);
       cardSaved = true;
       if (needsFullPeriodRefresh) {
-        pendingRefreshSinceDateRef.current = refreshSinceDate;
+        if (cacheEntry && cacheEntry.requiresFullRefresh !== true) {
+          await actions.setDashboardCachedData({
+            budgetId: cacheEntry.budgetId,
+            sinceDate: cacheEntry.sinceDate,
+            fetchedAt: cacheEntry.fetchedAt,
+            trackedAccountIds: cacheEntry.trackedAccountIds,
+            isComplete: cacheEntry.isComplete,
+            requiresFullRefresh: true,
+            transactions: cacheEntry.transactions,
+            accounts: cacheEntry.accounts,
+          });
+        }
         if (!canRefresh) {
           throw new Error('YNAB connection required for reward refresh');
         }
-        await actions.syncBudgetsAndAccounts({ sinceDate: refreshSinceDate });
-        pendingRefreshSinceDateRef.current = undefined;
+        await actions.syncBudgetsAndAccounts({ sinceDate: nextPeriodStart });
       }
       notification('success');
       router.back();

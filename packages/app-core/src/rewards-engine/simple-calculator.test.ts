@@ -122,7 +122,27 @@ describe('SimpleRewardsCalculator.calculateCardRewards', () => {
     });
   });
 
-  it('attributes capped rewards to transactions in reward-tier priority order', () => {
+  it('treats an unmatched flag as non-earning when no fallback tier exists', () => {
+    const card = createMilesCardWithSubcategories();
+    const transaction = {
+      ...createTransaction('unmatched', -10_000),
+      flag_color: 'orange' as const,
+    };
+    const calculation = SimpleRewardsCalculator.calculateCardRewards(
+      card,
+      [transaction],
+      period,
+    );
+
+    expect(calculation.rewardEarned).toBe(0);
+    expect(calculation.transactionRewards.unmatched).toMatchObject({
+      reward: 0,
+      rewardRate: 0,
+      reason: 'zero_rate',
+    });
+  });
+
+  it('attributes a shared card cap chronologically across reward tiers', () => {
     const card: CreditCard = {
       ...createMilesCardWithSubcategories(),
       maximumSpend: 10,
@@ -143,8 +163,12 @@ describe('SimpleRewardsCalculator.calculateCardRewards', () => {
       ],
     };
     const transactions = [
-      { ...createTransaction('later-txn', -10_000), flag_color: 'orange' as const },
-      createTransaction('priority-txn', -10_000),
+      { ...createTransaction('later-priority-txn', -10_000), date: '2026-02-20' },
+      {
+        ...createTransaction('older-lower-priority-txn', -10_000),
+        date: '2026-02-05',
+        flag_color: 'orange' as const,
+      },
     ];
 
     const calculation = SimpleRewardsCalculator.calculateCardRewards(
@@ -153,11 +177,11 @@ describe('SimpleRewardsCalculator.calculateCardRewards', () => {
       period,
     );
 
-    expect(calculation.rewardEarned).toBe(40);
-    expect(calculation.transactionRewards['priority-txn']).toMatchObject({
-      reward: 40,
+    expect(calculation.rewardEarned).toBe(20);
+    expect(calculation.transactionRewards['older-lower-priority-txn']).toMatchObject({
+      reward: 20,
     });
-    expect(calculation.transactionRewards['later-txn']).toMatchObject({
+    expect(calculation.transactionRewards['later-priority-txn']).toMatchObject({
       reward: 0,
       reason: 'cap_reached',
     });
