@@ -68,6 +68,29 @@ type TransactionRewardOptions = {
   flagColor?: string | null;
 };
 
+export type TransactionRewardReason =
+  | 'excluded'
+  | 'zero_amount'
+  | 'zero_rate'
+  | 'below_block';
+
+export interface TransactionRewardBlock {
+  size: number;
+  count: number;
+  eligibleAmount: number;
+  remainder: number;
+}
+
+export interface TransactionRewardResult {
+  reward: number;
+  rewardDollars: number;
+  rewardRate: number;
+  block?: TransactionRewardBlock;
+  /** @deprecated Prefer the structured `block` value and format it in the UI. */
+  blockInfo?: string;
+  reason?: TransactionRewardReason;
+}
+
 export class SimpleRewardsCalculator {
   /**
    * Calculate reward for a single transaction based on card settings
@@ -77,19 +100,60 @@ export class SimpleRewardsCalculator {
     card: CreditCard,
     settings?: AppSettings,
     options?: TransactionRewardOptions
-  ): { reward: number; rewardDollars: number; blockInfo?: string; rewardRate: number } {
-    const milesValuation = settings?.milesValuation || 0.01;
+  ): TransactionRewardResult {
+    const milesValuation = settings?.milesValuation ?? 0.01;
     const context = createSubcategoryContext(card);
     const flagColour = normaliseFlagColor(options?.flagColor);
     const subcategory = resolveSubcategory(context, flagColour);
 
+    if (subcategory?.excludeFromRewards) {
+      return {
+        reward: 0,
+        rewardDollars: 0,
+        rewardRate: 0,
+        reason: 'excluded',
+      };
+    }
+
     const rewardRate = getRewardRate(card, subcategory);
-    if (!rewardRate || rewardRate === 0) {
-      return { reward: 0, rewardDollars: 0, rewardRate: 0 };
+    if (amount <= 0) {
+      return {
+        reward: 0,
+        rewardDollars: 0,
+        rewardRate,
+        reason: 'zero_amount',
+      };
+    }
+
+    if (rewardRate <= 0) {
+      return {
+        reward: 0,
+        rewardDollars: 0,
+        rewardRate,
+        reason: 'zero_rate',
+      };
     }
 
     const blockSize = getBlockSize(card, subcategory);
     const { amount: earnableAmount, blocks } = applyBlock(amount, blockSize);
+    const block = blockSize
+      ? {
+          size: blockSize,
+          count: blocks,
+          eligibleAmount: earnableAmount,
+          remainder: Math.max(0, amount - earnableAmount),
+        }
+      : undefined;
+
+    if (block && blocks === 0) {
+      return {
+        reward: 0,
+        rewardDollars: 0,
+        rewardRate,
+        block,
+        reason: 'below_block',
+      };
+    }
 
     let reward = 0;
     let rewardDollars = 0;
@@ -104,7 +168,7 @@ export class SimpleRewardsCalculator {
 
     const blockInfo = blockSize && blocks > 0 ? `${blocks} block${blocks !== 1 ? 's' : ''} × $${blockSize}` : undefined;
 
-    return { reward, rewardDollars, blockInfo, rewardRate };
+    return { reward, rewardDollars, block, blockInfo, rewardRate };
   }
 
   /**
@@ -126,7 +190,7 @@ export class SimpleRewardsCalculator {
     period: CalculationPeriod,
     settings?: AppSettings
   ): SimplifiedCalculation {
-    const milesValuation = settings?.milesValuation || 0.01;
+    const milesValuation = settings?.milesValuation ?? 0.01;
     const context = createSubcategoryContext(card);
 
     const periodTransactions = transactions.filter((txn) => {
@@ -141,13 +205,10 @@ export class SimpleRewardsCalculator {
       for (const txn of periodTransactions) {
         const flagColour = normaliseFlagColor(txn.flag_color);
         const subcategory = resolveSubcategory(context, flagColour);
-
-        if (subcategory?.excludeFromRewards) {
-          continue;
-        }
-
         const txnSpend = Math.abs(txn.amount) / 1000;
-        totalSpend += txnSpend;
+        if (!subcategory?.excludeFromRewards) {
+          totalSpend += txnSpend;
+        }
 
         const effectiveFlag = subcategory?.flagColor ?? UNFLAGGED_FLAG.value;
         const prev = spendByFlag.get(effectiveFlag);
@@ -249,10 +310,13 @@ export class SimpleRewardsCalculator {
             countedBlocks += blockResult.blocks;
 
             if (hasCardCap) {
-              remainingCardCap = Math.max(0, remainingCardCap - spendContribution);
+              remainingCardCap = Math.max(0, remainingCardCap - blockResult.amount);
             }
             if (maximumAllowed) {
-              remainingSubcategoryCap = Math.max(0, remainingSubcategoryCap - spendContribution);
+              remainingSubcategoryCap = Math.max(
+                0,
+                remainingSubcategoryCap - blockResult.amount,
+              );
             }
           }
 
@@ -281,7 +345,7 @@ export class SimpleRewardsCalculator {
         }
 
         const cardCapHit = hasCardCap && remainingCardCap <= 0;
-        const subMaxExceeded = maximumAllowed ? totalForSubcategory >= maximumAllowed : false;
+        const subMaxExceeded = maximumAllowed ? subCounted >= maximumAllowed : false;
 
         subcategoryBreakdowns.push({
           id: subcategory.id,
@@ -305,7 +369,7 @@ export class SimpleRewardsCalculator {
         });
       }
     } else {
-      if (card.earningRate) {
+      if (typeof card.earningRate === 'number') {
         const hasCardCap = typeof maximumSpend === 'number' && maximumSpend !== null && maximumSpend > 0;
         const spendCap = hasCardCap ? maximumSpend! : Number.POSITIVE_INFINITY;
         let remainingCap = spendCap;
@@ -333,7 +397,7 @@ export class SimpleRewardsCalculator {
             eligibleSpend += earnablePortion;
           }
 
-          remainingCap -= spendContribution;
+          remainingCap -= earnablePortion;
         }
 
         if (minimumSpendMet && eligibleSpend > 0) {

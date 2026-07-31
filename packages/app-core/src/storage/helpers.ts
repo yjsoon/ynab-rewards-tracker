@@ -5,6 +5,7 @@
  */
 
 import type {
+  RewardCalculation,
   Transaction,
   CachedTransaction,
   DashboardTransactionsCacheEntry,
@@ -163,6 +164,45 @@ export function normalizePeriod(period: string): {
 
   const [start, end] = period.split(' → ');
   return { start, end };
+}
+
+/**
+ * Serializes a calculation period without losing its exact date boundaries.
+ */
+export function formatCalculationPeriod(period: {
+  start: string;
+  end: string;
+}): string {
+  return `${period.start} → ${period.end}`;
+}
+
+function createCalculationIdentity(calculation: RewardCalculation): string {
+  const period = normalizePeriod(calculation.period);
+  return JSON.stringify([
+    calculation.cardId,
+    calculation.ruleId ?? null,
+    period.start,
+    period.end,
+  ]);
+}
+
+/**
+ * Replaces calculations with the same card, rule, and exact period while
+ * retaining historical calculations for other periods.
+ */
+export function mergeRewardCalculations(
+  existing: readonly RewardCalculation[],
+  replacements: readonly RewardCalculation[]
+): RewardCalculation[] {
+  if (replacements.length === 0) {
+    return [...existing];
+  }
+
+  const replacementKeys = new Set(replacements.map(createCalculationIdentity));
+  return [
+    ...existing.filter((calculation) => !replacementKeys.has(createCalculationIdentity(calculation))),
+    ...replacements,
+  ];
 }
 
 /**

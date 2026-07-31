@@ -4,7 +4,6 @@ const STORAGE_PREFIX = 'ynab-rewards-tracker:';
 
 /**
  * AsyncStorage wrapper with typed helpers and namespace isolation
- * Note: PAT storage will be migrated to SecureStore in Phase 5 for better security
  */
 export class AsyncStorageService {
   private static getKey(key: string): string {
@@ -18,7 +17,7 @@ export class AsyncStorageService {
       if (__DEV__) {
         console.error(`AsyncStorageService.getString failed for key: ${key}`, error);
       }
-      return null;
+      throw error;
     }
   }
 
@@ -50,7 +49,7 @@ export class AsyncStorageService {
       const pairs = await AsyncStorage.multiGet(prefixedKeys);
       const result = {} as Record<TKey, string | null>;
       
-      pairs.forEach(([prefixedKey, value], index) => {
+      pairs.forEach(([, value], index) => {
         result[keys[index]] = value;
       });
       
@@ -59,7 +58,7 @@ export class AsyncStorageService {
       if (__DEV__) {
         console.error('AsyncStorageService.multiGet failed', error);
       }
-      return {} as Record<TKey, string | null>;
+      throw error;
     }
   }
 

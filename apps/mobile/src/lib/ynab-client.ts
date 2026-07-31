@@ -16,11 +16,18 @@ import type {
   YnabBudgetSummary,
   YnabAccountSummary,
   YnabTransactionSummary,
+  YnabTransactionFlagColor,
   YnabApiErrorCode,
 } from '@ynab-counter/ynab-client';
 
 // Re-export types for consumers
-export type { YnabBudgetSummary, YnabAccountSummary, YnabTransactionSummary, YnabApiErrorCode };
+export type {
+  YnabBudgetSummary,
+  YnabAccountSummary,
+  YnabTransactionSummary,
+  YnabTransactionFlagColor,
+  YnabApiErrorCode,
+};
 export { YnabApiError, isYnabApiError, createYnabError };
 
 // Mobile-specific configuration
@@ -70,5 +77,13 @@ export class YnabClient {
 
   async validateToken(): Promise<boolean> {
     return this.coreClient.validateToken();
+  }
+
+  async updateTransactionFlag(
+    budgetId: string,
+    transactionId: string,
+    flagColor: YnabTransactionFlagColor,
+  ): Promise<YnabTransactionSummary | undefined> {
+    return this.coreClient.updateTransactionFlag(budgetId, transactionId, flagColor);
   }
 }

@@ -8,12 +8,18 @@ import React, {
   useState,
   type ReactNode,
 } from 'react';
-import { normalizePeriod, storage } from '@/storage/service';
+import { storage } from '@/storage/service';
 import { ynabSync } from '@/lib/sync';
 import { fetchBudgets } from '@/lib/ynab-api';
+import { isYnabApiError } from '@/lib/ynab-client';
+import { createDemoStorageFixture } from '@/lib/demo-data';
 import { SimpleRewardsCalculator } from '@ynab-counter/app-core/rewards-engine';
 import { createRewardCalculationFromSimple } from '@ynab-counter/app-core/rewards-engine/utils/reward-calculation';
 import { getEarliestPeriodStart } from '@ynab-counter/app-core/rewards-engine/utils/periods';
+import {
+  formatCalculationPeriod,
+  mergeRewardCalculations,
+} from '@ynab-counter/app-core/storage';
 import type {
   AppSettings,
   CreditCard,
@@ -46,6 +52,7 @@ type StorageStatus = {
   isHydrated: boolean;
   isRefreshing: boolean;
   error?: Error;
+  refreshError?: Error;
 };
 
 type Metadata = {
@@ -113,6 +120,8 @@ type StorageContextValue = {
 const STORAGE_REFRESH_ERROR = 'Failed to refresh storage';
 const LOAD_ERROR_MESSAGE = 'Failed to load storage';
 const AUTO_CREATED_CARD_ISSUER = 'Unknown';
+const DEMO_MODE = __DEV__ && process.env.EXPO_PUBLIC_MOBILE_DEMO === '1';
+const DEMO_SYNC_DELAY_MS = 320;
 
 const defaultState: StorageState = {
   connectionStatus: 'disconnected',
@@ -138,6 +147,62 @@ const defaultStatus: StorageStatus = {
   isHydrated: false,
   isRefreshing: false,
 };
+
+function createDemoState(now = new Date()): StorageState {
+  return {
+    ...defaultState,
+    ...createDemoStorageFixture(now),
+    connectionStatus: 'connected',
+    isSyncing: false,
+    pending: undefined,
+    hasPendingChanges: false,
+    connectionError: undefined,
+  };
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error &&
+    (error.name === 'AbortError' || error.message.toLowerCase().includes('abort'));
+}
+
+function isConfirmedInvalidToken(error: unknown): boolean {
+  return isYnabApiError(error) && error.code === 'invalid_token';
+}
+
+function toCachedTransaction(transaction: YnabTransactionSummary): Transaction {
+  return {
+    id: transaction.id,
+    date: transaction.date,
+    amount: transaction.amount,
+    account_id: transaction.account_id,
+    payee_name: transaction.payee_name ?? null,
+    category_name: transaction.category_name ?? null,
+    memo: transaction.memo ?? null,
+    cleared: transaction.cleared ?? null,
+    approved: transaction.approved ?? false,
+    flag_color: transaction.flag_color ?? null,
+    flag_name: transaction.flag_name ?? null,
+  };
+}
+
+function withoutConnection(state: StorageState): StorageState {
+  return {
+    ...state,
+    pat: undefined,
+    connectionStatus: 'disconnected',
+    isSyncing: false,
+    connectionError: undefined,
+    selectedBudget: {},
+    trackedAccountIds: [],
+    pending: undefined,
+    hasPendingChanges: false,
+    calculations: [],
+    cachedData: undefined,
+    budgets: [],
+    accounts: [],
+    metadata: {},
+  };
+}
 
 const noopActions: StorageActions = {
   refresh: async () => {},
@@ -226,46 +291,6 @@ async function hydrate(): Promise<StorageState> {
   };
 }
 
-function mergeDashboardCache(
-  existing: StorageData['cachedData'] | undefined,
-  payload: DashboardTransactionsCachePayload,
-): StorageData['cachedData'] {
-  const entry: DashboardTransactionsCacheEntry = {
-    budgetId: payload.budgetId,
-    sinceDate: payload.sinceDate,
-    fetchedAt: payload.fetchedAt,
-    trackedAccountIds: [...payload.trackedAccountIds],
-    transactions: payload.transactions.map((txn) => ({
-      id: txn.id,
-      date: txn.date,
-      amount: txn.amount,
-      account_id: txn.account_id,
-      payee_name: txn.payee_name ?? null,
-      category_name: txn.category_name ?? null,
-      memo: txn.memo ?? null,
-      cleared: txn.cleared ?? null,
-      approved: txn.approved ?? false,
-      flag_color: txn.flag_color ?? null,
-      flag_name: txn.flag_name ?? null,
-    })),
-    accounts: payload.accounts,
-  };
-
-  const existingEntries = existing?.dashboardTransactions ?? [];
-  const incomingKey = `${entry.budgetId}::${entry.sinceDate}::${entry.trackedAccountIds.join(',')}`;
-  const filtered = existingEntries.filter((candidate) => {
-    const candidateKey = `${candidate.budgetId}::${candidate.sinceDate}::${candidate.trackedAccountIds.join(',')}`;
-    return candidateKey !== incomingKey;
-  });
-
-  filtered.unshift(entry);
-
-  return {
-    ...(existing ?? {}),
-    dashboardTransactions: filtered,
-  };
-}
-
 export function StorageProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<StorageState>(defaultState);
   const [status, setStatus] = useState<StorageStatus>(defaultStatus);
@@ -275,12 +300,37 @@ export function StorageProvider({ children }: { children: ReactNode }) {
       options: SyncOptions = {},
       overrides: Partial<{ pat: string; selectedBudgetId?: string; trackedAccountIds: string[] }> = {},
     ) => {
+      if (DEMO_MODE) {
+        const attemptedAt = new Date().toISOString();
+        setState((prev) => ({
+          ...prev,
+          isSyncing: true,
+          connectionStatus: 'connected',
+          connectionError: undefined,
+          metadata: {
+            ...prev.metadata,
+            lastAttemptedSync: attemptedAt,
+          },
+        }));
+        setStatus((prev) => ({
+          ...prev,
+          refreshError: undefined,
+        }));
+
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, DEMO_SYNC_DELAY_MS);
+        });
+
+        setState(createDemoState(new Date()));
+        setStatus({ isHydrated: true, isRefreshing: false });
+        return;
+      }
+
       const pat = overrides.pat ?? state.pat;
       const selectedBudgetId = overrides.selectedBudgetId ?? state.selectedBudget.id;
       const trackedAccountIds = overrides.trackedAccountIds ?? state.trackedAccountIds;
 
       if (!pat) {
-        console.log('[StorageContext] performSync: no PAT available, skipping sync');
         setState((prev) => ({
           ...prev,
           connectionStatus: 'disconnected',
@@ -291,7 +341,6 @@ export function StorageProvider({ children }: { children: ReactNode }) {
       }
 
       if (!selectedBudgetId) {
-        console.log('[StorageContext] performSync: no budget selected, setting awaiting_budget');
         setState((prev) => ({
           ...prev,
           connectionStatus: 'awaiting_budget',
@@ -300,12 +349,6 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         }));
         return;
       }
-
-      console.log('[StorageContext] performSync: begin', {
-        selectedBudgetId,
-        trackedCount: trackedAccountIds.length,
-        sinceDate: options.sinceDate,
-      });
 
       setState((prev) => ({
         ...prev,
@@ -326,7 +369,10 @@ export function StorageProvider({ children }: { children: ReactNode }) {
           skipTransactions: options.skipTransactions,
         });
 
-        let nextSelectedBudget: SelectedBudget = state.selectedBudget;
+        let nextSelectedBudget: SelectedBudget =
+          state.selectedBudget.id === selectedBudgetId
+            ? state.selectedBudget
+            : { id: selectedBudgetId };
         if (result.budgetId && result.budgetId !== selectedBudgetId) {
           const matched = result.budgets.find((budget) => budget.id === result.budgetId);
           if (matched) {
@@ -344,22 +390,11 @@ export function StorageProvider({ children }: { children: ReactNode }) {
 
         let nextCachedData = state.cachedData;
         const effectiveBudgetId = nextSelectedBudget.id;
-        let transactionsPayload: Transaction[] = [];
-        if (effectiveBudgetId) {
-          transactionsPayload = result.transactions.map((txn) => ({
-            id: txn.id,
-            date: txn.date,
-            amount: txn.amount,
-            account_id: txn.account_id,
-            payee_name: txn.payee_name ?? null,
-            category_name: txn.category_name ?? null,
-            memo: txn.memo ?? null,
-            cleared: txn.cleared ?? null,
-            approved: txn.approved ?? false,
-            flag_color: txn.flag_color ?? null,
-            flag_name: txn.flag_name ?? null,
-          })) as Transaction[];
+        const transactionsPayload = result.transactions.map(toCachedTransaction);
 
+        // Account-only bootstrap syncs intentionally return no transactions.
+        // Do not let that synthetic empty result evict a useful dashboard cache.
+        if (effectiveBudgetId && !options.skipTransactions) {
           const payload: DashboardTransactionsCachePayload = {
             budgetId: effectiveBudgetId,
             sinceDate: options.sinceDate ?? new Date().toISOString().split('T')[0],
@@ -370,51 +405,14 @@ export function StorageProvider({ children }: { children: ReactNode }) {
           };
 
           await storage.setDashboardTransactionsCache(payload);
-          nextCachedData = mergeDashboardCache(state.cachedData, payload);
-        } else {
-          transactionsPayload = result.transactions.map((txn) => ({
-            id: txn.id,
-            date: txn.date,
-            amount: txn.amount,
-            account_id: txn.account_id,
-            payee_name: txn.payee_name ?? null,
-            category_name: txn.category_name ?? null,
-            memo: txn.memo ?? null,
-            cleared: txn.cleared ?? null,
-            approved: txn.approved ?? false,
-            flag_color: txn.flag_color ?? null,
-            flag_name: txn.flag_name ?? null,
-          })) as Transaction[];
+          nextCachedData = await storage.getCachedData();
         }
 
-        // Only recalculate rewards if transactions were actually fetched
-        // When skipTransactions is true, preserve existing calculations instead of overwriting with zeros
-        const calculatedRewards = options.skipTransactions ? [] : state.cards.map((card) => {
-          if (!card.ynabAccountId) {
-            return null;
-          }
-          const period = SimpleRewardsCalculator.calculatePeriod(card);
-          const cardTransactions = transactionsPayload.filter((txn) => txn.account_id === card.ynabAccountId);
-          const calculation = SimpleRewardsCalculator.calculateCardRewards(card, cardTransactions, period, state.settings);
-          return createRewardCalculationFromSimple(card, calculation);
-        }).filter((value): value is RewardCalculation => Boolean(value));
-
-        if (calculatedRewards.length > 0) {
-          await Promise.all(calculatedRewards.map((entry) => storage.saveCalculation(entry)));
-        }
-
-        const mergedCalculations = (() => {
-          if (calculatedRewards.length === 0) {
-            return state.calculations;
-          }
-          const replacementKeys = new Set(calculatedRewards.map((entry) => `${entry.cardId}::${entry.period}`));
-          const preserved = state.calculations.filter((entry) => !replacementKeys.has(`${entry.cardId}::${entry.period}`));
-          return [...preserved, ...calculatedRewards];
-        })();
-
-        // Auto-create cards from tracked accounts (similar to web app)
+        // Create tracked cards before calculating so first sync produces useful
+        // calculations for the cards it just discovered.
+        const storedCards = await storage.getCards();
         const cardsByAccountId = new Map(
-          state.cards.filter((c): c is CreditCard & { ynabAccountId: string } => Boolean(c.ynabAccountId))
+          storedCards.filter((c): c is CreditCard & { ynabAccountId: string } => Boolean(c.ynabAccountId))
             .map((card) => [card.ynabAccountId, card] as const)
         );
 
@@ -446,16 +444,42 @@ export function StorageProvider({ children }: { children: ReactNode }) {
           }
         });
 
+        let updatedCards = storedCards;
         if (newCards.length > 0) {
-          await Promise.all(newCards.map((card) => storage.saveCard(card)));
-          console.log('[StorageContext] performSync: created cards from accounts', {
-            count: newCards.length,
-            cards: newCards.map((c) => ({ id: c.id, name: c.name })),
-          });
+          const replacement = await storage.replaceCards([...storedCards, ...newCards]);
+          updatedCards = replacement.cards;
         }
 
-        // Reload cards after potential creation
-        const updatedCards = await storage.getCards();
+        let mergedCalculations = await storage.getCalculations();
+        if (!options.skipTransactions) {
+          const calculatedRewards = updatedCards.map((card) => {
+            if (!card.ynabAccountId) {
+              return null;
+            }
+            const period = SimpleRewardsCalculator.calculatePeriod(card);
+            const cardTransactions = transactionsPayload.filter(
+              (txn) => txn.account_id === card.ynabAccountId,
+            );
+            const calculation = SimpleRewardsCalculator.calculateCardRewards(
+              card,
+              cardTransactions,
+              period,
+              state.settings,
+            );
+            return {
+              ...createRewardCalculationFromSimple(card, calculation),
+              period: formatCalculationPeriod(period),
+            };
+          }).filter((value): value is RewardCalculation => Boolean(value));
+
+          if (calculatedRewards.length > 0) {
+            mergedCalculations = mergeRewardCalculations(
+              mergedCalculations,
+              calculatedRewards,
+            );
+            mergedCalculations = await storage.replaceCalculations(mergedCalculations);
+          }
+        }
 
         setState((prev) => ({
           ...prev,
@@ -477,56 +501,55 @@ export function StorageProvider({ children }: { children: ReactNode }) {
             accountsBudgetId: effectiveBudgetId,
           },
         }));
-        console.log('[StorageContext] performSync: success', {
-          budgetId: nextSelectedBudget.id,
-          budgets: result.budgets.length,
-          accounts: result.accounts.length,
-          transactions: result.transactions.length,
-        });
       } catch (error) {
-        const isAbortError =
-          error instanceof Error &&
-          (error.name === 'AbortError' || error.message.toLowerCase().includes('abort'));
-
-        if (isAbortError) {
-          console.log('[StorageContext] performSync: aborted (user cancelled)', error);
+        if (isAbortError(error)) {
           setState((prev) => ({
             ...prev,
-            connectionStatus: pat ? prev.connectionStatus : 'disconnected',
+            connectionStatus: pat
+              ? (prev.selectedBudget.id ? 'connected' : 'awaiting_budget')
+              : 'disconnected',
             isSyncing: false,
             connectionError: undefined,
-          }));
-          setStatus((prev) => ({
-            ...prev,
-            error: undefined,
           }));
           return;
         }
 
-        // Non-abort errors: preserve existing behavior
         const message = error instanceof Error ? error.message : 'Failed to sync with YNAB';
-        setState((prev) => ({
-          ...prev,
-          connectionStatus: 'error',
-          isSyncing: false,
-          connectionError: message,
-        }));
-        setStatus((prev) => ({
-          ...prev,
-          error: error instanceof Error ? error : new Error(message),
-        }));
         const failure = error instanceof Error ? error : new Error(message);
-        console.error('[StorageContext] performSync: failed', failure);
+
+        if (isConfirmedInvalidToken(error)) {
+          try {
+            await storage.clearPAT();
+          } catch (cleanupError) {
+            if (__DEV__) {
+              console.error('Failed to clear an invalid YNAB token', cleanupError);
+            }
+          }
+          setState((prev) => ({
+            ...withoutConnection(prev),
+            connectionError: message,
+          }));
+        } else {
+          setState((prev) => ({
+            ...prev,
+            connectionStatus: 'error',
+            isSyncing: false,
+            connectionError: message,
+          }));
+        }
+
+        if (__DEV__) {
+          console.error('[StorageContext] performSync: failed', failure);
+        }
         throw failure;
       }
     },
-    [state.cachedData, state.pat, state.selectedBudget, state.trackedAccountIds, state.cards, state.calculations, state.settings],
+    [state.cachedData, state.pat, state.selectedBudget, state.trackedAccountIds, state.settings],
   );
 
   const initialiseConnection = useCallback(
     async (pat: string, trackedAccountIds: string[], selectedBudgetId?: string) => {
       if (!pat) {
-        console.log('[StorageContext] initialiseConnection: skipped (no PAT)');
         setState((prev) => ({
           ...prev,
           connectionStatus: 'disconnected',
@@ -536,10 +559,6 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      console.log('[StorageContext] initialiseConnection: begin', {
-        hasSelectedBudget: Boolean(selectedBudgetId),
-        trackedCount: trackedAccountIds.length,
-      });
       setState((prev) => ({
         ...prev,
         pat,
@@ -558,6 +577,9 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         }
 
         if (!nextBudget) {
+          if (selectedBudgetId) {
+            await storage.clearBudgetSelection();
+          }
           setState((prev) => ({
             ...prev,
             pat,
@@ -567,7 +589,6 @@ export function StorageProvider({ children }: { children: ReactNode }) {
             connectionStatus: 'awaiting_budget',
             connectionError: undefined,
           }));
-          console.log('[StorageContext] initialiseConnection: waiting for budget selection');
           return;
         }
 
@@ -587,19 +608,36 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Failed to connect to YNAB';
-        console.error('[StorageContext] initialiseConnection: failed', error);
-        setState((prev) => ({
-          ...prev,
-          pat: undefined,
-          connectionStatus: 'error',
-          isSyncing: false,
-          connectionError: message,
-          selectedBudget: {},
-          budgets: [],
-          accounts: [],
-        }));
-        await storage.clearPAT();
-        throw error instanceof Error ? error : new Error(message);
+        const failure = error instanceof Error ? error : new Error(message);
+
+        if (isConfirmedInvalidToken(error)) {
+          try {
+            await storage.clearPAT();
+          } catch (cleanupError) {
+            if (__DEV__) {
+              console.error('Failed to clear an invalid YNAB token', cleanupError);
+            }
+          }
+          setState((prev) => ({
+            ...withoutConnection(prev),
+            connectionError: message,
+          }));
+        } else {
+          // Network, timeout, and rate-limit failures are recoverable. Keep the
+          // hydrated credential, selection, cards, calculations, and cache.
+          setState((prev) => ({
+            ...prev,
+            pat,
+            connectionStatus: 'error',
+            isSyncing: false,
+            connectionError: message,
+          }));
+        }
+
+        if (__DEV__) {
+          console.error('[StorageContext] initialiseConnection: failed', failure);
+        }
+        throw failure;
       }
     },
     [performSync],
@@ -614,21 +652,17 @@ export function StorageProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
 
     const bootstrap = async () => {
+      if (DEMO_MODE) {
+        setState(createDemoState());
+        setStatus({ isHydrated: true, isRefreshing: false });
+        return;
+      }
+
+      let hydrated: StorageState;
       try {
-        const hydrated = await hydrate();
+        hydrated = await hydrate();
         if (cancelled) {
           return;
-        }
-
-        setState(hydrated);
-        setStatus({ isHydrated: true, isRefreshing: false });
-
-        if (hydrated.pat) {
-          await initialiseConnectionRef.current(
-            hydrated.pat,
-            hydrated.trackedAccountIds,
-            hydrated.selectedBudget.id,
-          );
         }
       } catch (error) {
         if (cancelled) {
@@ -639,6 +673,23 @@ export function StorageProvider({ children }: { children: ReactNode }) {
           isRefreshing: false,
           error: error instanceof Error ? error : new Error(LOAD_ERROR_MESSAGE),
         });
+        return;
+      }
+
+      setState(hydrated);
+      setStatus({ isHydrated: true, isRefreshing: false });
+
+      if (hydrated.pat) {
+        try {
+          await initialiseConnectionRef.current(
+            hydrated.pat,
+            hydrated.trackedAccountIds,
+            hydrated.selectedBudget.id,
+          );
+        } catch {
+          // Connection errors are represented in state and remain retryable;
+          // hydrated local data must stay usable instead of becoming root-fatal.
+        }
       }
     };
 
@@ -650,7 +701,12 @@ export function StorageProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refresh = useCallback(async () => {
-      setStatus((prev) => ({ ...prev, isRefreshing: true, error: undefined }));
+    if (DEMO_MODE) {
+      await performSync();
+      return;
+    }
+
+    setStatus((prev) => ({ ...prev, isRefreshing: true, refreshError: undefined }));
     try {
       const next = await hydrate();
       setState((prev) => ({
@@ -659,61 +715,147 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         budgets: prev.budgets,
         accounts: prev.accounts,
       }));
+      setStatus((prev) => ({ ...prev, refreshError: undefined }));
     } catch (error) {
       setStatus((prev) => ({
         ...prev,
-        error: error instanceof Error ? error : new Error(STORAGE_REFRESH_ERROR),
+        refreshError: error instanceof Error ? error : new Error(STORAGE_REFRESH_ERROR),
       }));
     } finally {
       setStatus((prev) => ({ ...prev, isRefreshing: false }));
     }
-  }, []);
+  }, [performSync]);
+
+  // Demo actions are intentionally memory-only. This keeps simulator QA
+  // hermetic: no fixture values (including the invalid session credential)
+  // touch AsyncStorage, SecureStore, Cloud Sync, or YNAB.
+  const demoActions = useMemo<StorageActions>(
+    () => ({
+      ...noopActions,
+      refresh,
+      setPAT: async () => {
+        setState((prev) => ({
+          ...prev,
+          pat: createDemoStorageFixture().pat,
+          connectionStatus: 'connected',
+          connectionError: undefined,
+        }));
+      },
+      clearPAT: async () => {
+        setState(withoutConnection);
+      },
+      disconnect: async () => {
+        setState(withoutConnection);
+      },
+      setSelectedBudget: async (budgetId, budgetName) => {
+        setState((prev) => ({
+          ...prev,
+          selectedBudget: { id: budgetId, name: budgetName },
+          connectionError: undefined,
+        }));
+      },
+      setTrackedAccountIds: async (accountIds) => {
+        setState((prev) => ({ ...prev, trackedAccountIds: [...accountIds] }));
+      },
+      syncBudgetsAndAccounts: async () => {
+        await performSync();
+      },
+      stageBudgetSelection: (budgetId, budgetName) => {
+        setState((prev) => ({
+          ...prev,
+          pending: {
+            ...prev.pending,
+            budget: { id: budgetId, name: budgetName },
+          },
+          hasPendingChanges: true,
+        }));
+      },
+      stageTrackedAccountIds: (ids) => {
+        setState((prev) => ({
+          ...prev,
+          pending: {
+            ...prev.pending,
+            trackedAccountIds: [...new Set(ids)],
+          },
+          hasPendingChanges: true,
+        }));
+      },
+      applyPendingChanges: async () => {
+        setState((prev) => ({
+          ...prev,
+          selectedBudget: prev.pending?.budget ?? prev.selectedBudget,
+          trackedAccountIds: prev.pending?.trackedAccountIds ?? prev.trackedAccountIds,
+          pending: undefined,
+          hasPendingChanges: false,
+        }));
+      },
+      clearPendingChanges: () => {
+        setState((prev) => ({
+          ...prev,
+          pending: undefined,
+          hasPendingChanges: false,
+        }));
+      },
+      setSettings: async (settings) => {
+        setState((prev) => ({
+          ...prev,
+          settings: { ...prev.settings, ...settings },
+        }));
+      },
+      setCards: async (cards) => {
+        setState((prev) => ({ ...prev, cards: [...cards] }));
+      },
+      setRules: async (rules) => {
+        setState((prev) => ({ ...prev, rules: [...rules] }));
+      },
+      setTagMappings: async (tagMappings) => {
+        setState((prev) => ({ ...prev, tagMappings: [...tagMappings] }));
+      },
+      setCalculations: async (calculations) => {
+        setState((prev) => ({ ...prev, calculations: [...calculations] }));
+      },
+      setThemeGroups: async (themeGroups) => {
+        setState((prev) => ({ ...prev, themeGroups: [...themeGroups] }));
+      },
+      setHiddenCards: async (hiddenCards) => {
+        setState((prev) => ({ ...prev, hiddenCards: [...hiddenCards] }));
+      },
+      setDashboardCachedData: async (payload) => {
+        const entry: DashboardTransactionsCacheEntry = {
+          ...payload,
+          isComplete: true,
+          transactions: payload.transactions,
+        };
+        setState((prev) => ({
+          ...prev,
+          cachedData: {
+            ...(prev.cachedData ?? {}),
+            lastUpdated: payload.fetchedAt,
+            dashboardTransactions: [entry],
+          },
+        }));
+      },
+      pruneDashboardCache: async () => {},
+    }),
+    [performSync, refresh],
+  );
 
   const actions = useMemo<StorageActions>(
     () => ({
       refresh,
       setPAT: async (pat: string) => {
         const trimmed = pat.trim();
-        console.log('[StorageContext] setPAT: received PAT update');
         await storage.setPAT(trimmed);
         const storedSelection = await storage.getSelectedBudget();
-        console.log('[StorageContext] setPAT: stored selection', storedSelection);
         await initialiseConnection(trimmed, state.trackedAccountIds, storedSelection.id);
       },
       clearPAT: async () => {
         await storage.clearPAT();
-        setState((prev) => ({
-          ...prev,
-          pat: undefined,
-          connectionStatus: 'disconnected',
-          isSyncing: false,
-          connectionError: undefined,
-          selectedBudget: {},
-          trackedAccountIds: [],
-          pending: undefined,
-          hasPendingChanges: false,
-          budgets: [],
-          accounts: [],
-          cachedData: undefined,
-          metadata: {},
-        }));
+        setState(withoutConnection);
       },
       disconnect: async () => {
-        await storage.resetConnectionState();
-        setState((prev) => ({
-          ...prev,
-          connectionStatus: 'disconnected',
-          isSyncing: false,
-          connectionError: undefined,
-          selectedBudget: {},
-          trackedAccountIds: [],
-          pending: undefined,
-          hasPendingChanges: false,
-          budgets: [],
-          accounts: [],
-          cachedData: undefined,
-          metadata: {},
-        }));
+        await storage.clearPAT();
+        setState(withoutConnection);
       },
       setSelectedBudget: async (budgetId: string, budgetName: string) => {
         await storage.setSelectedBudget(budgetId, budgetName);
@@ -816,7 +958,6 @@ export function StorageProvider({ children }: { children: ReactNode }) {
 
         // If setup just completed, fetch transactions now
         if (wasSetupMode && nextBudget.id && nextTrackedIds.length > 0) {
-          console.log('[StorageContext] applyPendingChanges: setup completed, fetching transactions');
           // Get the newly created cards to calculate earliest period start
           const cards = await storage.getCards();
           await performSync({ skipTransactions: false, sinceDate: getEarliestPeriodStart(cards) }, {
@@ -844,52 +985,53 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         }));
       },
       setCards: async (cards) => {
-        await Promise.all(cards.map((card) => storage.saveCard(card)));
+        const replacement = await storage.replaceCards(cards);
         setState((prev) => ({
           ...prev,
-          cards,
+          ...replacement,
         }));
       },
       setRules: async (rules) => {
-        await Promise.all(rules.map((rule) => storage.saveRule(rule)));
+        const persisted = await storage.replaceRules(rules);
         setState((prev) => ({
           ...prev,
-          rules,
+          rules: persisted,
         }));
       },
       setTagMappings: async (mappings) => {
-        await Promise.all(mappings.map((mapping) => storage.saveTagMapping(mapping)));
+        const persisted = await storage.replaceTagMappings(mappings);
         setState((prev) => ({
           ...prev,
-          tagMappings: mappings,
+          tagMappings: persisted,
         }));
       },
       setCalculations: async (calculations) => {
-        await Promise.all(calculations.map((calculation) => storage.saveCalculation(calculation)));
+        const persisted = await storage.replaceCalculations(calculations);
         setState((prev) => ({
           ...prev,
-          calculations,
+          calculations: persisted,
         }));
       },
       setThemeGroups: async (groups) => {
-        await Promise.all(groups.map((group) => storage.saveThemeGroup(group)));
+        const persisted = await storage.replaceThemeGroups(groups);
         setState((prev) => ({
           ...prev,
-          themeGroups: groups,
+          themeGroups: persisted,
         }));
       },
       setHiddenCards: async (hiddenCards) => {
-        await Promise.all(hiddenCards.map((entry) => storage.hideCard(entry.cardId, entry.hiddenUntil, entry.reason)));
+        const persisted = await storage.replaceHiddenCards(hiddenCards);
         setState((prev) => ({
           ...prev,
-          hiddenCards,
+          hiddenCards: persisted,
         }));
       },
       setDashboardCachedData: async (payload) => {
         await storage.setDashboardTransactionsCache(payload);
+        const cachedData = await storage.getCachedData();
         setState((prev) => ({
           ...prev,
-          cachedData: mergeDashboardCache(prev.cachedData, payload),
+          cachedData,
         }));
       },
       pruneDashboardCache: async (ttlMs) => {
@@ -908,9 +1050,9 @@ export function StorageProvider({ children }: { children: ReactNode }) {
     () => ({
       status,
       state,
-      actions,
+      actions: DEMO_MODE ? demoActions : actions,
     }),
-    [actions, state, status],
+    [actions, demoActions, state, status],
   );
 
   return <StorageContext.Provider value={value}>{children}</StorageContext.Provider>;

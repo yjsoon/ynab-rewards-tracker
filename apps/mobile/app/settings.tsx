@@ -204,7 +204,7 @@ export default function SettingsScreen() {
     // Navigate immediately if in setup mode to avoid label change
     if (wasInSetupMode) {
       if (hadNoBackStack) {
-        router.replace('/(tabs)');
+        router.replace('/(tabs)/overview');
       } else {
         router.back();
       }
@@ -256,7 +256,7 @@ export default function SettingsScreen() {
   useFocusEffect(
     React.useCallback(() => {
       navigation.setOptions({
-        title: 'Settings',
+        title: 'YNAB connection',
         headerLargeTitle: false,
         headerBackVisible: !isSetupMode,
         gestureEnabled: !isSetupMode,

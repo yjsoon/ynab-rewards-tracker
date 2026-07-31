@@ -13,7 +13,6 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { RecommendationEngine } from '@ynab-counter/app-core/rewards-engine';
 import type { CardRecommendation } from '@ynab-counter/app-core/rewards-engine/types';
 import { useStorage } from '@/contexts/StorageContext';
-import { useCardSummaries } from './index';
 import { Card, ListItem, Headline, Body, Footnote, Caption1 } from '@/components/ios';
 import { semanticColors } from '@/theme/semanticColors';
 
@@ -31,17 +30,17 @@ function getActionDetails(action: CardRecommendation['action']): { label: string
 
 export default function RecommendationsScreen() {
   const navigation = useNavigation();
-  const { summaries, calculations, isLoading } = useCardSummaries();
   const { state, status } = useStorage();
+  const calculations = state.calculations;
+  const isLoading = !status.isHydrated || state.isSyncing;
 
   const recommendations = useMemo(() => {
-    if (calculations.length === 0 || summaries.length === 0) {
+    if (calculations.length === 0 || state.cards.length === 0) {
       return [] as CardRecommendation[];
     }
 
-    const cards = summaries.map((summary) => summary.card);
-    return RecommendationEngine.generateCardRecommendations(cards, calculations);
-  }, [calculations, summaries]);
+    return RecommendationEngine.generateCardRecommendations(state.cards, calculations);
+  }, [calculations, state.cards]);
 
   const infoMessage = isLoading
     ? 'Loading recommendations…'
@@ -121,11 +120,6 @@ export default function RecommendationsScreen() {
             })
           )}
 
-          <View style={styles.footer}>
-            <Footnote color="tertiary" style={styles.footerText}>
-              Recommendations powered by shared rewards engine
-            </Footnote>
-          </View>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -175,12 +169,5 @@ const styles = StyleSheet.create({
   },
   prioritylow: {
     backgroundColor: semanticColors.systemGreen,
-  },
-  footer: {
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-  footerText: {
-    textAlign: 'center',
   },
 });

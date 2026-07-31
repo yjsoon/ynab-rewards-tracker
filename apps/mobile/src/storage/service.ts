@@ -32,7 +32,6 @@ import type {
   DashboardTransactionsCacheEntry,
   DashboardTransactionsCachePayload,
   CachedTransaction,
-  Transaction,
 } from '@ynab-counter/app-core/storage';
 import type {
   MutableCard,
@@ -41,7 +40,10 @@ import type {
 } from '@ynab-counter/app-core/storage';
 
 const PAT_SECURE_STORE_KEY = 'ynab_counter_pat';
-const LEGACY_PAT_SECURE_STORE_KEY = 'ynab_counter_pat_legacy';
+const LEGACY_PAT_SECURE_STORE_KEYS = [
+  'ynab_counter_pat_legacy',
+  'ynab-counter:pat',
+] as const;
 
 class StorageService {
   private static readonly DASHBOARD_CACHE_LIMIT = 500;
@@ -62,56 +64,69 @@ class StorageService {
       return this.cache;
     }
 
-    if (!this.loadPromise) {
-      this.loadPromise = this.performLoad();
-    }
+    const pendingLoad = this.loadPromise ?? this.performLoad();
+    this.loadPromise = pendingLoad;
 
-    return this.loadPromise;
+    try {
+      return await pendingLoad;
+    } catch (error) {
+      if (this.loadPromise === pendingLoad) {
+        this.loadPromise = null;
+      }
+      throw error;
+    }
   }
 
   private async performLoad(): Promise<StorageData> {
-    const storedVersion = await AsyncStorageService.getString(STORAGE_VERSION_KEY);
-    if (storedVersion !== STORAGE_VERSION) {
-      await AsyncStorageService.remove(STORAGE_KEY);
-      await AsyncStorageService.setString(STORAGE_VERSION_KEY, STORAGE_VERSION);
-    }
+    const stored = await AsyncStorageService.getString(STORAGE_KEY);
 
-    try {
-      const stored = await AsyncStorageService.getString(STORAGE_KEY);
-      if (stored) {
-        const data = JSON.parse(stored) as MutableStorageData;
-
-        applyStorageMigrations(data);
-
-        if (Array.isArray(data.cards)) {
-          const flagNames = data.cachedData?.flagNames;
-          data.cards = data.cards.map((card) =>
-            normaliseCard({ ...card } as MutableCard, flagNames)
-          );
+    if (stored) {
+      let data: MutableStorageData;
+      try {
+        data = JSON.parse(stored) as MutableStorageData;
+      } catch (error) {
+        if (__DEV__) {
+          console.error('Failed to parse mobile storage payload', error);
         }
+        const fallback = createDefaultStorage();
+        await this.save(fallback);
+        return fallback;
+      }
 
-        if (data.ynab?.pat) {
-          try {
-            await SecureStore.setItemAsync(PAT_SECURE_STORE_KEY, data.ynab.pat);
-            await SecureStore.deleteItemAsync(LEGACY_PAT_SECURE_STORE_KEY);
-            delete data.ynab.pat;
-          } catch (error) {
+      // A version change is not itself a reason to discard valid local data.
+      // Run all available migrations first, then persist at the current version.
+      applyStorageMigrations(data);
+
+      if (Array.isArray(data.cards)) {
+        const flagNames = data.cachedData?.flagNames;
+        data.cards = data.cards.map((card) =>
+          normaliseCard({ ...card } as MutableCard, flagNames)
+        );
+      }
+
+      if (data.ynab?.pat) {
+        try {
+          await SecureStore.setItemAsync(PAT_SECURE_STORE_KEY, data.ynab.pat);
+          await Promise.all(
+            LEGACY_PAT_SECURE_STORE_KEYS.map((key) => SecureStore.deleteItemAsync(key)),
+          );
+          delete data.ynab.pat;
+        } catch (error) {
+          if (__DEV__) {
             console.error('Failed to migrate PAT to SecureStore', error);
           }
         }
-
-        pruneThemeGroups(data);
-        data.hiddenCards = normaliseHiddenCards(data.hiddenCards || []);
-
-        this.cache = data;
-        return data;
       }
-    } catch (error) {
-      console.error('Failed to parse mobile storage payload', error);
+
+      pruneThemeGroups(data);
+      data.hiddenCards = normaliseHiddenCards(data.hiddenCards || []);
+
+      await this.save(data);
+      return data;
     }
 
     const fallback = createDefaultStorage();
-    this.cache = fallback;
+    await this.save(fallback);
     return fallback;
   }
 
@@ -121,7 +136,9 @@ class StorageService {
       await AsyncStorageService.setString(STORAGE_VERSION_KEY, STORAGE_VERSION);
       this.cache = data;
     } catch (error) {
-      console.error('Failed to persist mobile storage payload', error);
+      if (__DEV__) {
+        console.error('Failed to persist mobile storage payload', error);
+      }
       throw error;
     }
   }
@@ -152,11 +169,19 @@ class StorageService {
   }
 
   private wipeConnectionState(storage: MutableStorageData): void {
+    delete storage.ynab.lastSync;
     delete storage.ynab.selectedBudgetId;
     delete storage.ynab.selectedBudgetName;
     storage.ynab.trackedAccountIds = [];
     storage.calculations = [];
     storage.cachedData = undefined;
+  }
+
+  private async deleteSecurePAT(): Promise<void> {
+    await Promise.all([
+      SecureStore.deleteItemAsync(PAT_SECURE_STORE_KEY),
+      ...LEGACY_PAT_SECURE_STORE_KEYS.map((key) => SecureStore.deleteItemAsync(key)),
+    ]);
   }
 
   async resetConnectionState(): Promise<void> {
@@ -168,10 +193,15 @@ class StorageService {
   async getPAT(): Promise<YnabConnection['pat']> {
     let securePat = await SecureStore.getItemAsync(PAT_SECURE_STORE_KEY);
     if (!securePat) {
-      securePat = await SecureStore.getItemAsync(LEGACY_PAT_SECURE_STORE_KEY);
-      if (securePat) {
-        await SecureStore.setItemAsync(PAT_SECURE_STORE_KEY, securePat);
-        await SecureStore.deleteItemAsync(LEGACY_PAT_SECURE_STORE_KEY);
+      for (const legacyKey of LEGACY_PAT_SECURE_STORE_KEYS) {
+        securePat = await SecureStore.getItemAsync(legacyKey);
+        if (securePat) {
+          await SecureStore.setItemAsync(PAT_SECURE_STORE_KEY, securePat);
+          await Promise.all(
+            LEGACY_PAT_SECURE_STORE_KEYS.map((key) => SecureStore.deleteItemAsync(key)),
+          );
+          break;
+        }
       }
     }
     if (securePat && securePat.length > 0) {
@@ -184,9 +214,11 @@ class StorageService {
       await SecureStore.setItemAsync(PAT_SECURE_STORE_KEY, legacyPat);
       delete storage.ynab.pat;
       await this.save(storage);
+      return legacyPat;
     }
 
-    return legacyPat;
+    // performLoad may have migrated an embedded PAT before this call resumed.
+    return (await SecureStore.getItemAsync(PAT_SECURE_STORE_KEY)) ?? undefined;
   }
 
   async setPAT(pat: string): Promise<void> {
@@ -199,14 +231,18 @@ class StorageService {
   }
 
   async clearPAT(): Promise<void> {
-    await SecureStore.deleteItemAsync(PAT_SECURE_STORE_KEY);
-    await SecureStore.deleteItemAsync(LEGACY_PAT_SECURE_STORE_KEY);
-    const storage = await this.load() as MutableStorageData;
-    if (storage.ynab.pat) {
-      delete storage.ynab.pat;
+    try {
+      const storage = await this.load() as MutableStorageData;
+      if (storage.ynab.pat) {
+        delete storage.ynab.pat;
+      }
+      this.wipeConnectionState(storage);
+      await this.save(storage);
+    } finally {
+      // Delete after loading so an embedded legacy PAT cannot be migrated back
+      // into SecureStore during the clear operation.
+      await this.deleteSecurePAT();
     }
-    this.wipeConnectionState(storage);
-    await this.save(storage);
   }
 
   async clearBudgetSelection(): Promise<void> {
@@ -264,6 +300,31 @@ class StorageService {
     await this.save(storage);
   }
 
+  async replaceCards(
+    cards: readonly CreditCard[],
+  ): Promise<Pick<StorageData, 'cards' | 'rules' | 'tagMappings' | 'calculations' | 'themeGroups'>> {
+    const storage = await this.load() as MutableStorageData;
+    const flagNames = storage.cachedData?.flagNames;
+    const nextCards = cards.map((card) =>
+      normaliseCard({ ...card } as MutableCard, flagNames)
+    );
+    const nextCardIds = new Set(nextCards.map((card) => card.id));
+
+    storage.cards = nextCards;
+    storage.rules = storage.rules.filter((rule) => nextCardIds.has(rule.cardId));
+    storage.tagMappings = storage.tagMappings.filter((mapping) => nextCardIds.has(mapping.cardId));
+    storage.calculations = storage.calculations.filter((calculation) => nextCardIds.has(calculation.cardId));
+    pruneThemeGroups(storage);
+    await this.save(storage);
+    return {
+      cards: [...storage.cards],
+      rules: [...storage.rules],
+      tagMappings: [...storage.tagMappings],
+      calculations: [...storage.calculations],
+      themeGroups: [...storage.themeGroups],
+    };
+  }
+
   async deleteCard(cardId: string): Promise<void> {
     const storage = await this.load();
     applyCardDeletion(storage, cardId);
@@ -283,6 +344,13 @@ class StorageService {
     const storage = await this.load();
     upsertById(storage.rules, rule);
     await this.save(storage);
+  }
+
+  async replaceRules(rules: readonly RewardRule[]): Promise<RewardRule[]> {
+    const storage = await this.load();
+    storage.rules = rules.map((rule) => ({ ...rule }));
+    await this.save(storage);
+    return [...storage.rules];
   }
 
   async deleteRule(ruleId: string): Promise<void> {
@@ -327,6 +395,16 @@ class StorageService {
     await this.save(storage);
   }
 
+  async replaceThemeGroups(groups: readonly ThemeGroup[]): Promise<ThemeGroup[]> {
+    const storage = await this.load() as MutableStorageData;
+    storage.themeGroups = groups.map((group, index) =>
+      normaliseThemeGroup({ ...group } as MutableThemeGroup, storage, index)
+    );
+    pruneThemeGroups(storage);
+    await this.save(storage);
+    return [...storage.themeGroups];
+  }
+
   async deleteThemeGroup(groupId: string): Promise<void> {
     const storage = await this.load();
     storage.themeGroups = storage.themeGroups.filter((group) => group.id !== groupId);
@@ -346,6 +424,13 @@ class StorageService {
     const storage = await this.load();
     upsertById(storage.tagMappings, mapping);
     await this.save(storage);
+  }
+
+  async replaceTagMappings(mappings: readonly TagMapping[]): Promise<TagMapping[]> {
+    const storage = await this.load();
+    storage.tagMappings = mappings.map((mapping) => ({ ...mapping }));
+    await this.save(storage);
+    return [...storage.tagMappings];
   }
 
   async deleteTagMapping(mappingId: string): Promise<void> {
@@ -378,7 +463,6 @@ class StorageService {
 
     const nextEntry: RewardCalculation = {
       ...calculation,
-      period: `${normalizedPeriod.start} → ${normalizedPeriod.end}`
     };
 
     if (index >= 0) {
@@ -388,6 +472,15 @@ class StorageService {
     }
 
     await this.save(storage);
+  }
+
+  async replaceCalculations(
+    calculations: readonly RewardCalculation[],
+  ): Promise<RewardCalculation[]> {
+    const storage = await this.load();
+    storage.calculations = calculations.map((calculation) => ({ ...calculation }));
+    await this.save(storage);
+    return [...storage.calculations];
   }
 
   async deleteCalculation(cardId: string, ruleId: string, period: string): Promise<void> {
@@ -482,6 +575,13 @@ class StorageService {
 
     storage.hiddenCards = normaliseHiddenCards(next);
     await this.save(storage);
+  }
+
+  async replaceHiddenCards(hiddenCards: readonly HiddenCard[]): Promise<HiddenCard[]> {
+    const storage = await this.load() as MutableStorageData;
+    storage.hiddenCards = normaliseHiddenCards([...hiddenCards]);
+    await this.save(storage);
+    return [...storage.hiddenCards];
   }
 
   async unhideCard(cardId: string): Promise<void> {
@@ -600,24 +700,82 @@ class StorageService {
 
   async exportSettings(): Promise<string> {
     const storage = await this.load();
+    const formatterSettings = storage.settings.statementFormatter
+      ? {
+          ...storage.settings.statementFormatter,
+          apiKeys: undefined,
+        }
+      : undefined;
     const exportData = {
       ...storage,
       ynab: { ...storage.ynab, pat: undefined },
+      settings: {
+        ...storage.settings,
+        cloudSyncMnemonic: undefined,
+        statementFormatter: formatterSettings,
+      },
     };
     return JSON.stringify(exportData, null, 2);
   }
 
   async importSettings(jsonString: string): Promise<void> {
     try {
-      const imported = JSON.parse(jsonString);
-      const storage = await this.load() as MutableStorageData;
-      const pat = storage.ynab.pat;
-
-      Object.assign(storage, imported);
-      if (pat) {
-        storage.ynab.pat = pat;
+      const imported = JSON.parse(jsonString) as Partial<MutableStorageData>;
+      if (!imported || typeof imported !== 'object' || Array.isArray(imported)) {
+        throw new Error('Expected a storage object');
       }
 
+      const storage = await this.load() as MutableStorageData;
+      const localSettings = { ...storage.settings };
+      const localFormatterApiKeys = storage.settings.statementFormatter?.apiKeys;
+
+      Object.assign(storage, imported);
+
+      const importedYnab = imported.ynab && typeof imported.ynab === 'object'
+        ? imported.ynab
+        : {};
+      storage.ynab = { ...importedYnab };
+      // PAT ownership stays exclusively with SecureStore. Imported payloads
+      // must never replace it or reintroduce an embedded credential.
+      delete storage.ynab.pat;
+
+      storage.settings = storage.settings && typeof storage.settings === 'object'
+        ? { ...storage.settings }
+        : {};
+
+      const localSettingKeys = [
+        'cloudSyncKeyId',
+        'cloudSyncLastSyncedAt',
+        'cloudSyncMnemonic',
+        'rememberCloudSyncCode',
+        'autoSyncEnabled',
+      ] as const;
+      for (const key of localSettingKeys) {
+        const localValue = localSettings[key];
+        if (localValue === undefined) {
+          Reflect.deleteProperty(storage.settings, key);
+        } else {
+          Object.assign(storage.settings, { [key]: localValue });
+        }
+      }
+
+      if (localFormatterApiKeys) {
+        storage.settings.statementFormatter = {
+          ...(storage.settings.statementFormatter ?? {}),
+          apiKeys: { ...localFormatterApiKeys },
+        };
+      } else if (storage.settings.statementFormatter) {
+        const formatter = { ...storage.settings.statementFormatter };
+        delete formatter.apiKeys;
+        storage.settings.statementFormatter = formatter;
+      }
+
+      applyStorageMigrations(storage);
+      storage.cards = Array.isArray(storage.cards)
+        ? storage.cards.map((card) =>
+            normaliseCard({ ...card } as MutableCard, storage.cachedData?.flagNames)
+          )
+        : [];
       pruneThemeGroups(storage);
       storage.hiddenCards = normaliseHiddenCards(storage.hiddenCards || []);
       await this.save(storage);
@@ -627,10 +785,17 @@ class StorageService {
   }
 
   async clearAll(): Promise<void> {
-    await AsyncStorageService.remove(STORAGE_KEY);
-    await AsyncStorageService.remove(STORAGE_VERSION_KEY);
-    this.cache = null;
-    this.loadPromise = null;
+    try {
+      await Promise.all([
+        AsyncStorageService.remove(STORAGE_KEY),
+        AsyncStorageService.remove(STORAGE_VERSION_KEY),
+        SecureStore.deleteItemAsync(PAT_SECURE_STORE_KEY),
+        ...LEGACY_PAT_SECURE_STORE_KEYS.map((key) => SecureStore.deleteItemAsync(key)),
+      ]);
+    } finally {
+      this.cache = null;
+      this.loadPromise = null;
+    }
   }
 }
 
