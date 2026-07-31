@@ -319,7 +319,7 @@ export default function TransactionDetailScreen() {
       notification('error');
     } finally {
       flagMutationInFlightRef.current = false;
-      if (isCurrentMutation()) setIsSavingFlag(false);
+      setIsSavingFlag(false);
     }
   };
 

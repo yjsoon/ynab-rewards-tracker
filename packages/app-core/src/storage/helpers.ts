@@ -21,8 +21,9 @@ import type { MutableStorageData } from './internal-types';
 export function invalidateDerivedDataAfterSettingsImport(
   storage: MutableStorageData,
 ): void {
+  const flagNames = storage.cachedData?.flagNames;
   storage.calculations = [];
-  storage.cachedData = undefined;
+  storage.cachedData = flagNames ? { flagNames: { ...flagNames } } : undefined;
 }
 
 /**

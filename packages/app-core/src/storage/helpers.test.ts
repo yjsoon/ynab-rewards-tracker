@@ -74,6 +74,12 @@ describe('invalidateDerivedDataAfterSettingsImport', () => {
     storage.calculations = [calculation()];
     storage.cachedData = {
       lastUpdated: '2026-08-01T00:00:00.000Z',
+      flagNames: { red: 'No rewards' },
+      accounts: [{
+        budgetId: 'budget-1',
+        fetchedAt: '2026-08-01T00:00:00.000Z',
+        accounts: [],
+      }],
       dashboardTransactions: [{
         budgetId: 'budget-1',
         sinceDate: '2026-07-01',
@@ -88,6 +94,8 @@ describe('invalidateDerivedDataAfterSettingsImport', () => {
     invalidateDerivedDataAfterSettingsImport(storage);
 
     expect(storage.calculations).toEqual([]);
-    expect(storage.cachedData).toBeUndefined();
+    expect(storage.cachedData).toEqual({
+      flagNames: { red: 'No rewards' },
+    });
   });
 });
