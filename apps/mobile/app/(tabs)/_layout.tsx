@@ -13,25 +13,40 @@ export default function TabsLayout() {
       minimizeBehavior={supportsTabMinimisation ? 'onScrollDown' : undefined}
     >
       <NativeTabs.Trigger name="overview">
-        <Icon sf={{ default: 'rectangle.grid.1x2', selected: 'rectangle.grid.1x2.fill' }} />
+        <Icon
+          sf={{ default: 'rectangle.grid.1x2', selected: 'rectangle.grid.1x2.fill' }}
+          androidSrc={require('../../assets/tabs/overview.png')}
+        />
         <Label>Overview</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="cards">
-        <Icon sf={{ default: 'creditcard', selected: 'creditcard.fill' }} />
+        <Icon
+          sf={{ default: 'creditcard', selected: 'creditcard.fill' }}
+          androidSrc={require('../../assets/tabs/cards.png')}
+        />
         <Label>Cards</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="activity">
-        <Icon sf={{ default: 'list.bullet.rectangle', selected: 'list.bullet.rectangle.fill' }} />
+        <Icon
+          sf={{ default: 'list.bullet.rectangle', selected: 'list.bullet.rectangle.fill' }}
+          androidSrc={require('../../assets/tabs/activity.png')}
+        />
         <Label>Activity</Label>
       </NativeTabs.Trigger>
       {featureFlags.recommendations ? (
         <NativeTabs.Trigger name="recommendations">
-          <Icon sf={{ default: 'lightbulb', selected: 'lightbulb.fill' }} />
+          <Icon
+            sf={{ default: 'lightbulb', selected: 'lightbulb.fill' }}
+            androidSrc={require('../../assets/tabs/tips.png')}
+          />
           <Label>Tips</Label>
         </NativeTabs.Trigger>
       ) : null}
       <NativeTabs.Trigger name="preferences">
-        <Icon sf={{ default: 'gearshape', selected: 'gearshape.fill' }} />
+        <Icon
+          sf={{ default: 'gearshape', selected: 'gearshape.fill' }}
+          androidSrc={require('../../assets/tabs/settings.png')}
+        />
         <Label>Settings</Label>
       </NativeTabs.Trigger>
     </NativeTabs>

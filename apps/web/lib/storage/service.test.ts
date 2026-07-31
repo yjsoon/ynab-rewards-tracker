@@ -165,6 +165,27 @@ describe("StorageService importSettings", () => {
     expect(service.getTrackedAccountIds()).toEqual(["account-local"]);
   });
 
+  it("clears the device-local dashboard cache when the import omits it", () => {
+    const service = new StorageService();
+    service.setCachedData({
+      lastUpdated: "2026-08-01T00:00:00.000Z",
+      dashboardTransactions: [{
+        budgetId: "budget-local",
+        sinceDate: "2026-07-01",
+        fetchedAt: "2026-08-01T00:00:00.000Z",
+        trackedAccountIds: ["account-local"],
+        accounts: [],
+        transactions: [],
+        isComplete: false,
+      }],
+    });
+
+    service.importSettings(JSON.stringify({ ...importedBase, ynab: {} }));
+
+    expect(service.getCachedData()).toBeUndefined();
+    expect(service.getCalculations()).toEqual([]);
+  });
+
   it("preserves local YNAB metadata when importing partial connection settings", () => {
     const service = new StorageService();
 

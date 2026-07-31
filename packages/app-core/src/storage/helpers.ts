@@ -11,6 +11,19 @@ import type {
   DashboardTransactionsCacheEntry,
   StorageData,
 } from './types';
+import type { MutableStorageData } from './internal-types';
+
+/**
+ * Removes device-local projections after settings from another snapshot are
+ * applied. Those projections were calculated from the previous card/rule
+ * configuration and an omitted `cachedData` property must not preserve them.
+ */
+export function invalidateDerivedDataAfterSettingsImport(
+  storage: MutableStorageData,
+): void {
+  storage.calculations = [];
+  storage.cachedData = undefined;
+}
 
 /**
  * Validates and sanitizes a transaction for cache storage.

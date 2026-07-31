@@ -91,12 +91,13 @@ type SyncOptions = {
 type StorageActions = {
   refresh: (expectedGeneration?: number) => Promise<void>;
   invalidatePendingOperations: () => void;
+  invalidateSyncRequests: () => void;
   setPAT: (pat: string) => Promise<void>;
   clearPAT: () => Promise<void>;
   disconnect: () => Promise<void>;
   setSelectedBudget: (budgetId: string, budgetName: string) => Promise<void>;
   setTrackedAccountIds: (accountIds: string[]) => Promise<void>;
-  syncBudgetsAndAccounts: (options?: SyncOptions) => Promise<void>;
+  syncBudgetsAndAccounts: (options?: SyncOptions, expectedGeneration?: number) => Promise<void>;
   stageBudgetSelection: (budgetId: string, budgetName: string) => void;
   stageTrackedAccountIds: (ids: string[]) => void;
   applyPendingChanges: () => Promise<void>;
@@ -108,7 +109,10 @@ type StorageActions = {
   setCalculations: (calculations: RewardCalculation[]) => Promise<void>;
   setThemeGroups: (groups: ThemeGroup[]) => Promise<void>;
   setHiddenCards: (hiddenCards: HiddenCard[]) => Promise<void>;
-  setDashboardCachedData: (payload: DashboardTransactionsCachePayload) => Promise<void>;
+  setDashboardCachedData: (
+    payload: DashboardTransactionsCachePayload,
+    expectedGeneration?: number,
+  ) => Promise<void>;
   pruneDashboardCache: (ttlMs?: number) => Promise<void>;
 };
 
@@ -224,6 +228,7 @@ function withoutConnection(state: StorageState): StorageState {
 const noopActions: StorageActions = {
   refresh: async () => {},
   invalidatePendingOperations: () => {},
+  invalidateSyncRequests: () => {},
   setPAT: async () => {},
   clearPAT: async () => {},
   disconnect: async () => {},
@@ -315,18 +320,24 @@ export function StorageProvider({ children }: { children: ReactNode }) {
   const syncRequestIdRef = useRef(0);
   const cardConfigurationRevisionRef = useRef(0);
   const cardWritePromiseRef = useRef<Promise<void> | null>(null);
+  const invalidateSyncRequests = useCallback(() => {
+    syncRequestIdRef.current += 1;
+    setState((prev) => (prev.isSyncing ? { ...prev, isSyncing: false } : prev));
+  }, []);
   const invalidatePendingOperations = useCallback(() => {
     storage.invalidatePendingOperations();
-    syncRequestIdRef.current += 1;
-  }, []);
+    invalidateSyncRequests();
+  }, [invalidateSyncRequests]);
 
   const performSync = useCallback(
     async (
       options: SyncOptions = {},
       overrides: Partial<{ pat: string; selectedBudgetId?: string; trackedAccountIds: string[] }> = {},
+      expectedGeneration?: number,
     ) => {
+      const storageGeneration = expectedGeneration ?? storage.captureGeneration();
+      if (!storage.isGenerationCurrent(storageGeneration)) return;
       const syncRequestId = ++syncRequestIdRef.current;
-      const storageGeneration = storage.captureGeneration();
       const isCurrentSync = () => (
         syncRequestId === syncRequestIdRef.current
         && storage.isGenerationCurrent(storageGeneration)
@@ -841,6 +852,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
       ...noopActions,
       refresh,
       invalidatePendingOperations,
+      invalidateSyncRequests,
       setPAT: async () => {
         setState((prev) => ({
           ...prev,
@@ -865,8 +877,8 @@ export function StorageProvider({ children }: { children: ReactNode }) {
       setTrackedAccountIds: async (accountIds) => {
         setState((prev) => ({ ...prev, trackedAccountIds: [...accountIds] }));
       },
-      syncBudgetsAndAccounts: async () => {
-        await performSync();
+      syncBudgetsAndAccounts: async (options, expectedGeneration) => {
+        await performSync(options ?? {}, {}, expectedGeneration);
       },
       stageBudgetSelection: (budgetId, budgetName) => {
         setState((prev) => ({
@@ -928,13 +940,16 @@ export function StorageProvider({ children }: { children: ReactNode }) {
       setHiddenCards: async (hiddenCards) => {
         setState((prev) => ({ ...prev, hiddenCards: [...hiddenCards] }));
       },
-      setDashboardCachedData: async (payload) => {
+      setDashboardCachedData: async (payload, expectedGeneration) => {
+        const storageGeneration = expectedGeneration ?? storage.captureGeneration();
+        if (!storage.isGenerationCurrent(storageGeneration)) return;
         const entry: DashboardTransactionsCacheEntry = {
           ...payload,
           isComplete: payload.isComplete ?? true,
           requiresFullRefresh: payload.requiresFullRefresh ?? false,
           transactions: payload.transactions,
         };
+        if (!storage.isGenerationCurrent(storageGeneration)) return;
         setState((prev) => ({
           ...prev,
           cachedData: {
@@ -946,13 +961,14 @@ export function StorageProvider({ children }: { children: ReactNode }) {
       },
       pruneDashboardCache: async () => {},
     }),
-    [invalidatePendingOperations, performSync, refresh],
+    [invalidatePendingOperations, invalidateSyncRequests, performSync, refresh],
   );
 
   const actions = useMemo<StorageActions>(
     () => ({
       refresh,
       invalidatePendingOperations,
+      invalidateSyncRequests,
       setPAT: async (pat: string) => {
         const trimmed = pat.trim();
         await storage.setPAT(trimmed);
@@ -988,8 +1004,8 @@ export function StorageProvider({ children }: { children: ReactNode }) {
           settings: { ...prev.settings, ...localChange },
         }));
       },
-      syncBudgetsAndAccounts: async (options) => {
-        await performSync(options ?? {});
+      syncBudgetsAndAccounts: async (options, expectedGeneration) => {
+        await performSync(options ?? {}, {}, expectedGeneration);
       },
       stageBudgetSelection: (budgetId: string, budgetName: string) => {
         setState((prev) => {
@@ -1175,9 +1191,13 @@ export function StorageProvider({ children }: { children: ReactNode }) {
           settings: { ...prev.settings, ...localChange },
         }));
       },
-      setDashboardCachedData: async (payload) => {
-        await storage.setDashboardTransactionsCache(payload);
+      setDashboardCachedData: async (payload, expectedGeneration) => {
+        const storageGeneration = expectedGeneration ?? storage.captureGeneration();
+        if (!storage.isGenerationCurrent(storageGeneration)) return;
+        await storage.setDashboardTransactionsCache(payload, storageGeneration);
+        if (!storage.isGenerationCurrent(storageGeneration)) return;
         const cachedData = await storage.getCachedData();
+        if (!storage.isGenerationCurrent(storageGeneration)) return;
         setState((prev) => ({
           ...prev,
           cachedData,
@@ -1195,6 +1215,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
     [
       initialiseConnection,
       invalidatePendingOperations,
+      invalidateSyncRequests,
       performSync,
       refresh,
       state.trackedAccountIds,

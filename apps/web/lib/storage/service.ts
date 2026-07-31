@@ -18,6 +18,7 @@ import {
   createDashboardCacheKey,
   findDashboardCacheEntry,
   applyCardDeletion,
+  invalidateDerivedDataAfterSettingsImport,
   validateHiddenUntilDate,
 } from "@ynab-counter/app-core/storage";
 import type {
@@ -847,6 +848,7 @@ export class StorageService {
       }
 
       pruneThemeGroups(storage);
+      invalidateDerivedDataAfterSettingsImport(storage);
       this.setStorage(storage);
     } catch (error) {
       throw new Error("Invalid settings file");

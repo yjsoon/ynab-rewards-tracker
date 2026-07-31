@@ -17,6 +17,7 @@ import {
   createDashboardCacheKey,
   findDashboardCacheEntry,
   applyCardDeletion,
+  invalidateDerivedDataAfterSettingsImport,
   validateHiddenUntilDate,
   normalizePeriod,
 } from '@ynab-counter/app-core/storage';
@@ -892,6 +893,7 @@ class StorageService {
         : [];
       pruneThemeGroups(storage);
       storage.hiddenCards = normaliseHiddenCards(storage.hiddenCards || []);
+      invalidateDerivedDataAfterSettingsImport(storage);
       await this.save(storage, expectedGeneration);
     } catch (error) {
       if (options?.expectedGeneration !== undefined

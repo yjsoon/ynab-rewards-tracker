@@ -3,9 +3,11 @@ import { describe, expect, it } from 'vitest';
 import type { RewardCalculation } from './types';
 import {
   formatCalculationPeriod,
+  invalidateDerivedDataAfterSettingsImport,
   mergeRewardCalculations,
   normalizePeriod,
 } from './helpers';
+import { createDefaultStorage } from './normalisers';
 
 function calculation(
   overrides: Partial<RewardCalculation> = {},
@@ -63,5 +65,29 @@ describe('mergeRewardCalculations', () => {
 
     expect(merged).toEqual(existing);
     expect(merged).not.toBe(existing);
+  });
+});
+
+describe('invalidateDerivedDataAfterSettingsImport', () => {
+  it('clears calculations and cached dashboard data from the previous configuration', () => {
+    const storage = createDefaultStorage();
+    storage.calculations = [calculation()];
+    storage.cachedData = {
+      lastUpdated: '2026-08-01T00:00:00.000Z',
+      dashboardTransactions: [{
+        budgetId: 'budget-1',
+        sinceDate: '2026-07-01',
+        fetchedAt: '2026-08-01T00:00:00.000Z',
+        trackedAccountIds: ['account-1'],
+        accounts: [],
+        transactions: [],
+        isComplete: false,
+      }],
+    };
+
+    invalidateDerivedDataAfterSettingsImport(storage);
+
+    expect(storage.calculations).toEqual([]);
+    expect(storage.cachedData).toBeUndefined();
   });
 });

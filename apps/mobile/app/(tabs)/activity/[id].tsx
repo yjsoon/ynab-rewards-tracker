@@ -42,6 +42,7 @@ import {
 } from '@/lib/ynab-client';
 import { semanticColors } from '@/theme';
 import { nativeMetrics, spacing } from '@/theme/tokens';
+import { storage } from '@/storage/service';
 
 const DEMO_MODE = __DEV__ && process.env.EXPO_PUBLIC_MOBILE_DEMO === '1';
 
@@ -136,6 +137,7 @@ export default function TransactionDetailScreen() {
   const { notification } = useHaptics();
   const model = useActivityModel();
   const cacheEntryRef = useRef(model.cacheEntry);
+  const flagMutationInFlightRef = useRef(false);
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const projection = model.transactions.find((item) => item.transaction.id === id);
   const formatting = useMemo(() => createActivityFormatting(state.settings), [state.settings]);
@@ -180,7 +182,8 @@ export default function TransactionDetailScreen() {
 
   const handleFlagChange = async (nextFlagColour: YnabTransactionFlagColor) => {
     if (
-      isSavingFlag
+      flagMutationInFlightRef.current
+      || isSavingFlag
       || nextFlagColour === selectedFlagColour
       || !model.cacheEntry
       || !id
@@ -200,10 +203,13 @@ export default function TransactionDetailScreen() {
     const previousFlagColour = normaliseFlagColour(transaction.flag_color);
     const previousFlagName = transaction.flag_name;
     const cacheEntry = model.cacheEntry;
+    const storageGeneration = storage.captureGeneration();
+    const isCurrentMutation = () => storage.isGenerationCurrent(storageGeneration);
     const persistCachedFlag = async (
       flagColor: YnabTransactionFlagColor,
       flagName: string | null | undefined,
-    ) => {
+    ): Promise<boolean> => {
+      if (!isCurrentMutation()) return false;
       // A refresh may complete while the PATCH is in flight. Always apply the
       // single-field change to the latest entry instead of replaying an old blob.
       const latestEntry = cacheEntryRef.current ?? cacheEntry;
@@ -212,16 +218,21 @@ export default function TransactionDetailScreen() {
         ...latestEntry,
         transactions: payload.transactions,
       };
-      await actions.setDashboardCachedData(payload);
+      await actions.setDashboardCachedData(payload, storageGeneration);
+      return isCurrentMutation();
     };
 
+    flagMutationInFlightRef.current = true;
     setSelectedFlagColour(nextFlagColour);
     setFlagError(undefined);
     setIsSavingFlag(true);
     let remoteUpdateSucceeded = false;
 
     try {
-      await persistCachedFlag(nextFlagColour, null);
+      if (!(await persistCachedFlag(nextFlagColour, null))) return;
+
+      let confirmedFlagColour = nextFlagColour;
+      let confirmedFlagName: string | null | undefined = null;
 
       if (connection) {
         const savedTransaction = await updateTransactionFlag(
@@ -230,15 +241,21 @@ export default function TransactionDetailScreen() {
           id,
           nextFlagColour,
         );
+        if (!isCurrentMutation()) return;
         remoteUpdateSucceeded = true;
 
         if (savedTransaction) {
-          await persistCachedFlag(
-            normaliseFlagColour(savedTransaction.flag_color ?? nextFlagColour),
-            savedTransaction.flag_name ?? null,
+          confirmedFlagColour = normaliseFlagColour(
+            savedTransaction.flag_color ?? nextFlagColour,
           );
+          confirmedFlagName = savedTransaction.flag_name ?? null;
         }
       }
+
+      // The successful PATCH is authoritative. Cancel any refresh that started
+      // before it, then reapply the confirmed flag to the latest cached entry.
+      actions.invalidateSyncRequests();
+      if (!(await persistCachedFlag(confirmedFlagColour, confirmedFlagName))) return;
 
       if ((cacheEntryRef.current?.isComplete ?? cacheEntry.isComplete) === false) {
         try {
@@ -258,12 +275,15 @@ export default function TransactionDetailScreen() {
               ...latestEntry,
               requiresFullRefresh: true,
             };
-            await actions.setDashboardCachedData(stalePayload);
+            await actions.setDashboardCachedData(stalePayload, storageGeneration);
+            if (!isCurrentMutation()) return;
           }
           await actions.syncBudgetsAndAccounts({
             sinceDate: getEarliestPeriodStart(state.cards),
-          });
+          }, storageGeneration);
+          if (!isCurrentMutation()) return;
         } catch {
+          if (!isCurrentMutation()) return;
           setFlagError('Flag saved, but rewards couldn’t be refreshed. Refresh Activity to update totals.');
           notification('error');
           return;
@@ -272,6 +292,7 @@ export default function TransactionDetailScreen() {
 
       notification('success');
     } catch (error) {
+      if (!isCurrentMutation()) return;
       if (remoteUpdateSucceeded) {
         setFlagError('Flag saved in YNAB, but local rewards couldn’t be updated. Refresh Activity to try again.');
         notification('error');
@@ -285,10 +306,11 @@ export default function TransactionDetailScreen() {
         return;
       }
       try {
-        await persistCachedFlag(
+        const rollbackPersisted = await persistCachedFlag(
           previousFlagColour,
           previousFlagName,
         );
+        if (!rollbackPersisted) return;
       } catch {
         // The original cache remains the source of truth if persistence is unavailable.
       }
@@ -296,7 +318,8 @@ export default function TransactionDetailScreen() {
       setFlagError(flagUpdateErrorMessage(error));
       notification('error');
     } finally {
-      setIsSavingFlag(false);
+      flagMutationInFlightRef.current = false;
+      if (isCurrentMutation()) setIsSavingFlag(false);
     }
   };
 
