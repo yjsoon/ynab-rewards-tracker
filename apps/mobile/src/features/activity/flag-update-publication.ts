@@ -2,7 +2,6 @@ import { SimpleRewardsCalculator } from '@ynab-counter/app-core/rewards-engine';
 import { createRewardCalculationFromSimple } from '@ynab-counter/app-core/rewards-engine/utils/reward-calculation';
 import {
   formatCalculationPeriod,
-  mergeRewardCalculations,
   normalizePeriod,
 } from '@ynab-counter/app-core/storage';
 import type {
@@ -34,9 +33,11 @@ export function createLocalFlagUpdatePublication({
   calculations: RewardCalculation[];
   now?: Date;
 }): LocalFlagUpdatePublication {
+  const currentPeriods = new Map<string, { start: string; end: string }>();
   const replacements = cards.map((card) => {
     const period = SimpleRewardsCalculator.calculatePeriod(card, now);
-    const currentCalculation = calculations.find((calculation) => {
+    currentPeriods.set(card.id, period);
+    const currentCalculations = calculations.filter((calculation) => {
       if (calculation.cardId !== card.id) return false;
       const currentPeriod = normalizePeriod(calculation.period);
       return currentPeriod.start === period.start && currentPeriod.end === period.end;
@@ -49,14 +50,29 @@ export function createLocalFlagUpdatePublication({
       period,
       settings,
     );
+    const canonicalRuleId = `card-${card.id}`;
+    const ruleId = currentCalculations.some((current) => current.ruleId === canonicalRuleId)
+      ? canonicalRuleId
+      : currentCalculations.length === 1
+        ? currentCalculations[0].ruleId
+        : canonicalRuleId;
+
     return {
-      ...createRewardCalculationFromSimple(card, calculation, currentCalculation?.ruleId),
+      ...createRewardCalculationFromSimple(card, calculation, ruleId),
       period: formatCalculationPeriod(period),
     };
   });
 
+  const historicalCalculations = calculations.filter((calculation) => {
+    const currentPeriod = currentPeriods.get(calculation.cardId);
+    if (!currentPeriod) return true;
+    const calculationPeriod = normalizePeriod(calculation.period);
+    return calculationPeriod.start !== currentPeriod.start
+      || calculationPeriod.end !== currentPeriod.end;
+  });
+
   return {
     cacheEntry,
-    calculations: mergeRewardCalculations(calculations, replacements),
+    calculations: [...historicalCalculations, ...replacements],
   };
 }

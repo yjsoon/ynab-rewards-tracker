@@ -42,4 +42,49 @@ describe('demo flag update publication', () => {
       (breakdown) => breakdown.flagColor === 'red',
     )?.totalSpend).toBe(0);
   });
+
+  it('collapses multiple current-period rule rows to one canonical aggregate', () => {
+    const now = new Date('2026-08-01T12:00:00.000Z');
+    const fixture = createDemoStorageFixture(now);
+    const cacheEntry = fixture.cachedData.dashboardTransactions![0];
+    const emberCalculation = fixture.calculations.find(
+      (calculation) => calculation.cardId === 'demo-card-ember',
+    )!;
+    const staleSecondaryRule = {
+      ...emberCalculation,
+      ruleId: 'demo-rule-ember-secondary',
+      totalSpend: -1,
+      rewardEarned: -1,
+    };
+    const historicalCalculation = {
+      ...emberCalculation,
+      ruleId: 'demo-rule-ember-historical',
+      period: '2026-07-01 → 2026-07-31',
+      totalSpend: 321,
+    };
+
+    const publication = createLocalFlagUpdatePublication({
+      cacheEntry,
+      cards: fixture.cards,
+      settings: fixture.settings,
+      calculations: [
+        ...fixture.calculations,
+        staleSecondaryRule,
+        historicalCalculation,
+      ],
+      now,
+    });
+
+    const currentEmberRows = publication.calculations.filter((calculation) => (
+      calculation.cardId === 'demo-card-ember'
+      && calculation.period === emberCalculation.period
+    ));
+    expect(currentEmberRows).toHaveLength(1);
+    expect(currentEmberRows[0]).toMatchObject({
+      ruleId: 'card-demo-card-ember',
+      totalSpend: emberCalculation.totalSpend,
+      rewardEarned: emberCalculation.rewardEarned,
+    });
+    expect(publication.calculations).toContainEqual(historicalCalculation);
+  });
 });
