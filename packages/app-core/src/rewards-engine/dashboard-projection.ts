@@ -575,11 +575,11 @@ export function buildRewardsDashboard(
       ? Math.min(1, calculation.totalSpend / minimumTarget)
       : null;
     const maximumProgress = maximumTarget
-      ? Math.min(1, maximumProgressSpend / maximumTarget)
+      ? calculation.maximumSpendExceeded
+        ? 1
+        : Math.min(1, maximumProgressSpend / maximumTarget)
       : null;
-    const maximumReached = maximumTarget !== null && (
-      persistedCalculation?.maximumExceeded ?? maximumProgressSpend >= maximumTarget
-    );
+    const maximumReached = maximumTarget !== null && calculation.maximumSpendExceeded;
     const minimumMet = minimumTarget !== null
       ? persistedCalculation?.minimumMet ?? calculation.totalSpend >= minimumTarget
       : null;
@@ -625,7 +625,9 @@ export function buildRewardsDashboard(
         target: maximumTarget,
         remaining: maximumTarget === null
           ? null
-          : Math.max(0, maximumTarget - maximumProgressSpend),
+          : maximumReached
+            ? 0
+            : Math.max(0, maximumTarget - maximumProgressSpend),
         over: maximumTarget === null
           ? null
           : Math.max(0, maximumProgressSpend - maximumTarget),

@@ -96,6 +96,15 @@ export interface TransactionRewardResult {
   reason?: TransactionRewardReason;
 }
 
+function isCapHeadroomExhausted(
+  remaining: number,
+  blockSize: number | null | undefined,
+): boolean {
+  return blockSize && blockSize > 0
+    ? remaining < blockSize
+    : remaining <= 0;
+}
+
 export class SimpleRewardsCalculator {
   /**
    * Calculate reward for a single transaction based on card settings
@@ -267,6 +276,7 @@ export class SimpleRewardsCalculator {
     let countedSpend = 0;
     let rewardEarned = 0;
     let rewardEarnedDollars = 0;
+    let maximumCapacityExhausted = false;
     let subcategoryBreakdowns: SubcategoryCalculation[] | undefined;
 
     if (context.enabled && context.activeSubcategories.length > 0) {
@@ -329,7 +339,10 @@ export class SimpleRewardsCalculator {
           continue;
         }
 
-        if (remainingCardCap <= 0 || tier.remainingCap <= 0) {
+        if (
+          isCapHeadroomExhausted(remainingCardCap, tier.blockSize) ||
+          isCapHeadroomExhausted(tier.remainingCap, tier.blockSize)
+        ) {
           const standalone = transactionRewards[transaction.id];
           transactionRewards[transaction.id] = {
             ...standalone,
@@ -373,7 +386,12 @@ export class SimpleRewardsCalculator {
           : constrained;
       }
 
-      const cardCapHit = hasCardCap && remainingCardCap <= 0;
+      const earningTiers = [...tierStates.values()].filter(
+        ({ subcategory, rewardRate }) => !subcategory.excludeFromRewards && rewardRate > 0,
+      );
+      const cardCapHit = hasCardCap && earningTiers.length > 0 && earningTiers
+        .every(({ blockSize }) => isCapHeadroomExhausted(remainingCardCap, blockSize));
+      maximumCapacityExhausted = cardCapHit;
       subcategoryBreakdowns = context.activeSubcategories.map((subcategory) => {
         const tier = tierStates.get(subcategory.id)!;
         const tierEligibleBeforeBlocks = tier.minimumMet ? tier.countedBeforeBlocks : 0;
@@ -411,8 +429,12 @@ export class SimpleRewardsCalculator {
           minimumSpendMet: tier.minimumMet,
           maximumSpend: tier.maximum,
           maximumSpendExceeded: (
-            tier.maximum !== null && tier.counted >= tier.maximum
-          ) || (!subcategory.excludeFromRewards && cardCapHit),
+            tier.maximum !== null && isCapHeadroomExhausted(tier.remainingCap, tier.blockSize)
+          ) || (
+            !subcategory.excludeFromRewards &&
+            hasCardCap &&
+            isCapHeadroomExhausted(remainingCardCap, tier.blockSize)
+          ),
           blockSize: tier.blockSize,
           blocksEarned: tier.minimumMet && tier.blocks > 0 ? tier.blocks : undefined,
           active: subcategory.active !== false,
@@ -424,9 +446,10 @@ export class SimpleRewardsCalculator {
         const hasCardCap = typeof maximumSpend === 'number' && maximumSpend !== null && maximumSpend > 0;
         const spendCap = hasCardCap ? maximumSpend! : Number.POSITIVE_INFINITY;
         let remainingCap = spendCap;
+        const blockSize = getBlockSize(card);
 
         for (const txn of periodTransactions) {
-          if (remainingCap <= 0) {
+          if (isCapHeadroomExhausted(remainingCap, blockSize)) {
             const standalone = transactionRewards[txn.id];
             transactionRewards[txn.id] = {
               ...standalone,
@@ -443,9 +466,9 @@ export class SimpleRewardsCalculator {
           const spendContribution = Math.min(txnSpend, remainingCap);
 
           let earnablePortion = spendContribution;
-          if (card.earningBlockSize && card.earningBlockSize > 0) {
-            const blocks = Math.floor(spendContribution / card.earningBlockSize);
-            earnablePortion = blocks * card.earningBlockSize;
+          if (blockSize) {
+            const blocks = Math.floor(spendContribution / blockSize);
+            earnablePortion = blocks * blockSize;
           }
 
           countedSpend += earnablePortion;
@@ -470,8 +493,13 @@ export class SimpleRewardsCalculator {
                 rewardDollars: 0,
                 reason: 'below_minimum',
               }
-            : constrained;
+              : constrained;
         }
+
+        maximumCapacityExhausted = hasCardCap && isCapHeadroomExhausted(
+          remainingCap,
+          blockSize,
+        );
 
         if (minimumSpendMet && eligibleSpend > 0) {
           if (card.type === 'cashback') {
@@ -485,8 +513,11 @@ export class SimpleRewardsCalculator {
       }
     }
 
-    const maximumSpendExceeded = isMaximumSpendExceeded(countedSpend, maximumSpend);
-    const maximumSpendProgress = calculateMaximumSpendProgress(countedSpend, maximumSpend);
+    const maximumSpendExceeded = maximumCapacityExhausted ||
+      isMaximumSpendExceeded(countedSpend, maximumSpend);
+    const maximumSpendProgress = maximumSpendExceeded
+      ? 100
+      : calculateMaximumSpendProgress(countedSpend, maximumSpend);
 
     return {
       cardId: card.id,

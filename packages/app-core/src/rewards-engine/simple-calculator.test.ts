@@ -210,4 +210,58 @@ describe('SimpleRewardsCalculator.calculateCardRewards', () => {
       reason: 'cap_reached',
     });
   });
+
+  it('exhausts unusable card-cap headroom below one simple-rate block', () => {
+    const card: CreditCard = {
+      ...createMilesCardWithSubcategories(),
+      subcategoriesEnabled: false,
+      maximumSpend: 12,
+    };
+    const calculation = SimpleRewardsCalculator.calculateCardRewards(
+      card,
+      [
+        createTransaction('first', -10_000),
+        createTransaction('after-unusable-headroom', -10_000),
+      ],
+      period,
+    );
+
+    expect(calculation.countedSpend).toBe(10);
+    expect(calculation.maximumSpendExceeded).toBe(true);
+    expect(calculation.maximumSpendProgress).toBe(100);
+    expect(calculation.transactionRewards['after-unusable-headroom']).toMatchObject({
+      reward: 0,
+      reason: 'cap_reached',
+    });
+  });
+
+  it('exhausts unusable tier-cap headroom below one tier block', () => {
+    const base = createMilesCardWithSubcategories();
+    const card: CreditCard = {
+      ...base,
+      maximumSpend: null,
+      subcategories: base.subcategories?.map((subcategory) => ({
+        ...subcategory,
+        maximumSpend: 12,
+      })),
+    };
+    const calculation = SimpleRewardsCalculator.calculateCardRewards(
+      card,
+      [
+        createTransaction('first', -10_000),
+        createTransaction('after-unusable-headroom', -10_000),
+      ],
+      period,
+    );
+
+    expect(calculation.maximumSpendExceeded).toBe(false);
+    expect(calculation.subcategoryBreakdowns?.[0]).toMatchObject({
+      countedSpend: 10,
+      maximumSpendExceeded: true,
+    });
+    expect(calculation.transactionRewards['after-unusable-headroom']).toMatchObject({
+      reward: 0,
+      reason: 'cap_reached',
+    });
+  });
 });

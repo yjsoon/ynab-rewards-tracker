@@ -528,6 +528,30 @@ describe('buildRewardsDashboard', () => {
     });
   });
 
+  it('marks sub-block card-cap headroom as exhausted', () => {
+    const card = createCard({
+      type: 'miles',
+      earningRate: 4,
+      earningBlockSize: 5,
+      maximumSpend: 12,
+    });
+    const result = buildRewardsDashboard(
+      [card],
+      [
+        createTransaction({ id: 'first', amount: -10_000 }),
+        createTransaction({ id: 'after-unusable-headroom', amount: -10_000 }),
+      ],
+      { milesValuation: 0.01 },
+      referenceDate,
+    );
+
+    expect(result.cards[0]).toMatchObject({
+      spend: { counted: 10, eligible: 10 },
+      maximum: { target: 12, remaining: 0, progress: 1, reached: true },
+      status: 'capped',
+    });
+  });
+
   it('distinguishes building, earning, near-cap, and capped threshold states', () => {
     const cards = [
       createCard({

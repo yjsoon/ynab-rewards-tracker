@@ -310,12 +310,16 @@ async function hydrate(): Promise<StorageState> {
 export function StorageProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<StorageState>(defaultState);
   const [status, setStatus] = useState<StorageStatus>(defaultStatus);
+  const syncRequestIdRef = useRef(0);
+  const cardConfigurationRevisionRef = useRef(0);
+  const cardWritePromiseRef = useRef<Promise<void> | null>(null);
 
   const performSync = useCallback(
     async (
       options: SyncOptions = {},
       overrides: Partial<{ pat: string; selectedBudgetId?: string; trackedAccountIds: string[] }> = {},
     ) => {
+      const syncRequestId = ++syncRequestIdRef.current;
       if (DEMO_MODE) {
         const attemptedAt = new Date().toISOString();
         setState((prev) => ({
@@ -336,6 +340,8 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         await new Promise<void>((resolve) => {
           setTimeout(resolve, DEMO_SYNC_DELAY_MS);
         });
+
+        if (syncRequestId !== syncRequestIdRef.current) return;
 
         setState(createDemoState(new Date()));
         setStatus({ isHydrated: true, isRefreshing: false });
@@ -392,6 +398,14 @@ export function StorageProvider({ children }: { children: ReactNode }) {
           skipTransactions: options.skipTransactions,
         });
 
+        if (syncRequestId !== syncRequestIdRef.current) return;
+        if (cardWritePromiseRef.current) {
+          await cardWritePromiseRef.current;
+        }
+        if (syncRequestId !== syncRequestIdRef.current) return;
+        const latestStoredCards = await storage.getCards();
+        if (syncRequestId !== syncRequestIdRef.current) return;
+
         let nextSelectedBudget: SelectedBudget =
           state.selectedBudget.id === selectedBudgetId
             ? state.selectedBudget
@@ -399,6 +413,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         if (result.budgetId && result.budgetId !== selectedBudgetId) {
           const matched = result.budgets.find((budget) => budget.id === result.budgetId);
           if (matched) {
+            if (syncRequestId !== syncRequestIdRef.current) return;
             await storage.setSelectedBudget(matched.id, matched.name);
             nextSelectedBudget = { id: matched.id, name: matched.name };
           } else {
@@ -427,14 +442,16 @@ export function StorageProvider({ children }: { children: ReactNode }) {
             accounts: result.accounts.map((account) => ({ id: account.id, name: account.name })),
           };
 
+          if (syncRequestId !== syncRequestIdRef.current) return;
           await storage.setDashboardTransactionsCache(payload);
+          if (syncRequestId !== syncRequestIdRef.current) return;
           nextCachedData = await storage.getCachedData();
         }
 
         // Create tracked cards before calculating so first sync produces useful
         // calculations for the cards it just discovered.
         const cardsByAccountId = new Map(
-          storedCards.filter((c): c is CreditCard & { ynabAccountId: string } => Boolean(c.ynabAccountId))
+          latestStoredCards.filter((c): c is CreditCard & { ynabAccountId: string } => Boolean(c.ynabAccountId))
             .map((card) => [card.ynabAccountId, card] as const)
         );
 
@@ -466,50 +483,78 @@ export function StorageProvider({ children }: { children: ReactNode }) {
           }
         });
 
-        let updatedCards = storedCards;
+        let updatedCards = latestStoredCards;
         if (newCards.length > 0) {
-          const replacement = await storage.replaceCards([...storedCards, ...newCards]);
-          updatedCards = replacement.cards;
+          for (const card of newCards) {
+            if (syncRequestId !== syncRequestIdRef.current) return;
+            await storage.saveCard(card);
+          }
+          if (syncRequestId !== syncRequestIdRef.current) return;
+          updatedCards = await storage.getCards();
         }
 
         let mergedCalculations = await storage.getCalculations();
         if (!options.skipTransactions) {
-          const calculatedRewards = updatedCards.map((card) => {
-            if (!card.ynabAccountId) {
-              return null;
+          // Card edits can complete while the YNAB request is in flight. Re-read
+          // persisted configuration and retry calculation publication if it changes
+          // again before the write completes.
+          let calculationsPublished = false;
+          while (!calculationsPublished) {
+            if (syncRequestId !== syncRequestIdRef.current) return;
+            if (cardWritePromiseRef.current) {
+              await cardWritePromiseRef.current;
             }
-            const period = SimpleRewardsCalculator.calculatePeriod(card);
-            const cardTransactions = transactionsPayload.filter(
-              (txn) => txn.account_id === card.ynabAccountId,
-            );
-            const calculation = SimpleRewardsCalculator.calculateCardRewards(
-              card,
-              cardTransactions,
-              period,
-              state.settings,
-            );
-            return {
-              ...createRewardCalculationFromSimple(card, calculation),
-              period: formatCalculationPeriod(period),
-            };
-          }).filter((value): value is RewardCalculation => Boolean(value));
+            const cardRevision = cardConfigurationRevisionRef.current;
+            const calculationCards = await storage.getCards();
+            const calculationSettings = await storage.getSettings();
+            const existingCalculations = await storage.getCalculations();
+            if (syncRequestId !== syncRequestIdRef.current) return;
+            if (cardRevision !== cardConfigurationRevisionRef.current) continue;
 
-          if (calculatedRewards.length > 0) {
-            mergedCalculations = mergeRewardCalculations(
-              mergedCalculations,
-              calculatedRewards,
-            );
-            mergedCalculations = await storage.replaceCalculations(mergedCalculations);
+            const calculatedRewards = calculationCards.map((card) => {
+              if (!card.ynabAccountId) {
+                return null;
+              }
+              const period = SimpleRewardsCalculator.calculatePeriod(card);
+              const cardTransactions = transactionsPayload.filter(
+                (txn) => txn.account_id === card.ynabAccountId,
+              );
+              const calculation = SimpleRewardsCalculator.calculateCardRewards(
+                card,
+                cardTransactions,
+                period,
+                calculationSettings,
+              );
+              return {
+                ...createRewardCalculationFromSimple(card, calculation),
+                period: formatCalculationPeriod(period),
+              };
+            }).filter((value): value is RewardCalculation => Boolean(value));
+
+            mergedCalculations = calculatedRewards.length > 0
+              ? mergeRewardCalculations(existingCalculations, calculatedRewards)
+              : existingCalculations;
+            if (cardRevision !== cardConfigurationRevisionRef.current) continue;
+            if (calculatedRewards.length > 0) {
+              mergedCalculations = await storage.replaceCalculations(mergedCalculations);
+            }
+            if (syncRequestId !== syncRequestIdRef.current) return;
+            if (cardRevision !== cardConfigurationRevisionRef.current) continue;
+            updatedCards = calculationCards;
+            calculationsPublished = true;
           }
+        } else {
+          updatedCards = await storage.getCards();
         }
 
+        if (syncRequestId !== syncRequestIdRef.current) return;
         setState((prev) => ({
           ...prev,
           pat,
           budgets: result.budgets,
           accounts: result.accounts,
           selectedBudget: nextSelectedBudget,
-          cachedData: nextCachedData,
+          cachedData: options.skipTransactions ? prev.cachedData : nextCachedData,
           calculations: mergedCalculations,
           cards: updatedCards,
           connectionStatus: effectiveBudgetId ? 'connected' : 'awaiting_budget',
@@ -524,6 +569,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
           },
         }));
       } catch (error) {
+        if (syncRequestId !== syncRequestIdRef.current) return;
         if (isAbortError(error)) {
           setState((prev) => ({
             ...prev,
@@ -566,7 +612,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         throw failure;
       }
     },
-    [state.cachedData, state.pat, state.selectedBudget, state.trackedAccountIds, state.settings],
+    [state.cachedData, state.pat, state.selectedBudget, state.trackedAccountIds],
   );
 
   const initialiseConnection = useCallback(
@@ -1030,14 +1076,26 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         }));
       },
       setCards: async (cards) => {
-        const localChange = localChangeSettings();
-        await storage.updateSettings(localChange);
-        const replacement = await storage.replaceCards(cards);
-        setState((prev) => ({
-          ...prev,
-          ...replacement,
-          settings: { ...prev.settings, ...localChange },
-        }));
+        cardConfigurationRevisionRef.current += 1;
+        const write = (async () => {
+          const localChange = localChangeSettings();
+          await storage.updateSettings(localChange);
+          const replacement = await storage.replaceCards(cards);
+          setState((prev) => ({
+            ...prev,
+            ...replacement,
+            settings: { ...prev.settings, ...localChange },
+          }));
+        })();
+        const settledWrite = write.then(() => undefined, () => undefined);
+        cardWritePromiseRef.current = settledWrite;
+        try {
+          await write;
+        } finally {
+          if (cardWritePromiseRef.current === settledWrite) {
+            cardWritePromiseRef.current = null;
+          }
+        }
       },
       setRules: async (rules) => {
         const localChange = localChangeSettings();

@@ -4,6 +4,7 @@ import {
   STORAGE_KEY,
   STORAGE_VERSION,
   STORAGE_VERSION_KEY,
+  shouldResetStorage,
   createDefaultStorage,
   applyStorageMigrations,
   normaliseCard,
@@ -78,6 +79,13 @@ class StorageService {
   }
 
   private async performLoad(): Promise<StorageData> {
+    const storedVersion = await AsyncStorageService.getString(STORAGE_VERSION_KEY);
+    if (shouldResetStorage(storedVersion)) {
+      // Version bumps are deliberate hard-reset boundaries. Migrations below
+      // continue to handle compatible shape changes within the current version.
+      await AsyncStorageService.remove(STORAGE_KEY);
+    }
+
     const stored = await AsyncStorageService.getString(STORAGE_KEY);
 
     if (stored) {
@@ -93,8 +101,7 @@ class StorageService {
         return fallback;
       }
 
-      // A version change is not itself a reason to discard valid local data.
-      // Run all available migrations first, then persist at the current version.
+      // Compatible shape changes within the current reset boundary still migrate.
       applyStorageMigrations(data);
 
       if (Array.isArray(data.cards)) {
