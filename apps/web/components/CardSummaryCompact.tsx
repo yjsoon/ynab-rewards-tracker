@@ -85,15 +85,16 @@ export function CardSummaryCompactContent({
     !maximumSpendExceeded &&
     displayedSpend / maximumTarget >= NEAR_CAP_RATIO;
 
-  // Hero row leads with the number checked daily: room left before the cap (or to
-  // the minimum), falling back to plain spend when neither limit applies.
-  const heroVariant: "cap-left" | "cap-over" | "min-left" | "spent" = hasMaximum
-    ? maximumSpendExceeded
-      ? "cap-over"
-      : "cap-left"
-    : hasMinimum && !minimumSpendMet
+  // Hero row leads with an unmet minimum, then room left before or over the cap,
+  // falling back to plain spend when neither limit applies.
+  const heroVariant: "cap-left" | "cap-over" | "min-left" | "spent" =
+    hasMinimum && !minimumSpendMet
       ? "min-left"
-      : "spent";
+      : hasMaximum && maximumSpendExceeded
+        ? "cap-over"
+        : hasMaximum
+          ? "cap-left"
+          : "spent";
 
   // The hero lockup pairs the amount with a directional glyph and a qualifier word so
   // its meaning is legible without reading the label: a goal to spend into (rising
