@@ -34,6 +34,7 @@ import type {
   DashboardTransactionsCachePayload,
   CachedTransaction,
 } from '@ynab-counter/app-core/storage';
+import { resolveCloudSyncDirtyMarker } from '@ynab-counter/app-core/cloud-sync';
 import type {
   MutableCard,
   MutableStorageData,
@@ -52,6 +53,8 @@ class StorageService {
   private static instance: StorageService;
   private cache: StorageData | null = null;
   private loadPromise: Promise<StorageData> | null = null;
+  private operationGeneration = 0;
+  private writeBarrier: Promise<void> = Promise.resolve();
 
   static getInstance(): StorageService {
     if (!StorageService.instance) {
@@ -65,7 +68,8 @@ class StorageService {
       return this.cache;
     }
 
-    const pendingLoad = this.loadPromise ?? this.performLoad();
+    const loadGeneration = this.operationGeneration;
+    const pendingLoad = this.loadPromise ?? this.performLoad(loadGeneration);
     this.loadPromise = pendingLoad;
 
     try {
@@ -78,8 +82,9 @@ class StorageService {
     }
   }
 
-  private async performLoad(): Promise<StorageData> {
+  private async performLoad(expectedGeneration: number): Promise<StorageData> {
     const storedVersion = await AsyncStorageService.getString(STORAGE_VERSION_KEY);
+    this.assertGeneration(expectedGeneration);
     if (shouldResetStorage(storedVersion)) {
       // Version bumps are deliberate hard-reset boundaries. Migrations below
       // continue to handle compatible shape changes within the current version.
@@ -87,6 +92,7 @@ class StorageService {
     }
 
     const stored = await AsyncStorageService.getString(STORAGE_KEY);
+    this.assertGeneration(expectedGeneration);
 
     if (stored) {
       let data: MutableStorageData;
@@ -97,7 +103,7 @@ class StorageService {
           console.error('Failed to parse mobile storage payload', error);
         }
         const fallback = createDefaultStorage();
-        await this.save(fallback);
+        await this.save(fallback, expectedGeneration);
         return fallback;
       }
 
@@ -128,22 +134,55 @@ class StorageService {
       pruneThemeGroups(data);
       data.hiddenCards = normaliseHiddenCards(data.hiddenCards || []);
 
-      await this.save(data);
+      await this.save(data, expectedGeneration);
       return data;
     }
 
     const fallback = createDefaultStorage();
-    await this.save(fallback);
+    await this.save(fallback, expectedGeneration);
     return fallback;
   }
 
-  private async save(data: StorageData): Promise<void> {
+  captureGeneration(): number {
+    return this.operationGeneration;
+  }
+
+  invalidatePendingOperations(): number {
+    this.operationGeneration += 1;
+    return this.operationGeneration;
+  }
+
+  isGenerationCurrent(generation: number): boolean {
+    return generation === this.operationGeneration;
+  }
+
+  private enqueueWrite(operation: () => Promise<void>): Promise<void> {
+    const queued = this.writeBarrier.then(operation, operation);
+    this.writeBarrier = queued.catch(() => undefined);
+    return queued;
+  }
+
+  private assertGeneration(generation: number): void {
+    if (!this.isGenerationCurrent(generation)) {
+      throw new Error('Storage operation was cancelled.');
+    }
+  }
+
+  private async save(
+    data: StorageData,
+    expectedGeneration = this.operationGeneration,
+  ): Promise<void> {
+    const serialized = JSON.stringify(data);
     try {
-      await AsyncStorageService.setString(STORAGE_KEY, JSON.stringify(data));
-      await AsyncStorageService.setString(STORAGE_VERSION_KEY, STORAGE_VERSION);
-      this.cache = data;
+      await this.enqueueWrite(async () => {
+        this.assertGeneration(expectedGeneration);
+        await AsyncStorageService.setString(STORAGE_KEY, serialized);
+        await AsyncStorageService.setString(STORAGE_VERSION_KEY, STORAGE_VERSION);
+        this.assertGeneration(expectedGeneration);
+        this.cache = data;
+      });
     } catch (error) {
-      if (__DEV__) {
+      if (__DEV__ && this.isGenerationCurrent(expectedGeneration)) {
         console.error('Failed to persist mobile storage payload', error);
       }
       throw error;
@@ -166,13 +205,38 @@ class StorageService {
     return (await this.load()).settings || {};
   }
 
-  async updateSettings(settings: Partial<AppSettings>): Promise<void> {
+  async updateSettings(
+    settings: Partial<AppSettings>,
+    expectedGeneration = this.operationGeneration,
+  ): Promise<void> {
+    this.assertGeneration(expectedGeneration);
     const storage = await this.load();
+    this.assertGeneration(expectedGeneration);
     storage.settings = {
       ...storage.settings,
       ...settings,
     };
-    await this.save(storage);
+    await this.save(storage, expectedGeneration);
+  }
+
+  async completeCloudSyncSnapshot(
+    snapshotMarker: string | undefined,
+    metadata: Pick<AppSettings, 'cloudSyncKeyId' | 'cloudSyncLastSyncedAt'>,
+    expectedGeneration = this.operationGeneration,
+  ): Promise<AppSettings> {
+    this.assertGeneration(expectedGeneration);
+    const storage = await this.load();
+    this.assertGeneration(expectedGeneration);
+    storage.settings = {
+      ...storage.settings,
+      ...metadata,
+      cloudSyncLocalChangedAt: resolveCloudSyncDirtyMarker(
+        snapshotMarker,
+        storage.settings.cloudSyncLocalChangedAt,
+      ),
+    };
+    await this.save(storage, expectedGeneration);
+    return { ...storage.settings };
   }
 
   private wipeConnectionState(storage: MutableStorageData): void {
@@ -252,11 +316,13 @@ class StorageService {
     }
   }
 
-  async clearBudgetSelection(): Promise<void> {
+  async clearBudgetSelection(expectedGeneration = this.operationGeneration): Promise<void> {
+    this.assertGeneration(expectedGeneration);
     const storage = await this.load();
+    this.assertGeneration(expectedGeneration);
     delete storage.ynab.selectedBudgetId;
     delete storage.ynab.selectedBudgetName;
-    await this.save(storage);
+    await this.save(storage, expectedGeneration);
   }
 
   async getSelectedBudget(): Promise<{ id?: string; name?: string }> {
@@ -264,11 +330,17 @@ class StorageService {
     return { id: selectedBudgetId, name: selectedBudgetName };
   }
 
-  async setSelectedBudget(budgetId: string, budgetName: string): Promise<void> {
+  async setSelectedBudget(
+    budgetId: string,
+    budgetName: string,
+    expectedGeneration = this.operationGeneration,
+  ): Promise<void> {
+    this.assertGeneration(expectedGeneration);
     const storage = await this.load();
+    this.assertGeneration(expectedGeneration);
     storage.ynab.selectedBudgetId = budgetId;
     storage.ynab.selectedBudgetName = budgetName;
-    await this.save(storage);
+    await this.save(storage, expectedGeneration);
   }
 
   async getTrackedAccountIds(): Promise<string[]> {
@@ -299,12 +371,17 @@ class StorageService {
     return (await this.load()).cards || [];
   }
 
-  async saveCard(card: CreditCard): Promise<void> {
+  async saveCard(
+    card: CreditCard,
+    expectedGeneration = this.operationGeneration,
+  ): Promise<void> {
+    this.assertGeneration(expectedGeneration);
     const storage = await this.load();
+    this.assertGeneration(expectedGeneration);
     const normalised = normaliseCard({ ...card } as MutableCard, storage.cachedData?.flagNames);
     upsertById(storage.cards, normalised);
     pruneThemeGroups(storage as MutableStorageData);
-    await this.save(storage);
+    await this.save(storage, expectedGeneration);
   }
 
   async replaceCards(
@@ -485,10 +562,13 @@ class StorageService {
 
   async replaceCalculations(
     calculations: readonly RewardCalculation[],
+    expectedGeneration = this.operationGeneration,
   ): Promise<RewardCalculation[]> {
+    this.assertGeneration(expectedGeneration);
     const storage = await this.load();
+    this.assertGeneration(expectedGeneration);
     storage.calculations = calculations.map((calculation) => ({ ...calculation }));
-    await this.save(storage);
+    await this.save(storage, expectedGeneration);
     return [...storage.calculations];
   }
 
@@ -651,8 +731,13 @@ class StorageService {
     };
   }
 
-  async setDashboardTransactionsCache(payload: DashboardTransactionsCachePayload): Promise<void> {
+  async setDashboardTransactionsCache(
+    payload: DashboardTransactionsCachePayload,
+    expectedGeneration = this.operationGeneration,
+  ): Promise<void> {
+    this.assertGeneration(expectedGeneration);
     const storage = await this.load();
+    this.assertGeneration(expectedGeneration);
     storage.cachedData = storage.cachedData || {};
     const entries = storage.cachedData.dashboardTransactions || [];
 
@@ -688,7 +773,7 @@ class StorageService {
     }
 
     storage.cachedData.dashboardTransactions = filtered;
-    await this.save(storage);
+    await this.save(storage, expectedGeneration);
   }
 
   async pruneDashboardTransactionsCache(ttlMs = 5 * 60 * 1000): Promise<void> {
@@ -732,15 +817,21 @@ class StorageService {
 
   async importSettings(
     jsonString: string,
-    options?: { expectedCloudSyncLocalChangedAt?: string | null },
+    options?: {
+      expectedCloudSyncLocalChangedAt?: string | null;
+      expectedGeneration?: number;
+    },
   ): Promise<void> {
     try {
+      const expectedGeneration = options?.expectedGeneration ?? this.operationGeneration;
+      this.assertGeneration(expectedGeneration);
       const imported = JSON.parse(jsonString) as Partial<MutableStorageData>;
       if (!imported || typeof imported !== 'object' || Array.isArray(imported)) {
         throw new Error('Expected a storage object');
       }
 
       const storage = await this.load() as MutableStorageData;
+      this.assertGeneration(expectedGeneration);
       if (
         options &&
         (storage.settings.cloudSyncLocalChangedAt ?? null) !==
@@ -801,20 +892,27 @@ class StorageService {
         : [];
       pruneThemeGroups(storage);
       storage.hiddenCards = normaliseHiddenCards(storage.hiddenCards || []);
-      await this.save(storage);
+      await this.save(storage, expectedGeneration);
     } catch (error) {
+      if (options?.expectedGeneration !== undefined
+        && !this.isGenerationCurrent(options.expectedGeneration)) {
+        throw error;
+      }
       throw new Error('Invalid settings file');
     }
   }
 
   async clearAll(): Promise<void> {
+    this.invalidatePendingOperations();
     try {
-      await Promise.all([
-        AsyncStorageService.remove(STORAGE_KEY),
-        AsyncStorageService.remove(STORAGE_VERSION_KEY),
-        SecureStore.deleteItemAsync(PAT_SECURE_STORE_KEY),
-        ...LEGACY_PAT_SECURE_STORE_KEYS.map((key) => SecureStore.deleteItemAsync(key)),
-      ]);
+      await this.enqueueWrite(async () => {
+        await Promise.all([
+          AsyncStorageService.remove(STORAGE_KEY),
+          AsyncStorageService.remove(STORAGE_VERSION_KEY),
+          SecureStore.deleteItemAsync(PAT_SECURE_STORE_KEY),
+          ...LEGACY_PAT_SECURE_STORE_KEYS.map((key) => SecureStore.deleteItemAsync(key)),
+        ]);
+      });
     } finally {
       this.cache = null;
       this.loadPromise = null;

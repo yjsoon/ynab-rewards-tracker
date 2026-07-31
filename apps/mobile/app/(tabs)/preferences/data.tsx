@@ -82,6 +82,7 @@ export default function DataPreferencesScreen() {
           style: 'destructive',
           onPress: () => {
             void (async () => {
+              actions.invalidatePendingOperations();
               await Promise.all([storage.clearAll(), forgetCloudSyncCode()]);
               await actions.refresh();
               router.replace('/');

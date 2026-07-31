@@ -1,9 +1,19 @@
 import { describe, expect, it } from 'vitest';
 
 import { createDefaultStorage } from '../storage';
-import { createCloudSyncPayload, parseCloudSyncPayload } from './payload';
+import {
+  createCloudSyncPayload,
+  parseCloudSyncPayload,
+  resolveCloudSyncDirtyMarker,
+} from './payload';
 
 describe('Cloud Sync payloads', () => {
+  it('clears only the dirty marker represented by a completed snapshot', () => {
+    expect(resolveCloudSyncDirtyMarker('snapshot', 'snapshot')).toBeUndefined();
+    expect(resolveCloudSyncDirtyMarker('snapshot', 'newer-edit')).toBe('newer-edit');
+    expect(resolveCloudSyncDirtyMarker(undefined, 'newer-edit')).toBe('newer-edit');
+  });
+
   it('exclude credentials, recovery codes, API keys, transactions and calculations', () => {
     const data = createDefaultStorage();
     data.ynab.pat = 'secret-pat';

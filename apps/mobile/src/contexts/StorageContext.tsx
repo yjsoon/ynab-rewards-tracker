@@ -89,7 +89,8 @@ type SyncOptions = {
 };
 
 type StorageActions = {
-  refresh: () => Promise<void>;
+  refresh: (expectedGeneration?: number) => Promise<void>;
+  invalidatePendingOperations: () => void;
   setPAT: (pat: string) => Promise<void>;
   clearPAT: () => Promise<void>;
   disconnect: () => Promise<void>;
@@ -222,6 +223,7 @@ function withoutConnection(state: StorageState): StorageState {
 
 const noopActions: StorageActions = {
   refresh: async () => {},
+  invalidatePendingOperations: () => {},
   setPAT: async () => {},
   clearPAT: async () => {},
   disconnect: async () => {},
@@ -313,6 +315,10 @@ export function StorageProvider({ children }: { children: ReactNode }) {
   const syncRequestIdRef = useRef(0);
   const cardConfigurationRevisionRef = useRef(0);
   const cardWritePromiseRef = useRef<Promise<void> | null>(null);
+  const invalidatePendingOperations = useCallback(() => {
+    storage.invalidatePendingOperations();
+    syncRequestIdRef.current += 1;
+  }, []);
 
   const performSync = useCallback(
     async (
@@ -320,6 +326,11 @@ export function StorageProvider({ children }: { children: ReactNode }) {
       overrides: Partial<{ pat: string; selectedBudgetId?: string; trackedAccountIds: string[] }> = {},
     ) => {
       const syncRequestId = ++syncRequestIdRef.current;
+      const storageGeneration = storage.captureGeneration();
+      const isCurrentSync = () => (
+        syncRequestId === syncRequestIdRef.current
+        && storage.isGenerationCurrent(storageGeneration)
+      );
       if (DEMO_MODE) {
         const attemptedAt = new Date().toISOString();
         setState((prev) => ({
@@ -341,7 +352,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
           setTimeout(resolve, DEMO_SYNC_DELAY_MS);
         });
 
-        if (syncRequestId !== syncRequestIdRef.current) return;
+        if (!isCurrentSync()) return;
 
         setState(createDemoState(new Date()));
         setStatus({ isHydrated: true, isRefreshing: false });
@@ -398,13 +409,13 @@ export function StorageProvider({ children }: { children: ReactNode }) {
           skipTransactions: options.skipTransactions,
         });
 
-        if (syncRequestId !== syncRequestIdRef.current) return;
+        if (!isCurrentSync()) return;
         if (cardWritePromiseRef.current) {
           await cardWritePromiseRef.current;
         }
-        if (syncRequestId !== syncRequestIdRef.current) return;
+        if (!isCurrentSync()) return;
         const latestStoredCards = await storage.getCards();
-        if (syncRequestId !== syncRequestIdRef.current) return;
+        if (!isCurrentSync()) return;
 
         let nextSelectedBudget: SelectedBudget =
           state.selectedBudget.id === selectedBudgetId
@@ -413,8 +424,8 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         if (result.budgetId && result.budgetId !== selectedBudgetId) {
           const matched = result.budgets.find((budget) => budget.id === result.budgetId);
           if (matched) {
-            if (syncRequestId !== syncRequestIdRef.current) return;
-            await storage.setSelectedBudget(matched.id, matched.name);
+            if (!isCurrentSync()) return;
+            await storage.setSelectedBudget(matched.id, matched.name, storageGeneration);
             nextSelectedBudget = { id: matched.id, name: matched.name };
           } else {
             nextSelectedBudget = { id: result.budgetId };
@@ -442,9 +453,9 @@ export function StorageProvider({ children }: { children: ReactNode }) {
             accounts: result.accounts.map((account) => ({ id: account.id, name: account.name })),
           };
 
-          if (syncRequestId !== syncRequestIdRef.current) return;
-          await storage.setDashboardTransactionsCache(payload);
-          if (syncRequestId !== syncRequestIdRef.current) return;
+          if (!isCurrentSync()) return;
+          await storage.setDashboardTransactionsCache(payload, storageGeneration);
+          if (!isCurrentSync()) return;
           nextCachedData = await storage.getCachedData();
         }
 
@@ -486,10 +497,10 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         let updatedCards = latestStoredCards;
         if (newCards.length > 0) {
           for (const card of newCards) {
-            if (syncRequestId !== syncRequestIdRef.current) return;
-            await storage.saveCard(card);
+            if (!isCurrentSync()) return;
+            await storage.saveCard(card, storageGeneration);
           }
-          if (syncRequestId !== syncRequestIdRef.current) return;
+          if (!isCurrentSync()) return;
           updatedCards = await storage.getCards();
         }
 
@@ -500,7 +511,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
           // again before the write completes.
           let calculationsPublished = false;
           while (!calculationsPublished) {
-            if (syncRequestId !== syncRequestIdRef.current) return;
+            if (!isCurrentSync()) return;
             if (cardWritePromiseRef.current) {
               await cardWritePromiseRef.current;
             }
@@ -508,7 +519,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
             const calculationCards = await storage.getCards();
             const calculationSettings = await storage.getSettings();
             const existingCalculations = await storage.getCalculations();
-            if (syncRequestId !== syncRequestIdRef.current) return;
+            if (!isCurrentSync()) return;
             if (cardRevision !== cardConfigurationRevisionRef.current) continue;
 
             const calculatedRewards = calculationCards.map((card) => {
@@ -536,9 +547,12 @@ export function StorageProvider({ children }: { children: ReactNode }) {
               : existingCalculations;
             if (cardRevision !== cardConfigurationRevisionRef.current) continue;
             if (calculatedRewards.length > 0) {
-              mergedCalculations = await storage.replaceCalculations(mergedCalculations);
+              mergedCalculations = await storage.replaceCalculations(
+                mergedCalculations,
+                storageGeneration,
+              );
             }
-            if (syncRequestId !== syncRequestIdRef.current) return;
+            if (!isCurrentSync()) return;
             if (cardRevision !== cardConfigurationRevisionRef.current) continue;
             updatedCards = calculationCards;
             calculationsPublished = true;
@@ -547,7 +561,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
           updatedCards = await storage.getCards();
         }
 
-        if (syncRequestId !== syncRequestIdRef.current) return;
+        if (!isCurrentSync()) return;
         setState((prev) => ({
           ...prev,
           pat,
@@ -569,7 +583,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
           },
         }));
       } catch (error) {
-        if (syncRequestId !== syncRequestIdRef.current) return;
+        if (!isCurrentSync()) return;
         if (isAbortError(error)) {
           setState((prev) => ({
             ...prev,
@@ -617,6 +631,8 @@ export function StorageProvider({ children }: { children: ReactNode }) {
 
   const initialiseConnection = useCallback(
     async (pat: string, trackedAccountIds: string[], selectedBudgetId?: string) => {
+      const storageGeneration = storage.captureGeneration();
+      const isCurrentConnection = () => storage.isGenerationCurrent(storageGeneration);
       if (!pat) {
         setState((prev) => ({
           ...prev,
@@ -637,17 +653,19 @@ export function StorageProvider({ children }: { children: ReactNode }) {
 
       try {
         const budgets = await fetchBudgets(pat);
+        if (!isCurrentConnection()) return;
         let nextBudget = selectedBudgetId ? budgets.find((budget) => budget.id === selectedBudgetId) : undefined;
 
         if (!nextBudget && budgets.length === 1) {
           nextBudget = budgets[0];
-          await storage.setSelectedBudget(nextBudget.id, nextBudget.name);
+          await storage.setSelectedBudget(nextBudget.id, nextBudget.name, storageGeneration);
         }
 
         if (!nextBudget) {
           if (selectedBudgetId) {
-            await storage.clearBudgetSelection();
+            await storage.clearBudgetSelection(storageGeneration);
           }
+          if (!isCurrentConnection()) return;
           setState((prev) => ({
             ...prev,
             pat,
@@ -660,6 +678,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
           return;
         }
 
+        if (!isCurrentConnection()) return;
         setState((prev) => ({
           ...prev,
           pat,
@@ -675,6 +694,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
           trackedAccountIds,
         });
       } catch (error) {
+        if (!isCurrentConnection()) return;
         const message = error instanceof Error ? error.message : 'Failed to connect to YNAB';
         const failure = error instanceof Error ? error : new Error(message);
 
@@ -718,6 +738,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
+    const storageGeneration = storage.captureGeneration();
 
     const bootstrap = async () => {
       if (DEMO_MODE) {
@@ -729,11 +750,11 @@ export function StorageProvider({ children }: { children: ReactNode }) {
       let hydrated: StorageState;
       try {
         hydrated = await hydrate();
-        if (cancelled) {
+        if (cancelled || !storage.isGenerationCurrent(storageGeneration)) {
           return;
         }
       } catch (error) {
-        if (cancelled) {
+        if (cancelled || !storage.isGenerationCurrent(storageGeneration)) {
           return;
         }
         setStatus({
@@ -744,6 +765,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      if (!storage.isGenerationCurrent(storageGeneration)) return;
       setState(hydrated);
       setStatus({ isHydrated: true, isRefreshing: false });
 
@@ -768,7 +790,9 @@ export function StorageProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (expectedGeneration?: number) => {
+    const storageGeneration = expectedGeneration ?? storage.captureGeneration();
+    if (!storage.isGenerationCurrent(storageGeneration)) return;
     if (DEMO_MODE) {
       await performSync();
       return;
@@ -777,6 +801,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
     setStatus((prev) => ({ ...prev, isRefreshing: true, refreshError: undefined }));
     try {
       const next = await hydrate();
+      if (!storage.isGenerationCurrent(storageGeneration)) return;
       const budgetChanged = next.selectedBudget.id !== state.selectedBudget.id;
       setState((prev) => ({
         ...next,
@@ -793,14 +818,18 @@ export function StorageProvider({ children }: { children: ReactNode }) {
           next.selectedBudget.id,
         );
       }
+      if (!storage.isGenerationCurrent(storageGeneration)) return;
       setStatus((prev) => ({ ...prev, refreshError: undefined }));
     } catch (error) {
+      if (!storage.isGenerationCurrent(storageGeneration)) return;
       setStatus((prev) => ({
         ...prev,
         refreshError: error instanceof Error ? error : new Error(STORAGE_REFRESH_ERROR),
       }));
     } finally {
-      setStatus((prev) => ({ ...prev, isRefreshing: false }));
+      if (storage.isGenerationCurrent(storageGeneration)) {
+        setStatus((prev) => ({ ...prev, isRefreshing: false }));
+      }
     }
   }, [performSync, state.selectedBudget.id]);
 
@@ -811,6 +840,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
     () => ({
       ...noopActions,
       refresh,
+      invalidatePendingOperations,
       setPAT: async () => {
         setState((prev) => ({
           ...prev,
@@ -916,12 +946,13 @@ export function StorageProvider({ children }: { children: ReactNode }) {
       },
       pruneDashboardCache: async () => {},
     }),
-    [performSync, refresh],
+    [invalidatePendingOperations, performSync, refresh],
   );
 
   const actions = useMemo<StorageActions>(
     () => ({
       refresh,
+      invalidatePendingOperations,
       setPAT: async (pat: string) => {
         const trimmed = pat.trim();
         await storage.setPAT(trimmed);
@@ -1161,7 +1192,16 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         }));
       },
     }),
-    [initialiseConnection, performSync, refresh, state.trackedAccountIds, state.pat, state.pending, state.selectedBudget],
+    [
+      initialiseConnection,
+      invalidatePendingOperations,
+      performSync,
+      refresh,
+      state.trackedAccountIds,
+      state.pat,
+      state.pending,
+      state.selectedBudget,
+    ],
   );
 
   const value = useMemo<StorageContextValue>(

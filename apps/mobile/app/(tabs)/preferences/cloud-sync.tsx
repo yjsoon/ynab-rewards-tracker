@@ -67,6 +67,7 @@ export default function CloudSyncScreen() {
   const validPhrase = isValidMnemonic(normaliseMnemonic(phrase));
 
   const persistPhrasePreference = async (nextRemember: boolean, code = phrase) => {
+    const storageGeneration = storage.captureGeneration();
     const previousRemember = remember;
     try {
       setRemember(nextRemember);
@@ -75,11 +76,14 @@ export default function CloudSyncScreen() {
       } else if (!nextRemember) {
         await forgetCloudSyncCode();
       }
-      await actions.setSettings({
+      if (!storage.isGenerationCurrent(storageGeneration)) return;
+      await storage.updateSettings({
         rememberCloudSyncCode: nextRemember,
         autoSyncEnabled: nextRemember ? state.settings.autoSyncEnabled : false,
-      });
+      }, storageGeneration);
+      await actions.refresh(storageGeneration);
     } catch (error) {
+      if (!storage.isGenerationCurrent(storageGeneration)) return;
       setRemember(previousRemember);
       setMessage({
         text: error instanceof Error ? error.message : 'Couldn’t update the remembered code',
@@ -89,22 +93,38 @@ export default function CloudSyncScreen() {
   };
 
   const saveNow = async () => {
+    const storageGeneration = storage.captureGeneration();
     setOperation('save');
     setMessage(undefined);
     try {
       const raw = JSON.parse(await storage.exportSettings()) as StorageData;
+      if (!storage.isGenerationCurrent(storageGeneration)) return;
       const payload = createCloudSyncPayload(raw);
       const result = await saveSettingsToCloud(phrase, payload);
-      await actions.setSettings({
-        cloudSyncKeyId: result.keyId,
-        cloudSyncLastSyncedAt: result.updatedAt,
-        cloudSyncLocalChangedAt: undefined,
-        rememberCloudSyncCode: remember,
-      });
-      if (remember) await rememberCloudSyncCode(result.phrase);
+      if (!storage.isGenerationCurrent(storageGeneration)) return;
+      const completedSettings = await storage.completeCloudSyncSnapshot(
+        raw.settings.cloudSyncLocalChangedAt,
+        {
+          cloudSyncKeyId: result.keyId,
+          cloudSyncLastSyncedAt: result.updatedAt,
+        },
+        storageGeneration,
+      );
+      if (!storage.isGenerationCurrent(storageGeneration)) return;
+      const shouldRemember = completedSettings.rememberCloudSyncCode ?? remember;
+      if (shouldRemember) {
+        await rememberCloudSyncCode(result.phrase);
+      } else {
+        await forgetCloudSyncCode();
+      }
+      if (!storage.isGenerationCurrent(storageGeneration)) return;
+      setRemember(shouldRemember);
+      await actions.refresh(storageGeneration);
+      if (!storage.isGenerationCurrent(storageGeneration)) return;
       setPhrase(result.phrase);
       setMessage({ text: 'Encrypted settings are up to date', tone: 'positive' });
     } catch (error) {
+      if (!storage.isGenerationCurrent(storageGeneration)) return;
       setMessage({
         text: error instanceof Error ? error.message : 'Couldn’t save to Cloud Sync',
         tone: 'attention',
@@ -117,17 +137,22 @@ export default function CloudSyncScreen() {
   const applyRestore = async (
     payload: StorageData,
     metadata: { keyId: string; phrase: string; updatedAt: string },
+    storageGeneration: number,
   ) => {
-    await storage.importSettings(JSON.stringify(payload));
+    if (!storage.isGenerationCurrent(storageGeneration)) return;
+    await storage.importSettings(JSON.stringify(payload), { expectedGeneration: storageGeneration });
     await storage.updateSettings({
       cloudSyncKeyId: metadata.keyId,
       cloudSyncLastSyncedAt: metadata.updatedAt,
       cloudSyncLocalChangedAt: undefined,
       rememberCloudSyncCode: remember,
       autoSyncEnabled: state.settings.autoSyncEnabled ?? false,
-    });
+    }, storageGeneration);
+    if (!storage.isGenerationCurrent(storageGeneration)) return;
     if (remember) await rememberCloudSyncCode(metadata.phrase);
-    await actions.refresh();
+    if (!storage.isGenerationCurrent(storageGeneration)) return;
+    await actions.refresh(storageGeneration);
+    if (!storage.isGenerationCurrent(storageGeneration)) return;
     setPhrase(metadata.phrase);
     setMessage({
       text: `Restored ${payload.cards.length} card${payload.cards.length === 1 ? '' : 's'} from Cloud Sync`,
@@ -136,10 +161,12 @@ export default function CloudSyncScreen() {
   };
 
   const restoreNow = async () => {
+    const storageGeneration = storage.captureGeneration();
     setOperation('restore');
     setMessage(undefined);
     try {
       const restored = await restoreSettingsFromCloud<unknown>(phrase);
+      if (!storage.isGenerationCurrent(storageGeneration)) return;
       const payload = parseCloudSyncPayload(restored.data);
       Alert.alert(
         'Restore encrypted settings?',
@@ -153,8 +180,9 @@ export default function CloudSyncScreen() {
           {
             text: 'Restore',
             onPress: () => {
-              void applyRestore(payload, restored)
+              void applyRestore(payload, restored, storageGeneration)
                 .catch((error: unknown) => {
+                  if (!storage.isGenerationCurrent(storageGeneration)) return;
                   setMessage({
                     text: error instanceof Error ? error.message : 'Couldn’t restore settings',
                     tone: 'attention',
@@ -166,6 +194,7 @@ export default function CloudSyncScreen() {
         ],
       );
     } catch (error) {
+      if (!storage.isGenerationCurrent(storageGeneration)) return;
       setMessage({
         text: error instanceof Error ? error.message : 'Couldn’t restore from Cloud Sync',
         tone: 'attention',
@@ -193,21 +222,27 @@ export default function CloudSyncScreen() {
           text: 'Delete Backup',
           style: 'destructive',
           onPress: () => {
+            const storageGeneration = storage.captureGeneration();
             setOperation('delete');
             void (async () => {
               const enteredKeyId = await computeKeyId(normaliseMnemonic(phrase));
+              if (!storage.isGenerationCurrent(storageGeneration)) return;
               if (enteredKeyId !== configuredKeyId) {
                 throw new Error('Enter the recovery code for the configured backup.');
               }
               await deleteSettingsFromCloud(phrase);
-              await actions.setSettings({
+              if (!storage.isGenerationCurrent(storageGeneration)) return;
+              await storage.updateSettings({
                 cloudSyncKeyId: undefined,
                 cloudSyncLastSyncedAt: undefined,
                 autoSyncEnabled: false,
-              });
+              }, storageGeneration);
+              await actions.refresh(storageGeneration);
+              if (!storage.isGenerationCurrent(storageGeneration)) return;
               setMessage({ text: 'Cloud backup deleted', tone: 'positive' });
             })()
               .catch((error: unknown) => {
+                if (!storage.isGenerationCurrent(storageGeneration)) return;
                 setMessage({
                   text: error instanceof Error ? error.message : 'Couldn’t delete cloud backup',
                   tone: 'attention',
@@ -229,22 +264,33 @@ export default function CloudSyncScreen() {
       setMessage({ text: 'Save or restore once before turning on automatic sync.', tone: 'attention' });
       return;
     }
+    const storageGeneration = storage.captureGeneration();
     const previousRemember = remember;
     try {
       if (enabled) {
         const enteredKeyId = await computeKeyId(normaliseMnemonic(phrase));
+        if (!storage.isGenerationCurrent(storageGeneration)) return;
         if (enteredKeyId !== state.settings.cloudSyncKeyId) {
           throw new Error('Save or restore this recovery code before turning on automatic sync.');
         }
         setRemember(true);
         await rememberCloudSyncCode(phrase);
-        await actions.setSettings({ rememberCloudSyncCode: true, autoSyncEnabled: true });
+        if (!storage.isGenerationCurrent(storageGeneration)) return;
+        await storage.updateSettings(
+          { rememberCloudSyncCode: true, autoSyncEnabled: true },
+          storageGeneration,
+        );
+        await actions.refresh(storageGeneration);
+        if (!storage.isGenerationCurrent(storageGeneration)) return;
         setMessage({ text: 'Automatic sync turned on', tone: 'positive' });
       } else {
-        await actions.setSettings({ autoSyncEnabled: false });
+        await storage.updateSettings({ autoSyncEnabled: false }, storageGeneration);
+        await actions.refresh(storageGeneration);
+        if (!storage.isGenerationCurrent(storageGeneration)) return;
         setMessage({ text: 'Automatic sync turned off', tone: 'positive' });
       }
     } catch (error) {
+      if (!storage.isGenerationCurrent(storageGeneration)) return;
       setRemember(previousRemember);
       setMessage({
         text: error instanceof Error ? error.message : 'Couldn’t update automatic sync',
@@ -330,6 +376,7 @@ export default function CloudSyncScreen() {
               <Switch
                 value={remember}
                 onValueChange={(value) => void persistPhrasePreference(value)}
+                disabled={isBusy}
                 trackColor={{ true: semanticColors.action }}
                 accessibilityLabel="Remember Cloud Sync code"
               />

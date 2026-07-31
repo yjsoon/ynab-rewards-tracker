@@ -114,33 +114,47 @@ export function useCloudAutoSync(): void {
     const now = Date.now();
     if (!force && now - lastAttemptRef.current < FOREGROUND_COOLDOWN_MS) return;
     if (inFlightRef.current) return inFlightRef.current;
+    const storageGeneration = storage.captureGeneration();
+    const assertCurrentGeneration = () => {
+      if (!storage.isGenerationCurrent(storageGeneration)) {
+        throw new Error('Automatic Cloud Sync was cancelled.');
+      }
+    };
 
     const run = (async () => {
       lastAttemptRef.current = now;
       const phrase = await loadRememberedCloudSyncCode();
+      assertCurrentGeneration();
       if (!phrase) return;
 
       let restored: Awaited<ReturnType<typeof restoreSettingsFromCloud<unknown>>>;
       try {
         restored = await restoreSettingsFromCloud<unknown>(phrase);
+        assertCurrentGeneration();
       } catch (error) {
+        assertCurrentGeneration();
         if (!isMissingBackup(error)) throw error;
         const latestLocal = await readLocalSnapshot();
+        assertCurrentGeneration();
         const seeded = await saveSettingsToCloud(phrase, latestLocal.payload);
+        assertCurrentGeneration();
         const afterSeed = await storage.getSettings();
-        await actions.setSettings({
+        assertCurrentGeneration();
+        await storage.updateSettings({
           cloudSyncKeyId: seeded.keyId,
           cloudSyncLastSyncedAt: seeded.updatedAt,
           cloudSyncLocalChangedAt:
             afterSeed.cloudSyncLocalChangedAt === latestLocal.settings.cloudSyncLocalChangedAt
               ? undefined
               : afterSeed.cloudSyncLocalChangedAt,
-        });
+        }, storageGeneration);
+        await actions.refresh(storageGeneration);
         return;
       }
 
       const cloudPayload = parseCloudSyncPayload(restored.data);
       const latestLocal = await readLocalSnapshot();
+      assertCurrentGeneration();
       const localPayload = latestLocal.payload;
       const localSettings = latestLocal.settings;
       const lastLocalSync = localSettings.cloudSyncLastSyncedAt
@@ -163,8 +177,11 @@ export function useCloudAutoSync(): void {
       if (cloudIsNewer) {
         await storage.importSettings(JSON.stringify(cloudPayload), {
           expectedCloudSyncLocalChangedAt: localSettings.cloudSyncLocalChangedAt ?? null,
+          expectedGeneration: storageGeneration,
         });
+        assertCurrentGeneration();
         const afterImport = await storage.getSettings();
+        assertCurrentGeneration();
         await storage.updateSettings({
           cloudSyncKeyId: restored.keyId,
           cloudSyncLastSyncedAt: restored.updatedAt,
@@ -174,8 +191,8 @@ export function useCloudAutoSync(): void {
               : afterImport.cloudSyncLocalChangedAt,
           rememberCloudSyncCode: true,
           autoSyncEnabled: true,
-        });
-        await actions.refresh();
+        }, storageGeneration);
+        await actions.refresh(storageGeneration);
         return;
       }
 
@@ -187,15 +204,18 @@ export function useCloudAutoSync(): void {
 
       if (payloadsDiffer) {
         const pushed = await saveSettingsToCloud(phrase, localPayload);
+        assertCurrentGeneration();
         const afterPush = await storage.getSettings();
-        await actions.setSettings({
+        assertCurrentGeneration();
+        await storage.updateSettings({
           cloudSyncKeyId: pushed.keyId,
           cloudSyncLastSyncedAt: pushed.updatedAt,
           cloudSyncLocalChangedAt:
             afterPush.cloudSyncLocalChangedAt === localSettings.cloudSyncLocalChangedAt
               ? undefined
               : afterPush.cloudSyncLocalChangedAt,
-        });
+        }, storageGeneration);
+        await actions.refresh(storageGeneration);
         return;
       }
 
@@ -205,17 +225,21 @@ export function useCloudAutoSync(): void {
         localSettings.cloudSyncLocalChangedAt !== undefined
       ) {
         const latestSettings = await storage.getSettings();
-        await actions.setSettings({
+        assertCurrentGeneration();
+        await storage.updateSettings({
           cloudSyncKeyId: restored.keyId,
           cloudSyncLastSyncedAt: restored.updatedAt,
           cloudSyncLocalChangedAt:
             latestSettings.cloudSyncLocalChangedAt === localSettings.cloudSyncLocalChangedAt
               ? undefined
               : latestSettings.cloudSyncLocalChangedAt,
-        });
+        }, storageGeneration);
+        await actions.refresh(storageGeneration);
       }
     })().catch((error: unknown) => {
-      if (__DEV__) console.warn('Automatic Cloud Sync failed', error);
+      if (__DEV__ && storage.isGenerationCurrent(storageGeneration)) {
+        console.warn('Automatic Cloud Sync failed', error);
+      }
     });
 
     inFlightRef.current = run;

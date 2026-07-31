@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { Linking, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
@@ -50,6 +50,26 @@ export default function PreferencesScreen() {
     return connected ? 'synced' as const : 'offline' as const;
   }, [connected, state.connectionError, state.isSyncing, status.isRefreshing, status.refreshError]);
 
+  const refreshYnab = useCallback(async () => {
+    if (!connected || state.isSyncing || status.isRefreshing) {
+      return;
+    }
+
+    try {
+      await actions.syncBudgetsAndAccounts({
+        sinceDate: getEarliestPeriodStart(state.cards),
+      });
+    } catch {
+      // StorageContext exposes the recoverable failure through the sync badge.
+    }
+  }, [
+    actions,
+    connected,
+    state.cards,
+    state.isSyncing,
+    status.isRefreshing,
+  ]);
+
   return (
     <ScrollView
       style={styles.screen}
@@ -86,9 +106,7 @@ export default function PreferencesScreen() {
             trailing={(
               <SyncBadge
                 state={ynabSyncState}
-                onPress={() => void actions.syncBudgetsAndAccounts({
-                  sinceDate: getEarliestPeriodStart(state.cards),
-                })}
+                onPress={() => void refreshYnab()}
                 accessibilityHint="Refreshes cards and transactions from YNAB"
               />
             )}

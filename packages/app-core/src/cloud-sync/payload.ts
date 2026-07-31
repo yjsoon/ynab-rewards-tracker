@@ -9,6 +9,14 @@ import {
   type StorageData,
 } from '../storage';
 
+/** Clear only the dirty marker belonging to the snapshot that just completed. */
+export function resolveCloudSyncDirtyMarker(
+  snapshotMarker: string | undefined,
+  currentMarker: string | undefined,
+): string | undefined {
+  return currentMarker === snapshotMarker ? undefined : currentMarker;
+}
+
 function sanitizeSettings(settings: StorageData['settings']): StorageData['settings'] {
   const formatter = settings.statementFormatter
     ? { ...settings.statementFormatter, apiKeys: undefined }
