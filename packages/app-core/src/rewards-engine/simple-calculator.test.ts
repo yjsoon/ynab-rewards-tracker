@@ -142,6 +142,34 @@ describe('SimpleRewardsCalculator.calculateCardRewards', () => {
     });
   });
 
+  it('does not fall back to the card rate when every enabled flag tier is inactive', () => {
+    const card: CreditCard = {
+      ...createMilesCardWithSubcategories(),
+      subcategories: createMilesCardWithSubcategories().subcategories?.map((subcategory) => ({
+        ...subcategory,
+        active: false,
+      })),
+    };
+
+    const calculation = SimpleRewardsCalculator.calculateCardRewards(
+      card,
+      [createTransaction('inactive-tier', -10_000)],
+      period,
+    );
+
+    expect(calculation.totalSpend).toBe(10);
+    expect(calculation.countedSpend).toBe(0);
+    expect(calculation.eligibleSpend).toBe(0);
+    expect(calculation.rewardEarned).toBe(0);
+    expect(calculation.subcategoryBreakdowns).toBeUndefined();
+    expect(calculation.transactionRewards['inactive-tier']).toMatchObject({
+      reward: 0,
+      rewardDollars: 0,
+      rewardRate: 0,
+      reason: 'zero_rate',
+    });
+  });
+
   it('attributes a shared card cap chronologically across reward tiers', () => {
     const card: CreditCard = {
       ...createMilesCardWithSubcategories(),

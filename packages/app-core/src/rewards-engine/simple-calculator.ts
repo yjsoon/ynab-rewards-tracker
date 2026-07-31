@@ -441,7 +441,7 @@ export class SimpleRewardsCalculator {
           excluded: Boolean(subcategory.excludeFromRewards),
         };
       });
-    } else {
+    } else if (!context.enabled) {
       if (typeof card.earningRate === 'number') {
         const hasCardCap = typeof maximumSpend === 'number' && maximumSpend !== null && maximumSpend > 0;
         const spendCap = hasCardCap ? maximumSpend! : Number.POSITIVE_INFINITY;

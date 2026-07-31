@@ -194,6 +194,16 @@ export function normaliseCard(
     mutableCard.issuer = 'Unknown';
   }
 
+  if (
+    mutableCard.promotionalPeriod
+    && !Object.prototype.hasOwnProperty.call(mutableCard.promotionalPeriod, 'startDate')
+  ) {
+    mutableCard.promotionalPeriod = {
+      ...mutableCard.promotionalPeriod,
+      startDate: null,
+    };
+  }
+
   return mutableCard as CreditCard;
 }
 

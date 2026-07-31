@@ -329,6 +329,27 @@ export function StorageProvider({ children }: { children: ReactNode }) {
     invalidateSyncRequests();
   }, [invalidateSyncRequests]);
 
+  const clearInvalidConnection = useCallback(async (message: string) => {
+    invalidatePendingOperations();
+    const storageGeneration = storage.captureGeneration();
+    const localChange = localChangeSettings();
+
+    try {
+      await storage.clearPAT(storageGeneration, localChange);
+    } catch (cleanupError) {
+      if (__DEV__ && storage.isGenerationCurrent(storageGeneration)) {
+        console.error('Failed to clear an invalid YNAB token', cleanupError);
+      }
+    }
+
+    if (!storage.isGenerationCurrent(storageGeneration)) return;
+    setState((prev) => ({
+      ...withoutConnection(prev),
+      settings: { ...prev.settings, ...localChange },
+      connectionError: message,
+    }));
+  }, [invalidatePendingOperations]);
+
   const performSync = useCallback(
     async (
       options: SyncOptions = {},
@@ -611,17 +632,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         const failure = error instanceof Error ? error : new Error(message);
 
         if (isConfirmedInvalidToken(error)) {
-          try {
-            await storage.clearPAT();
-          } catch (cleanupError) {
-            if (__DEV__) {
-              console.error('Failed to clear an invalid YNAB token', cleanupError);
-            }
-          }
-          setState((prev) => ({
-            ...withoutConnection(prev),
-            connectionError: message,
-          }));
+          await clearInvalidConnection(message);
         } else {
           setState((prev) => ({
             ...prev,
@@ -637,13 +648,19 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         throw failure;
       }
     },
-    [state.cachedData, state.pat, state.selectedBudget, state.trackedAccountIds],
+    [clearInvalidConnection, state.cachedData, state.pat, state.selectedBudget, state.trackedAccountIds],
   );
 
   const initialiseConnection = useCallback(
-    async (pat: string, trackedAccountIds: string[], selectedBudgetId?: string) => {
-      const storageGeneration = storage.captureGeneration();
+    async (
+      pat: string,
+      trackedAccountIds: string[],
+      selectedBudgetId?: string,
+      expectedGeneration?: number,
+    ) => {
+      const storageGeneration = expectedGeneration ?? storage.captureGeneration();
       const isCurrentConnection = () => storage.isGenerationCurrent(storageGeneration);
+      if (!isCurrentConnection()) return;
       if (!pat) {
         setState((prev) => ({
           ...prev,
@@ -703,24 +720,14 @@ export function StorageProvider({ children }: { children: ReactNode }) {
           pat,
           selectedBudgetId: nextBudget.id,
           trackedAccountIds,
-        });
+        }, storageGeneration);
       } catch (error) {
         if (!isCurrentConnection()) return;
         const message = error instanceof Error ? error.message : 'Failed to connect to YNAB';
         const failure = error instanceof Error ? error : new Error(message);
 
         if (isConfirmedInvalidToken(error)) {
-          try {
-            await storage.clearPAT();
-          } catch (cleanupError) {
-            if (__DEV__) {
-              console.error('Failed to clear an invalid YNAB token', cleanupError);
-            }
-          }
-          setState((prev) => ({
-            ...withoutConnection(prev),
-            connectionError: message,
-          }));
+          await clearInvalidConnection(message);
         } else {
           // Network, timeout, and rate-limit failures are recoverable. Keep the
           // hydrated credential, selection, cards, calculations, and cache.
@@ -739,7 +746,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         throw failure;
       }
     },
-    [performSync],
+    [clearInvalidConnection, performSync],
   );
 
   const initialiseConnectionRef = useRef(initialiseConnection);
@@ -971,16 +978,24 @@ export function StorageProvider({ children }: { children: ReactNode }) {
       invalidateSyncRequests,
       setPAT: async (pat: string) => {
         const trimmed = pat.trim();
-        await storage.setPAT(trimmed);
+        invalidatePendingOperations();
+        const storageGeneration = storage.captureGeneration();
+        await storage.setPAT(trimmed, storageGeneration);
+        if (!storage.isGenerationCurrent(storageGeneration)) return;
         const storedSelection = await storage.getSelectedBudget();
-        await initialiseConnection(trimmed, state.trackedAccountIds, storedSelection.id);
+        if (!storage.isGenerationCurrent(storageGeneration)) return;
+        await initialiseConnection(
+          trimmed,
+          state.trackedAccountIds,
+          storedSelection.id,
+          storageGeneration,
+        );
       },
       clearPAT: async () => {
         invalidatePendingOperations();
         const storageGeneration = storage.captureGeneration();
         const localChange = localChangeSettings();
-        await storage.updateSettings(localChange, storageGeneration);
-        await storage.clearPAT(storageGeneration);
+        await storage.clearPAT(storageGeneration, localChange);
         if (!storage.isGenerationCurrent(storageGeneration)) return;
         setState((prev) => ({
           ...withoutConnection(prev),
@@ -991,8 +1006,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         invalidatePendingOperations();
         const storageGeneration = storage.captureGeneration();
         const localChange = localChangeSettings();
-        await storage.updateSettings(localChange, storageGeneration);
-        await storage.clearPAT(storageGeneration);
+        await storage.clearPAT(storageGeneration, localChange);
         if (!storage.isGenerationCurrent(storageGeneration)) return;
         setState((prev) => ({
           ...withoutConnection(prev),

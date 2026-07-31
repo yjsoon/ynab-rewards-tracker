@@ -153,6 +153,9 @@ importers:
       typescript:
         specifier: ~5.9.3
         version: 5.9.3
+      vitest:
+        specifier: ^2.1.9
+        version: 2.1.9(@types/node@24.3.1)(lightningcss@1.30.2)(terser@5.44.0)
 
   apps/web:
     dependencies:

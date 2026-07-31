@@ -48,7 +48,7 @@ const LEGACY_PAT_SECURE_STORE_KEYS = [
   'ynab-counter:pat',
 ] as const;
 
-class StorageService {
+export class StorageService {
   private static readonly DASHBOARD_CACHE_LIMIT = 500;
   private static readonly DASHBOARD_CACHE_MAX_ENTRIES = 5;
   private static instance: StorageService;
@@ -56,6 +56,9 @@ class StorageService {
   private loadPromise: Promise<StorageData> | null = null;
   private operationGeneration = 0;
   private writeBarrier: Promise<void> = Promise.resolve();
+  private credentialBarrier: Promise<void> = Promise.resolve();
+  private credentialResetBarrier: Promise<void> = Promise.resolve();
+  private credentialResetVersion = 0;
 
   static getInstance(): StorageService {
     if (!StorageService.instance) {
@@ -120,10 +123,7 @@ class StorageService {
 
       if (data.ynab?.pat) {
         try {
-          await SecureStore.setItemAsync(PAT_SECURE_STORE_KEY, data.ynab.pat);
-          await Promise.all(
-            LEGACY_PAT_SECURE_STORE_KEYS.map((key) => SecureStore.deleteItemAsync(key)),
-          );
+          await this.storeSecurePAT(data.ynab.pat, expectedGeneration);
           delete data.ynab.pat;
         } catch (error) {
           if (__DEV__) {
@@ -161,6 +161,38 @@ class StorageService {
     const queued = this.writeBarrier.then(operation, operation);
     this.writeBarrier = queued.catch(() => undefined);
     return queued;
+  }
+
+  private enqueueCredentialOperation(operation: () => Promise<void>): Promise<void> {
+    const queued = this.credentialBarrier.then(operation, operation);
+    this.credentialBarrier = queued.catch(() => undefined);
+    return queued;
+  }
+
+  private enqueueCredentialReset(operation: () => Promise<void>): Promise<void> {
+    this.credentialResetVersion += 1;
+    const queued = this.credentialResetBarrier.then(operation, operation);
+    this.credentialResetBarrier = queued.catch(() => undefined);
+    return queued;
+  }
+
+  private async waitForCredentialResets(): Promise<number> {
+    const barrier = this.credentialResetBarrier;
+    await barrier;
+    if (barrier !== this.credentialResetBarrier) {
+      return this.waitForCredentialResets();
+    }
+    return this.credentialResetVersion;
+  }
+
+  private assertCredentialReadCurrent(
+    generation: number,
+    resetVersion: number,
+  ): void {
+    this.assertGeneration(generation);
+    if (resetVersion !== this.credentialResetVersion) {
+      throw new Error('Credential read was cancelled.');
+    }
   }
 
   private assertGeneration(generation: number): void {
@@ -249,11 +281,27 @@ class StorageService {
     storage.cachedData = undefined;
   }
 
-  private async deleteSecurePAT(): Promise<void> {
-    await Promise.all([
-      SecureStore.deleteItemAsync(PAT_SECURE_STORE_KEY),
-      ...LEGACY_PAT_SECURE_STORE_KEYS.map((key) => SecureStore.deleteItemAsync(key)),
-    ]);
+  private async storeSecurePAT(pat: string, expectedGeneration: number): Promise<void> {
+    await this.enqueueCredentialOperation(async () => {
+      this.assertGeneration(expectedGeneration);
+      await SecureStore.setItemAsync(PAT_SECURE_STORE_KEY, pat);
+      this.assertGeneration(expectedGeneration);
+      await Promise.all(
+        LEGACY_PAT_SECURE_STORE_KEYS.map((key) => SecureStore.deleteItemAsync(key)),
+      );
+      this.assertGeneration(expectedGeneration);
+    });
+  }
+
+  private async deleteSecurePAT(expectedGeneration: number): Promise<void> {
+    await this.enqueueCredentialOperation(async () => {
+      this.assertGeneration(expectedGeneration);
+      await Promise.all([
+        SecureStore.deleteItemAsync(PAT_SECURE_STORE_KEY),
+        ...LEGACY_PAT_SECURE_STORE_KEYS.map((key) => SecureStore.deleteItemAsync(key)),
+      ]);
+      this.assertGeneration(expectedGeneration);
+    });
   }
 
   async resetConnectionState(): Promise<void> {
@@ -263,15 +311,17 @@ class StorageService {
   }
 
   async getPAT(): Promise<YnabConnection['pat']> {
+    const credentialResetVersion = await this.waitForCredentialResets();
+    const storageGeneration = this.captureGeneration();
     let securePat = await SecureStore.getItemAsync(PAT_SECURE_STORE_KEY);
+    this.assertCredentialReadCurrent(storageGeneration, credentialResetVersion);
     if (!securePat) {
       for (const legacyKey of LEGACY_PAT_SECURE_STORE_KEYS) {
         securePat = await SecureStore.getItemAsync(legacyKey);
+        this.assertCredentialReadCurrent(storageGeneration, credentialResetVersion);
         if (securePat) {
-          await SecureStore.setItemAsync(PAT_SECURE_STORE_KEY, securePat);
-          await Promise.all(
-            LEGACY_PAT_SECURE_STORE_KEYS.map((key) => SecureStore.deleteItemAsync(key)),
-          );
+          await this.storeSecurePAT(securePat, storageGeneration);
+          this.assertCredentialReadCurrent(storageGeneration, credentialResetVersion);
           break;
         }
       }
@@ -281,44 +331,64 @@ class StorageService {
     }
 
     const storage = await this.load();
+    this.assertCredentialReadCurrent(storageGeneration, credentialResetVersion);
     const legacyPat = storage.ynab.pat;
     if (legacyPat) {
-      await SecureStore.setItemAsync(PAT_SECURE_STORE_KEY, legacyPat);
+      await this.storeSecurePAT(legacyPat, storageGeneration);
+      this.assertCredentialReadCurrent(storageGeneration, credentialResetVersion);
       delete storage.ynab.pat;
-      await this.save(storage);
+      await this.save(storage, storageGeneration);
+      this.assertCredentialReadCurrent(storageGeneration, credentialResetVersion);
       return legacyPat;
     }
 
     // performLoad may have migrated an embedded PAT before this call resumed.
-    return (await SecureStore.getItemAsync(PAT_SECURE_STORE_KEY)) ?? undefined;
+    const migratedPat = await SecureStore.getItemAsync(PAT_SECURE_STORE_KEY);
+    this.assertCredentialReadCurrent(storageGeneration, credentialResetVersion);
+    return migratedPat ?? undefined;
   }
 
-  async setPAT(pat: string): Promise<void> {
-    await SecureStore.setItemAsync(PAT_SECURE_STORE_KEY, pat);
+  async setPAT(
+    pat: string,
+    expectedGeneration = this.operationGeneration,
+  ): Promise<void> {
+    this.assertGeneration(expectedGeneration);
     const storage = await this.load();
+    this.assertGeneration(expectedGeneration);
     if (storage.ynab.pat) {
       delete storage.ynab.pat;
-      await this.save(storage);
+      await this.save(storage, expectedGeneration);
+      this.assertGeneration(expectedGeneration);
     }
+    // An explicit credential always wins over any embedded PAT migration that
+    // may have occurred while loading legacy storage.
+    await this.storeSecurePAT(pat, expectedGeneration);
+    this.assertGeneration(expectedGeneration);
   }
 
-  async clearPAT(expectedGeneration = this.operationGeneration): Promise<void> {
-    this.assertGeneration(expectedGeneration);
-    try {
-      const storage = await this.load() as MutableStorageData;
+  async clearPAT(
+    expectedGeneration = this.operationGeneration,
+    settings: Partial<AppSettings> = {},
+  ): Promise<void> {
+    return this.enqueueCredentialReset(async () => {
       this.assertGeneration(expectedGeneration);
-      if (storage.ynab.pat) {
-        delete storage.ynab.pat;
+      try {
+        const storage = await this.load() as MutableStorageData;
+        this.assertGeneration(expectedGeneration);
+        if (storage.ynab.pat) {
+          delete storage.ynab.pat;
+        }
+        storage.settings = { ...storage.settings, ...settings };
+        this.wipeConnectionState(storage);
+        await this.save(storage, expectedGeneration);
+      } finally {
+        // Delete after loading so an embedded legacy PAT cannot be migrated back
+        // into SecureStore during the clear operation.
+        if (this.isGenerationCurrent(expectedGeneration)) {
+          await this.deleteSecurePAT(expectedGeneration);
+        }
       }
-      this.wipeConnectionState(storage);
-      await this.save(storage, expectedGeneration);
-    } finally {
-      // Delete after loading so an embedded legacy PAT cannot be migrated back
-      // into SecureStore during the clear operation.
-      if (this.isGenerationCurrent(expectedGeneration)) {
-        await this.deleteSecurePAT();
-      }
-    }
+    });
   }
 
   async clearBudgetSelection(expectedGeneration = this.operationGeneration): Promise<void> {
@@ -909,15 +979,18 @@ class StorageService {
   }
 
   async clearAll(): Promise<void> {
-    this.invalidatePendingOperations();
+    const expectedGeneration = this.invalidatePendingOperations();
     try {
-      await this.enqueueWrite(async () => {
-        await Promise.all([
-          AsyncStorageService.remove(STORAGE_KEY),
-          AsyncStorageService.remove(STORAGE_VERSION_KEY),
-          SecureStore.deleteItemAsync(PAT_SECURE_STORE_KEY),
-          ...LEGACY_PAT_SECURE_STORE_KEYS.map((key) => SecureStore.deleteItemAsync(key)),
-        ]);
+      await this.enqueueCredentialReset(async () => {
+        await this.enqueueWrite(async () => {
+          this.assertGeneration(expectedGeneration);
+          await Promise.all([
+            AsyncStorageService.remove(STORAGE_KEY),
+            AsyncStorageService.remove(STORAGE_VERSION_KEY),
+          ]);
+          this.assertGeneration(expectedGeneration);
+        });
+        await this.deleteSecurePAT(expectedGeneration);
       });
     } finally {
       this.cache = null;

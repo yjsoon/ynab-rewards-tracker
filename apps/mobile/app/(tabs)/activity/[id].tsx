@@ -21,6 +21,8 @@ import {
 import { EmptyState, StatusPill } from '@/components/native';
 import { useStorage } from '@/contexts/StorageContext';
 import { FlagPicker } from '@/features/activity/FlagPicker';
+import { planFlagUpdateRefresh } from '@/features/activity/flag-update';
+import { createLocalFlagUpdatePublication } from '@/features/activity/flag-update-publication';
 import {
   createActivityFormatting,
   formatActivityDate,
@@ -257,37 +259,53 @@ export default function TransactionDetailScreen() {
       actions.invalidateSyncRequests();
       if (!(await persistCachedFlag(confirmedFlagColour, confirmedFlagName))) return;
 
-      if ((cacheEntryRef.current?.isComplete ?? cacheEntry.isComplete) === false) {
-        try {
-          const latestEntry = cacheEntryRef.current ?? cacheEntry;
-          if (latestEntry.requiresFullRefresh !== true) {
-            const stalePayload: DashboardTransactionsCachePayload = {
-              budgetId: latestEntry.budgetId,
-              sinceDate: latestEntry.sinceDate,
-              fetchedAt: latestEntry.fetchedAt,
-              trackedAccountIds: latestEntry.trackedAccountIds,
-              isComplete: latestEntry.isComplete,
-              requiresFullRefresh: true,
-              transactions: latestEntry.transactions,
-              accounts: latestEntry.accounts,
-            };
-            cacheEntryRef.current = {
-              ...latestEntry,
-              requiresFullRefresh: true,
-            };
-            await actions.setDashboardCachedData(stalePayload, storageGeneration);
-            if (!isCurrentMutation()) return;
-          }
-          await actions.syncBudgetsAndAccounts({
-            sinceDate: getEarliestPeriodStart(state.cards),
-          }, storageGeneration);
+      // Reward calculations are persisted derived data. Even a complete
+      // transaction cache cannot update those totals by changing one cached
+      // row alone, so every confirmed flag change must run the calculation
+      // publication path. Incomplete caches additionally force a full fetch.
+      try {
+        const latestEntry = cacheEntryRef.current ?? cacheEntry;
+        const refreshPlan = planFlagUpdateRefresh(latestEntry);
+        if (refreshPlan.markCacheForFullRefresh) {
+          const stalePayload: DashboardTransactionsCachePayload = {
+            budgetId: latestEntry.budgetId,
+            sinceDate: latestEntry.sinceDate,
+            fetchedAt: latestEntry.fetchedAt,
+            trackedAccountIds: latestEntry.trackedAccountIds,
+            isComplete: latestEntry.isComplete,
+            requiresFullRefresh: true,
+            transactions: latestEntry.transactions,
+            accounts: latestEntry.accounts,
+          };
+          cacheEntryRef.current = {
+            ...latestEntry,
+            requiresFullRefresh: true,
+          };
+          await actions.setDashboardCachedData(stalePayload, storageGeneration);
           if (!isCurrentMutation()) return;
-        } catch {
-          if (!isCurrentMutation()) return;
-          setFlagError('Flag saved, but rewards couldn’t be refreshed. Refresh Activity to update totals.');
-          notification('error');
-          return;
         }
+
+        if (refreshPlan.syncRewards) {
+          if (DEMO_MODE) {
+            const publication = createLocalFlagUpdatePublication({
+              cacheEntry: cacheEntryRef.current ?? latestEntry,
+              cards: state.cards,
+              settings: state.settings,
+              calculations: state.calculations,
+            });
+            await actions.setCalculations(publication.calculations);
+          } else {
+            await actions.syncBudgetsAndAccounts({
+              sinceDate: getEarliestPeriodStart(state.cards),
+            }, storageGeneration);
+          }
+        }
+        if (!isCurrentMutation()) return;
+      } catch {
+        if (!isCurrentMutation()) return;
+        setFlagError('Flag saved, but rewards couldn’t be refreshed. Refresh Activity to update totals.');
+        notification('error');
+        return;
       }
 
       notification('success');

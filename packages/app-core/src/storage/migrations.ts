@@ -48,8 +48,7 @@ export function applyStorageMigrations(data: MutableStorageData): void {
           mutableCard.type = 'miles';
         }
         if ('milesBlockSize' in mutableCard) {
-          const { milesBlockSize, ...cleanCard } = mutableCard;
-          return cleanCard as CreditCard;
+          Reflect.deleteProperty(mutableCard, 'milesBlockSize');
         }
         // Legacy promotions omitted the field entirely. New saves persist null
         // to represent the intentional "use current card period" behaviour.

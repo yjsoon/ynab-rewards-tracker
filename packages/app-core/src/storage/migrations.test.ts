@@ -51,4 +51,22 @@ describe('promotional period migration', () => {
       endDate: '2026-12-31',
     });
   });
+
+  it('migrates a missing promotion start after removing legacy card fields', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 7, 15));
+    try {
+      const storage = createDefaultStorage() as MutableStorageData;
+      const legacyCard = cardWithPromotion({ endDate: '2026-12-31' }) as MutableCard;
+      legacyCard.milesBlockSize = 5;
+      storage.cards = [legacyCard];
+
+      applyStorageMigrations(storage);
+
+      expect(storage.cards[0].promotionalPeriod?.startDate).toBe('2026-07-01');
+      expect(storage.cards[0]).not.toHaveProperty('milesBlockSize');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
