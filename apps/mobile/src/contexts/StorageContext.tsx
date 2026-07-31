@@ -13,6 +13,7 @@ import { ynabSync } from '@/lib/sync';
 import { fetchBudgets } from '@/lib/ynab-api';
 import { isYnabApiError } from '@/lib/ynab-client';
 import { createDemoStorageFixture } from '@/lib/demo-data';
+import { runSetupSyncChain } from './setup-sync-chain';
 import { SimpleRewardsCalculator } from '@ynab-counter/app-core/rewards-engine';
 import { createRewardCalculationFromSimple } from '@ynab-counter/app-core/rewards-engine/utils/reward-calculation';
 import { getEarliestPeriodStart } from '@ynab-counter/app-core/rewards-engine/utils/periods';
@@ -90,9 +91,9 @@ type SyncOptions = {
 
 type StorageActions = {
   refresh: (expectedGeneration?: number) => Promise<void>;
-  invalidatePendingOperations: () => void;
+  invalidatePendingOperations: () => number;
   invalidateSyncRequests: () => void;
-  setPAT: (pat: string) => Promise<void>;
+  setPAT: (pat: string) => Promise<boolean>;
   clearPAT: () => Promise<void>;
   disconnect: () => Promise<void>;
   setSelectedBudget: (budgetId: string, budgetName: string) => Promise<void>;
@@ -100,7 +101,7 @@ type StorageActions = {
   syncBudgetsAndAccounts: (options?: SyncOptions, expectedGeneration?: number) => Promise<void>;
   stageBudgetSelection: (budgetId: string, budgetName: string) => void;
   stageTrackedAccountIds: (ids: string[]) => void;
-  applyPendingChanges: () => Promise<void>;
+  applyPendingChanges: () => Promise<boolean>;
   clearPendingChanges: () => void;
   setSettings: (settings: Partial<AppSettings>) => Promise<void>;
   setCards: (cards: CreditCard[]) => Promise<void>;
@@ -227,9 +228,9 @@ function withoutConnection(state: StorageState): StorageState {
 
 const noopActions: StorageActions = {
   refresh: async () => {},
-  invalidatePendingOperations: () => {},
+  invalidatePendingOperations: () => 0,
   invalidateSyncRequests: () => {},
-  setPAT: async () => {},
+  setPAT: async () => true,
   clearPAT: async () => {},
   disconnect: async () => {},
   setSelectedBudget: async () => {},
@@ -237,7 +238,7 @@ const noopActions: StorageActions = {
   syncBudgetsAndAccounts: async () => {},
   stageBudgetSelection: () => {},
   stageTrackedAccountIds: () => {},
-  applyPendingChanges: async () => {},
+  applyPendingChanges: async () => true,
   clearPendingChanges: () => {},
   setSettings: async () => {},
   setCards: async () => {},
@@ -325,8 +326,10 @@ export function StorageProvider({ children }: { children: ReactNode }) {
     setState((prev) => (prev.isSyncing ? { ...prev, isSyncing: false } : prev));
   }, []);
   const invalidatePendingOperations = useCallback(() => {
-    storage.invalidatePendingOperations();
+    const generation = storage.invalidatePendingOperations();
+    cardConfigurationRevisionRef.current += 1;
     invalidateSyncRequests();
+    return generation;
   }, [invalidateSyncRequests]);
 
   const clearInvalidConnection = useCallback(async (message: string) => {
@@ -867,6 +870,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
           connectionStatus: 'connected',
           connectionError: undefined,
         }));
+        return true;
       },
       clearPAT: async () => {
         setState(withoutConnection);
@@ -915,6 +919,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
           pending: undefined,
           hasPendingChanges: false,
         }));
+        return true;
       },
       clearPendingChanges: () => {
         setState((prev) => ({
@@ -978,18 +983,28 @@ export function StorageProvider({ children }: { children: ReactNode }) {
       invalidateSyncRequests,
       setPAT: async (pat: string) => {
         const trimmed = pat.trim();
-        invalidatePendingOperations();
-        const storageGeneration = storage.captureGeneration();
-        await storage.setPAT(trimmed, storageGeneration);
-        if (!storage.isGenerationCurrent(storageGeneration)) return;
-        const storedSelection = await storage.getSelectedBudget();
-        if (!storage.isGenerationCurrent(storageGeneration)) return;
-        await initialiseConnection(
-          trimmed,
-          state.trackedAccountIds,
-          storedSelection.id,
-          storageGeneration,
-        );
+        const storageGeneration = invalidatePendingOperations();
+        try {
+          await storage.setPAT(trimmed, storageGeneration);
+          if (!storage.isGenerationCurrent(storageGeneration)) return false;
+          const storedSelection = await storage.getSelectedBudget();
+          if (!storage.isGenerationCurrent(storageGeneration)) return false;
+          await initialiseConnection(
+            trimmed,
+            state.trackedAccountIds,
+            storedSelection.id,
+            storageGeneration,
+          );
+          return storage.isGenerationCurrent(storageGeneration);
+        } catch (error) {
+          if (
+            !storage.isGenerationCurrent(storageGeneration)
+            && !isConfirmedInvalidToken(error)
+          ) {
+            return false;
+          }
+          throw error;
+        }
       },
       clearPAT: async () => {
         invalidatePendingOperations();
@@ -1085,51 +1100,70 @@ export function StorageProvider({ children }: { children: ReactNode }) {
             pending: undefined,
             hasPendingChanges: false,
           }));
-          return;
+          return true;
         }
         const pending = state.pending;
         if (!pending || (!pending.budget && !pending.trackedAccountIds)) {
-          return;
+          return true;
         }
 
         const nextBudget = pending.budget ?? state.selectedBudget;
         const nextTrackedIds = pending.trackedAccountIds ?? state.trackedAccountIds;
         const wasSetupMode = !state.selectedBudget.id || state.trackedAccountIds.length === 0;
         const localChange = localChangeSettings();
-        await storage.updateSettings(localChange);
+        const storageGeneration = invalidatePendingOperations();
+        try {
+          await storage.updateSettings(localChange, storageGeneration);
 
-        if (pending.budget && nextBudget.id && nextBudget.name) {
-          await storage.setSelectedBudget(nextBudget.id, nextBudget.name);
-        }
-        if (pending.trackedAccountIds) {
-          await storage.setTrackedAccountIds(nextTrackedIds);
-        }
+          if (pending.budget && nextBudget.id && nextBudget.name) {
+            await storage.setSelectedBudget(nextBudget.id, nextBudget.name, storageGeneration);
+          }
+          if (pending.trackedAccountIds) {
+            await storage.setTrackedAccountIds(nextTrackedIds, storageGeneration);
+          }
 
-        setState((prev) => ({
-          ...prev,
-          selectedBudget: nextBudget.id ? nextBudget : prev.selectedBudget,
-          trackedAccountIds: pending.trackedAccountIds ? nextTrackedIds : prev.trackedAccountIds,
-          settings: { ...prev.settings, ...localChange },
-          pending: undefined,
-          hasPendingChanges: false,
-        }));
+          if (!storage.isGenerationCurrent(storageGeneration)) return false;
 
-        // Initial sync skips transactions for speed
-        await performSync({ skipTransactions: true }, {
-          pat,
-          selectedBudgetId: nextBudget.id,
-          trackedAccountIds: nextTrackedIds,
-        });
+          setState((prev) => ({
+            ...prev,
+            selectedBudget: nextBudget.id ? nextBudget : prev.selectedBudget,
+            trackedAccountIds: pending.trackedAccountIds ? nextTrackedIds : prev.trackedAccountIds,
+            settings: { ...prev.settings, ...localChange },
+            pending: undefined,
+            hasPendingChanges: false,
+          }));
 
-        // If setup just completed, fetch transactions now
-        if (wasSetupMode && nextBudget.id && nextTrackedIds.length > 0) {
-          // Get the newly created cards to calculate earliest period start
-          const cards = await storage.getCards();
-          await performSync({ skipTransactions: false, sinceDate: getEarliestPeriodStart(cards) }, {
-            pat,
-            selectedBudgetId: nextBudget.id,
-            trackedAccountIds: nextTrackedIds,
+          return await runSetupSyncChain({
+            expectedGeneration: storageGeneration,
+            isCurrent: (generation) => storage.isGenerationCurrent(generation),
+            runInitialSync: async (generation) => {
+              await performSync({ skipTransactions: true }, {
+                pat,
+                selectedBudgetId: nextBudget.id,
+                trackedAccountIds: nextTrackedIds,
+              }, generation);
+            },
+            shouldRunFullSync: wasSetupMode && Boolean(nextBudget.id) && nextTrackedIds.length > 0,
+            loadCards: () => storage.getCards(),
+            runFullSync: async (cards, generation) => {
+              await performSync({
+                skipTransactions: false,
+                sinceDate: getEarliestPeriodStart(cards),
+              }, {
+                pat,
+                selectedBudgetId: nextBudget.id,
+                trackedAccountIds: nextTrackedIds,
+              }, generation);
+            },
           });
+        } catch (error) {
+          if (
+            !storage.isGenerationCurrent(storageGeneration)
+            && !isConfirmedInvalidToken(error)
+          ) {
+            return false;
+          }
+          throw error;
         }
       },
       clearPendingChanges: () => {

@@ -136,6 +136,15 @@ export function normaliseCard(
 
   const mutableCard = { ...card } as MutableCard;
 
+  // Preserve the editor's intentional blank rate across JSON persistence.
+  // A truly absent property is handled by the legacy migration before this.
+  if (
+    Object.prototype.hasOwnProperty.call(mutableCard, 'earningRate')
+    && mutableCard.earningRate === undefined
+  ) {
+    mutableCard.earningRate = null;
+  }
+
   if ('active' in mutableCard) {
     Reflect.deleteProperty(mutableCard, 'active');
   }

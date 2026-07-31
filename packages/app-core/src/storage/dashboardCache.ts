@@ -1,6 +1,36 @@
 import type { DashboardTransactionsCacheEntry } from './types';
 
 export const DASHBOARD_CACHE_FRESH_WINDOW_MS = 30 * 60 * 1000;
+export const DASHBOARD_TRANSACTION_CACHE_LIMIT = 500;
+
+/**
+ * Legacy cache entries predate the explicit completeness bit. Entries that
+ * filled the local cap may have been truncated, so only shorter legacy
+ * snapshots can be considered complete.
+ */
+export function isDashboardCacheEntryComplete(
+  entry: Pick<DashboardTransactionsCacheEntry, 'isComplete' | 'transactions'> | undefined,
+): boolean {
+  if (!entry) return false;
+  if (typeof entry.isComplete === 'boolean') return entry.isComplete;
+  return entry.transactions.length < DASHBOARD_TRANSACTION_CACHE_LIMIT;
+}
+
+/** A trusted entry is complete and has no durable full-refresh marker. */
+export function isDashboardCacheEntryTrusted(
+  entry: DashboardTransactionsCacheEntry | undefined,
+): boolean {
+  return isDashboardCacheEntryComplete(entry) && entry?.requiresFullRefresh !== true;
+}
+
+export function getDashboardProjectionCompleteness(
+  entry: DashboardTransactionsCacheEntry | undefined,
+): { periodDataComplete: boolean; periodDataSinceDate?: string } {
+  return {
+    periodDataComplete: isDashboardCacheEntryTrusted(entry),
+    periodDataSinceDate: entry?.sinceDate,
+  };
+}
 
 function normaliseAccountIds(ids: string[]): string {
   if (ids.length === 0) {
@@ -49,6 +79,22 @@ export function findBestDashboardEntry(
 }
 
 /**
+ * Returns a cache only when it belongs to the current tracked-account scope.
+ * Budget-level fallback entries are useful for read-only display, but must not
+ * be used to publish derived calculations for a different selection.
+ */
+export function findExactDashboardEntry(
+  entries: DashboardTransactionsCacheEntry[] | undefined,
+  budgetId?: string,
+  trackedAccountIds: string[] = [],
+): DashboardTransactionsCacheEntry | undefined {
+  const entry = findBestDashboardEntry(entries, budgetId, trackedAccountIds);
+  return entry && compareAccountSets(entry.trackedAccountIds, trackedAccountIds)
+    ? entry
+    : undefined;
+}
+
+/**
  * Build a Map of account ID to account name from a dashboard cache entry.
  */
 export function buildAccountsMap(entry: DashboardTransactionsCacheEntry | undefined): Map<string, string> {
@@ -78,7 +124,12 @@ export function shouldRefreshDashboardCache(
   now = new Date(),
   freshWindowMs = DASHBOARD_CACHE_FRESH_WINDOW_MS,
 ): boolean {
-  if (!entry || entry.requiresFullRefresh === true || entry.sinceDate > requiredSinceDate) {
+  if (
+    !entry
+    || !isDashboardCacheEntryComplete(entry)
+    || entry.requiresFullRefresh === true
+    || entry.sinceDate > requiredSinceDate
+  ) {
     return true;
   }
 

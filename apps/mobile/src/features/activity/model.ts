@@ -4,6 +4,7 @@ import { useStorage } from '@/contexts/StorageContext';
 import {
   buildAccountsMap,
   findBestDashboardEntry,
+  getDashboardProjectionCompleteness,
 } from '@/lib/dashboardCache';
 import {
   projectTransactions,
@@ -222,16 +223,13 @@ export function useActivityModel(query = ''): ActivityModel {
       state.cards,
       state.settings,
       accountNames,
-      {
-        periodDataComplete: cacheEntry?.isComplete !== false,
-        periodDataSinceDate: cacheEntry?.sinceDate,
-      },
+      getDashboardProjectionCompleteness(cacheEntry),
     )
       .filter((projection) => (
         trackedAccounts.size === 0 || trackedAccounts.has(projection.transaction.account_id)
       ))
       .sort((left, right) => right.transaction.date.localeCompare(left.transaction.date)),
-    [accountNames, cacheEntry?.isComplete, cacheEntry?.sinceDate, cacheEntry?.transactions, state.cards, state.settings, trackedAccounts],
+    [accountNames, cacheEntry, state.cards, state.settings, trackedAccounts],
   );
   const transactions = useMemo(
     () => projected.filter((projection) => matchesQuery(projection, query)),

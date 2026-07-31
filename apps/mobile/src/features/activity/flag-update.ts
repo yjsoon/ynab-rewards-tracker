@@ -1,4 +1,7 @@
-import type { DashboardTransactionsCacheEntry } from '@ynab-counter/app-core/storage';
+import {
+  isDashboardCacheEntryComplete,
+  type DashboardTransactionsCacheEntry,
+} from '@ynab-counter/app-core/storage';
 
 export type FlagUpdateRefreshPlan = {
   syncRewards: true;
@@ -11,11 +14,15 @@ export type FlagUpdateRefreshPlan = {
  * transaction fetch before those calculations are trustworthy.
  */
 export function planFlagUpdateRefresh(
-  cacheEntry: Pick<DashboardTransactionsCacheEntry, 'isComplete' | 'requiresFullRefresh'>,
+  cacheEntry: Pick<
+    DashboardTransactionsCacheEntry,
+    'isComplete' | 'requiresFullRefresh' | 'transactions'
+  >,
 ): FlagUpdateRefreshPlan {
   return {
     syncRewards: true,
     markCacheForFullRefresh:
-      cacheEntry.isComplete === false && cacheEntry.requiresFullRefresh !== true,
+      !isDashboardCacheEntryComplete(cacheEntry)
+      && cacheEntry.requiresFullRefresh !== true,
   };
 }

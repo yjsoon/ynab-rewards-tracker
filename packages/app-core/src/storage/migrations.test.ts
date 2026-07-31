@@ -70,3 +70,54 @@ describe('promotional period migration', () => {
     }
   });
 });
+
+describe('earning rate migration', () => {
+  it.each([
+    ['zero', 0],
+    ['intentional blank', null],
+    ['explicit undefined', undefined],
+  ])('preserves an existing %s earning rate', (_label, earningRate) => {
+    const storage = createDefaultStorage() as MutableStorageData;
+    storage.cards = [{
+      ...cardWithPromotion(undefined),
+      earningRate,
+    } as MutableCard];
+
+    applyStorageMigrations(storage);
+
+    expect(storage.cards[0].earningRate).toBe(earningRate);
+  });
+
+  it('fills only an absent legacy earning rate and preserves a zero rule rate', () => {
+    const storage = createDefaultStorage() as MutableStorageData;
+    const legacyCard = cardWithPromotion(undefined) as MutableCard;
+    Reflect.deleteProperty(legacyCard, 'earningRate');
+    storage.cards = [legacyCard];
+    storage.rules = [{
+      id: 'rule-1',
+      cardId: legacyCard.id,
+      name: 'No earn',
+      rewardType: 'cashback',
+      rewardValue: 0,
+      startDate: '2026-01-01',
+      endDate: '2026-12-31',
+      active: true,
+      priority: 0,
+    }];
+
+    applyStorageMigrations(storage);
+
+    expect(storage.cards[0].earningRate).toBe(0);
+  });
+
+  it('normalises an explicit undefined rate to a JSON-stable blank', () => {
+    const card = cardWithPromotion(undefined) as MutableCard;
+    card.earningRate = undefined;
+
+    const normalised = normaliseCard(card);
+    const reloaded = JSON.parse(JSON.stringify(normalised)) as CreditCard;
+
+    expect(normalised.earningRate).toBeNull();
+    expect(reloaded).toHaveProperty('earningRate', null);
+  });
+});

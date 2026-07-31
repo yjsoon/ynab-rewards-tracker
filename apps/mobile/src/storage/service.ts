@@ -7,6 +7,7 @@ import {
   shouldResetStorage,
   createDefaultStorage,
   applyStorageMigrations,
+  DASHBOARD_TRANSACTION_CACHE_LIMIT,
   normaliseCard,
   normaliseThemeGroup,
   pruneThemeGroups,
@@ -49,7 +50,7 @@ const LEGACY_PAT_SECURE_STORE_KEYS = [
 ] as const;
 
 export class StorageService {
-  private static readonly DASHBOARD_CACHE_LIMIT = 500;
+  private static readonly DASHBOARD_CACHE_LIMIT = DASHBOARD_TRANSACTION_CACHE_LIMIT;
   private static readonly DASHBOARD_CACHE_MAX_ENTRIES = 5;
   private static instance: StorageService;
   private cache: StorageData | null = null;
@@ -430,12 +431,17 @@ export class StorageService {
     return unique;
   }
 
-  async setTrackedAccountIds(accountIds: string[]): Promise<void> {
+  async setTrackedAccountIds(
+    accountIds: string[],
+    expectedGeneration = this.operationGeneration,
+  ): Promise<void> {
+    this.assertGeneration(expectedGeneration);
     const storage = await this.load();
+    this.assertGeneration(expectedGeneration);
     const unique = Array.from(new Set(accountIds));
     unique.sort();
     storage.ynab.trackedAccountIds = unique;
-    await this.save(storage);
+    await this.save(storage, expectedGeneration);
   }
 
   async isAccountTracked(accountId: string): Promise<boolean> {

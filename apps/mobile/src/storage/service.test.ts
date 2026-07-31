@@ -179,3 +179,54 @@ describe('PAT generation ownership', () => {
     expect(persisted.ynab).not.toHaveProperty('pat');
   });
 });
+
+describe('snapshot restore publication ownership', () => {
+  it('rejects YNAB card and calculation publishers from before the restore boundary', async () => {
+    const initial = createDefaultStorage();
+    const restored = createDefaultStorage();
+    restored.cards = [{
+      id: 'restored-card',
+      name: 'Restored card',
+      issuer: 'Restored bank',
+      type: 'cashback',
+      featured: true,
+      earningRate: 2,
+      ynabAccountId: 'restored-account',
+    }];
+    mocks.asyncValues.set(STORAGE_VERSION_KEY, STORAGE_VERSION);
+    mocks.asyncValues.set(STORAGE_KEY, JSON.stringify(initial));
+
+    const service = new StorageService();
+    const stalePublisherGeneration = service.captureGeneration();
+    const restoreGeneration = service.invalidatePendingOperations();
+    await service.importSettings(JSON.stringify(restored), {
+      expectedGeneration: restoreGeneration,
+    });
+
+    await expect(service.saveCard({
+      id: 'stale-card',
+      name: 'Stale card',
+      issuer: 'Old bank',
+      type: 'cashback',
+      featured: true,
+      earningRate: 1,
+      ynabAccountId: 'stale-account',
+    }, stalePublisherGeneration)).rejects.toThrow('cancelled');
+    await expect(service.replaceCalculations([{
+      cardId: 'stale-card',
+      ruleId: 'card-stale-card',
+      period: '2026-08',
+      totalSpend: 100,
+      eligibleSpend: 100,
+      rewardEarned: 1,
+      rewardType: 'cashback',
+      minimumMet: true,
+      maximumExceeded: false,
+      shouldStopUsing: false,
+    }], stalePublisherGeneration)).rejects.toThrow('cancelled');
+
+    const persisted = JSON.parse(await service.exportSettings());
+    expect(persisted.cards.map((card: { id: string }) => card.id)).toEqual(['restored-card']);
+    expect(persisted.calculations).toEqual([]);
+  });
+});

@@ -123,7 +123,7 @@ export function useCloudAutoSync(): void {
       if (force) pendingForceRef.current = true;
       return inFlightRef.current;
     }
-    const storageGeneration = storage.captureGeneration();
+    let storageGeneration = storage.captureGeneration();
     const assertCurrentGeneration = () => {
       if (!storage.isGenerationCurrent(storageGeneration)) {
         throw new Error('Automatic Cloud Sync was cancelled.');
@@ -191,6 +191,7 @@ export function useCloudAutoSync(): void {
       }
 
       if (cloudIsNewer) {
+        storageGeneration = actions.invalidatePendingOperations();
         await storage.importSettings(JSON.stringify(cloudPayload), {
           expectedCloudSyncLocalChangedAt: localSettings.cloudSyncLocalChangedAt ?? null,
           expectedGeneration: storageGeneration,

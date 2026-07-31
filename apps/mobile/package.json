@@ -8,7 +8,7 @@
     "ios": "pnpm exec expo start --ios",
     "android": "pnpm exec expo start --android",
     "typecheck": "tsc --project tsconfig.json --noEmit",
-    "test": "vitest run src/storage/service.test.ts src/features/activity/flag-update.integration.test.ts src/features/activity/flag-update.test.ts"
+    "test": "vitest run src/storage/service.test.ts src/features/activity/flag-update.integration.test.ts src/features/activity/flag-update.test.ts src/features/cards/card-edit-publication.integration.test.ts src/features/cards/card-edit-refresh.test.ts src/contexts/setup-sync-chain.test.ts"
   },
   "dependencies": {
     "@babel/runtime": "^7.25.0",

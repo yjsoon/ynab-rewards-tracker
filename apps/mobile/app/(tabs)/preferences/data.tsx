@@ -47,11 +47,14 @@ export default function DataPreferencesScreen() {
             text: 'Import',
             onPress: () => {
               void (async () => {
+                const storageGeneration = actions.invalidatePendingOperations();
                 await storage.updateSettings({
                   cloudSyncLocalChangedAt: new Date().toISOString(),
+                }, storageGeneration);
+                await storage.importSettings(JSON.stringify(payload), {
+                  expectedGeneration: storageGeneration,
                 });
-                await storage.importSettings(JSON.stringify(payload));
-                await actions.refresh();
+                await actions.refresh(storageGeneration);
                 setMessage({ text: 'Settings imported', tone: 'positive' });
               })().catch((error: unknown) => {
                 setMessage({

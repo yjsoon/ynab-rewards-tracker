@@ -262,9 +262,10 @@ export default function CloudSyncScreen() {
                 return;
               }
 
-              void applyRestore(payload, restored, storageGeneration)
+              const restoreGeneration = actions.invalidatePendingOperations();
+              void applyRestore(payload, restored, restoreGeneration)
                 .catch((error: unknown) => {
-                  if (!mountedRef.current || !storage.isGenerationCurrent(storageGeneration)) return;
+                  if (!mountedRef.current || !storage.isGenerationCurrent(restoreGeneration)) return;
                   setMessage({
                     text: error instanceof Error ? error.message : 'Couldn’t restore settings',
                     tone: 'attention',

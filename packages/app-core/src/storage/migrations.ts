@@ -97,13 +97,15 @@ export function applyStorageMigrations(data: MutableStorageData): void {
     if (Array.isArray(data.cards)) {
       data.cards = data.cards.map((card) => {
         const mutableCard: MutableCard = { ...card } as MutableCard;
-        if (!mutableCard.earningRate) {
+        if (!Object.prototype.hasOwnProperty.call(mutableCard, 'earningRate')) {
           const cardRules = Array.isArray(data.rules)
             ? data.rules.filter((rule) => rule.cardId === mutableCard.id && rule.active)
             : [];
           if (cardRules.length > 0) {
             const firstRule = cardRules[0];
-            mutableCard.earningRate = firstRule.rewardValue || 1;
+            mutableCard.earningRate = typeof firstRule.rewardValue === 'number'
+              ? firstRule.rewardValue
+              : 1;
           } else {
             mutableCard.earningRate = 1;
           }

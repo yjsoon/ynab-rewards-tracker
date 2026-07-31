@@ -101,7 +101,8 @@ export interface CreditCard {
     description?: string; // Optional description (e.g., "5x groceries Q4 2024")
   };
   featured: boolean;
-  earningRate?: number;
+  /** A null value is an intentional, persisted "not configured" rate. */
+  earningRate?: number | null;
   earningBlockSize?: number | null;
   minimumSpend?: number | null;
   maximumSpend?: number | null;

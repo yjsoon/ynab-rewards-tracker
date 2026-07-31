@@ -4,20 +4,21 @@ import { planFlagUpdateRefresh } from './flag-update';
 
 describe('planFlagUpdateRefresh', () => {
   it('syncs derived rewards even when the transaction cache is complete', () => {
-    expect(planFlagUpdateRefresh({ isComplete: true })).toEqual({
+    expect(planFlagUpdateRefresh({ isComplete: true, transactions: [] })).toEqual({
       syncRewards: true,
       markCacheForFullRefresh: false,
     });
   });
 
   it('marks a truncated cache for a full fetch before syncing rewards', () => {
-    expect(planFlagUpdateRefresh({ isComplete: false })).toEqual({
+    expect(planFlagUpdateRefresh({ isComplete: false, transactions: [] })).toEqual({
       syncRewards: true,
       markCacheForFullRefresh: true,
     });
     expect(planFlagUpdateRefresh({
       isComplete: false,
       requiresFullRefresh: true,
+      transactions: [],
     }).markCacheForFullRefresh).toBe(false);
   });
 });

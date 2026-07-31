@@ -25,9 +25,13 @@ import {
 } from '@/components/ios';
 import { useHaptics } from '@/hooks/useHaptics';
 import { flagColor } from '@/features/cards/presentation';
+import { planCardEditRefresh } from '@/features/cards/card-edit-refresh';
+import { createLocalFlagUpdatePublication } from '@/features/activity/flag-update-publication';
 import { semanticColors } from '@/theme';
 import { interaction, nativeMetrics, radii, spacing } from '@/theme/tokens';
-import { findBestDashboardEntry } from '@ynab-counter/app-core/storage/dashboardCache';
+import {
+  findExactDashboardEntry,
+} from '@ynab-counter/app-core/storage/dashboardCache';
 import { getEarliestPeriodStart } from '@ynab-counter/app-core/rewards-engine/utils/periods';
 import {
   createSubcategoryId,
@@ -294,7 +298,7 @@ function validateForm(source: CreditCard, form: CardForm): ValidationResult {
     subcategories: tiers,
   };
   if (rate.value === undefined) {
-    Reflect.deleteProperty(card, 'earningRate');
+    card.earningRate = null;
   } else {
     card.earningRate = rate.value;
   }
@@ -683,28 +687,41 @@ export default function EditCardScreen() {
       (card) => card.id === sourceCard.id ? validation.card! : card,
     );
     const nextPeriodStart = getEarliestPeriodStart(nextCards);
-    const cacheEntry = findBestDashboardEntry(
+    const cacheEntry = findExactDashboardEntry(
       state.cachedData?.dashboardTransactions,
       state.selectedBudget.id,
       state.trackedAccountIds,
     );
     const rewardConfigurationChanged = rewardConfigurationSignature(sourceCard)
       !== rewardConfigurationSignature(validation.card);
-    const newlyRequiresFullPeriodRefresh = Boolean(
-      cacheEntry && (
-        nextPeriodStart < cacheEntry.sinceDate
-        || (cacheEntry.isComplete === false && rewardConfigurationChanged)
-      ),
-    );
-    const needsFullPeriodRefresh = newlyRequiresFullPeriodRefresh
-      || cacheEntry?.requiresFullRefresh === true;
+    const refreshPlan = planCardEditRefresh({
+      cacheEntry,
+      nextPeriodStart,
+      rewardConfigurationChanged,
+    });
+    const { needsFullPeriodRefresh } = refreshPlan;
     const canRefresh = Boolean(
       state.pat && state.selectedBudget.id && state.trackedAccountIds.length > 0,
     );
     let cardSaved = false;
     try {
+      if (rewardConfigurationChanged) {
+        actions.invalidateSyncRequests();
+      }
       await actions.setCards(nextCards);
       cardSaved = true;
+      if (
+        refreshPlan.publishCalculationsLocally
+        && cacheEntry
+      ) {
+        const publication = createLocalFlagUpdatePublication({
+          cacheEntry,
+          cards: nextCards,
+          settings: state.settings,
+          calculations: state.calculations,
+        });
+        await actions.setCalculations(publication.calculations);
+      }
       if (needsFullPeriodRefresh) {
         if (cacheEntry && cacheEntry.requiresFullRefresh !== true) {
           await actions.setDashboardCachedData({

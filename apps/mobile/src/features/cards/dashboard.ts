@@ -19,6 +19,11 @@ import type {
   CreditCard,
   DashboardTransactionsCacheEntry,
 } from '@ynab-counter/app-core/storage';
+import {
+  getDashboardProjectionCompleteness,
+  isDashboardCacheEntryComplete,
+  isDashboardCacheEntryTrusted,
+} from '@ynab-counter/app-core/storage';
 
 export type DashboardSyncState = 'synced' | 'syncing' | 'attention' | 'offline';
 
@@ -231,20 +236,21 @@ export function useRewardsDashboard(referenceDate?: Date): RewardsDashboardModel
     () => cacheEntry?.transactions ?? [],
     [cacheEntry],
   );
+  const cacheIsComplete = isDashboardCacheEntryComplete(cacheEntry);
   const dashboard = useMemo(
     () => buildRewardsDashboard(
       state.cards,
       cachedTransactions,
       state.settings,
       asOf,
-      cacheEntry?.isComplete === false && cacheEntry.requiresFullRefresh !== true
+      cacheEntry && !cacheIsComplete && cacheEntry.requiresFullRefresh !== true
         ? state.calculations
         : [],
     ),
     [
       asOf,
-      cacheEntry?.isComplete,
-      cacheEntry?.requiresFullRefresh,
+      cacheIsComplete,
+      cacheEntry,
       cachedTransactions,
       state.calculations,
       state.cards,
@@ -257,15 +263,10 @@ export function useRewardsDashboard(referenceDate?: Date): RewardsDashboardModel
       state.cards,
       state.settings,
       new Map(cacheEntry?.accounts.map((account) => [account.id, account.name] as const) ?? []),
-      {
-        periodDataComplete: cacheEntry?.isComplete !== false
-          && cacheEntry?.requiresFullRefresh !== true,
-      },
+      getDashboardProjectionCompleteness(cacheEntry),
     ),
     [
-      cacheEntry?.accounts,
-      cacheEntry?.isComplete,
-      cacheEntry?.requiresFullRefresh,
+      cacheEntry,
       cachedTransactions,
       state.cards,
       state.settings,
@@ -316,7 +317,7 @@ export function useRewardsDashboard(referenceDate?: Date): RewardsDashboardModel
     isSyncing: state.isSyncing,
     connectionStatus: state.connectionStatus,
     connectionError: state.connectionError,
-    hasCache: Boolean(cacheEntry && cacheEntry.requiresFullRefresh !== true),
+    hasCache: isDashboardCacheEntryTrusted(cacheEntry),
     cacheMatchesSelection,
     hasConnection: canSync,
   });
