@@ -1,11 +1,11 @@
 # Rewards Tracker for YNAB
 
-A client-side rewards tracker spanning a production-ready web app and an in-progress mobile companion. Both platforms analyse YNAB transactions to track credit card rewards with user-defined rules. All user data lives in browser or device storage — no server database is used. The mobile app is actively integrating live storage/sync flows and continues to rely on demo data until that work is completed.
+A client-side rewards tracker with web and mobile apps. Both platforms analyse YNAB transactions to track credit card rewards with user-defined rules. User data lives in browser or device storage; the application does not depend on a server database.
 
 ## Platforms Overview
 
-- **Web App (`apps/web`)**: Fully featured, production-ready experience with complete YNAB integration, rewards calculation engine, storage persistence, and dashboard analytics. The Recommendations page is temporarily hidden from navigation (not ready for production).
-- **Mobile App (`apps/mobile`)**: Expo-based companion app currently wiring up live YNAB integration, AsyncStorage persistence, and rewards calculations. Home and Settings screens are mid-integration; card management UI and remaining tab screens still need implementation. The Recommendations tab is temporarily hidden (not ready for production).
+- **Web App (`apps/web`)**: Next.js experience with YNAB integration, rewards calculations, local persistence, cloud sync, and dashboard analytics.
+- **Mobile App (`apps/mobile`)**: Expo-based companion using the shared domain model, native YNAB access, AsyncStorage persistence, and SecureStore for the PAT.
 - **Shared Foundation (`packages/app-core`)**: Cross-platform rewards engine, storage types, and utilities consumed by both apps.
 - **Agent API (`apps/web/app/api/agent/rewards`)**: Stateless endpoint that decrypts Cloud Sync data in memory and recomputes rewards for card limits, category recommendations, and transaction advice.
 
@@ -27,7 +27,7 @@ A client-side rewards tracker spanning a production-ready web app and an in-prog
 - TypeScript + Tamagui component system and theming
 - `@react-navigation/native` + Expo Router tabs
 - `expo-haptics`, `expo-constants`, `expo-secure-store` (for PAT security)
-- `@react-native-async-storage/async-storage` (persistence layer under active integration)
+- `@react-native-async-storage/async-storage` for persistence
 - React Native Safe Area, Gesture Handler, Reanimated, SVG for platform affordances
 - Direct YNAB API integration via native fetch (no proxy required)
 
@@ -36,24 +36,9 @@ A client-side rewards tracker spanning a production-ready web app and an in-prog
 - Storage type definitions, constants, and helpers for local persistence
 - Shared date utilities, minimum spend helpers, and YNAB client abstractions
 
-## Current Status Snapshot
-
-| Area | Web (apps/web) | Mobile (apps/mobile) |
-| --- | --- | --- |
-| UI Screens & Navigation | Stable and production-ready; Recommendations hidden | Core tabs scaffolded; several flows incomplete |
-| YNAB Authentication & Sync | Fully functional | StorageContext and PAT flows under active development; live sync not yet validated end-to-end |
-| Rewards Calculation Engine | Production usage | Shares engine, but mobile still mixes demo data with partial live wiring |
-| Storage Persistence | Browser localStorage service | AsyncStorage + SecureStore integration in progress |
-| Card & Rule Management | Complete CRUD | UI missing |
-| Transactions & Analytics | Full parity; Recommendations hidden | Transactions tab pending live wiring; Recommendations tab temporarily hidden |
-
-This document is an architectural reference—do not maintain TODOs here.
-
-> Note: Until the live storage/sync flow is confirmed complete, assume the mobile app falls back to `useDemoRewards`.
-
 ## Core Features
 
-The production web app currently delivers the following capabilities. The mobile app implements most infrastructure but lacks UI for card/rules management.
+The web app provides the following capabilities. Check each platform's implementation before assuming feature parity.
 
 ### YNAB Integration
 - Connect via Personal Access Token (PAT)
@@ -78,7 +63,6 @@ The production web app currently delivers the following capabilities. The mobile
 - Map YNAB flags/tags to reward categories
 - Inline category editing in transaction views
 - "Apply to tag" shortcut for bulk mappings
-- Per-transaction overrides (planned)
 
 ### Rewards Calculation Engine
 - Period-based calculations (monthly or billing cycle)
@@ -87,7 +71,7 @@ The production web app currently delivers the following capabilities. The mobile
 - Eligible spend calculation (respecting both minimum and maximum)
 - Normalised dollar values for cross-card comparison
 - Real-time recomputation with caching
- - Agent API outputs limit signals and transaction advice on demand
+- Agent API outputs limit signals and transaction advice on demand
 
 ### Dashboard & Analytics
 - Overview of all tracked cards
@@ -114,16 +98,15 @@ apps/
 │   └── hooks/                # React hooks for data fetching and state
 ├── mobile/                   # Expo + React Native companion app
 │   ├── app/                  # Expo Router tabs (Home, Transactions, Recommendations, Settings)
-│   ├── components/ios/       # iOS-inspired primitives (Card, Button, Typography)
 │   ├── src/
+│   │   ├── components/       # Mobile UI components and iOS-inspired primitives
 │   │   ├── contexts/         # StorageContext with state management & sync orchestration
-│   │   ├── hooks/            # Mobile-specific hooks (demo rewards, haptics, keyboard)
+│   │   ├── hooks/            # Mobile-specific hooks (haptics, keyboard)
 │   │   ├── lib/              # YNAB client, API wrappers, sync service
 │   │   ├── storage/          # AsyncStorage service & persistence layer
 │   │   └── theme/            # Semantic colour tokens shared across screens
 packages/
 ├── app-core/                 # Shared rewards engine, storage types, utilities
-├── core/                     # Additional core utilities (legacy)
 ├── db/                       # Database layer (unused in client-only apps)
 ├── worker/                   # Background compute scripts
 └── ynab-client/              # YNAB API client abstractions
@@ -133,15 +116,15 @@ packages/
 
 - Both apps consume the shared rewards engine and storage types from `packages/app-core`, ensuring consistent calculations and data structures.
 - Web persists data via `storage.ts` service (browser `localStorage`); mobile mirrors this through AsyncStorage with SecureStore for sensitive PAT storage.
-- Mobile uses `useDemoRewards` as fallback when no cards configured, otherwise computes live rewards from cached YNAB transactions.
 - Web routes YNAB API calls through `/api/ynab/*` proxy; mobile makes direct API calls using native fetch with built-in retry and rate limiting.
 - Both apps use React Context (`StorageContext`) for state management with automatic hydration and sync orchestration.
 
 ## Data Model
 
 ### Resetting Local Storage
-- **Web**: Browser state lives under `ynab-rewards-tracker` key. Bump `STORAGE_VERSION` in `apps/web/lib/storage.ts` to force-clear cached data
-- **Mobile**: AsyncStorage uses `ynab-rewards-tracker:` prefix. Bump `STORAGE_VERSION` in `packages/app-core/src/storage/constants.ts` to force-clear cached data. PAT stored separately in SecureStore for security
+- **Web**: Browser state lives under the shared `STORAGE_KEY`.
+- **Mobile**: AsyncStorage uses the shared storage keys; the PAT is stored separately in SecureStore.
+- Bump `STORAGE_VERSION` in `packages/app-core/src/storage/constants.ts` when a deliberate cross-platform reset is required.
 
 ### Core Entities
 ```typescript
@@ -180,7 +163,7 @@ TagMapping {
 ### Storage & Security
 - All reads/writes through `storage.ts` service
 - PAT never included in exports/backups
-- No server-side data storage
+- Cloud Sync is optional and stores client-encrypted payloads in Cloudflare KV; there is no application database
 
 ### Brand & Icons
 - Master vector and brand guidelines: `design/brand/` (see its README)
@@ -210,16 +193,15 @@ pnpm --filter ./apps/mobile android    # Launch Android emulator via Expo
 ```
 
 ### Type Checking & Quality
-- `pnpm --filter ./apps/web lint`
-- `pnpm --filter ./apps/web typecheck`
-- `pnpm --filter ./apps/mobile typecheck`
-- `pnpm test` — repository-wide tests (web coverage currently most comprehensive)
+- `pnpm lint` — lint the web app and shared packages
+- `pnpm typecheck` — type-check the web app and shared packages
+- `pnpm mobile:typecheck` — type-check the mobile app
+- `pnpm test` — lint and run the primary test suites
 
 ## Testing Strategy
 - Unit tests for calculation logic
 - Integration tests for YNAB API proxy
 - Component tests for critical UI flows (web)
-- Mobile testing focus pending integration work; current priority is wiring real data before UI regression coverage
 - Manual testing for edge cases
 
 ## Deployment
@@ -232,11 +214,7 @@ pnpm --filter ./apps/mobile android    # Launch Android emulator via Expo
 - Manual deploy: `pnpm --filter ./apps/web deploy:cloudflare`
 
 ### Mobile App
-- Expo EAS or local builds planned once integrations land
-
-## Roadmap & Task Management
-
-Keep this document focused on architecture; do not add checklists or TODO items here.
+- Use the scripts in `apps/mobile/package.json` for local Expo builds. Inspect the current Expo/EAS configuration before changing release workflows.
 
 ## Contributing Guidelines
 - TypeScript-first development
@@ -260,8 +238,7 @@ This project uses a static feature flag system for managing incomplete or experi
   // In JSX (mobile tabs):
   {featureFlags.recommendations && <RecommendationsTab />}
   ```
-- **Current flags**:
-  - `recommendations`: Smart card suggestions (currently `false` - not ready for production)
+- Treat `featureFlags.ts` as the source of truth for available flags and their current values.
 - **Benefits**:
   - Single source of truth for all feature toggles
   - Type-safe with TypeScript autocomplete
@@ -278,3 +255,9 @@ This project uses a static feature flag system for managing incomplete or experi
 - ❌ Access localStorage directly (use storage.ts)
 - ❌ Hardcode currency symbols or values
 - ❌ Create server-side dependencies
+
+## Task Source
+
+- Follow the user's request and the checked-in code as the source of truth for current work.
+- Do not infer or manage work from repository-local task databases unless the user explicitly asks you to.
+- Keep this file focused on durable architecture and conventions, not transient status snapshots or TODO lists.
