@@ -1,5 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -23,7 +24,7 @@ import {
   Title3,
 } from '@/components/ios';
 import { useHaptics } from '@/hooks/useHaptics';
-import { flagColour } from '@/features/cards/presentation';
+import { flagColor } from '@/features/cards/presentation';
 import { semanticColors } from '@/theme';
 import { interaction, nativeMetrics, radii, spacing } from '@/theme/tokens';
 import type {
@@ -215,31 +216,35 @@ function validateForm(source: CreditCard, form: CardForm): ValidationResult {
     });
   }
 
-  return {
-    card: {
-      ...source,
-      name,
-      issuer: issuer || 'Unknown',
-      type: form.type,
-      featured: form.featured,
-      earningRate: rate.value,
-      earningBlockSize: block.value ?? null,
-      minimumSpend: minimum.value ?? null,
-      maximumSpend: maximum.value ?? null,
-      billingCycle: form.cycleType === 'billing'
-        ? { type: 'billing', dayOfMonth: cycleDay.value ?? 1 }
-        : { type: 'calendar' },
-      promotionalPeriod: form.promotionEnabled
-        ? {
-            startDate: form.promotionStart.trim() || undefined,
-            endDate: form.promotionEnd.trim(),
-            description: form.promotionDescription.trim() || undefined,
-          }
-        : undefined,
-      subcategoriesEnabled: form.subcategoriesEnabled,
-      subcategories: tiers,
-    },
+  const card: CreditCard = {
+    ...source,
+    name,
+    issuer: issuer || 'Unknown',
+    type: form.type,
+    featured: form.featured,
+    earningBlockSize: block.value ?? null,
+    minimumSpend: minimum.value ?? null,
+    maximumSpend: maximum.value ?? null,
+    billingCycle: form.cycleType === 'billing'
+      ? { type: 'billing', dayOfMonth: cycleDay.value ?? 1 }
+      : { type: 'calendar' },
+    promotionalPeriod: form.promotionEnabled
+      ? {
+          startDate: form.promotionStart.trim() || undefined,
+          endDate: form.promotionEnd.trim(),
+          description: form.promotionDescription.trim() || undefined,
+        }
+      : undefined,
+    subcategoriesEnabled: form.subcategoriesEnabled,
+    subcategories: tiers,
   };
+  if (rate.value === undefined) {
+    Reflect.deleteProperty(card, 'earningRate');
+  } else {
+    card.earningRate = rate.value;
+  }
+
+  return { card };
 }
 
 function Group({ title, footer, children }: {
@@ -381,7 +386,7 @@ function TierEditor({
     <View style={styles.tier}>
       <View style={styles.tierHeading}>
         <View style={styles.tierIdentity}>
-          <View style={[styles.flagDot, { backgroundColor: flagColour(tier.flagColor) }]} />
+          <View style={[styles.flagDot, { backgroundColor: flagColor(tier.flagColor) }]} />
           <View style={styles.tierCopy}>
             <Title3>{tier.name || 'Untitled tier'}</Title3>
             <Footnote color="secondary">YNAB {tier.flagColor === 'unflagged' ? 'unflagged' : `${tier.flagColor} flag`}</Footnote>
@@ -444,16 +449,24 @@ export default function EditCardScreen() {
   const params = useLocalSearchParams<{ id?: string | string[] }>();
   const cardId = parameterValue(params.id);
   const router = useRouter();
-  const { state, actions } = useStorage();
+  const { state, status, actions } = useStorage();
   const { notification } = useHaptics();
   const sourceCard = state.cards.find((card) => card.id === cardId);
   const [form, setForm] = useState<CardForm | undefined>(() => sourceCard ? createForm(sourceCard) : undefined);
+  const initialisedCardIdRef = useRef<string | undefined>(sourceCard?.id);
   const [error, setError] = useState<string>();
   const [saving, setSaving] = useState(false);
   const accountName = useMemo(
     () => state.accounts.find((account) => account.id === sourceCard?.ynabAccountId)?.name ?? sourceCard?.name,
     [sourceCard, state.accounts],
   );
+
+  useEffect(() => {
+    if (sourceCard && initialisedCardIdRef.current !== sourceCard.id) {
+      initialisedCardIdRef.current = sourceCard.id;
+      setForm(createForm(sourceCard));
+    }
+  }, [sourceCard]);
 
   const patchForm = <K extends keyof CardForm>(key: K, value: CardForm[K]) => {
     setError(undefined);
@@ -494,6 +507,15 @@ export default function EditCardScreen() {
       setSaving(false);
     }
   };
+
+  if (!status.isHydrated || (sourceCard && initialisedCardIdRef.current !== sourceCard.id)) {
+    return (
+      <View style={styles.missingScreen} accessibilityLabel="Loading card">
+        <Stack.Screen options={{ title: 'Edit card' }} />
+        <ActivityIndicator size="large" color={semanticColors.action} />
+      </View>
+    );
+  }
 
   if (!sourceCard || !form) {
     return (

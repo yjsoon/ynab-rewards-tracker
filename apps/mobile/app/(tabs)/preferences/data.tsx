@@ -13,19 +13,24 @@ import { semanticColors, spacing } from '@/theme';
 import { createCloudSyncPayload, parseCloudSyncPayload } from '@ynab-counter/app-core/cloud-sync';
 import type { StorageData } from '@ynab-counter/app-core/storage';
 
+type Message = { text: string; tone: 'positive' | 'attention' };
+
 export default function DataPreferencesScreen() {
   const router = useRouter();
   const { actions } = useStorage();
-  const [message, setMessage] = useState<string>();
+  const [message, setMessage] = useState<Message>();
 
   const exportData = async () => {
     try {
       const raw = JSON.parse(await storage.exportSettings()) as StorageData;
       const payload = createCloudSyncPayload(raw);
       await Clipboard.setStringAsync(JSON.stringify(payload, null, 2));
-      setMessage('Settings copied to the clipboard');
+      setMessage({ text: 'Settings copied to the clipboard', tone: 'positive' });
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Couldn’t export settings');
+      setMessage({
+        text: error instanceof Error ? error.message : 'Couldn’t export settings',
+        tone: 'attention',
+      });
     }
   };
 
@@ -44,16 +49,22 @@ export default function DataPreferencesScreen() {
               void (async () => {
                 await storage.importSettings(JSON.stringify(payload));
                 await actions.refresh();
-                setMessage('Settings imported');
+                setMessage({ text: 'Settings imported', tone: 'positive' });
               })().catch((error: unknown) => {
-                setMessage(error instanceof Error ? error.message : 'Couldn’t import settings');
+                setMessage({
+                  text: error instanceof Error ? error.message : 'Couldn’t import settings',
+                  tone: 'attention',
+                });
               });
             },
           },
         ],
       );
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'The clipboard does not contain valid settings');
+      setMessage({
+        text: error instanceof Error ? error.message : 'The clipboard does not contain valid settings',
+        tone: 'attention',
+      });
     }
   };
 
@@ -72,7 +83,10 @@ export default function DataPreferencesScreen() {
               await actions.refresh();
               router.replace('/');
             })().catch((error: unknown) => {
-              setMessage(error instanceof Error ? error.message : 'Couldn’t erase local data');
+              setMessage({
+                text: error instanceof Error ? error.message : 'Couldn’t erase local data',
+                tone: 'attention',
+              });
             });
           },
         },
@@ -123,8 +137,8 @@ export default function DataPreferencesScreen() {
 
       {message ? (
         <StatusPill
-          label={message}
-          tone={message.includes('Couldn’t') || message.includes('Invalid') ? 'attention' : 'positive'}
+          label={message.text}
+          tone={message.tone}
           style={styles.message}
         />
       ) : null}

@@ -35,13 +35,14 @@ import {
 import {
   attentionCopy,
   createCardFormatting,
-  flagColour,
+  flagColor,
   formatDaysRemaining,
   formatPeriod,
   formatRate,
   formatRewardForCard,
   formatResetDate,
   statusPresentation,
+  type CardFormatting,
 } from '@/features/cards/presentation';
 import { semanticColors } from '@/theme';
 import { nativeMetrics, radii, spacing } from '@/theme/tokens';
@@ -80,6 +81,8 @@ function noRewardCopy(transaction: TransactionProjection): string {
   switch (transaction.noRewardReason) {
     case 'excluded': return 'Excluded from rewards';
     case 'below_block': return 'Below earning block';
+    case 'below_minimum': return 'Minimum not met';
+    case 'cap_reached': return 'Cap reached';
     case 'zero_rate': return 'No earning rate';
     case 'zero_amount': return 'No reward';
     default: return 'No reward';
@@ -142,20 +145,19 @@ function TransactionRow({
 function SubcategoryRow({
   subcategory,
   projection,
-  currency,
-  number,
+  formatting,
   showDivider,
   highlighted = false,
   onLayout,
 }: {
   subcategory: CardSubcategory;
   projection: CardDashboardProjection;
-  currency: (value: number) => string;
-  number: (value: number) => string;
+  formatting: CardFormatting;
   showDivider: boolean;
   highlighted?: boolean;
   onLayout?: (event: LayoutChangeEvent) => void;
 }) {
+  const currency = formatting.currencyCompact;
   const calculation = projection.calculation.subcategoryBreakdowns?.find(
     (entry) => entry.id === subcategory.id,
   );
@@ -165,19 +167,15 @@ function SubcategoryRow({
     : totalSpend;
   const rewardAmount = calculation?.rewardEarned ?? 0;
   const rewardDollars = calculation?.rewardEarnedDollars ?? 0;
-  const rate = projection.card.type === 'cashback'
-    ? `${number(subcategory.rewardValue)}% cashback`
-    : `${number(subcategory.rewardValue)} ${subcategory.rewardValue === 1 ? 'mile' : 'miles'}/$1`;
+  const rate = formatRate({
+    type: projection.card.type,
+    earningRate: subcategory.rewardValue,
+  }, formatting);
   const reward = formatRewardForCard(
     projection.card,
     rewardAmount,
     rewardDollars,
-    {
-      currency: '',
-      currencyCompact: currency,
-      currencyExact: currency,
-      number,
-    },
+    formatting,
   );
   const stateLabel = subcategory.active === false
     ? { label: 'Inactive', tone: 'inactive' as const }
@@ -200,7 +198,7 @@ function SubcategoryRow({
     >
       <View style={styles.subcategoryHeading} accessibilityElementsHidden>
         <View style={styles.subcategoryIdentity}>
-          <View style={[styles.flagDot, { backgroundColor: flagColour(subcategory.flagColor) }]} />
+          <View style={[styles.flagDot, { backgroundColor: flagColor(subcategory.flagColor) }]} />
           <View style={styles.subcategoryCopy}>
             <Headline>{subcategory.name}</Headline>
             <Footnote color="secondary">
@@ -253,6 +251,7 @@ export default function CardDetailScreen() {
   const router = useRouter();
   const scrollViewRef = useRef<ScrollView>(null);
   const focusedCategoryRef = useRef<string | undefined>(undefined);
+  const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [rewardTiersY, setRewardTiersY] = useState<number | null>(null);
   const [rewardTierGroupY, setRewardTierGroupY] = useState<number | null>(null);
   const [categoryOffsets, setCategoryOffsets] = useState<Record<string, number>>({});
@@ -297,6 +296,7 @@ export default function CardDetailScreen() {
 
     focusedCategoryRef.current = requestedCategoryId;
     setHighlightedCategoryId(requestedCategoryId);
+    if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current);
     const frame = requestAnimationFrame(() => {
       scrollViewRef.current?.scrollTo({
         y: Math.max(
@@ -306,13 +306,19 @@ export default function CardDetailScreen() {
         animated: true,
       });
     });
-    const timeout = setTimeout(() => setHighlightedCategoryId(undefined), 2400);
+    highlightTimeoutRef.current = setTimeout(() => {
+      setHighlightedCategoryId(undefined);
+      highlightTimeoutRef.current = undefined;
+    }, 2400);
 
     return () => {
       cancelAnimationFrame(frame);
-      clearTimeout(timeout);
     };
   }, [categoryOffsets, requestedCategoryId, rewardTierGroupY, rewardTiersY]);
+
+  useEffect(() => () => {
+    if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current);
+  }, []);
 
   const edit = () => {
     if (cardId) {
@@ -327,10 +333,13 @@ export default function CardDetailScreen() {
     const targetIndex = currentIndex + offset;
     if (currentIndex < 0 || targetIndex < 0 || targetIndex >= nextOrder.length) return;
     [nextOrder[currentIndex], nextOrder[targetIndex]] = [nextOrder[targetIndex], nextOrder[currentIndex]];
+    const cardTypeById = new Map(orderedCards.map(({ card }) => [card.id, card.type] as const));
     await actions.setSettings({
       cardOrdering: {
         ...state.settings.cardOrdering,
         all: nextOrder,
+        cashback: nextOrder.filter((id) => cardTypeById.get(id) === 'cashback'),
+        miles: nextOrder.filter((id) => cardTypeById.get(id) === 'miles'),
       },
     });
   };
@@ -562,7 +571,7 @@ export default function CardDetailScreen() {
           />
           <View style={styles.group}>
             <ConfigRow label="Reward type" value={card.type === 'cashback' ? 'Cashback' : 'Miles'} />
-            <ConfigRow label="Rate" value={formatRate(card)} />
+            <ConfigRow label="Rate" value={formatRate(card, formatting)} />
             <ConfigRow
               label="Minimum"
               value={(card.minimumSpend ?? 0) > 0 ? formatting.currencyCompact(card.minimumSpend!) : 'None'}
@@ -615,8 +624,7 @@ export default function CardDetailScreen() {
                   key={subcategory.id}
                   subcategory={subcategory}
                   projection={projection}
-                  currency={formatting.currencyCompact}
-                  number={formatting.number}
+                  formatting={formatting}
                   showDivider={index < subcategories.length - 1}
                   highlighted={subcategory.id === highlightedCategoryId}
                   onLayout={(event: LayoutChangeEvent) => {
@@ -632,7 +640,7 @@ export default function CardDetailScreen() {
             </View>
           ) : (
             <View style={styles.simpleRate}>
-              <Title3>{formatRate(card)}</Title3>
+              <Title3>{formatRate(card, formatting)}</Title3>
               <Body color="secondary">
                 Applied to eligible spend{card.earningBlockSize ? ` in ${formatting.currencyCompact(card.earningBlockSize)} transaction blocks` : ''}.
               </Body>

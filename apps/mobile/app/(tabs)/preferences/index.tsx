@@ -12,6 +12,10 @@ import {
 import { useStorage } from '@/contexts/StorageContext';
 import { SettingsFooter, SettingsRow } from '@/features/preferences/SettingsRow';
 import { semanticColors, spacing } from '@/theme';
+import { getEarliestPeriodStart } from '@ynab-counter/app-core/rewards-engine/utils/periods';
+import { createDefaultStorage } from '@ynab-counter/app-core/storage';
+
+const DEFAULT_CURRENCY = createDefaultStorage().settings.currency ?? '';
 
 function relativeTime(value?: string): string {
   if (!value) return 'Never';
@@ -78,10 +82,13 @@ export default function PreferencesScreen() {
             title="Last YNAB refresh"
             subtitle={`Updated ${relativeTime(lastYnabSync).toLowerCase()}`}
             symbol="arrow.triangle.2.circlepath"
+            trailingIsInteractive
             trailing={(
               <SyncBadge
                 state={ynabSyncState}
-                onPress={() => void actions.syncBudgetsAndAccounts()}
+                onPress={() => void actions.syncBudgetsAndAccounts({
+                  sinceDate: getEarliestPeriodStart(state.cards),
+                })}
                 accessibilityHint="Refreshes cards and transactions from YNAB"
               />
             )}
@@ -118,7 +125,7 @@ export default function PreferencesScreen() {
           <SettingsRow
             isFirst
             title="Display & value"
-            subtitle={`${state.settings.currency ?? 'USD'} · ${appearanceLabel(state.settings.theme)}`}
+            subtitle={`${state.settings.currency ?? DEFAULT_CURRENCY} · ${appearanceLabel(state.settings.theme)}`}
             symbol="slider.horizontal.3"
             onPress={() => router.push('/(tabs)/preferences/general')}
           />

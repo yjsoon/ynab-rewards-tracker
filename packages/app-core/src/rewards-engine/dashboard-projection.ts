@@ -6,6 +6,7 @@ import {
   type SimplifiedCalculation,
   type TransactionRewardBlock,
   type TransactionRewardReason,
+  type TransactionRewardResult,
 } from './simple-calculator';
 
 const MILLIUNITS_PER_UNIT = 1000;
@@ -596,13 +597,52 @@ export function projectTransactions(
   const cardsByAccount = new Map(
     cards.map((card) => [card.ynabAccountId, card] as const),
   );
+  const periodRewards = new Map<string, TransactionRewardResult>();
+
+  for (const card of cards) {
+    const transactionsByPeriod = new Map<
+      string,
+      { period: CalculationPeriod; transactions: Transaction[] }
+    >();
+    for (const transaction of transactions) {
+      if (transaction.account_id !== card.ynabAccountId || transaction.amount >= 0) {
+        continue;
+      }
+      const period = SimpleRewardsCalculator.calculatePeriod(
+        card,
+        parseYnabDate(transaction.date),
+      );
+      const existing = transactionsByPeriod.get(period.start);
+      if (existing) {
+        existing.transactions.push(transaction);
+      } else {
+        transactionsByPeriod.set(period.start, { period, transactions: [transaction] });
+      }
+    }
+
+    for (const { period, transactions: periodTransactions } of transactionsByPeriod.values()) {
+      const calculation = SimpleRewardsCalculator.calculateCardRewards(
+        card,
+        periodTransactions,
+        period,
+        settings,
+      );
+      for (const transaction of periodTransactions) {
+        const reward = calculation.transactionRewards[transaction.id];
+        if (reward) {
+          periodRewards.set(`${card.id}:${transaction.id}`, reward);
+        }
+      }
+    }
+  }
 
   return transactions.map((transaction) => {
     const card = cardsByAccount.get(transaction.account_id) ?? null;
     const amount = Math.abs(transaction.amount) / MILLIUNITS_PER_UNIT;
     const incoming = transaction.amount > 0;
     const rewardResult = !incoming && card
-      ? SimpleRewardsCalculator.calculateTransactionReward(amount, card, settings, {
+      ? periodRewards.get(`${card.id}:${transaction.id}`) ??
+        SimpleRewardsCalculator.calculateTransactionReward(amount, card, settings, {
           flagColor: transaction.flag_color,
         })
       : null;

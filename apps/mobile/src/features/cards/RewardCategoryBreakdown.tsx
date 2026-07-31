@@ -14,7 +14,7 @@ import { semanticColors } from '@/theme';
 import { interaction, nativeMetrics, radii, spacing } from '@/theme/tokens';
 import type { TextColor } from '@/components/ios/Typography';
 import type { CardFormatting } from './presentation';
-import { flagColour } from './presentation';
+import { flagColor } from './presentation';
 import type { PortfolioRewardCategory } from './reward-categories';
 
 type OperationalState = {
@@ -117,14 +117,14 @@ function railSegments(categories: PortfolioRewardCategory[]): RailSegment[] {
   if (spentCategories.length <= 5) {
     return spentCategories.map((item) => ({
       key: item.key,
-      color: flagColour(item.category.flagColor),
+      color: flagColor(item.category.flagColor),
       spend: item.category.spend.total,
     }));
   }
 
   const leading = spentCategories.slice(0, 4).map((item) => ({
     key: item.key,
-    color: flagColour(item.category.flagColor),
+    color: flagColor(item.category.flagColor),
     spend: item.category.spend.total,
   }));
   return [
@@ -281,7 +281,7 @@ export function RewardCategoryRow({
           <SymbolView
             name="flag.fill"
             size={15}
-            tintColor={flagColour(item.category.flagColor)}
+            tintColor={flagColor(item.category.flagColor)}
             style={styles.flagIcon}
           />
           <View style={styles.categoryCopy}>

@@ -26,6 +26,7 @@ import {
 import { storage } from '@/storage/service';
 import { semanticColors, spacing } from '@/theme';
 import {
+  computeKeyId,
   createCloudSyncPayload,
   isValidMnemonic,
   normaliseMnemonic,
@@ -34,6 +35,7 @@ import {
 import type { StorageData } from '@ynab-counter/app-core/storage';
 
 type Operation = 'save' | 'restore' | 'delete' | undefined;
+type Message = { text: string; tone: 'positive' | 'attention' };
 
 export default function CloudSyncScreen() {
   const { state, actions } = useStorage();
@@ -41,13 +43,22 @@ export default function CloudSyncScreen() {
   const [revealed, setRevealed] = useState(false);
   const [remember, setRemember] = useState(state.settings.rememberCloudSyncCode ?? true);
   const [operation, setOperation] = useState<Operation>();
-  const [message, setMessage] = useState<string>();
+  const [message, setMessage] = useState<Message>();
 
   useEffect(() => {
     let active = true;
-    void loadRememberedCloudSyncCode().then((saved) => {
-      if (active && saved) setPhrase(saved);
-    });
+    void loadRememberedCloudSyncCode()
+      .then((saved) => {
+        if (active && saved) setPhrase(saved);
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          setMessage({
+            text: error instanceof Error ? error.message : 'Couldn’t load the remembered code',
+            tone: 'attention',
+          });
+        }
+      });
     return () => {
       active = false;
     };
@@ -56,16 +67,25 @@ export default function CloudSyncScreen() {
   const validPhrase = isValidMnemonic(normaliseMnemonic(phrase));
 
   const persistPhrasePreference = async (nextRemember: boolean, code = phrase) => {
-    setRemember(nextRemember);
-    if (nextRemember && isValidMnemonic(normaliseMnemonic(code))) {
-      await rememberCloudSyncCode(code);
-    } else if (!nextRemember) {
-      await forgetCloudSyncCode();
+    const previousRemember = remember;
+    try {
+      setRemember(nextRemember);
+      if (nextRemember && isValidMnemonic(normaliseMnemonic(code))) {
+        await rememberCloudSyncCode(code);
+      } else if (!nextRemember) {
+        await forgetCloudSyncCode();
+      }
+      await actions.setSettings({
+        rememberCloudSyncCode: nextRemember,
+        autoSyncEnabled: nextRemember ? state.settings.autoSyncEnabled : false,
+      });
+    } catch (error) {
+      setRemember(previousRemember);
+      setMessage({
+        text: error instanceof Error ? error.message : 'Couldn’t update the remembered code',
+        tone: 'attention',
+      });
     }
-    await actions.setSettings({
-      rememberCloudSyncCode: nextRemember,
-      autoSyncEnabled: nextRemember ? state.settings.autoSyncEnabled : false,
-    });
   };
 
   const saveNow = async () => {
@@ -82,9 +102,12 @@ export default function CloudSyncScreen() {
         rememberCloudSyncCode: remember,
       });
       setPhrase(result.phrase);
-      setMessage('Encrypted settings are up to date');
+      setMessage({ text: 'Encrypted settings are up to date', tone: 'positive' });
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Couldn’t save to Cloud Sync');
+      setMessage({
+        text: error instanceof Error ? error.message : 'Couldn’t save to Cloud Sync',
+        tone: 'attention',
+      });
     } finally {
       setOperation(undefined);
     }
@@ -104,7 +127,10 @@ export default function CloudSyncScreen() {
     if (remember) await rememberCloudSyncCode(metadata.phrase);
     await actions.refresh();
     setPhrase(metadata.phrase);
-    setMessage(`Restored ${payload.cards.length} card${payload.cards.length === 1 ? '' : 's'} from Cloud Sync`);
+    setMessage({
+      text: `Restored ${payload.cards.length} card${payload.cards.length === 1 ? '' : 's'} from Cloud Sync`,
+      tone: 'positive',
+    });
   };
 
   const restoreNow = async () => {
@@ -122,14 +148,20 @@ export default function CloudSyncScreen() {
             text: 'Restore',
             onPress: () => {
               void applyRestore(payload, restored).catch((error: unknown) => {
-                setMessage(error instanceof Error ? error.message : 'Couldn’t restore settings');
+                setMessage({
+                  text: error instanceof Error ? error.message : 'Couldn’t restore settings',
+                  tone: 'attention',
+                });
               });
             },
           },
         ],
       );
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Couldn’t restore from Cloud Sync');
+      setMessage({
+        text: error instanceof Error ? error.message : 'Couldn’t restore from Cloud Sync',
+        tone: 'attention',
+      });
     } finally {
       setOperation(undefined);
     }
@@ -139,11 +171,20 @@ export default function CloudSyncScreen() {
     const next = generateCloudSyncCode();
     setPhrase(next);
     setRevealed(true);
-    setMessage('New 12-word code created. Save it somewhere safe.');
-    if (remember) void rememberCloudSyncCode(next);
+    setMessage({ text: 'New 12-word code created. Save it somewhere safe.', tone: 'positive' });
+    if (remember) {
+      void rememberCloudSyncCode(next).catch((error: unknown) => {
+        setMessage({
+          text: error instanceof Error ? error.message : 'Couldn’t remember the new code',
+          tone: 'attention',
+        });
+      });
+    }
   };
 
   const removeBackup = () => {
+    const configuredKeyId = state.settings.cloudSyncKeyId;
+    if (!configuredKeyId) return;
     Alert.alert(
       'Delete cloud backup?',
       'The encrypted cloud copy will be removed. Local settings stay on this iPhone.',
@@ -154,17 +195,24 @@ export default function CloudSyncScreen() {
           style: 'destructive',
           onPress: () => {
             setOperation('delete');
-            void deleteSettingsFromCloud(phrase)
-              .then(async () => {
-                await actions.setSettings({
-                  cloudSyncKeyId: undefined,
-                  cloudSyncLastSyncedAt: undefined,
-                  autoSyncEnabled: false,
-                });
-                setMessage('Cloud backup deleted');
-              })
+            void (async () => {
+              const enteredKeyId = await computeKeyId(normaliseMnemonic(phrase));
+              if (enteredKeyId !== configuredKeyId) {
+                throw new Error('Enter the recovery code for the configured backup.');
+              }
+              await deleteSettingsFromCloud(phrase);
+              await actions.setSettings({
+                cloudSyncKeyId: undefined,
+                cloudSyncLastSyncedAt: undefined,
+                autoSyncEnabled: false,
+              });
+              setMessage({ text: 'Cloud backup deleted', tone: 'positive' });
+            })()
               .catch((error: unknown) => {
-                setMessage(error instanceof Error ? error.message : 'Couldn’t delete cloud backup');
+                setMessage({
+                  text: error instanceof Error ? error.message : 'Couldn’t delete cloud backup',
+                  tone: 'attention',
+                });
               })
               .finally(() => setOperation(undefined));
           },
@@ -175,21 +223,42 @@ export default function CloudSyncScreen() {
 
   const toggleAutoSync = async (enabled: boolean) => {
     if (enabled && !validPhrase) {
-      setMessage('Enter or generate a valid 12-word code first.');
+      setMessage({ text: 'Enter or generate a valid 12-word code first.', tone: 'attention' });
       return;
     }
     if (enabled && !state.settings.cloudSyncKeyId) {
-      setMessage('Save or restore once before turning on automatic sync.');
+      setMessage({ text: 'Save or restore once before turning on automatic sync.', tone: 'attention' });
       return;
     }
-    if (enabled) {
-      setRemember(true);
-      await rememberCloudSyncCode(phrase);
-      await actions.setSettings({ rememberCloudSyncCode: true, autoSyncEnabled: true });
-      setMessage('Automatic sync turned on');
-    } else {
-      await actions.setSettings({ autoSyncEnabled: false });
-      setMessage('Automatic sync turned off');
+    const previousRemember = remember;
+    try {
+      if (enabled) {
+        setRemember(true);
+        await rememberCloudSyncCode(phrase);
+        await actions.setSettings({ rememberCloudSyncCode: true, autoSyncEnabled: true });
+        setMessage({ text: 'Automatic sync turned on', tone: 'positive' });
+      } else {
+        await actions.setSettings({ autoSyncEnabled: false });
+        setMessage({ text: 'Automatic sync turned off', tone: 'positive' });
+      }
+    } catch (error) {
+      setRemember(previousRemember);
+      setMessage({
+        text: error instanceof Error ? error.message : 'Couldn’t update automatic sync',
+        tone: 'attention',
+      });
+    }
+  };
+
+  const copyCode = async () => {
+    try {
+      await Clipboard.setStringAsync(normaliseMnemonic(phrase));
+      setMessage({ text: 'Code copied', tone: 'positive' });
+    } catch (error) {
+      setMessage({
+        text: error instanceof Error ? error.message : 'Couldn’t copy the code',
+        tone: 'attention',
+      });
     }
   };
 
@@ -235,7 +304,7 @@ export default function CloudSyncScreen() {
               variant="plain"
               size="small"
               disabled={!phrase.trim()}
-              onPress={() => void Clipboard.setStringAsync(normaliseMnemonic(phrase)).then(() => setMessage('Code copied'))}
+              onPress={() => void copyCode()}
             >
               Copy
             </Button>
@@ -253,6 +322,7 @@ export default function CloudSyncScreen() {
             title="Remember code"
             subtitle="Store it in the iOS Keychain"
             symbol="key.fill"
+            trailingIsInteractive
             trailing={(
               <Switch
                 value={remember}
@@ -265,6 +335,7 @@ export default function CloudSyncScreen() {
           <SettingsRow
             title="Automatic sync"
             symbol="arrow.triangle.2.circlepath.icloud.fill"
+            trailingIsInteractive
             trailing={(
               <Switch
                 value={Boolean(state.settings.autoSyncEnabled)}
@@ -305,8 +376,8 @@ export default function CloudSyncScreen() {
       ) : null}
       {message ? (
         <StatusPill
-          label={message}
-          tone={message.includes('Couldn’t') || message.includes('Invalid') || message.includes('first') ? 'attention' : 'positive'}
+          label={message.text}
+          tone={message.tone}
           style={styles.message}
         />
       ) : null}

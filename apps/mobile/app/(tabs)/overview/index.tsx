@@ -27,6 +27,7 @@ import {
   formatDaysRemaining,
   formatPeriod,
   formatReward,
+  primaryProgress,
   statusPresentation,
   attentionCopy,
 } from '@/features/cards/presentation';
@@ -39,35 +40,6 @@ import {
 import { semanticColors } from '@/theme';
 import { nativeMetrics, spacing } from '@/theme/tokens';
 import type { CardDashboardProjection } from '@ynab-counter/app-core/rewards-engine';
-
-function primaryProgress(projection: CardDashboardProjection): {
-  spend: number;
-  minimum: number | null;
-  maximum: number | null;
-} {
-  if (projection.status === 'unconfigured') {
-    return { spend: projection.spend.total, minimum: null, maximum: null };
-  }
-  if (projection.status === 'building' && projection.minimum.target) {
-    return {
-      spend: projection.progress.minimumProgressSpend,
-      minimum: projection.minimum.target,
-      maximum: null,
-    };
-  }
-  if (projection.maximum.target) {
-    return {
-      spend: projection.progress.maximumProgressSpend,
-      minimum: null,
-      maximum: projection.maximum.target,
-    };
-  }
-  return {
-    spend: projection.progress.minimumProgressSpend,
-    minimum: projection.minimum.target,
-    maximum: null,
-  };
-}
 
 function CardProjectionRow({
   projection,

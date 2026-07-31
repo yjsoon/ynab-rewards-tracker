@@ -18,11 +18,14 @@ const themes: Array<{ value: NonNullable<AppSettings['theme']>; label: string; d
 
 export default function GeneralPreferencesScreen() {
   const { state, actions } = useStorage();
-  const [currency, setCurrency] = useState(state.settings.currency ?? 'USD');
+  const [currency, setCurrency] = useState(normalizeCurrencyCode(state.settings.currency));
   const [milesValue, setMilesValue] = useState(String(state.settings.milesValuation ?? 0.01));
   const [message, setMessage] = useState<string>();
 
-  useEffect(() => setCurrency(state.settings.currency ?? 'USD'), [state.settings.currency]);
+  useEffect(
+    () => setCurrency(normalizeCurrencyCode(state.settings.currency)),
+    [state.settings.currency],
+  );
   useEffect(
     () => setMilesValue(String(state.settings.milesValuation ?? 0.01)),
     [state.settings.milesValuation],
@@ -31,12 +34,19 @@ export default function GeneralPreferencesScreen() {
   const sample = useMemo(() => {
     const numeric = Number.parseFloat(milesValue);
     if (!Number.isFinite(numeric) || numeric < 0) return undefined;
-    const code = normalizeCurrencyCode(currency);
-    return new Intl.NumberFormat(undefined, {
-      style: 'currency',
-      currency: code,
-      maximumFractionDigits: 2,
-    }).format(numeric * 1000);
+    const candidate = currency.trim().toUpperCase();
+    if (!/^[A-Z]{3}$/.test(candidate)) return undefined;
+    try {
+      new Intl.NumberFormat(undefined, { style: 'currency', currency: candidate });
+      const code = normalizeCurrencyCode(candidate);
+      return new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency: code,
+        maximumFractionDigits: 2,
+      }).format(numeric * 1000);
+    } catch {
+      return undefined;
+    }
   }, [currency, milesValue]);
 
   const selectTheme = async (theme: NonNullable<AppSettings['theme']>) => {
@@ -56,8 +66,9 @@ export default function GeneralPreferencesScreen() {
       setMessage('That currency code is not supported on this device.');
       return;
     }
-    setCurrency(candidate);
-    await actions.setSettings({ currency: candidate });
+    const code = normalizeCurrencyCode(candidate);
+    setCurrency(code);
+    await actions.setSettings({ currency: code });
     setMessage('Currency saved');
   };
 

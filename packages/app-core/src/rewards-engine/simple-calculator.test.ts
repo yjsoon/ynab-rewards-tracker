@@ -97,5 +97,51 @@ describe('SimpleRewardsCalculator.calculateCardRewards', () => {
     expect(calculation.minimumSpendMet).toBe(false);
     expect(calculation.subcategoryBreakdowns?.[0]?.countedSpend).toBe(535);
     expect(calculation.subcategoryBreakdowns?.[0]?.eligibleSpend).toBe(0);
+    expect(calculation.transactionRewards.t1).toMatchObject({
+      reward: 0,
+      rewardDollars: 0,
+      reason: 'below_minimum',
+    });
+  });
+
+  it('attributes capped rewards to transactions in reward-tier priority order', () => {
+    const card: CreditCard = {
+      ...createMilesCardWithSubcategories(),
+      maximumSpend: 10,
+      subcategories: [
+        {
+          ...createMilesCardWithSubcategories().subcategories![0],
+          id: 'priority',
+          priority: 0,
+          rewardValue: 4,
+        },
+        {
+          ...createMilesCardWithSubcategories().subcategories![0],
+          id: 'later',
+          flagColor: 'orange',
+          priority: 1,
+          rewardValue: 2,
+        },
+      ],
+    };
+    const transactions = [
+      { ...createTransaction('later-txn', -10_000), flag_color: 'orange' as const },
+      createTransaction('priority-txn', -10_000),
+    ];
+
+    const calculation = SimpleRewardsCalculator.calculateCardRewards(
+      card,
+      transactions,
+      period,
+    );
+
+    expect(calculation.rewardEarned).toBe(40);
+    expect(calculation.transactionRewards['priority-txn']).toMatchObject({
+      reward: 40,
+    });
+    expect(calculation.transactionRewards['later-txn']).toMatchObject({
+      reward: 0,
+      reason: 'cap_reached',
+    });
   });
 });

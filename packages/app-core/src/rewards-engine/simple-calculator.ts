@@ -56,6 +56,8 @@ export interface SimplifiedCalculation {
   maximumSpendExceeded: boolean;
   maximumSpendProgress?: number;
   subcategoryBreakdowns?: SubcategoryCalculation[];
+  /** Period-aware reward attribution keyed by YNAB transaction ID. */
+  transactionRewards: Record<string, TransactionRewardResult>;
 }
 
 export interface CalculationPeriod {
@@ -72,7 +74,9 @@ export type TransactionRewardReason =
   | 'excluded'
   | 'zero_amount'
   | 'zero_rate'
-  | 'below_block';
+  | 'below_block'
+  | 'below_minimum'
+  | 'cap_reached';
 
 export interface TransactionRewardBlock {
   size: number;
@@ -198,8 +202,22 @@ export class SimpleRewardsCalculator {
       return txnDate >= period.start && txnDate <= period.end && txn.amount < 0;
     });
 
+    const transactionRewards = Object.fromEntries(
+      periodTransactions.map((transaction) => [
+        transaction.id,
+        this.calculateTransactionReward(
+          Math.abs(transaction.amount) / 1000,
+          card,
+          settings,
+          { flagColor: transaction.flag_color },
+        ),
+      ]),
+    );
     let totalSpend = 0;
-    let spendByFlag: Map<YnabFlagColor, { total: number; transactions: number[] }> | undefined;
+    let spendByFlag: Map<
+      YnabFlagColor,
+      { total: number; transactions: Array<{ transaction: Transaction; spend: number }> }
+    > | undefined;
     if (context.enabled && context.activeSubcategories.length > 0) {
       spendByFlag = new Map();
       for (const txn of periodTransactions) {
@@ -214,9 +232,12 @@ export class SimpleRewardsCalculator {
         const prev = spendByFlag.get(effectiveFlag);
         if (prev) {
           prev.total += txnSpend;
-          prev.transactions.push(txnSpend);
+          prev.transactions.push({ transaction: txn, spend: txnSpend });
         } else {
-          spendByFlag.set(effectiveFlag, { total: txnSpend, transactions: [txnSpend] });
+          spendByFlag.set(effectiveFlag, {
+            total: txnSpend,
+            transactions: [{ transaction: txn, spend: txnSpend }],
+          });
         }
       }
     } else {
@@ -237,7 +258,10 @@ export class SimpleRewardsCalculator {
     let subcategoryBreakdowns: SubcategoryCalculation[] | undefined;
 
     if (context.enabled && context.activeSubcategories.length > 0) {
-      const subcategorySpends = spendByFlag ?? new Map<YnabFlagColor, { total: number; transactions: number[] }>();
+      const subcategorySpends = spendByFlag ?? new Map<
+        YnabFlagColor,
+        { total: number; transactions: Array<{ transaction: Transaction; spend: number }> }
+      >();
       const hasCardCap = typeof maximumSpend === 'number' && maximumSpend !== null && maximumSpend > 0;
       let remainingCardCap = hasCardCap ? maximumSpend! : Number.POSITIVE_INFINITY;
 
@@ -291,9 +315,16 @@ export class SimpleRewardsCalculator {
         if (rewardRate > 0 && totalForSubcategory > 0) {
           let remainingSubcategoryCap = maximumAllowed ?? Number.POSITIVE_INFINITY;
 
-          for (const txnSpend of transactionsForSubcategory) {
+          for (const { transaction, spend: txnSpend } of transactionsForSubcategory) {
             if (remainingCardCap <= 0 || remainingSubcategoryCap <= 0) {
-              break;
+              const standalone = transactionRewards[transaction.id];
+              transactionRewards[transaction.id] = {
+                ...standalone,
+                reward: 0,
+                rewardDollars: 0,
+                reason: 'cap_reached',
+              };
+              continue;
             }
             if (txnSpend <= 0) {
               continue;
@@ -318,6 +349,21 @@ export class SimpleRewardsCalculator {
                 remainingSubcategoryCap - blockResult.amount,
               );
             }
+
+            const constrained = this.calculateTransactionReward(
+              spendContribution,
+              card,
+              settings,
+              { flagColor: transaction.flag_color },
+            );
+            transactionRewards[transaction.id] = subMinimumMet
+              ? constrained
+              : {
+                  ...constrained,
+                  reward: 0,
+                  rewardDollars: 0,
+                  reason: 'below_minimum',
+                };
           }
 
           countedSpend += subCounted;
@@ -376,7 +422,14 @@ export class SimpleRewardsCalculator {
 
         for (const txn of periodTransactions) {
           if (remainingCap <= 0) {
-            break;
+            const standalone = transactionRewards[txn.id];
+            transactionRewards[txn.id] = {
+              ...standalone,
+              reward: 0,
+              rewardDollars: 0,
+              reason: 'cap_reached',
+            };
+            continue;
           }
           const txnSpend = Math.abs(txn.amount) / 1000;
           if (txnSpend <= 0) {
@@ -398,6 +451,21 @@ export class SimpleRewardsCalculator {
           }
 
           remainingCap -= earnablePortion;
+
+          const constrained = this.calculateTransactionReward(
+            spendContribution,
+            card,
+            settings,
+            { flagColor: txn.flag_color },
+          );
+          transactionRewards[txn.id] = minimumSpendMet
+            ? constrained
+            : {
+                ...constrained,
+                reward: 0,
+                rewardDollars: 0,
+                reason: 'below_minimum',
+              };
         }
 
         if (minimumSpendMet && eligibleSpend > 0) {
@@ -432,6 +500,7 @@ export class SimpleRewardsCalculator {
       maximumSpendExceeded,
       maximumSpendProgress,
       subcategoryBreakdowns,
+      transactionRewards,
     };
   }
 

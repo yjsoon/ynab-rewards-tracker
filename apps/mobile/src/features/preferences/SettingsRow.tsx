@@ -14,6 +14,7 @@ type SettingsRowProps = {
   symbol?: SymbolName;
   symbolColor?: ComponentProps<typeof SymbolView>['tintColor'];
   trailing?: ReactNode;
+  trailingIsInteractive?: boolean;
   onPress?: () => void;
   isFirst?: boolean;
   destructive?: boolean;
@@ -28,6 +29,7 @@ export function SettingsRow({
   symbol,
   symbolColor = semanticColors.action,
   trailing,
+  trailingIsInteractive = false,
   onPress,
   isFirst = false,
   destructive = false,
@@ -43,8 +45,8 @@ export function SettingsRow({
       isFirst={isFirst}
       onPress={onPress}
       showDisclosure={Boolean(onPress) && !trailing}
-      accessibilityLabel={resolvedAccessibilityLabel}
-      accessibilityHint={accessibilityHint}
+      accessibilityLabel={trailingIsInteractive ? undefined : resolvedAccessibilityLabel}
+      accessibilityHint={trailingIsInteractive ? undefined : accessibilityHint}
     >
       <View style={styles.row}>
         {symbol ? (
@@ -54,11 +56,9 @@ export function SettingsRow({
         ) : null}
         <View style={styles.copy}>
           <View style={styles.titleLine}>
-            {destructive ? (
-              <Headline color="destructive" style={styles.title}>{title}</Headline>
-            ) : (
-              <Headline style={styles.title}>{title}</Headline>
-            )}
+            <Headline color={destructive ? 'destructive' : undefined} style={styles.title}>
+              {title}
+            </Headline>
             {value ? (
               <Body color="secondary" numberOfLines={1} style={styles.value}>
                 {value}

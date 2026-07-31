@@ -644,4 +644,52 @@ describe('projectTransactions', () => {
       blockInfo: null,
     });
   });
+
+  it('uses period minimum and cap allocations for transaction reward status', () => {
+    const belowMinimum = createCard({
+      id: 'minimum-card',
+      ynabAccountId: 'minimum-account',
+      minimumSpend: 100,
+    });
+    const capped = createCard({
+      id: 'capped-card',
+      ynabAccountId: 'capped-account',
+      maximumSpend: 50,
+    });
+    const projections = projectTransactions(
+      [
+        createTransaction({
+          id: 'below-minimum',
+          account_id: 'minimum-account',
+          amount: -10_000,
+        }),
+        createTransaction({
+          id: 'within-cap',
+          account_id: 'capped-account',
+          amount: -50_000,
+        }),
+        createTransaction({
+          id: 'after-cap',
+          account_id: 'capped-account',
+          amount: -25_000,
+        }),
+      ],
+      [belowMinimum, capped],
+    );
+
+    expect(projections[0]).toMatchObject({
+      status: 'no_reward',
+      noRewardReason: 'below_minimum',
+      reward: { amount: 0, dollars: 0 },
+    });
+    expect(projections[1]).toMatchObject({
+      status: 'earning',
+      reward: { amount: 1, dollars: 1 },
+    });
+    expect(projections[2]).toMatchObject({
+      status: 'no_reward',
+      noRewardReason: 'cap_reached',
+      reward: { amount: 0, dollars: 0 },
+    });
+  });
 });

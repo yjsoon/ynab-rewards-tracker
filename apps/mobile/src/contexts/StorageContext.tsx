@@ -161,8 +161,7 @@ function createDemoState(now = new Date()): StorageState {
 }
 
 function isAbortError(error: unknown): boolean {
-  return error instanceof Error &&
-    (error.name === 'AbortError' || error.message.toLowerCase().includes('abort'));
+  return error instanceof Error && error.name === 'AbortError';
 }
 
 function isConfirmedInvalidToken(error: unknown): boolean {
@@ -361,11 +360,18 @@ export function StorageProvider({ children }: { children: ReactNode }) {
       }));
 
       try {
+        const storedCards = await storage.getCards();
+        const earliestPeriodStart = getEarliestPeriodStart(storedCards);
+        const transactionSinceDate = options.skipTransactions
+          ? undefined
+          : options.sinceDate && options.sinceDate < earliestPeriodStart
+            ? options.sinceDate
+            : earliestPeriodStart;
         const result = await ynabSync.syncBudgetsAndAccounts({
           pat,
           selectedBudgetId,
           trackedAccountIds,
-          sinceDate: options.sinceDate,
+          sinceDate: transactionSinceDate,
           skipTransactions: options.skipTransactions,
         });
 
@@ -397,7 +403,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         if (effectiveBudgetId && !options.skipTransactions) {
           const payload: DashboardTransactionsCachePayload = {
             budgetId: effectiveBudgetId,
-            sinceDate: options.sinceDate ?? new Date().toISOString().split('T')[0],
+            sinceDate: transactionSinceDate!,
             fetchedAt: new Date().toISOString(),
             trackedAccountIds,
             transactions: transactionsPayload,
@@ -410,7 +416,6 @@ export function StorageProvider({ children }: { children: ReactNode }) {
 
         // Create tracked cards before calculating so first sync produces useful
         // calculations for the cards it just discovered.
-        const storedCards = await storage.getCards();
         const cardsByAccountId = new Map(
           storedCards.filter((c): c is CreditCard & { ynabAccountId: string } => Boolean(c.ynabAccountId))
             .map((card) => [card.ynabAccountId, card] as const)
@@ -714,6 +719,8 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         metadata: prev.metadata,
         budgets: prev.budgets,
         accounts: prev.accounts,
+        pending: prev.pending,
+        hasPendingChanges: prev.hasPendingChanges,
       }));
       setStatus((prev) => ({ ...prev, refreshError: undefined }));
     } catch (error) {

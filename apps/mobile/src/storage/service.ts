@@ -314,6 +314,8 @@ class StorageService {
     storage.rules = storage.rules.filter((rule) => nextCardIds.has(rule.cardId));
     storage.tagMappings = storage.tagMappings.filter((mapping) => nextCardIds.has(mapping.cardId));
     storage.calculations = storage.calculations.filter((calculation) => nextCardIds.has(calculation.cardId));
+    storage.hiddenCards = (storage.hiddenCards ?? [])
+      .filter((hiddenCard) => nextCardIds.has(hiddenCard.cardId));
     pruneThemeGroups(storage);
     await this.save(storage);
     return {

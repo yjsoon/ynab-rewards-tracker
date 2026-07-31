@@ -1,4 +1,5 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AppState } from 'react-native';
 
 import { useStorage } from '@/contexts/StorageContext';
 import { findBestDashboardEntry } from '@/lib/dashboardCache';
@@ -175,7 +176,31 @@ export function getDashboardSyncLabel(
 
 export function useRewardsDashboard(referenceDate?: Date): RewardsDashboardModel {
   const { state, status, actions } = useStorage();
-  const asOf = useMemo(() => referenceDate ?? new Date(), [referenceDate]);
+  const [currentTimestamp, setCurrentTimestamp] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (referenceDate) {
+      return;
+    }
+
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        setCurrentTimestamp(Date.now());
+      }
+    });
+    return () => subscription.remove();
+  }, [referenceDate]);
+
+  useEffect(() => {
+    if (!referenceDate && state.metadata.lastSuccessfulSync) {
+      setCurrentTimestamp(Date.now());
+    }
+  }, [referenceDate, state.metadata.lastSuccessfulSync]);
+
+  const asOf = useMemo(
+    () => referenceDate ?? new Date(currentTimestamp),
+    [currentTimestamp, referenceDate],
+  );
   const cacheEntry = useMemo(
     () => findBestDashboardEntry(
       state.cachedData?.dashboardTransactions,

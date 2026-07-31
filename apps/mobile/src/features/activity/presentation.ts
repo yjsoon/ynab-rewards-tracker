@@ -11,6 +11,7 @@ import {
 const LOCALE = 'en-GB';
 
 export interface ActivityFormatting {
+  currencyCode: string;
   currency: (value: number) => string;
   number: (value: number) => string;
 }
@@ -19,6 +20,7 @@ export function createActivityFormatting(settings: AppSettings): ActivityFormatt
   const currency = normalizeCurrencyCode(settings.currency);
 
   return {
+    currencyCode: currency,
     currency: (value) => formatCurrency(value, {
       locale: LOCALE,
       currency,
@@ -84,7 +86,10 @@ export function formatRewardValueDetail(
   return undefined;
 }
 
-export function formatRewardRate(projection: TransactionProjection): string {
+export function formatRewardRate(
+  projection: TransactionProjection,
+  formatting: ActivityFormatting,
+): string {
   if (!projection.card) {
     return 'Not applicable';
   }
@@ -95,7 +100,7 @@ export function formatRewardRate(projection: TransactionProjection): string {
 
   return projection.card.type === 'cashback'
     ? `${value}% cashback`
-    : `${value} ${projection.reward.rate === 1 ? 'mile' : 'miles'} per dollar`;
+    : `${value} ${projection.reward.rate === 1 ? 'mile' : 'miles'} per ${formatting.currencyCode}`;
 }
 
 export function getRewardStatusCopy(projection: TransactionProjection): string {
@@ -112,6 +117,10 @@ export function getRewardStatusCopy(projection: TransactionProjection): string {
           return 'Excluded · no reward';
         case 'below_block':
           return 'Below block · no reward';
+        case 'below_minimum':
+          return 'Minimum not met · no reward';
+        case 'cap_reached':
+          return 'Cap reached · no reward';
         case 'zero_rate':
           return 'No earning rate';
         case 'zero_amount':
@@ -143,6 +152,10 @@ export function getRewardExplanation(
           return projection.blockInfo
             ? `The amount is below the ${formatting.currency(projection.blockInfo.size)} earning block.`
             : 'The amount is below the card’s earning block.';
+        case 'below_minimum':
+          return 'The reward is locked until the period minimum spend is met.';
+        case 'cap_reached':
+          return 'The card or reward category has reached its period spending cap.';
         case 'zero_rate':
           return 'No earning rate is configured for this transaction.';
         case 'zero_amount':
@@ -166,6 +179,9 @@ export function rewardStatusTone(
 
 export function formatActivityDate(dateValue: string): string {
   const date = new Date(`${dateValue}T12:00:00`);
+  if (!Number.isFinite(date.getTime())) {
+    return 'Unknown date';
+  }
   return new Intl.DateTimeFormat(LOCALE, {
     weekday: 'long',
     day: 'numeric',

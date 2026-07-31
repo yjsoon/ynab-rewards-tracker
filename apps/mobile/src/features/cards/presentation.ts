@@ -8,6 +8,8 @@ import {
   normalizeCurrencyCode,
 } from '@ynab-counter/app-core/utils/currency';
 import type { CardStatusDescriptor } from '@/components/native';
+import { semanticColors } from '@/theme';
+import type { ColorValue } from 'react-native';
 
 export interface CardFormatting {
   currency: string;
@@ -60,7 +62,10 @@ export function formatRewardForCard(
   return `${formatting.number(rewardAmount)} miles · ≈ ${formatting.currencyExact(rewardDollars)}`;
 }
 
-export function formatRate(card: CreditCard): string {
+export function formatRate(
+  card: Pick<CreditCard, 'type' | 'earningRate'>,
+  formatting: Pick<CardFormatting, 'currency'>,
+): string {
   const rate = card.earningRate;
   if (typeof rate !== 'number' || !Number.isFinite(rate)) {
     return 'Rate needed';
@@ -70,7 +75,7 @@ export function formatRate(card: CreditCard): string {
   }).format(rate);
   return card.type === 'cashback'
     ? `${formatted}% cashback`
-    : `${formatted} ${rate === 1 ? 'mile' : 'miles'}/$1`;
+    : `${formatted} ${rate === 1 ? 'mile' : 'miles'}/${formatting.currency} 1`;
 }
 
 export function formatPeriod(period: CardDashboardProjection['period']): string {
@@ -109,6 +114,35 @@ export function statusPresentation(status: CardPortfolioStatus): CardStatusDescr
   }
 }
 
+export function primaryProgress(projection: CardDashboardProjection): {
+  spend: number;
+  minimum: number | null;
+  maximum: number | null;
+} {
+  if (projection.status === 'unconfigured') {
+    return { spend: projection.spend.total, minimum: null, maximum: null };
+  }
+  if (projection.status === 'building' && projection.minimum.target) {
+    return {
+      spend: projection.progress.minimumProgressSpend,
+      minimum: projection.minimum.target,
+      maximum: null,
+    };
+  }
+  if (projection.maximum.target) {
+    return {
+      spend: projection.progress.maximumProgressSpend,
+      minimum: null,
+      maximum: projection.maximum.target,
+    };
+  }
+  return {
+    spend: projection.progress.minimumProgressSpend,
+    minimum: projection.minimum.target,
+    maximum: null,
+  };
+}
+
 export function attentionCopy(
   projection: CardDashboardProjection,
   formatting: CardFormatting,
@@ -134,7 +168,7 @@ export function formatThresholdSummary(
 ): string {
   const values = [
     card.featured === false ? 'Not on Overview' : 'On Overview',
-    formatRate(card),
+    formatRate(card, formatting),
   ];
   if (typeof card.minimumSpend === 'number' && card.minimumSpend > 0) {
     values.push(`Min ${formatting.currencyCompact(card.minimumSpend)}`);
@@ -168,14 +202,14 @@ export function isCardConfigured(card: CreditCard): boolean {
   );
 }
 
-export function flagColour(flag: string): string {
+export function flagColor(flag: string): ColorValue {
   switch (flag) {
-    case 'red': return '#FF453A';
-    case 'orange': return '#FF9F0A';
-    case 'yellow': return '#FFD60A';
-    case 'green': return '#30D158';
-    case 'blue': return '#0A84FF';
-    case 'purple': return '#BF5AF2';
-    default: return '#8E8E93';
+    case 'red': return semanticColors.systemRed;
+    case 'orange': return semanticColors.systemOrange;
+    case 'yellow': return semanticColors.systemYellow;
+    case 'green': return semanticColors.systemGreen;
+    case 'blue': return semanticColors.systemBlue;
+    case 'purple': return semanticColors.systemPurple;
+    default: return semanticColors.systemGray;
   }
 }

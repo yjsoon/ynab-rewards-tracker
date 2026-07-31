@@ -134,7 +134,8 @@ export function useCloudAutoSync(): void {
         : Number.NaN;
       const cloudUpdated = Date.parse(restored.updatedAt);
       const sameKey = state.settings.cloudSyncKeyId === restored.keyId;
-      const cloudIsNewer = sameKey && Number.isFinite(lastLocalSync) && cloudUpdated > lastLocalSync;
+      const orderKnown = sameKey && Number.isFinite(lastLocalSync) && Number.isFinite(cloudUpdated);
+      const cloudIsNewer = orderKnown && cloudUpdated > lastLocalSync;
 
       if (cloudIsNewer) {
         await storage.importSettings(JSON.stringify(cloudPayload));
@@ -148,7 +149,13 @@ export function useCloudAutoSync(): void {
         return;
       }
 
-      if (comparable(localPayload) !== comparable(cloudPayload)) {
+      const payloadsDiffer = comparable(localPayload) !== comparable(cloudPayload);
+      if (payloadsDiffer && !orderKnown) {
+        // Automatic sync cannot safely choose a winner without a shared key and timestamp.
+        return;
+      }
+
+      if (payloadsDiffer) {
         const pushed = await saveSettingsToCloud(phrase, localPayload);
         await actions.setSettings({
           cloudSyncKeyId: pushed.keyId,

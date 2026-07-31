@@ -31,7 +31,6 @@ export default function ActivityScreen() {
   const { state } = useStorage();
   const [query, setQuery] = useState('');
   const model = useActivityModel(query);
-  const totalCachedTransactions = model.cacheEntry?.transactions.length ?? 0;
 
   const openTransaction = useCallback((id: string) => {
     router.push({
@@ -70,9 +69,10 @@ export default function ActivityScreen() {
   }, [openTransaction, state.settings]);
 
   const isSearching = query.trim().length > 0;
+  const resultCount = model.transactions.length;
   const resultCopy = isSearching
-    ? `${model.transactions.length} ${model.transactions.length === 1 ? 'match' : 'matches'}`
-    : `${totalCachedTransactions} ${totalCachedTransactions === 1 ? 'transaction' : 'transactions'}`;
+    ? `${resultCount} ${resultCount === 1 ? 'match' : 'matches'}`
+    : `${resultCount} ${resultCount === 1 ? 'transaction' : 'transactions'}`;
 
   return (
     <SectionList<TransactionProjection, ActivitySection>

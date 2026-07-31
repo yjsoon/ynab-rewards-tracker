@@ -135,7 +135,7 @@ export function FlagPicker({
 
 const styles = StyleSheet.create({
   container: {
-    // Seven 44 pt controls still fit an iPhone SE without horizontal scrolling.
+    // Wrap the seven full-size controls on compact screens.
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.lg,
     gap: spacing.md,
@@ -155,8 +155,10 @@ const styles = StyleSheet.create({
   },
   options: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
+    rowGap: spacing.sm,
   },
   option: {
     width: nativeMetrics.minimumTouchTarget,

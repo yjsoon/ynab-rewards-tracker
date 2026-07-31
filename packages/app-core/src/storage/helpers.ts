@@ -120,13 +120,16 @@ export function findDashboardCacheEntry(
  * @param cardId - ID of card to delete
  */
 export function applyCardDeletion(
-  storage: Pick<StorageData, 'cards' | 'rules' | 'tagMappings'>,
+  storage: Pick<StorageData, 'cards' | 'rules' | 'tagMappings' | 'hiddenCards'>,
   cardId: string
 ): void {
   storage.cards = storage.cards.filter((card) => card.id !== cardId);
   storage.rules = storage.rules.filter((rule) => rule.cardId !== cardId);
   storage.tagMappings = storage.tagMappings.filter(
     (mapping) => mapping.cardId !== cardId
+  );
+  storage.hiddenCards = (storage.hiddenCards ?? []).filter(
+    (hiddenCard) => hiddenCard.cardId !== cardId
   );
 }
 

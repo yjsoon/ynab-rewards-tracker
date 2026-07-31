@@ -93,7 +93,7 @@ function flagUpdateErrorMessage(error: unknown): string {
         return 'YNAB is receiving too many requests. Wait a moment and try again.';
       case 'network_error':
       case 'timeout':
-        return 'YNAB could not be reached. Your previous flag colour has been restored.';
+        return 'YNAB could not be reached. Refresh Activity to confirm the flag colour.';
       case 'unknown_error':
         break;
     }
@@ -237,6 +237,13 @@ export default function TransactionDetailScreen() {
 
       notification('success');
     } catch (error) {
+      const outcomeUnknown = isYnabApiError(error)
+        && (error.code === 'timeout' || error.code === 'network_error');
+      if (outcomeUnknown) {
+        setFlagError(flagUpdateErrorMessage(error));
+        notification('error');
+        return;
+      }
       try {
         await persistCachedFlag(
           previousFlagColour,
@@ -310,7 +317,7 @@ export default function TransactionDetailScreen() {
               label="Card"
               value={projection.card?.name ?? 'No tracked card'}
             />
-            <DetailRow label="Earning rate" value={formatRewardRate(projection)} />
+            <DetailRow label="Earning rate" value={formatRewardRate(projection, formatting)} />
             {block ? (
               <>
                 <DetailRow label="Block size" value={formatting.currency(block.size)} />
