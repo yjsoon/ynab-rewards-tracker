@@ -7,6 +7,7 @@ import {
   restoreSettingsFromCloud,
   saveSettingsToCloud,
 } from '@/lib/cloud-sync';
+import { acquireCloudSyncLease } from '@/lib/cloud-sync-coordinator';
 import { storage } from '@/storage/service';
 import {
   createCloudSyncPayload,
@@ -52,15 +53,20 @@ async function readLocalSnapshot(): Promise<{
  */
 export function useCloudAutoSync(): void {
   const { state, status, actions } = useStorage();
-  const inFlightRef = useRef<Promise<void> | null>(null);
-  const lastAttemptRef = useRef(0);
-  const lastSignatureRef = useRef<string | undefined>(undefined);
-
   const enabled = Boolean(
     status.isHydrated &&
     state.settings.autoSyncEnabled &&
     state.settings.rememberCloudSyncCode,
   );
+  const inFlightRef = useRef<Promise<void> | null>(null);
+  const pendingForceRef = useRef(false);
+  const enabledRef = useRef(enabled);
+  const reconcileRef = useRef<(force?: boolean) => Promise<void>>(async () => {});
+  const wasEnabledRef = useRef(enabled);
+  const lastAttemptRef = useRef(0);
+  const lastSignatureRef = useRef<string | undefined>(undefined);
+
+  enabledRef.current = enabled;
 
   const localSignature = useMemo(
     () => JSON.stringify(stableValue({
@@ -113,7 +119,10 @@ export function useCloudAutoSync(): void {
     if (!enabled) return;
     const now = Date.now();
     if (!force && now - lastAttemptRef.current < FOREGROUND_COOLDOWN_MS) return;
-    if (inFlightRef.current) return inFlightRef.current;
+    if (inFlightRef.current) {
+      if (force) pendingForceRef.current = true;
+      return inFlightRef.current;
+    }
     const storageGeneration = storage.captureGeneration();
     const assertCurrentGeneration = () => {
       if (!storage.isGenerationCurrent(storageGeneration)) {
@@ -122,7 +131,14 @@ export function useCloudAutoSync(): void {
     };
 
     const run = (async () => {
-      lastAttemptRef.current = now;
+      const lease = await acquireCloudSyncLease();
+      try {
+        lastAttemptRef.current = now;
+      const currentSettings = await storage.getSettings();
+      assertCurrentGeneration();
+      if (!currentSettings.autoSyncEnabled || !currentSettings.rememberCloudSyncCode) {
+        return;
+      }
       const phrase = await loadRememberedCloudSyncCode();
       assertCurrentGeneration();
       if (!phrase) return;
@@ -189,8 +205,6 @@ export function useCloudAutoSync(): void {
             afterImport.cloudSyncLocalChangedAt === localSettings.cloudSyncLocalChangedAt
               ? undefined
               : afterImport.cloudSyncLocalChangedAt,
-          rememberCloudSyncCode: true,
-          autoSyncEnabled: true,
         }, storageGeneration);
         await actions.refresh(storageGeneration);
         return;
@@ -236,6 +250,9 @@ export function useCloudAutoSync(): void {
         }, storageGeneration);
         await actions.refresh(storageGeneration);
       }
+      } finally {
+        lease.release();
+      }
     })().catch((error: unknown) => {
       if (__DEV__ && storage.isGenerationCurrent(storageGeneration)) {
         console.warn('Automatic Cloud Sync failed', error);
@@ -247,14 +264,41 @@ export function useCloudAutoSync(): void {
       await run;
     } finally {
       inFlightRef.current = null;
+      const shouldRerun = pendingForceRef.current && enabledRef.current;
+      pendingForceRef.current = false;
+      if (shouldRerun) {
+        void Promise.resolve()
+          .then(async () => {
+            const latestSettings = await storage.getSettings();
+            if (
+              enabledRef.current &&
+              latestSettings.autoSyncEnabled &&
+              latestSettings.rememberCloudSyncCode
+            ) {
+              await reconcileRef.current(true);
+            }
+          })
+          .catch((error: unknown) => {
+            if (__DEV__) console.warn('Queued automatic Cloud Sync failed', error);
+          });
+      }
     }
   }, [
     actions,
     enabled,
   ]);
+  reconcileRef.current = reconcile;
+
+  useEffect(() => {
+    if (wasEnabledRef.current && !enabled) {
+      actions.invalidatePendingOperations();
+    }
+    wasEnabledRef.current = enabled;
+  }, [actions, enabled]);
 
   useEffect(() => {
     if (!enabled) {
+      pendingForceRef.current = false;
       lastSignatureRef.current = undefined;
       return;
     }

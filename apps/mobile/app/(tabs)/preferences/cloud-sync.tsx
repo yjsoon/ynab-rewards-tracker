@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Platform,
@@ -23,6 +23,10 @@ import {
   restoreSettingsFromCloud,
   saveSettingsToCloud,
 } from '@/lib/cloud-sync';
+import {
+  acquireCloudSyncLease,
+  type CloudSyncLease,
+} from '@/lib/cloud-sync-coordinator';
 import { storage } from '@/storage/service';
 import { semanticColors, spacing } from '@/theme';
 import {
@@ -44,6 +48,24 @@ export default function CloudSyncScreen() {
   const [remember, setRemember] = useState(state.settings.rememberCloudSyncCode ?? true);
   const [operation, setOperation] = useState<Operation>();
   const [message, setMessage] = useState<Message>();
+  const mountedRef = useRef(true);
+  const operationRef = useRef<Operation>(undefined);
+  const activeLeaseRef = useRef<CloudSyncLease | undefined>(undefined);
+  const parkedRestoreLeaseRef = useRef<CloudSyncLease | undefined>(undefined);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      // Active requests retain the lease until their own finally block. A
+      // restore waiting at the native confirmation alert can release now.
+      const parkedLease = parkedRestoreLeaseRef.current;
+      parkedLease?.release();
+      if (activeLeaseRef.current === parkedLease) activeLeaseRef.current = undefined;
+      parkedRestoreLeaseRef.current = undefined;
+      operationRef.current = undefined;
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -66,7 +88,50 @@ export default function CloudSyncScreen() {
 
   const validPhrase = isValidMnemonic(normaliseMnemonic(phrase));
 
+  const acquireManualLease = async (
+    nextOperation: Exclude<Operation, undefined>,
+    expectedGeneration: number,
+  ): Promise<CloudSyncLease | null> => {
+    // State updates are asynchronous, so the ref closes the same-frame double-tap window.
+    if (operationRef.current) return null;
+    operationRef.current = nextOperation;
+    setOperation(nextOperation);
+
+    const lease = await acquireCloudSyncLease();
+    if (
+      !mountedRef.current
+      || operationRef.current !== nextOperation
+      || !storage.isGenerationCurrent(expectedGeneration)
+    ) {
+      lease.release();
+      if (mountedRef.current && operationRef.current === nextOperation) {
+        operationRef.current = undefined;
+        setOperation(undefined);
+      }
+      return null;
+    }
+
+    activeLeaseRef.current = lease;
+    return lease;
+  };
+
+  const finishManualOperation = (
+    completedOperation: Exclude<Operation, undefined>,
+    lease: CloudSyncLease,
+  ) => {
+    lease.release();
+    if (activeLeaseRef.current === lease) activeLeaseRef.current = undefined;
+    if (parkedRestoreLeaseRef.current === lease) parkedRestoreLeaseRef.current = undefined;
+    if (operationRef.current === completedOperation) {
+      operationRef.current = undefined;
+      if (mountedRef.current) setOperation(undefined);
+    }
+  };
+
   const persistPhrasePreference = async (nextRemember: boolean, code = phrase) => {
+    if (!nextRemember) {
+      actions.invalidatePendingOperations();
+    }
     const storageGeneration = storage.captureGeneration();
     const previousRemember = remember;
     try {
@@ -81,9 +146,11 @@ export default function CloudSyncScreen() {
         rememberCloudSyncCode: nextRemember,
         autoSyncEnabled: nextRemember ? state.settings.autoSyncEnabled : false,
       }, storageGeneration);
-      await actions.refresh(storageGeneration);
-    } catch (error) {
       if (!storage.isGenerationCurrent(storageGeneration)) return;
+      await actions.refresh(storageGeneration);
+      if (!storage.isGenerationCurrent(storageGeneration)) return;
+    } catch (error) {
+      if (!mountedRef.current || !storage.isGenerationCurrent(storageGeneration)) return;
       setRemember(previousRemember);
       setMessage({
         text: error instanceof Error ? error.message : 'Couldn’t update the remembered code',
@@ -94,11 +161,12 @@ export default function CloudSyncScreen() {
 
   const saveNow = async () => {
     const storageGeneration = storage.captureGeneration();
-    setOperation('save');
+    const lease = await acquireManualLease('save', storageGeneration);
+    if (!lease) return;
     setMessage(undefined);
     try {
       const raw = JSON.parse(await storage.exportSettings()) as StorageData;
-      if (!storage.isGenerationCurrent(storageGeneration)) return;
+      if (!mountedRef.current || !storage.isGenerationCurrent(storageGeneration)) return;
       const payload = createCloudSyncPayload(raw);
       const result = await saveSettingsToCloud(phrase, payload);
       if (!storage.isGenerationCurrent(storageGeneration)) return;
@@ -118,19 +186,19 @@ export default function CloudSyncScreen() {
         await forgetCloudSyncCode();
       }
       if (!storage.isGenerationCurrent(storageGeneration)) return;
-      setRemember(shouldRemember);
+      if (mountedRef.current) setRemember(shouldRemember);
       await actions.refresh(storageGeneration);
-      if (!storage.isGenerationCurrent(storageGeneration)) return;
+      if (!storage.isGenerationCurrent(storageGeneration) || !mountedRef.current) return;
       setPhrase(result.phrase);
       setMessage({ text: 'Encrypted settings are up to date', tone: 'positive' });
     } catch (error) {
-      if (!storage.isGenerationCurrent(storageGeneration)) return;
+      if (!mountedRef.current || !storage.isGenerationCurrent(storageGeneration)) return;
       setMessage({
         text: error instanceof Error ? error.message : 'Couldn’t save to Cloud Sync',
         tone: 'attention',
       });
     } finally {
-      setOperation(undefined);
+      finishManualOperation('save', lease);
     }
   };
 
@@ -139,8 +207,9 @@ export default function CloudSyncScreen() {
     metadata: { keyId: string; phrase: string; updatedAt: string },
     storageGeneration: number,
   ) => {
-    if (!storage.isGenerationCurrent(storageGeneration)) return;
+    if (!mountedRef.current || !storage.isGenerationCurrent(storageGeneration)) return;
     await storage.importSettings(JSON.stringify(payload), { expectedGeneration: storageGeneration });
+    if (!storage.isGenerationCurrent(storageGeneration)) return;
     await storage.updateSettings({
       cloudSyncKeyId: metadata.keyId,
       cloudSyncLastSyncedAt: metadata.updatedAt,
@@ -152,7 +221,7 @@ export default function CloudSyncScreen() {
     if (remember) await rememberCloudSyncCode(metadata.phrase);
     if (!storage.isGenerationCurrent(storageGeneration)) return;
     await actions.refresh(storageGeneration);
-    if (!storage.isGenerationCurrent(storageGeneration)) return;
+    if (!storage.isGenerationCurrent(storageGeneration) || !mountedRef.current) return;
     setPhrase(metadata.phrase);
     setMessage({
       text: `Restored ${payload.cards.length} card${payload.cards.length === 1 ? '' : 's'} from Cloud Sync`,
@@ -162,12 +231,18 @@ export default function CloudSyncScreen() {
 
   const restoreNow = async () => {
     const storageGeneration = storage.captureGeneration();
-    setOperation('restore');
+    const lease = await acquireManualLease('restore', storageGeneration);
+    if (!lease) return;
     setMessage(undefined);
     try {
       const restored = await restoreSettingsFromCloud<unknown>(phrase);
-      if (!storage.isGenerationCurrent(storageGeneration)) return;
+      if (!mountedRef.current || !storage.isGenerationCurrent(storageGeneration)) {
+        finishManualOperation('restore', lease);
+        return;
+      }
       const payload = parseCloudSyncPayload(restored.data);
+      let restoreAccepted = false;
+      parkedRestoreLeaseRef.current = lease;
       Alert.alert(
         'Restore encrypted settings?',
         `The backup from ${new Date(restored.updatedAt).toLocaleString()} contains ${payload.cards.length} card${payload.cards.length === 1 ? '' : 's'}. It will replace local card configuration; your YNAB token stays on this iPhone.`,
@@ -175,31 +250,44 @@ export default function CloudSyncScreen() {
           {
             text: 'Cancel',
             style: 'cancel',
-            onPress: () => setOperation(undefined),
+            onPress: () => finishManualOperation('restore', lease),
           },
           {
             text: 'Restore',
             onPress: () => {
+              restoreAccepted = true;
+              parkedRestoreLeaseRef.current = undefined;
+              if (!mountedRef.current || !storage.isGenerationCurrent(storageGeneration)) {
+                finishManualOperation('restore', lease);
+                return;
+              }
+
               void applyRestore(payload, restored, storageGeneration)
                 .catch((error: unknown) => {
-                  if (!storage.isGenerationCurrent(storageGeneration)) return;
+                  if (!mountedRef.current || !storage.isGenerationCurrent(storageGeneration)) return;
                   setMessage({
                     text: error instanceof Error ? error.message : 'Couldn’t restore settings',
                     tone: 'attention',
                   });
                 })
-                .finally(() => setOperation(undefined));
+                .finally(() => finishManualOperation('restore', lease));
             },
           },
         ],
+        {
+          cancelable: true,
+          onDismiss: () => {
+            if (!restoreAccepted) finishManualOperation('restore', lease);
+          },
+        },
       );
     } catch (error) {
-      if (!storage.isGenerationCurrent(storageGeneration)) return;
+      finishManualOperation('restore', lease);
+      if (!mountedRef.current || !storage.isGenerationCurrent(storageGeneration)) return;
       setMessage({
         text: error instanceof Error ? error.message : 'Couldn’t restore from Cloud Sync',
         tone: 'attention',
       });
-      setOperation(undefined);
     }
   };
 
@@ -223,32 +311,37 @@ export default function CloudSyncScreen() {
           style: 'destructive',
           onPress: () => {
             const storageGeneration = storage.captureGeneration();
-            setOperation('delete');
             void (async () => {
-              const enteredKeyId = await computeKeyId(normaliseMnemonic(phrase));
-              if (!storage.isGenerationCurrent(storageGeneration)) return;
-              if (enteredKeyId !== configuredKeyId) {
-                throw new Error('Enter the recovery code for the configured backup.');
+              const lease = await acquireManualLease('delete', storageGeneration);
+              if (!lease) return;
+              try {
+                const enteredKeyId = await computeKeyId(normaliseMnemonic(phrase));
+                if (!mountedRef.current || !storage.isGenerationCurrent(storageGeneration)) return;
+                if (enteredKeyId !== configuredKeyId) {
+                  throw new Error('Enter the recovery code for the configured backup.');
+                }
+                await deleteSettingsFromCloud(phrase);
+                if (!storage.isGenerationCurrent(storageGeneration)) return;
+                await storage.updateSettings({
+                  cloudSyncKeyId: undefined,
+                  cloudSyncLastSyncedAt: undefined,
+                  autoSyncEnabled: false,
+                }, storageGeneration);
+                if (!storage.isGenerationCurrent(storageGeneration)) return;
+                await actions.refresh(storageGeneration);
+                if (!storage.isGenerationCurrent(storageGeneration) || !mountedRef.current) return;
+                setMessage({ text: 'Cloud backup deleted', tone: 'positive' });
+              } finally {
+                finishManualOperation('delete', lease);
               }
-              await deleteSettingsFromCloud(phrase);
-              if (!storage.isGenerationCurrent(storageGeneration)) return;
-              await storage.updateSettings({
-                cloudSyncKeyId: undefined,
-                cloudSyncLastSyncedAt: undefined,
-                autoSyncEnabled: false,
-              }, storageGeneration);
-              await actions.refresh(storageGeneration);
-              if (!storage.isGenerationCurrent(storageGeneration)) return;
-              setMessage({ text: 'Cloud backup deleted', tone: 'positive' });
             })()
               .catch((error: unknown) => {
-                if (!storage.isGenerationCurrent(storageGeneration)) return;
+                if (!mountedRef.current || !storage.isGenerationCurrent(storageGeneration)) return;
                 setMessage({
                   text: error instanceof Error ? error.message : 'Couldn’t delete cloud backup',
                   tone: 'attention',
                 });
-              })
-              .finally(() => setOperation(undefined));
+              });
           },
         },
       ],
@@ -264,12 +357,15 @@ export default function CloudSyncScreen() {
       setMessage({ text: 'Save or restore once before turning on automatic sync.', tone: 'attention' });
       return;
     }
+    if (!enabled) {
+      actions.invalidatePendingOperations();
+    }
     const storageGeneration = storage.captureGeneration();
     const previousRemember = remember;
     try {
       if (enabled) {
         const enteredKeyId = await computeKeyId(normaliseMnemonic(phrase));
-        if (!storage.isGenerationCurrent(storageGeneration)) return;
+        if (!mountedRef.current || !storage.isGenerationCurrent(storageGeneration)) return;
         if (enteredKeyId !== state.settings.cloudSyncKeyId) {
           throw new Error('Save or restore this recovery code before turning on automatic sync.');
         }
@@ -280,17 +376,19 @@ export default function CloudSyncScreen() {
           { rememberCloudSyncCode: true, autoSyncEnabled: true },
           storageGeneration,
         );
-        await actions.refresh(storageGeneration);
         if (!storage.isGenerationCurrent(storageGeneration)) return;
+        await actions.refresh(storageGeneration);
+        if (!storage.isGenerationCurrent(storageGeneration) || !mountedRef.current) return;
         setMessage({ text: 'Automatic sync turned on', tone: 'positive' });
       } else {
         await storage.updateSettings({ autoSyncEnabled: false }, storageGeneration);
-        await actions.refresh(storageGeneration);
         if (!storage.isGenerationCurrent(storageGeneration)) return;
+        await actions.refresh(storageGeneration);
+        if (!storage.isGenerationCurrent(storageGeneration) || !mountedRef.current) return;
         setMessage({ text: 'Automatic sync turned off', tone: 'positive' });
       }
     } catch (error) {
-      if (!storage.isGenerationCurrent(storageGeneration)) return;
+      if (!mountedRef.current || !storage.isGenerationCurrent(storageGeneration)) return;
       setRemember(previousRemember);
       setMessage({
         text: error instanceof Error ? error.message : 'Couldn’t update automatic sync',
@@ -302,8 +400,10 @@ export default function CloudSyncScreen() {
   const copyCode = async () => {
     try {
       await Clipboard.setStringAsync(normaliseMnemonic(phrase));
+      if (!mountedRef.current) return;
       setMessage({ text: 'Code copied', tone: 'positive' });
     } catch (error) {
+      if (!mountedRef.current) return;
       setMessage({
         text: error instanceof Error ? error.message : 'Couldn’t copy the code',
         tone: 'attention',
