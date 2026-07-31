@@ -358,14 +358,14 @@ export class SimpleRewardsCalculator {
               settings,
               { flagColor: transaction.flag_color },
             );
-            transactionRewards[transaction.id] = subMinimumMet
-              ? constrained
-              : {
+            transactionRewards[transaction.id] = !subMinimumMet && constrained.reward > 0
+              ? {
                   ...constrained,
                   reward: 0,
                   rewardDollars: 0,
                   reason: 'below_minimum',
-                };
+                }
+              : constrained;
           }
 
           countedSpend += subCounted;
@@ -460,14 +460,14 @@ export class SimpleRewardsCalculator {
             settings,
             { flagColor: txn.flag_color },
           );
-          transactionRewards[txn.id] = minimumSpendMet
-            ? constrained
-            : {
+          transactionRewards[txn.id] = !minimumSpendMet && constrained.reward > 0
+            ? {
                 ...constrained,
                 reward: 0,
                 rewardDollars: 0,
                 reason: 'below_minimum',
-              };
+              }
+            : constrained;
         }
 
         if (minimumSpendMet && eligibleSpend > 0) {

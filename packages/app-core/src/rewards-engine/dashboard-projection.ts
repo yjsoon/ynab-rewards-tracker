@@ -1,4 +1,10 @@
-import type { AppSettings, CreditCard, Transaction } from '../storage/types';
+import { normalizePeriod } from '../storage/helpers';
+import type {
+  AppSettings,
+  CreditCard,
+  RewardCalculation,
+  Transaction,
+} from '../storage/types';
 import { formatLocalDate, parseYnabDate } from './date-utils';
 import {
   SimpleRewardsCalculator,
@@ -360,6 +366,86 @@ function getBlocksEarned(
   return null;
 }
 
+function findPersistedCalculation(
+  card: CreditCard,
+  period: CalculationPeriod,
+  calculations: readonly RewardCalculation[],
+): RewardCalculation | undefined {
+  const matches = calculations.filter((candidate) => {
+    if (candidate.cardId !== card.id) {
+      return false;
+    }
+    const normalized = normalizePeriod(candidate.period);
+    return normalized.start === period.start && normalized.end === period.end;
+  });
+  return matches.find(({ ruleId }) => ruleId === `card-${card.id}`) ??
+    (matches.length === 1 ? matches[0] : undefined);
+}
+
+function applyPersistedCalculation(
+  card: CreditCard,
+  calculation: SimplifiedCalculation,
+  persisted: RewardCalculation | undefined,
+  settings: AppSettings,
+): SimplifiedCalculation {
+  if (!persisted) {
+    return calculation;
+  }
+
+  const persistedSubcategories = new Map(
+    persisted.subcategoryBreakdowns?.map((entry) => [entry.subcategoryId, entry] as const) ?? [],
+  );
+  const maximumSpend = hasPositiveThreshold(card.maximumSpend) ? card.maximumSpend : null;
+  const maximumProgress = typeof persisted.maximumProgress === 'number'
+    ? persisted.maximumProgress
+    : undefined;
+  const countedSpend = persisted.countedSpend ?? (
+    maximumSpend !== null && maximumProgress !== undefined
+      ? maximumSpend * Math.min(1, Math.max(0, maximumProgress / 100))
+      : persisted.minimumMet
+        ? persisted.eligibleSpend
+        : persisted.totalSpend
+  );
+  const rewardEarnedDollars = card.type === 'cashback'
+    ? persisted.rewardEarned
+    : persisted.rewardEarned * (settings.milesValuation ?? 0.01);
+
+  return {
+    ...calculation,
+    totalSpend: persisted.totalSpend,
+    countedSpend,
+    eligibleSpend: persisted.eligibleSpend,
+    eligibleSpendBeforeBlocks: persisted.eligibleSpendBeforeBlocks ?? persisted.eligibleSpend,
+    rewardEarned: persisted.rewardEarned,
+    rewardEarnedDollars,
+    minimumSpendMet: persisted.minimumMet,
+    minimumSpendProgress: persisted.minimumProgress,
+    maximumSpendExceeded: persisted.maximumExceeded,
+    maximumSpendProgress: persisted.maximumProgress,
+    subcategoryBreakdowns: calculation.subcategoryBreakdowns?.map((subcategory) => {
+      const complete = persistedSubcategories.get(subcategory.id);
+      if (!complete) {
+        return subcategory;
+      }
+      return {
+        ...subcategory,
+        totalSpend: complete.totalSpend,
+        countedSpend: complete.countedSpend ?? complete.eligibleSpend,
+        eligibleSpendBeforeBlocks: complete.eligibleSpendBeforeBlocks ?? complete.eligibleSpend,
+        eligibleSpend: complete.eligibleSpend,
+        rewardEarned: complete.rewardEarned,
+        rewardEarnedDollars: card.type === 'cashback'
+          ? complete.rewardEarned
+          : complete.rewardEarned * (settings.milesValuation ?? 0.01),
+        minimumSpendMet: complete.minimumSpendMet,
+        maximumSpendExceeded: complete.maximumSpendExceeded,
+        blockSize: complete.blockSize ?? subcategory.blockSize,
+        blocksEarned: complete.blocksEarned ?? subcategory.blocksEarned,
+      };
+    }),
+  };
+}
+
 function getStatus(params: {
   configured: boolean;
   hasMinimum: boolean;
@@ -420,6 +506,7 @@ export function buildRewardsDashboard(
   transactions: Transaction[],
   settings: AppSettings = {},
   referenceDate: Date = new Date(),
+  persistedCalculations: readonly RewardCalculation[] = [],
 ): RewardsDashboardProjection {
   const asOf = formatLocalDate(referenceDate);
   const transactionsByAccount = new Map<string, Transaction[]>();
@@ -444,10 +531,21 @@ export function buildRewardsDashboard(
         transaction.date >= calculationPeriod.start &&
         transaction.date <= calculationPeriod.end,
     );
-    const calculation = SimpleRewardsCalculator.calculateCardRewards(
+    const cachedCalculation = SimpleRewardsCalculator.calculateCardRewards(
       card,
       periodTransactions,
       calculationPeriod,
+      settings,
+    );
+    const persistedCalculation = findPersistedCalculation(
+      card,
+      period,
+      persistedCalculations,
+    );
+    const calculation = applyPersistedCalculation(
+      card,
+      cachedCalculation,
+      persistedCalculation,
       settings,
     );
     const blockSizes = getBlockSizes(card);
@@ -467,8 +565,12 @@ export function buildRewardsDashboard(
     const maximumProgress = maximumTarget
       ? Math.min(1, maximumProgressSpend / maximumTarget)
       : null;
-    const maximumReached = maximumTarget !== null && maximumProgressSpend >= maximumTarget;
-    const minimumMet = minimumTarget !== null ? calculation.totalSpend >= minimumTarget : null;
+    const maximumReached = maximumTarget !== null && (
+      persistedCalculation?.maximumExceeded ?? maximumProgressSpend >= maximumTarget
+    );
+    const minimumMet = minimumTarget !== null
+      ? persistedCalculation?.minimumMet ?? calculation.totalSpend >= minimumTarget
+      : null;
     const eligibleSpendBeforeBlocks = calculation.eligibleSpendBeforeBlocks
       ?? calculation.eligibleSpend;
     const status = getStatus({

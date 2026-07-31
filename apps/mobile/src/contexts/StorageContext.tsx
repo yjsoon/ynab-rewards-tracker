@@ -122,6 +122,23 @@ const LOAD_ERROR_MESSAGE = 'Failed to load storage';
 const AUTO_CREATED_CARD_ISSUER = 'Unknown';
 const DEMO_MODE = __DEV__ && process.env.EXPO_PUBLIC_MOBILE_DEMO === '1';
 const DEMO_SYNC_DELAY_MS = 320;
+const CLOUD_SYNC_DEVICE_SETTING_KEYS = new Set<keyof AppSettings>([
+  'cloudSyncKeyId',
+  'cloudSyncLastSyncedAt',
+  'cloudSyncLocalChangedAt',
+  'cloudSyncMnemonic',
+  'rememberCloudSyncCode',
+  'autoSyncEnabled',
+]);
+
+function settingsAffectCloudPayload(settings: Partial<AppSettings>): boolean {
+  return (Object.keys(settings) as Array<keyof AppSettings>)
+    .some((key) => !CLOUD_SYNC_DEVICE_SETTING_KEYS.has(key));
+}
+
+function localChangeSettings(): Pick<AppSettings, 'cloudSyncLocalChangedAt'> {
+  return { cloudSyncLocalChangedAt: new Date().toISOString() };
+}
 
 const defaultState: StorageState = {
   connectionStatus: 'disconnected',
@@ -873,18 +890,24 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         setState(withoutConnection);
       },
       setSelectedBudget: async (budgetId: string, budgetName: string) => {
+        const localChange = localChangeSettings();
+        await storage.updateSettings(localChange);
         await storage.setSelectedBudget(budgetId, budgetName);
         setState((prev) => ({
           ...prev,
           selectedBudget: { id: budgetId, name: budgetName },
+          settings: { ...prev.settings, ...localChange },
           connectionError: undefined,
         }));
       },
       setTrackedAccountIds: async (accountIds: string[]) => {
+        const localChange = localChangeSettings();
+        await storage.updateSettings(localChange);
         await storage.setTrackedAccountIds(accountIds);
         setState((prev) => ({
           ...prev,
           trackedAccountIds: [...accountIds],
+          settings: { ...prev.settings, ...localChange },
         }));
       },
       syncBudgetsAndAccounts: async (options) => {
@@ -948,6 +971,8 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         const nextBudget = pending.budget ?? state.selectedBudget;
         const nextTrackedIds = pending.trackedAccountIds ?? state.trackedAccountIds;
         const wasSetupMode = !state.selectedBudget.id || state.trackedAccountIds.length === 0;
+        const localChange = localChangeSettings();
+        await storage.updateSettings(localChange);
 
         if (pending.budget && nextBudget.id && nextBudget.name) {
           await storage.setSelectedBudget(nextBudget.id, nextBudget.name);
@@ -960,6 +985,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
           ...prev,
           selectedBudget: nextBudget.id ? nextBudget : prev.selectedBudget,
           trackedAccountIds: pending.trackedAccountIds ? nextTrackedIds : prev.trackedAccountIds,
+          settings: { ...prev.settings, ...localChange },
           pending: undefined,
           hasPendingChanges: false,
         }));
@@ -990,34 +1016,46 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         }));
       },
       setSettings: async (settings) => {
-        await storage.updateSettings(settings);
+        const updates = settingsAffectCloudPayload(settings)
+          ? { ...settings, ...localChangeSettings() }
+          : settings;
+        await storage.updateSettings(updates);
         setState((prev) => ({
           ...prev,
           settings: {
             ...prev.settings,
-            ...settings,
+            ...updates,
           },
         }));
       },
       setCards: async (cards) => {
+        const localChange = localChangeSettings();
+        await storage.updateSettings(localChange);
         const replacement = await storage.replaceCards(cards);
         setState((prev) => ({
           ...prev,
           ...replacement,
+          settings: { ...prev.settings, ...localChange },
         }));
       },
       setRules: async (rules) => {
+        const localChange = localChangeSettings();
+        await storage.updateSettings(localChange);
         const persisted = await storage.replaceRules(rules);
         setState((prev) => ({
           ...prev,
           rules: persisted,
+          settings: { ...prev.settings, ...localChange },
         }));
       },
       setTagMappings: async (mappings) => {
+        const localChange = localChangeSettings();
+        await storage.updateSettings(localChange);
         const persisted = await storage.replaceTagMappings(mappings);
         setState((prev) => ({
           ...prev,
           tagMappings: persisted,
+          settings: { ...prev.settings, ...localChange },
         }));
       },
       setCalculations: async (calculations) => {
@@ -1028,17 +1066,23 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         }));
       },
       setThemeGroups: async (groups) => {
+        const localChange = localChangeSettings();
+        await storage.updateSettings(localChange);
         const persisted = await storage.replaceThemeGroups(groups);
         setState((prev) => ({
           ...prev,
           themeGroups: persisted,
+          settings: { ...prev.settings, ...localChange },
         }));
       },
       setHiddenCards: async (hiddenCards) => {
+        const localChange = localChangeSettings();
+        await storage.updateSettings(localChange);
         const persisted = await storage.replaceHiddenCards(hiddenCards);
         setState((prev) => ({
           ...prev,
           hiddenCards: persisted,
+          settings: { ...prev.settings, ...localChange },
         }));
       },
       setDashboardCachedData: async (payload) => {

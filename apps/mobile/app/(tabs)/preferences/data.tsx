@@ -48,6 +48,9 @@ export default function DataPreferencesScreen() {
             onPress: () => {
               void (async () => {
                 await storage.importSettings(JSON.stringify(payload));
+                await storage.updateSettings({
+                  cloudSyncLocalChangedAt: new Date().toISOString(),
+                });
                 await actions.refresh();
                 setMessage({ text: 'Settings imported', tone: 'positive' });
               })().catch((error: unknown) => {

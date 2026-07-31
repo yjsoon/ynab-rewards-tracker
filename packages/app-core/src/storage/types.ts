@@ -158,12 +158,15 @@ export interface SubcategoryBreakdown {
   name: string;
   flagColor: YnabFlagColor;
   totalSpend: number;
+  countedSpend?: number;
   eligibleSpend: number;
   eligibleSpendBeforeBlocks?: number;
   rewardEarned: number;
   rewardEarnedDollars?: number;
   minimumSpendMet: boolean;
   maximumSpendExceeded: boolean;
+  blockSize?: number | null;
+  blocksEarned?: number;
 }
 
 export interface RewardCalculation {
@@ -171,7 +174,9 @@ export interface RewardCalculation {
   ruleId: string;
   period: string;
   totalSpend: number;
+  countedSpend?: number;
   eligibleSpend: number;
+  eligibleSpendBeforeBlocks?: number;
   rewardEarned: number;
   rewardEarnedDollars?: number;
   rewardType: "cashback" | "miles";
@@ -234,6 +239,7 @@ export interface AppSettings {
   groupCardsByType?: boolean;
   cloudSyncKeyId?: string;
   cloudSyncLastSyncedAt?: string;
+  cloudSyncLocalChangedAt?: string;
   cloudSyncMnemonic?: string;
   rememberCloudSyncCode?: boolean;
   autoSyncEnabled?: boolean;

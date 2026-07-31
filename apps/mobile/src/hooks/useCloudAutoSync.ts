@@ -124,6 +124,7 @@ export function useCloudAutoSync(): void {
         await actions.setSettings({
           cloudSyncKeyId: seeded.keyId,
           cloudSyncLastSyncedAt: seeded.updatedAt,
+          cloudSyncLocalChangedAt: undefined,
         });
         return;
       }
@@ -135,13 +136,23 @@ export function useCloudAutoSync(): void {
       const cloudUpdated = Date.parse(restored.updatedAt);
       const sameKey = state.settings.cloudSyncKeyId === restored.keyId;
       const orderKnown = sameKey && Number.isFinite(lastLocalSync) && Number.isFinite(cloudUpdated);
+      // A marker exists only between a local payload mutation and a confirmed
+      // push/import. Do not compare device and server clocks to decide dirtiness.
+      const localIsDirty = Boolean(state.settings.cloudSyncLocalChangedAt);
       const cloudIsNewer = orderKnown && cloudUpdated > lastLocalSync;
+
+      if (cloudIsNewer && localIsDirty) {
+        // Both sides changed since the common baseline. Leave reconciliation
+        // to the manual restore/save flow rather than silently choosing a winner.
+        return;
+      }
 
       if (cloudIsNewer) {
         await storage.importSettings(JSON.stringify(cloudPayload));
         await storage.updateSettings({
           cloudSyncKeyId: restored.keyId,
           cloudSyncLastSyncedAt: restored.updatedAt,
+          cloudSyncLocalChangedAt: undefined,
           rememberCloudSyncCode: true,
           autoSyncEnabled: true,
         });
@@ -160,6 +171,7 @@ export function useCloudAutoSync(): void {
         await actions.setSettings({
           cloudSyncKeyId: pushed.keyId,
           cloudSyncLastSyncedAt: pushed.updatedAt,
+          cloudSyncLocalChangedAt: undefined,
         });
         return;
       }
@@ -171,6 +183,7 @@ export function useCloudAutoSync(): void {
         await actions.setSettings({
           cloudSyncKeyId: restored.keyId,
           cloudSyncLastSyncedAt: restored.updatedAt,
+          cloudSyncLocalChangedAt: undefined,
         });
       }
     })().catch((error: unknown) => {
@@ -188,6 +201,7 @@ export function useCloudAutoSync(): void {
     enabled,
     state.settings.cloudSyncKeyId,
     state.settings.cloudSyncLastSyncedAt,
+    state.settings.cloudSyncLocalChangedAt,
   ]);
 
   useEffect(() => {

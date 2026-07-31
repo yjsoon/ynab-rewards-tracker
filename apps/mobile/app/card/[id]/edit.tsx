@@ -29,10 +29,27 @@ import { semanticColors } from '@/theme';
 import { interaction, nativeMetrics, radii, spacing } from '@/theme/tokens';
 import { findBestDashboardEntry } from '@ynab-counter/app-core/storage/dashboardCache';
 import { getEarliestPeriodStart } from '@ynab-counter/app-core/rewards-engine/utils/periods';
-import type {
-  CardSubcategory,
-  CreditCard,
+import {
+  createSubcategoryId,
+  type CardSubcategory,
+  type CreditCard,
 } from '@ynab-counter/app-core/storage';
+import {
+  UNFLAGGED_FLAG,
+  YNAB_FLAG_COLORS,
+  type YnabFlagColor,
+} from '@ynab-counter/app-core/ynab/constants';
+
+const FLAG_OPTIONS: ReadonlyArray<{ value: YnabFlagColor; label: string }> = [
+  UNFLAGGED_FLAG,
+  ...YNAB_FLAG_COLORS,
+];
+
+function tierNameForFlag(flag: YnabFlagColor): string {
+  if (flag === UNFLAGGED_FLAG.value) return 'Everything else';
+  const label = FLAG_OPTIONS.find((option) => option.value === flag)?.label ?? flag;
+  return `${label} flag`;
+}
 
 type EditableTier = {
   id: string;
@@ -185,7 +202,12 @@ function validateForm(source: CreditCard, form: CardForm): ValidationResult {
 
   const now = new Date().toISOString();
   const tiers: CardSubcategory[] = [];
+  const tierFlags = new Set<YnabFlagColor>();
   for (const [index, tier] of form.tiers.entries()) {
+    if (tierFlags.has(tier.flagColor)) {
+      return { message: `${tierNameForFlag(tier.flagColor)} can only be used once.` };
+    }
+    tierFlags.add(tier.flagColor);
     const tierName = tier.name.trim();
     if (!tierName) return { message: `Tier ${index + 1} needs a name.` };
     const tierRate = parseOptionalNumber(tier.rewardValue, `${tierName} rate`);
@@ -375,13 +397,80 @@ function Choice<T extends string>({
   );
 }
 
+function TierFlagPicker({
+  value,
+  usedFlagColors,
+  onChange,
+}: {
+  value: YnabFlagColor;
+  usedFlagColors: ReadonlySet<YnabFlagColor>;
+  onChange: (value: YnabFlagColor) => void;
+}) {
+  return (
+    <View style={styles.flagField}>
+      <Headline>YNAB flag</Headline>
+      <View
+        style={styles.flagOptions}
+        accessibilityRole="radiogroup"
+        accessibilityLabel="YNAB flag for this tier"
+      >
+        {FLAG_OPTIONS.map((option) => {
+          const selected = option.value === value;
+          const unavailable = !selected && usedFlagColors.has(option.value);
+          return (
+            <Pressable
+              key={option.value}
+              onPress={() => onChange(option.value)}
+              disabled={unavailable}
+              accessibilityRole="radio"
+              accessibilityLabel={`${option.label} flag`}
+              accessibilityHint={unavailable
+                ? 'Already used by another tier'
+                : 'Assigns this YNAB flag to the tier'}
+              accessibilityState={{ checked: selected, disabled: unavailable }}
+              style={({ pressed }) => [
+                styles.flagOption,
+                selected && styles.flagOptionSelected,
+                pressed && styles.pressed,
+                unavailable && styles.flagOptionUnavailable,
+              ]}
+            >
+              <View
+                style={[
+                  styles.flagSwatch,
+                  { backgroundColor: flagColor(option.value) },
+                ]}
+                accessibilityElementsHidden
+              >
+                {option.value === UNFLAGGED_FLAG.value ? (
+                  <View style={styles.unflaggedSlash} />
+                ) : null}
+              </View>
+              <Caption1
+                color={unavailable ? 'tertiary' : 'secondary'}
+                style={[styles.flagOptionLabel, selected && styles.flagOptionLabelSelected]}
+              >
+                {option.value === UNFLAGGED_FLAG.value ? 'None' : option.label}
+              </Caption1>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 function TierEditor({
   tier,
   cardType,
+  usedFlagColors,
+  onFlagChange,
   update,
 }: {
   tier: EditableTier;
   cardType: CreditCard['type'];
+  usedFlagColors: ReadonlySet<YnabFlagColor>;
+  onFlagChange: (value: YnabFlagColor) => void;
   update: (patch: Partial<EditableTier>) => void;
 }) {
   return (
@@ -401,6 +490,11 @@ function TierEditor({
         />
       </View>
 
+      <TierFlagPicker
+        value={tier.flagColor}
+        usedFlagColors={usedFlagColors}
+        onChange={onFlagChange}
+      />
       <Field label="Tier name" value={tier.name} onChangeText={(name) => update({ name })} />
       <Field
         label={cardType === 'cashback' ? 'Cashback rate (%)' : 'Miles per dollar'}
@@ -452,7 +546,7 @@ export default function EditCardScreen() {
   const cardId = parameterValue(params.id);
   const router = useRouter();
   const { state, status, actions } = useStorage();
-  const { notification } = useHaptics();
+  const { notification, selection } = useHaptics();
   const sourceCard = state.cards.find((card) => card.id === cardId);
   const [form, setForm] = useState<CardForm | undefined>(() => sourceCard ? createForm(sourceCard) : undefined);
   const initialisedCardIdRef = useRef<string | undefined>(sourceCard?.id);
@@ -461,6 +555,10 @@ export default function EditCardScreen() {
   const accountName = useMemo(
     () => state.accounts.find((account) => account.id === sourceCard?.ynabAccountId)?.name ?? sourceCard?.name,
     [sourceCard, state.accounts],
+  );
+  const usedFlagColors = useMemo(
+    () => new Set<YnabFlagColor>(form?.tiers.map((tier) => tier.flagColor) ?? []),
+    [form?.tiers],
   );
 
   useEffect(() => {
@@ -483,6 +581,60 @@ export default function EditCardScreen() {
           tiers: previous.tiers.map((tier) => tier.id === id ? { ...tier, ...patch } : tier),
         }
       : previous);
+  };
+
+  const addTier = () => {
+    if (!form) return;
+    const availableFlag = FLAG_OPTIONS.find((option) => !usedFlagColors.has(option.value));
+    if (!availableFlag) {
+      setError('Every YNAB flag already has a tier.');
+      notification('warning');
+      return;
+    }
+    const now = new Date().toISOString();
+    setError(undefined);
+    setForm((previous) => previous
+      ? {
+          ...previous,
+          tiers: [
+            ...previous.tiers,
+            {
+              id: createSubcategoryId(),
+              flagColor: availableFlag.value,
+              name: tierNameForFlag(availableFlag.value),
+              rewardValue: previous.earningRate.trim() || '0',
+              milesBlockSize: '',
+              minimumSpend: '',
+              maximumSpend: '',
+              priority: previous.tiers.length,
+              active: true,
+              excludeFromRewards: false,
+              createdAt: now,
+            },
+          ],
+        }
+      : previous);
+    selection();
+  };
+
+  const changeTierFlag = (id: string, nextFlag: YnabFlagColor) => {
+    if (usedFlagColors.has(nextFlag)) return;
+    setError(undefined);
+    setForm((previous) => previous
+      ? {
+          ...previous,
+          tiers: previous.tiers.map((tier) => {
+            if (tier.id !== id) return tier;
+            const previousDefaultName = tierNameForFlag(tier.flagColor);
+            return {
+              ...tier,
+              flagColor: nextFlag,
+              name: tier.name === previousDefaultName ? tierNameForFlag(nextFlag) : tier.name,
+            };
+          }),
+        }
+      : previous);
+    selection();
   };
 
   const save = async () => {
@@ -728,25 +880,38 @@ export default function EditCardScreen() {
         </Group>
 
         {form.subcategoriesEnabled ? (
-          form.tiers.length > 0 ? (
-            <View style={styles.tiers}>
-              {form.tiers.map((tier) => (
-                <TierEditor
-                  key={tier.id}
-                  tier={tier}
-                  cardType={form.type}
-                  update={(patch) => updateTier(tier.id, patch)}
-                />
-              ))}
-            </View>
-          ) : (
-            <View style={styles.tierEmpty}>
-              <Headline>No flag tiers yet</Headline>
-              <Body color="secondary">
-                Save to initialise the default unflagged tier, then return to name and tune it.
-              </Body>
-            </View>
-          )
+          <View style={styles.tierComposer}>
+            {form.tiers.length > 0 ? (
+              <View style={styles.tiers}>
+                {form.tiers.map((tier) => (
+                  <TierEditor
+                    key={tier.id}
+                    tier={tier}
+                    cardType={form.type}
+                    usedFlagColors={usedFlagColors}
+                    onFlagChange={(flag) => changeTierFlag(tier.id, flag)}
+                    update={(patch) => updateTier(tier.id, patch)}
+                  />
+                ))}
+              </View>
+            ) : (
+              <View style={styles.tierEmpty}>
+                <Headline>No flag tiers yet</Headline>
+                <Body color="secondary">Add a tier for each YNAB flag you use.</Body>
+              </View>
+            )}
+            <Button
+              variant="tinted"
+              size="large"
+              onPress={addTier}
+              disabled={usedFlagColors.size >= FLAG_OPTIONS.length}
+              accessibilityHint="Adds a tier using the next available YNAB flag"
+            >
+              {usedFlagColors.size >= FLAG_OPTIONS.length
+                ? 'All flag colours added'
+                : 'Add flag tier'}
+            </Button>
+          </View>
         ) : null}
 
         <View style={styles.actions}>
@@ -905,6 +1070,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
   },
+  tierComposer: {
+    gap: spacing.lg,
+  },
   tiers: {
     gap: spacing.xl,
   },
@@ -940,6 +1108,53 @@ const styles = StyleSheet.create({
     height: 12,
     marginTop: 6,
     borderRadius: 6,
+  },
+  flagField: {
+    marginLeft: spacing.lg,
+    paddingRight: spacing.lg,
+    paddingVertical: spacing.md,
+    gap: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: semanticColors.separator,
+  },
+  flagOptions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  flagOption: {
+    width: '25%',
+    minHeight: 64,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    borderRadius: radii.medium,
+  },
+  flagOptionSelected: {
+    backgroundColor: semanticColors.actionTint,
+  },
+  flagOptionUnavailable: {
+    opacity: interaction.disabledOpacity,
+  },
+  flagSwatch: {
+    width: 26,
+    height: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 13,
+  },
+  unflaggedSlash: {
+    width: 18,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: semanticColors.systemBackground,
+    transform: [{ rotate: '-45deg' }],
+  },
+  flagOptionLabel: {
+    textAlign: 'center',
+  },
+  flagOptionLabelSelected: {
+    color: semanticColors.action,
+    fontWeight: '600',
   },
   tierEmpty: {
     padding: spacing.xl,

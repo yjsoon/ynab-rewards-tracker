@@ -218,8 +218,14 @@ export function useRewardsDashboard(referenceDate?: Date): RewardsDashboardModel
     [cacheEntry],
   );
   const dashboard = useMemo(
-    () => buildRewardsDashboard(state.cards, cachedTransactions, state.settings, asOf),
-    [asOf, cachedTransactions, state.cards, state.settings],
+    () => buildRewardsDashboard(
+      state.cards,
+      cachedTransactions,
+      state.settings,
+      asOf,
+      cacheEntry?.isComplete === false ? state.calculations : [],
+    ),
+    [asOf, cacheEntry?.isComplete, cachedTransactions, state.calculations, state.cards, state.settings],
   );
   const transactions = useMemo(
     () => projectTransactions(

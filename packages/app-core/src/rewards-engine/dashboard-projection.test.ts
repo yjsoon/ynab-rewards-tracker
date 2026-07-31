@@ -96,6 +96,50 @@ describe('buildRewardsDashboard', () => {
     });
   });
 
+  it('uses a complete persisted calculation when the transaction preview is truncated', () => {
+    const card = createCard({
+      minimumSpend: 500,
+      maximumSpend: 1_000,
+    });
+    const result = buildRewardsDashboard(
+      [card],
+      [createTransaction({ amount: -10_000 })],
+      {},
+      referenceDate,
+      [{
+        cardId: card.id,
+        ruleId: `card-${card.id}`,
+        period: '2026-02-01 → 2026-02-28',
+        totalSpend: 750,
+        countedSpend: 750,
+        eligibleSpend: 750,
+        eligibleSpendBeforeBlocks: 750,
+        rewardEarned: 15,
+        rewardEarnedDollars: 15,
+        rewardType: 'cashback',
+        minimumProgress: 100,
+        maximumProgress: 75,
+        minimumMet: true,
+        maximumExceeded: false,
+        shouldStopUsing: false,
+      }],
+    );
+
+    expect(result.cards[0]).toMatchObject({
+      spend: { total: 750, counted: 750, eligible: 750 },
+      reward: { amount: 15, dollars: 15 },
+      minimum: { met: true, remaining: 0, progress: 1 },
+      maximum: { reached: false, remaining: 250, progress: 0.75 },
+      status: 'earning',
+    });
+    expect(result.totals).toMatchObject({
+      spend: 750,
+      countedSpend: 750,
+      eligibleSpend: 750,
+      normalizedRewardDollars: 15,
+    });
+  });
+
   it('keeps native miles while respecting an explicit zero valuation', () => {
     const milesCard = createCard({
       id: 'miles-card',

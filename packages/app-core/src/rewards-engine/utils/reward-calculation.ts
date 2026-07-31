@@ -8,12 +8,15 @@ function mapSubcategoryBreakdown(subcategory: SubcategoryCalculation): Subcatego
     name: subcategory.name,
     flagColor: subcategory.flagColor,
     totalSpend: subcategory.totalSpend,
+    countedSpend: subcategory.countedSpend,
     eligibleSpend: subcategory.eligibleSpend,
     eligibleSpendBeforeBlocks: subcategory.eligibleSpendBeforeBlocks,
     rewardEarned: subcategory.rewardEarned,
     rewardEarnedDollars: subcategory.rewardEarnedDollars,
     minimumSpendMet: subcategory.minimumSpendMet,
     maximumSpendExceeded: subcategory.maximumSpendExceeded,
+    blockSize: subcategory.blockSize,
+    blocksEarned: subcategory.blocksEarned,
   };
 }
 
@@ -27,7 +30,9 @@ export function createRewardCalculationFromSimple(
     ruleId: overrideRuleId ?? `card-${card.id}`,
     period: calculation.period,
     totalSpend: calculation.totalSpend,
+    countedSpend: calculation.countedSpend,
     eligibleSpend: calculation.eligibleSpend,
+    eligibleSpendBeforeBlocks: calculation.eligibleSpendBeforeBlocks,
     rewardEarned: calculation.rewardEarned,
     rewardEarnedDollars: calculation.rewardEarnedDollars,
     rewardType: calculation.rewardType,

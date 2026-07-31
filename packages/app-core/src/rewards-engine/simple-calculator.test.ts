@@ -104,6 +104,24 @@ describe('SimpleRewardsCalculator.calculateCardRewards', () => {
     });
   });
 
+  it('preserves a structural below-block reason when the period minimum is unmet', () => {
+    const card: CreditCard = {
+      ...createMilesCardWithMinimum(100),
+      earningBlockSize: 5,
+    };
+    const calculation = SimpleRewardsCalculator.calculateCardRewards(
+      card,
+      [createTransaction('small', -3_000)],
+      period,
+    );
+
+    expect(calculation.transactionRewards.small).toMatchObject({
+      reward: 0,
+      reason: 'below_block',
+      block: { size: 5, count: 0 },
+    });
+  });
+
   it('attributes capped rewards to transactions in reward-tier priority order', () => {
     const card: CreditCard = {
       ...createMilesCardWithSubcategories(),

@@ -18,6 +18,7 @@ function sanitizeSettings(settings: StorageData['settings']): StorageData['setti
     ...settings,
     cloudSyncKeyId: undefined,
     cloudSyncLastSyncedAt: undefined,
+    cloudSyncLocalChangedAt: undefined,
     cloudSyncMnemonic: undefined,
     rememberCloudSyncCode: undefined,
     autoSyncEnabled: undefined,

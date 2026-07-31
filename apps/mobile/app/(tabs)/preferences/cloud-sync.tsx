@@ -98,6 +98,7 @@ export default function CloudSyncScreen() {
       await actions.setSettings({
         cloudSyncKeyId: result.keyId,
         cloudSyncLastSyncedAt: result.updatedAt,
+        cloudSyncLocalChangedAt: undefined,
         rememberCloudSyncCode: remember,
       });
       if (remember) await rememberCloudSyncCode(result.phrase);
@@ -121,6 +122,7 @@ export default function CloudSyncScreen() {
     await storage.updateSettings({
       cloudSyncKeyId: metadata.keyId,
       cloudSyncLastSyncedAt: metadata.updatedAt,
+      cloudSyncLocalChangedAt: undefined,
       rememberCloudSyncCode: remember,
       autoSyncEnabled: state.settings.autoSyncEnabled ?? false,
     });

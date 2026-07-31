@@ -649,17 +649,18 @@ class StorageService {
     storage.cachedData = storage.cachedData || {};
     const entries = storage.cachedData.dashboardTransactions || [];
 
-    const sanitized = payload.transactions
+    const allSanitized = payload.transactions
       .map((txn) => sanitizeTransactionForCache(txn))
       .filter((txn): txn is CachedTransaction => txn !== null)
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      .slice(0, StorageService.DASHBOARD_CACHE_LIMIT);
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const sanitized = allSanitized.slice(0, StorageService.DASHBOARD_CACHE_LIMIT);
 
     const normalized: DashboardTransactionsCacheEntry = {
       budgetId: payload.budgetId,
       sinceDate: payload.sinceDate,
       fetchedAt: payload.fetchedAt,
       trackedAccountIds: [...payload.trackedAccountIds].sort(),
+      isComplete: allSanitized.length <= StorageService.DASHBOARD_CACHE_LIMIT,
       transactions: sanitized,
       accounts: payload.accounts,
     };
@@ -748,6 +749,7 @@ class StorageService {
       const localSettingKeys = [
         'cloudSyncKeyId',
         'cloudSyncLastSyncedAt',
+        'cloudSyncLocalChangedAt',
         'cloudSyncMnemonic',
         'rememberCloudSyncCode',
         'autoSyncEnabled',

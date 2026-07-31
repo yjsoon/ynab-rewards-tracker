@@ -11,6 +11,7 @@ describe('Cloud Sync payloads', () => {
     data.settings = {
       currency: 'SGD',
       cloudSyncMnemonic: 'secret phrase',
+      cloudSyncLocalChangedAt: '2026-07-31T01:00:00Z',
       rememberCloudSyncCode: true,
       autoSyncEnabled: true,
       statementFormatter: { apiKeys: { openai: 'secret-key' } },
@@ -25,6 +26,7 @@ describe('Cloud Sync payloads', () => {
     const payload = createCloudSyncPayload(data);
     expect(payload.ynab.pat).toBeUndefined();
     expect(payload.settings.cloudSyncMnemonic).toBeUndefined();
+    expect(payload.settings.cloudSyncLocalChangedAt).toBeUndefined();
     expect(payload.settings.statementFormatter?.apiKeys).toBeUndefined();
     expect(payload.calculations).toEqual([]);
     expect(payload.cachedData).toBeUndefined();
@@ -43,6 +45,7 @@ describe('Cloud Sync payloads', () => {
       settings: {
         currency: 'SGD',
         cloudSyncMnemonic: 'must-not-import',
+        cloudSyncLocalChangedAt: '2026-07-31T01:00:00Z',
         statementFormatter: { apiKeys: { openai: 'must-not-import' } },
       },
       cachedData: { transactions: [{ secret: true }] },
@@ -52,6 +55,7 @@ describe('Cloud Sync payloads', () => {
     expect(parsed.ynab.selectedBudgetId).toBe('budget-1');
     expect(parsed.settings.currency).toBe('SGD');
     expect(parsed.settings.cloudSyncMnemonic).toBeUndefined();
+    expect(parsed.settings.cloudSyncLocalChangedAt).toBeUndefined();
     expect(parsed.settings.statementFormatter?.apiKeys).toBeUndefined();
     expect(parsed.calculations).toEqual([]);
     expect(parsed.cachedData).toBeUndefined();
