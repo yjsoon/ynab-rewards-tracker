@@ -94,28 +94,30 @@ export default function GeneralPreferencesScreen() {
         keyboardDismissMode="interactive"
         keyboardShouldPersistTaps="handled"
       >
-        <View>
-          <SectionHeader>APPEARANCE</SectionHeader>
-          <Card>
-            {themes.map((theme, index) => {
-              const selected = (state.settings.theme ?? 'auto') === theme.value;
-              return (
-                <SettingsRow
-                  key={theme.value}
-                  isFirst={index === 0}
-                  title={theme.label}
-                  subtitle={theme.detail}
-                  symbol={theme.value === 'auto' ? 'circle.lefthalf.filled' : theme.value === 'light' ? 'sun.max.fill' : 'moon.fill'}
-                  onPress={() => void selectTheme(theme.value)}
-                  trailing={selected ? (
-                    <SymbolView name="checkmark" size={18} weight="semibold" tintColor={semanticColors.action} />
-                  ) : null}
-                  accessibilityLabel={`${theme.label}${selected ? ', selected' : ''}`}
-                />
-              );
-            })}
-          </Card>
-        </View>
+        {Platform.OS === 'ios' ? (
+          <View>
+            <SectionHeader>APPEARANCE</SectionHeader>
+            <Card>
+              {themes.map((theme, index) => {
+                const selected = (state.settings.theme ?? 'auto') === theme.value;
+                return (
+                  <SettingsRow
+                    key={theme.value}
+                    isFirst={index === 0}
+                    title={theme.label}
+                    subtitle={theme.detail}
+                    symbol={theme.value === 'auto' ? 'circle.lefthalf.filled' : theme.value === 'light' ? 'sun.max.fill' : 'moon.fill'}
+                    onPress={() => void selectTheme(theme.value)}
+                    trailing={selected ? (
+                      <SymbolView name="checkmark" size={18} weight="semibold" tintColor={semanticColors.action} />
+                    ) : null}
+                    accessibilityLabel={`${theme.label}${selected ? ', selected' : ''}`}
+                  />
+                );
+              })}
+            </Card>
+          </View>
+        ) : null}
 
         <View>
           <SectionHeader>REWARD VALUE</SectionHeader>

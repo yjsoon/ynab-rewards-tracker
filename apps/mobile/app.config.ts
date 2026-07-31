@@ -37,6 +37,7 @@ const createExpoConfig = ({ config }: ConfigContext): ExpoConfig => ({
   },
   android: {
     ...config.android,
+    userInterfaceStyle: 'light',
   },
   experiments: {
     ...config.experiments,

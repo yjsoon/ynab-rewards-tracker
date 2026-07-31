@@ -5,6 +5,7 @@ import type {
   DashboardTransactionsCacheEntry,
   DashboardTransactionsCachePayload,
 } from '@ynab-counter/app-core/storage';
+import { getEarliestPeriodStart } from '@ynab-counter/app-core/rewards-engine/utils/periods';
 
 import { SparkIcon } from '@/components/brand';
 import {
@@ -216,6 +217,7 @@ export default function TransactionDetailScreen() {
     setSelectedFlagColour(nextFlagColour);
     setFlagError(undefined);
     setIsSavingFlag(true);
+    let remoteUpdateSucceeded = false;
 
     try {
       await persistCachedFlag(nextFlagColour, null);
@@ -227,6 +229,7 @@ export default function TransactionDetailScreen() {
           id,
           nextFlagColour,
         );
+        remoteUpdateSucceeded = true;
 
         if (savedTransaction) {
           await persistCachedFlag(
@@ -236,8 +239,25 @@ export default function TransactionDetailScreen() {
         }
       }
 
+      if ((cacheEntryRef.current?.isComplete ?? cacheEntry.isComplete) === false) {
+        try {
+          await actions.syncBudgetsAndAccounts({
+            sinceDate: getEarliestPeriodStart(state.cards),
+          });
+        } catch {
+          setFlagError('Flag saved, but rewards couldn’t be refreshed. Refresh Activity to update totals.');
+          notification('error');
+          return;
+        }
+      }
+
       notification('success');
     } catch (error) {
+      if (remoteUpdateSucceeded) {
+        setFlagError('Flag saved in YNAB, but local rewards couldn’t be updated. Refresh Activity to try again.');
+        notification('error');
+        return;
+      }
       const outcomeUnknown = isYnabApiError(error)
         && (error.code === 'timeout' || error.code === 'network_error');
       if (outcomeUnknown) {

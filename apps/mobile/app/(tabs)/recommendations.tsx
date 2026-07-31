@@ -11,6 +11,7 @@ import { ScrollView, View, StyleSheet, type ColorValue } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { RecommendationEngine } from '@ynab-counter/app-core/rewards-engine';
+import { selectCurrentCardCalculations } from '@ynab-counter/app-core/rewards-engine/utils/recommendation-helpers';
 import type { CardRecommendation } from '@ynab-counter/app-core/rewards-engine/types';
 import { useStorage } from '@/contexts/StorageContext';
 import { Card, ListItem, Headline, Body, Footnote, Caption1 } from '@/components/ios';
@@ -32,26 +33,32 @@ export default function RecommendationsScreen() {
   const navigation = useNavigation();
   const { state, status } = useStorage();
   const calculations = state.calculations;
+  const [referenceDate, setReferenceDate] = React.useState(() => new Date());
   const isLoading = !status.isHydrated || state.isSyncing;
+  const currentCalculations = useMemo(
+    () => selectCurrentCardCalculations(state.cards, calculations, referenceDate),
+    [calculations, referenceDate, state.cards],
+  );
 
   const recommendations = useMemo(() => {
-    if (calculations.length === 0 || state.cards.length === 0) {
+    if (state.cards.length === 0) {
       return [] as CardRecommendation[];
     }
 
-    return RecommendationEngine.generateCardRecommendations(state.cards, calculations);
-  }, [calculations, state.cards]);
+    return RecommendationEngine.generateCardRecommendations(state.cards, currentCalculations);
+  }, [currentCalculations, state.cards]);
 
   const infoMessage = isLoading
     ? 'Loading recommendations…'
     : state.connectionStatus !== 'connected'
     ? 'Complete setup to see recommendations.'
-    : calculations.length === 0
+    : currentCalculations.length === 0
     ? 'Sync your data from Home to generate recommendations.'
     : undefined;
 
   useFocusEffect(
     React.useCallback(() => {
+      setReferenceDate(new Date());
       const parent = navigation.getParent();
       parent?.setOptions({
         headerLargeTitle: false,

@@ -1,5 +1,5 @@
 import { Stack } from 'expo-router';
-import { useColorScheme } from 'react-native';
+import { Platform, useColorScheme } from 'react-native';
 
 import {
   nativeStackScreenOptions,
@@ -7,7 +7,8 @@ import {
 } from '@/theme';
 
 export default function PreferencesLayout() {
-  const isDark = useColorScheme() === 'dark';
+  const systemScheme = useColorScheme();
+  const isDark = Platform.OS !== 'android' && systemScheme === 'dark';
 
   return (
     <Stack screenOptions={nativeStackScreenOptions(isDark)}>

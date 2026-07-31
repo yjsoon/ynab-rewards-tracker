@@ -1,12 +1,44 @@
-import type { RewardCalculation } from '../../storage/types';
+import { normalizePeriod } from '../../storage/helpers';
+import type { CreditCard, RewardCalculation } from '../../storage/types';
 
 import type { CategoryCardInsight } from '../types';
+import { SimpleRewardsCalculator } from '../simple-calculator';
 
 export const STATUS_PRIORITY: Record<CategoryCardInsight['status'], number> = {
   use: 3,
   consider: 2,
   avoid: 1,
 };
+
+/** Select at most one calculation for each card's exact current reward period. */
+export function selectCurrentCardCalculations(
+  cards: readonly CreditCard[],
+  calculations: readonly RewardCalculation[],
+  referenceDate = new Date(),
+): RewardCalculation[] {
+  const selected: RewardCalculation[] = [];
+
+  for (const card of cards) {
+    const period = SimpleRewardsCalculator.calculatePeriod(card, referenceDate);
+    const matches = calculations.filter((calculation) => {
+      if (calculation.cardId !== card.id) {
+        return false;
+      }
+      const normalized = normalizePeriod(calculation.period);
+      return (
+        normalized.start === period.start && normalized.end === period.end
+      ) || calculation.period === period.label;
+    });
+    const cardCalculation = matches.find(
+      ({ ruleId }) => ruleId === `card-${card.id}`,
+    ) ?? matches[matches.length - 1];
+    if (cardCalculation) {
+      selected.push(cardCalculation);
+    }
+  }
+
+  return selected;
+}
 
 export function resolveLatestPeriod(calculations: RewardCalculation[]): string | undefined {
   return calculations.reduce<string | undefined>((latest, calc) => {

@@ -5,6 +5,7 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native
 import {
   ActivityIndicator,
   Appearance,
+  Platform,
   StyleSheet,
   Text,
   useColorScheme,
@@ -30,10 +31,14 @@ function AppShell() {
   useCloudAutoSync();
   const systemScheme = useColorScheme();
   const preference = state.settings.theme ?? 'auto';
-  const activeScheme = preference === 'auto' ? systemScheme ?? 'light' : preference;
+  const activeScheme = Platform.OS === 'android'
+    ? 'light'
+    : preference === 'auto' ? systemScheme ?? 'light' : preference;
 
   useEffect(() => {
-    Appearance.setColorScheme(preference === 'auto' ? null : preference);
+    Appearance.setColorScheme(
+      Platform.OS === 'android' ? 'light' : preference === 'auto' ? null : preference,
+    );
   }, [preference]);
 
   useEffect(() => {

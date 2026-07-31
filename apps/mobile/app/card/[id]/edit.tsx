@@ -581,6 +581,7 @@ export default function EditCardScreen() {
   const sourceCard = state.cards.find((card) => card.id === cardId);
   const [form, setForm] = useState<CardForm | undefined>(() => sourceCard ? createForm(sourceCard) : undefined);
   const initialisedCardIdRef = useRef<string | undefined>(sourceCard?.id);
+  const pendingRefreshSinceDateRef = useRef<string | undefined>(undefined);
   const [error, setError] = useState<string>();
   const [saving, setSaving] = useState(false);
   const accountName = useMemo(
@@ -690,24 +691,40 @@ export default function EditCardScreen() {
     );
     const rewardConfigurationChanged = rewardConfigurationSignature(sourceCard)
       !== rewardConfigurationSignature(validation.card);
-    const needsFullPeriodRefresh = Boolean(
+    const newlyRequiresFullPeriodRefresh = Boolean(
       cacheEntry && (
         nextPeriodStart < cacheEntry.sinceDate
         || (cacheEntry.isComplete === false && rewardConfigurationChanged)
       ),
+    );
+    const refreshSinceDate = pendingRefreshSinceDateRef.current
+      && pendingRefreshSinceDateRef.current < nextPeriodStart
+      ? pendingRefreshSinceDateRef.current
+      : nextPeriodStart;
+    const needsFullPeriodRefresh = newlyRequiresFullPeriodRefresh
+      || Boolean(pendingRefreshSinceDateRef.current);
+    const canRefresh = Boolean(
+      state.pat && state.selectedBudget.id && state.trackedAccountIds.length > 0,
     );
     let cardSaved = false;
     try {
       await actions.setCards(nextCards);
       cardSaved = true;
       if (needsFullPeriodRefresh) {
-        await actions.syncBudgetsAndAccounts({ sinceDate: nextPeriodStart });
+        pendingRefreshSinceDateRef.current = refreshSinceDate;
+        if (!canRefresh) {
+          throw new Error('YNAB connection required for reward refresh');
+        }
+        await actions.syncBudgetsAndAccounts({ sinceDate: refreshSinceDate });
+        pendingRefreshSinceDateRef.current = undefined;
       }
       notification('success');
       router.back();
     } catch {
       setError(cardSaved
-        ? 'Card saved, but transactions couldn’t be refreshed. Try again to refresh this reward period.'
+        ? canRefresh
+          ? 'Card saved, but transactions couldn’t be refreshed. Tap Save to try again.'
+          : 'Card saved. Reconnect YNAB, then tap Save to refresh this reward period.'
         : 'Couldn’t save this card. Your previous settings are still intact.');
       notification('error');
     } finally {
