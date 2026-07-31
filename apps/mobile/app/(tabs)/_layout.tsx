@@ -2,6 +2,7 @@ import { Icon, Label, NativeTabs } from 'expo-router/unstable-native-tabs';
 import { Platform } from 'react-native';
 
 import { semanticColors } from '@/theme';
+import { featureFlags } from '@ynab-counter/app-core/config/featureFlags';
 
 export default function TabsLayout() {
   const supportsTabMinimisation = Platform.OS === 'ios' && Number(Platform.Version) >= 26;
@@ -23,6 +24,12 @@ export default function TabsLayout() {
         <Icon sf={{ default: 'list.bullet.rectangle', selected: 'list.bullet.rectangle.fill' }} />
         <Label>Activity</Label>
       </NativeTabs.Trigger>
+      {featureFlags.recommendations ? (
+        <NativeTabs.Trigger name="recommendations">
+          <Icon sf={{ default: 'lightbulb', selected: 'lightbulb.fill' }} />
+          <Label>Tips</Label>
+        </NativeTabs.Trigger>
+      ) : null}
       <NativeTabs.Trigger name="preferences">
         <Icon sf={{ default: 'gearshape', selected: 'gearshape.fill' }} />
         <Label>Settings</Label>

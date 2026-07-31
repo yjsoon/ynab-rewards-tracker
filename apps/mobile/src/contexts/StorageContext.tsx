@@ -714,14 +714,22 @@ export function StorageProvider({ children }: { children: ReactNode }) {
     setStatus((prev) => ({ ...prev, isRefreshing: true, refreshError: undefined }));
     try {
       const next = await hydrate();
+      const budgetChanged = next.selectedBudget.id !== state.selectedBudget.id;
       setState((prev) => ({
         ...next,
-        metadata: prev.metadata,
-        budgets: prev.budgets,
-        accounts: prev.accounts,
-        pending: prev.pending,
-        hasPendingChanges: prev.hasPendingChanges,
+        metadata: budgetChanged ? {} : prev.metadata,
+        budgets: budgetChanged ? [] : prev.budgets,
+        accounts: budgetChanged ? [] : prev.accounts,
+        pending: budgetChanged ? undefined : prev.pending,
+        hasPendingChanges: budgetChanged ? false : prev.hasPendingChanges,
       }));
+      if (budgetChanged && next.pat) {
+        await initialiseConnectionRef.current(
+          next.pat,
+          next.trackedAccountIds,
+          next.selectedBudget.id,
+        );
+      }
       setStatus((prev) => ({ ...prev, refreshError: undefined }));
     } catch (error) {
       setStatus((prev) => ({
@@ -731,7 +739,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
     } finally {
       setStatus((prev) => ({ ...prev, isRefreshing: false }));
     }
-  }, [performSync]);
+  }, [performSync, state.selectedBudget.id]);
 
   // Demo actions are intentionally memory-only. This keeps simulator QA
   // hermetic: no fixture values (including the invalid session credential)

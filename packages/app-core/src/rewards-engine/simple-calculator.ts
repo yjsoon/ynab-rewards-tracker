@@ -197,10 +197,12 @@ export class SimpleRewardsCalculator {
     const milesValuation = settings?.milesValuation ?? 0.01;
     const context = createSubcategoryContext(card);
 
-    const periodTransactions = transactions.filter((txn) => {
-      const txnDate = txn.date;
-      return txnDate >= period.start && txnDate <= period.end && txn.amount < 0;
-    });
+    const periodTransactions = transactions
+      .filter((txn) => {
+        const txnDate = txn.date;
+        return txnDate >= period.start && txnDate <= period.end && txn.amount < 0;
+      })
+      .sort((left, right) => left.date.localeCompare(right.date));
 
     const transactionRewards = Object.fromEntries(
       periodTransactions.map((transaction) => [

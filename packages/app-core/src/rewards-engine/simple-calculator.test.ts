@@ -144,4 +144,28 @@ describe('SimpleRewardsCalculator.calculateCardRewards', () => {
       reason: 'cap_reached',
     });
   });
+
+  it('consumes a period cap chronologically when transactions arrive newest-first', () => {
+    const card: CreditCard = {
+      ...createMilesCardWithSubcategories(),
+      subcategoriesEnabled: false,
+      maximumSpend: 10,
+    };
+    const transactions = [
+      { ...createTransaction('newer', -10_000), date: '2026-02-20' },
+      { ...createTransaction('older', -10_000), date: '2026-02-05' },
+    ];
+
+    const calculation = SimpleRewardsCalculator.calculateCardRewards(
+      card,
+      transactions,
+      period,
+    );
+
+    expect(calculation.transactionRewards.older).toMatchObject({ reward: 40 });
+    expect(calculation.transactionRewards.newer).toMatchObject({
+      reward: 0,
+      reason: 'cap_reached',
+    });
+  });
 });

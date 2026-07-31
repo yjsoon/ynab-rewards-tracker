@@ -27,6 +27,8 @@ import { useHaptics } from '@/hooks/useHaptics';
 import { flagColor } from '@/features/cards/presentation';
 import { semanticColors } from '@/theme';
 import { interaction, nativeMetrics, radii, spacing } from '@/theme/tokens';
+import { findBestDashboardEntry } from '@ynab-counter/app-core/storage/dashboardCache';
+import { getEarliestPeriodStart } from '@ynab-counter/app-core/rewards-engine/utils/periods';
 import type {
   CardSubcategory,
   CreditCard,
@@ -494,14 +496,31 @@ export default function EditCardScreen() {
 
     setSaving(true);
     setError(undefined);
+    const nextCards = state.cards.map(
+      (card) => card.id === sourceCard.id ? validation.card! : card,
+    );
+    const nextPeriodStart = getEarliestPeriodStart(nextCards);
+    const cacheEntry = findBestDashboardEntry(
+      state.cachedData?.dashboardTransactions,
+      state.selectedBudget.id,
+      state.trackedAccountIds,
+    );
+    const needsFullPeriodRefresh = Boolean(
+      cacheEntry && nextPeriodStart < cacheEntry.sinceDate,
+    );
+    let cardSaved = false;
     try {
-      await actions.setCards(
-        state.cards.map((card) => card.id === sourceCard.id ? validation.card! : card),
-      );
+      await actions.setCards(nextCards);
+      cardSaved = true;
+      if (needsFullPeriodRefresh) {
+        await actions.syncBudgetsAndAccounts({ sinceDate: nextPeriodStart });
+      }
       notification('success');
       router.back();
     } catch {
-      setError('Couldn’t save this card. Your previous settings are still intact.');
+      setError(cardSaved
+        ? 'Card saved, but transactions couldn’t be refreshed. Try again to refresh this reward period.'
+        : 'Couldn’t save this card. Your previous settings are still intact.');
       notification('error');
     } finally {
       setSaving(false);

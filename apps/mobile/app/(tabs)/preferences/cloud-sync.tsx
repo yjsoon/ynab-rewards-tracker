@@ -95,12 +95,12 @@ export default function CloudSyncScreen() {
       const raw = JSON.parse(await storage.exportSettings()) as StorageData;
       const payload = createCloudSyncPayload(raw);
       const result = await saveSettingsToCloud(phrase, payload);
-      if (remember) await rememberCloudSyncCode(result.phrase);
       await actions.setSettings({
         cloudSyncKeyId: result.keyId,
         cloudSyncLastSyncedAt: result.updatedAt,
         rememberCloudSyncCode: remember,
       });
+      if (remember) await rememberCloudSyncCode(result.phrase);
       setPhrase(result.phrase);
       setMessage({ text: 'Encrypted settings are up to date', tone: 'positive' });
     } catch (error) {
@@ -172,14 +172,6 @@ export default function CloudSyncScreen() {
     setPhrase(next);
     setRevealed(true);
     setMessage({ text: 'New 12-word code created. Save it somewhere safe.', tone: 'positive' });
-    if (remember) {
-      void rememberCloudSyncCode(next).catch((error: unknown) => {
-        setMessage({
-          text: error instanceof Error ? error.message : 'Couldn’t remember the new code',
-          tone: 'attention',
-        });
-      });
-    }
   };
 
   const removeBackup = () => {
@@ -233,6 +225,10 @@ export default function CloudSyncScreen() {
     const previousRemember = remember;
     try {
       if (enabled) {
+        const enteredKeyId = await computeKeyId(normaliseMnemonic(phrase));
+        if (enteredKeyId !== state.settings.cloudSyncKeyId) {
+          throw new Error('Save or restore this recovery code before turning on automatic sync.');
+        }
         setRemember(true);
         await rememberCloudSyncCode(phrase);
         await actions.setSettings({ rememberCloudSyncCode: true, autoSyncEnabled: true });
