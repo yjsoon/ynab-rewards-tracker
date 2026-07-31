@@ -230,3 +230,70 @@ describe('snapshot restore publication ownership', () => {
     expect(persisted.calculations).toEqual([]);
   });
 });
+
+describe('settings import dirty-marker preconditions', () => {
+  it('accepts options containing only the restore generation', async () => {
+    const initial = createDefaultStorage();
+    const imported = createDefaultStorage();
+    imported.settings.currency = 'SGD';
+    mocks.asyncValues.set(STORAGE_VERSION_KEY, STORAGE_VERSION);
+    mocks.asyncValues.set(STORAGE_KEY, JSON.stringify(initial));
+
+    const service = new StorageService();
+    await service.importSettings(JSON.stringify(imported), {
+      expectedGeneration: service.captureGeneration(),
+    });
+
+    const persisted = JSON.parse(await service.exportSettings());
+    expect(persisted.settings.currency).toBe('SGD');
+  });
+
+  it('allows a generation-owned manual restore while preserving its dirty marker', async () => {
+    const initial = createDefaultStorage();
+    initial.settings.cloudSyncLocalChangedAt = '2026-08-01T01:00:00.000Z';
+    const imported = createDefaultStorage();
+    imported.cards = [{
+      id: 'manual-restore-card',
+      name: 'Manual restore card',
+      issuer: 'Imported bank',
+      type: 'cashback',
+      featured: true,
+      earningRate: 2,
+      ynabAccountId: 'manual-account',
+    }];
+    mocks.asyncValues.set(STORAGE_VERSION_KEY, STORAGE_VERSION);
+    mocks.asyncValues.set(STORAGE_KEY, JSON.stringify(initial));
+
+    const service = new StorageService();
+    const restoreGeneration = service.invalidatePendingOperations();
+    await service.importSettings(JSON.stringify(imported), {
+      expectedGeneration: restoreGeneration,
+    });
+
+    const persisted = JSON.parse(await service.exportSettings());
+    expect(persisted.cards.map((card: { id: string }) => card.id)).toEqual([
+      'manual-restore-card',
+    ]);
+    expect(persisted.settings.cloudSyncLocalChangedAt).toBe(
+      '2026-08-01T01:00:00.000Z',
+    );
+  });
+
+  it('enforces an explicitly supplied dirty-marker precondition', async () => {
+    const initial = createDefaultStorage();
+    initial.settings.cloudSyncLocalChangedAt = '2026-08-01T02:00:00.000Z';
+    mocks.asyncValues.set(STORAGE_VERSION_KEY, STORAGE_VERSION);
+    mocks.asyncValues.set(STORAGE_KEY, JSON.stringify(initial));
+
+    const service = new StorageService();
+    await expect(service.importSettings(JSON.stringify(createDefaultStorage()), {
+      expectedGeneration: service.captureGeneration(),
+      expectedCloudSyncLocalChangedAt: null,
+    })).rejects.toThrow('Invalid settings file');
+
+    await expect(service.importSettings(JSON.stringify(createDefaultStorage()), {
+      expectedGeneration: service.captureGeneration(),
+      expectedCloudSyncLocalChangedAt: '2026-08-01T02:00:00.000Z',
+    })).resolves.toBeUndefined();
+  });
+});

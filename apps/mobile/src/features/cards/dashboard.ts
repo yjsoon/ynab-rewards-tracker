@@ -25,6 +25,8 @@ import {
   isDashboardCacheEntryTrusted,
 } from '@ynab-counter/app-core/storage';
 
+import { startLocalMidnightTicker } from './local-day-clock';
+
 export type DashboardSyncState = 'synced' | 'syncing' | 'attention' | 'offline';
 
 export interface RewardsDashboardModel {
@@ -215,6 +217,13 @@ export function useRewardsDashboard(referenceDate?: Date): RewardsDashboardModel
       setCurrentTimestamp(Date.now());
     }
   }, [referenceDate, state.metadata.lastSuccessfulSync]);
+
+  useEffect(() => {
+    if (referenceDate) {
+      return;
+    }
+    return startLocalMidnightTicker(setCurrentTimestamp);
+  }, [referenceDate]);
 
   const asOf = useMemo(
     () => referenceDate ?? new Date(currentTimestamp),

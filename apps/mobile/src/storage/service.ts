@@ -914,8 +914,9 @@ export class StorageService {
       const storage = await this.load() as MutableStorageData;
       this.assertGeneration(expectedGeneration);
       if (
-        options &&
-        (storage.settings.cloudSyncLocalChangedAt ?? null) !==
+        options
+        && Object.prototype.hasOwnProperty.call(options, 'expectedCloudSyncLocalChangedAt')
+        && (storage.settings.cloudSyncLocalChangedAt ?? null) !==
           (options.expectedCloudSyncLocalChangedAt ?? null)
       ) {
         throw new Error('Local settings changed during Cloud Sync. Try again to reconcile.');
