@@ -7,7 +7,7 @@ export function hasCloudSyncConflict(): boolean {
 }
 
 function notifyConflictChanged(): void {
-  if (typeof window !== 'undefined') {
+  if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
     window.dispatchEvent(new Event(CLOUD_SYNC_CONFLICT_EVENT));
   }
 }

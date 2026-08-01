@@ -31,6 +31,12 @@ export type RestoredCloudSettings<T> = CloudSyncMetadata & {
   data: T;
 };
 
+export type CurrentCloudSyncRevision = {
+  keyId: string;
+  phrase: string;
+  updatedAt: string | null;
+};
+
 function endpoint(): string {
   const configured = process.env.EXPO_PUBLIC_CLOUD_SYNC_URL?.trim();
   return configured || DEFAULT_CLOUD_SYNC_ENDPOINT;
@@ -114,6 +120,24 @@ export async function saveSettingsToCloud<T>(
   });
   const metadata = await handleResponse<CloudSyncMetadata>(response);
   return { ...metadata, keyId, phrase };
+}
+
+export async function fetchCurrentCloudSyncRevision(
+  inputPhrase: string,
+): Promise<CurrentCloudSyncRevision> {
+  const phrase = validPhrase(inputPhrase);
+  const keyId = await computeKeyId(phrase);
+  const response = await request(`${endpoint()}?key=${encodeURIComponent(keyId)}`, {
+    headers: { Accept: 'application/json' },
+  });
+
+  if (response.status === 404) return { keyId, phrase, updatedAt: null };
+
+  const stored = await handleResponse<CloudSyncDownload>(response);
+  if (typeof stored?.updatedAt !== 'string' || stored.updatedAt.length === 0) {
+    throw new Error('Cloud Sync returned an unreadable backup.');
+  }
+  return { keyId, phrase, updatedAt: stored.updatedAt };
 }
 
 export async function restoreSettingsFromCloud<T>(

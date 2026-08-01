@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   expectedCloudSyncRevision,
   hasDivergentCloudLineage,
+  planManualCloudSyncSave,
 } from './cloud-sync-revision';
 
 describe('expectedCloudSyncRevision', () => {
@@ -21,6 +22,36 @@ describe('expectedCloudSyncRevision', () => {
     expect(expectedCloudSyncRevision(freshSnapshotSettings, 'another-key'))
       .toBeNull();
     expect(staleUiSettings.cloudSyncLastSyncedAt).toBe('old-revision');
+  });
+});
+
+describe('planManualCloudSyncSave', () => {
+  it('uses the freshly fetched cloud revision after an overwrite confirmation', () => {
+    expect(planManualCloudSyncSave('shared-revision', 'new-cloud-revision')).toEqual({
+      needsOverwriteConfirmation: true,
+      expectedUpdatedAt: 'new-cloud-revision',
+    });
+  });
+
+  it('saves immediately when the local and cloud revisions still match', () => {
+    expect(planManualCloudSyncSave('shared-revision', 'shared-revision')).toEqual({
+      needsOverwriteConfirmation: false,
+      expectedUpdatedAt: 'shared-revision',
+    });
+  });
+
+  it('requires confirmation before recreating a remotely deleted backup', () => {
+    expect(planManualCloudSyncSave('shared-revision', null)).toEqual({
+      needsOverwriteConfirmation: true,
+      expectedUpdatedAt: null,
+    });
+  });
+
+  it('requires confirmation before replacing a backup new to this iPhone', () => {
+    expect(planManualCloudSyncSave(null, 'cloud-revision')).toEqual({
+      needsOverwriteConfirmation: true,
+      expectedUpdatedAt: 'cloud-revision',
+    });
   });
 });
 

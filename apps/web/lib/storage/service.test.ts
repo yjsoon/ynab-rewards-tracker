@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { STORAGE_KEY } from "@ynab-counter/app-core/storage";
 
+import {
+  CLOUD_SYNC_CONFLICT_EVENT,
+  CLOUD_SYNC_CONFLICT_STORAGE_KEY,
+} from "../cloud-sync/conflict-state";
 import { StorageService } from "./service";
 import type { CreditCard } from "./types";
 
@@ -38,6 +42,39 @@ function readStoredYnab(): Record<string, unknown> {
 
   return JSON.parse(stored).ynab;
 }
+
+describe("StorageService clearAll", () => {
+  it("clears the persistent Cloud Sync conflict marker and updates its banner", () => {
+    const localStorageMock = createLocalStorageMock();
+    const dispatchEvent = vi.fn();
+
+    Object.defineProperty(globalThis, "window", {
+      value: {
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+        dispatchEvent,
+      },
+      configurable: true,
+      writable: true,
+    });
+    Object.defineProperty(globalThis, "localStorage", {
+      value: localStorageMock,
+      configurable: true,
+      writable: true,
+    });
+
+    localStorage.setItem(STORAGE_KEY, "stored data");
+    localStorage.setItem(CLOUD_SYNC_CONFLICT_STORAGE_KEY, "1");
+
+    new StorageService().clearAll();
+
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+    expect(localStorage.getItem(CLOUD_SYNC_CONFLICT_STORAGE_KEY)).toBeNull();
+    expect(dispatchEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ type: CLOUD_SYNC_CONFLICT_EVENT }),
+    );
+  });
+});
 
 describe("StorageService budget accounts cache", () => {
   beforeEach(() => {

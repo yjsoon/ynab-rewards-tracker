@@ -9,6 +9,26 @@ export function expectedCloudSyncRevision(
     : null;
 }
 
+export type ManualCloudSyncSavePlan = {
+  needsOverwriteConfirmation: boolean;
+  expectedUpdatedAt: string | null;
+};
+
+/**
+ * Plans a manual save against a revision fetched immediately beforehand.
+ * A changed (or removed) backup requires confirmation, and the confirmed
+ * write uses that fetched revision so the server can still reject a later race.
+ */
+export function planManualCloudSyncSave(
+  localExpectedUpdatedAt: string | null,
+  currentCloudUpdatedAt: string | null,
+): ManualCloudSyncSavePlan {
+  return {
+    needsOverwriteConfirmation: localExpectedUpdatedAt !== currentCloudUpdatedAt,
+    expectedUpdatedAt: currentCloudUpdatedAt,
+  };
+}
+
 export function hasDivergentCloudLineage(
   settingsSnapshot: AppSettings,
   phraseKeyId: string,

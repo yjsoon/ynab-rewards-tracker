@@ -48,6 +48,7 @@ import type {
   MutableStorageData,
   MutableThemeGroup,
 } from "@ynab-counter/app-core/storage";
+import { clearCloudSyncConflict } from "@/lib/cloud-sync/conflict-state";
 
 export class StorageService {
   private static readonly DASHBOARD_CACHE_LIMIT = 500;
@@ -970,6 +971,7 @@ export class StorageService {
     }
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(STORAGE_VERSION_KEY);
+    clearCloudSyncConflict();
     this.invalidateCache();
   }
 }

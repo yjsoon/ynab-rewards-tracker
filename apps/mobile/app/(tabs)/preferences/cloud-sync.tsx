@@ -16,6 +16,7 @@ import { useStorage } from '@/contexts/StorageContext';
 import { SettingsFooter, SettingsRow } from '@/features/preferences/SettingsRow';
 import {
   deleteSettingsFromCloud,
+  fetchCurrentCloudSyncRevision,
   forgetCloudSyncCode,
   generateCloudSyncCode,
   loadRememberedCloudSyncCode,
@@ -23,7 +24,10 @@ import {
   restoreSettingsFromCloud,
   saveSettingsToCloud,
 } from '@/lib/cloud-sync';
-import { expectedCloudSyncRevision } from '@/lib/cloud-sync-revision';
+import {
+  expectedCloudSyncRevision,
+  planManualCloudSyncSave,
+} from '@/lib/cloud-sync-revision';
 import {
   acquireCloudSyncLease,
   type CloudSyncLease,
@@ -53,17 +57,22 @@ export default function CloudSyncScreen() {
   const operationRef = useRef<Operation>(undefined);
   const activeLeaseRef = useRef<CloudSyncLease | undefined>(undefined);
   const parkedRestoreLeaseRef = useRef<CloudSyncLease | undefined>(undefined);
+  const parkedSaveLeaseRef = useRef<CloudSyncLease | undefined>(undefined);
 
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      // Active requests retain the lease until their own finally block. A
-      // restore waiting at the native confirmation alert can release now.
+      // Active requests retain the lease until their own completion path.
+      // Operations waiting at a native confirmation alert can release now.
       const parkedLease = parkedRestoreLeaseRef.current;
       parkedLease?.release();
       if (activeLeaseRef.current === parkedLease) activeLeaseRef.current = undefined;
       parkedRestoreLeaseRef.current = undefined;
+      const parkedSaveLease = parkedSaveLeaseRef.current;
+      parkedSaveLease?.release();
+      if (activeLeaseRef.current === parkedSaveLease) activeLeaseRef.current = undefined;
+      parkedSaveLeaseRef.current = undefined;
       operationRef.current = undefined;
     };
   }, []);
@@ -123,6 +132,7 @@ export default function CloudSyncScreen() {
     lease.release();
     if (activeLeaseRef.current === lease) activeLeaseRef.current = undefined;
     if (parkedRestoreLeaseRef.current === lease) parkedRestoreLeaseRef.current = undefined;
+    if (parkedSaveLeaseRef.current === lease) parkedSaveLeaseRef.current = undefined;
     if (operationRef.current === completedOperation) {
       operationRef.current = undefined;
       if (mountedRef.current) setOperation(undefined);
@@ -160,40 +170,113 @@ export default function CloudSyncScreen() {
     }
   };
 
+  const completeSave = async (
+    raw: StorageData,
+    payload: ReturnType<typeof createCloudSyncPayload>,
+    normalisedPhrase: string,
+    expectedUpdatedAt: string | null,
+    storageGeneration: number,
+  ) => {
+    const result = await saveSettingsToCloud(normalisedPhrase, payload, expectedUpdatedAt);
+    if (!storage.isGenerationCurrent(storageGeneration)) return;
+    const completedSettings = await storage.completeCloudSyncSnapshot(
+      raw.settings.cloudSyncLocalChangedAt,
+      {
+        cloudSyncKeyId: result.keyId,
+        cloudSyncLastSyncedAt: result.updatedAt,
+      },
+      storageGeneration,
+    );
+    if (!storage.isGenerationCurrent(storageGeneration)) return;
+    const shouldRemember = completedSettings.rememberCloudSyncCode ?? remember;
+    if (shouldRemember) {
+      await rememberCloudSyncCode(result.phrase);
+    } else {
+      await forgetCloudSyncCode();
+    }
+    if (!storage.isGenerationCurrent(storageGeneration)) return;
+    if (mountedRef.current) setRemember(shouldRemember);
+    await actions.refresh(storageGeneration);
+    if (!storage.isGenerationCurrent(storageGeneration) || !mountedRef.current) return;
+    setPhrase(result.phrase);
+    setMessage({ text: 'Encrypted settings are up to date', tone: 'positive' });
+  };
+
   const saveNow = async () => {
     const storageGeneration = storage.captureGeneration();
     const lease = await acquireManualLease('save', storageGeneration);
     if (!lease) return;
+    let saveParked = false;
     setMessage(undefined);
     try {
       const raw = JSON.parse(await storage.exportSettings()) as StorageData;
       if (!mountedRef.current || !storage.isGenerationCurrent(storageGeneration)) return;
       const payload = createCloudSyncPayload(raw);
-      const phraseKeyId = await computeKeyId(normaliseMnemonic(phrase));
+      const normalisedPhrase = normaliseMnemonic(phrase);
+      const currentCloud = await fetchCurrentCloudSyncRevision(normalisedPhrase);
+      if (!mountedRef.current || !storage.isGenerationCurrent(storageGeneration)) return;
+      const phraseKeyId = currentCloud.keyId;
       const expectedUpdatedAt = expectedCloudSyncRevision(raw.settings, phraseKeyId);
-      const result = await saveSettingsToCloud(phrase, payload, expectedUpdatedAt);
-      if (!storage.isGenerationCurrent(storageGeneration)) return;
-      const completedSettings = await storage.completeCloudSyncSnapshot(
-        raw.settings.cloudSyncLocalChangedAt,
-        {
-          cloudSyncKeyId: result.keyId,
-          cloudSyncLastSyncedAt: result.updatedAt,
-        },
+      const savePlan = planManualCloudSyncSave(expectedUpdatedAt, currentCloud.updatedAt);
+
+      if (savePlan.needsOverwriteConfirmation) {
+        let saveAccepted = false;
+        saveParked = true;
+        parkedSaveLeaseRef.current = lease;
+        Alert.alert(
+          'Replace cloud backup?',
+          'Cloud Sync changed since this iPhone last synced. Save this iPhone’s settings over it?',
+          [
+            {
+              text: 'Cancel',
+              style: 'cancel',
+              onPress: () => finishManualOperation('save', lease),
+            },
+            {
+              text: 'Replace Backup',
+              style: 'destructive',
+              onPress: () => {
+                saveAccepted = true;
+                parkedSaveLeaseRef.current = undefined;
+                if (!mountedRef.current || !storage.isGenerationCurrent(storageGeneration)) {
+                  finishManualOperation('save', lease);
+                  return;
+                }
+                void completeSave(
+                  raw,
+                  payload,
+                  normalisedPhrase,
+                  savePlan.expectedUpdatedAt,
+                  storageGeneration,
+                )
+                  .catch((error: unknown) => {
+                    if (!mountedRef.current || !storage.isGenerationCurrent(storageGeneration)) return;
+                    setMessage({
+                      text: error instanceof Error ? error.message : 'Couldn’t save to Cloud Sync',
+                      tone: 'attention',
+                    });
+                  })
+                  .finally(() => finishManualOperation('save', lease));
+              },
+            },
+          ],
+          {
+            cancelable: true,
+            onDismiss: () => {
+              if (!saveAccepted) finishManualOperation('save', lease);
+            },
+          },
+        );
+        return;
+      }
+
+      await completeSave(
+        raw,
+        payload,
+        normalisedPhrase,
+        savePlan.expectedUpdatedAt,
         storageGeneration,
       );
-      if (!storage.isGenerationCurrent(storageGeneration)) return;
-      const shouldRemember = completedSettings.rememberCloudSyncCode ?? remember;
-      if (shouldRemember) {
-        await rememberCloudSyncCode(result.phrase);
-      } else {
-        await forgetCloudSyncCode();
-      }
-      if (!storage.isGenerationCurrent(storageGeneration)) return;
-      if (mountedRef.current) setRemember(shouldRemember);
-      await actions.refresh(storageGeneration);
-      if (!storage.isGenerationCurrent(storageGeneration) || !mountedRef.current) return;
-      setPhrase(result.phrase);
-      setMessage({ text: 'Encrypted settings are up to date', tone: 'positive' });
     } catch (error) {
       if (!mountedRef.current || !storage.isGenerationCurrent(storageGeneration)) return;
       setMessage({
@@ -201,7 +284,7 @@ export default function CloudSyncScreen() {
         tone: 'attention',
       });
     } finally {
-      finishManualOperation('save', lease);
+      if (!saveParked) finishManualOperation('save', lease);
     }
   };
 
