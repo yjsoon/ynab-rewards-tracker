@@ -14,6 +14,7 @@ import { fetchBudgets } from '@/lib/ynab-api';
 import { isYnabApiError } from '@/lib/ynab-client';
 import { createDemoStorageFixture } from '@/lib/demo-data';
 import { runSetupSyncChain } from './setup-sync-chain';
+import { retryExpectedStorageCancellation } from './storage-cancellation';
 import { SimpleRewardsCalculator } from '@ynab-counter/app-core/rewards-engine';
 import { createRewardCalculationFromSimple } from '@ynab-counter/app-core/rewards-engine/utils/reward-calculation';
 import { getEarliestPeriodStart } from '@ynab-counter/app-core/rewards-engine/utils/periods';
@@ -770,10 +771,12 @@ export function StorageProvider({ children }: { children: ReactNode }) {
 
       let hydrated: StorageState;
       try {
-        hydrated = await hydrate();
-        if (cancelled || !storage.isGenerationCurrent(storageGeneration)) {
-          return;
-        }
+        const next = await retryExpectedStorageCancellation(
+          hydrate,
+          () => !cancelled && storage.isGenerationCurrent(storageGeneration),
+        );
+        if (!next) return;
+        hydrated = next;
       } catch (error) {
         if (cancelled || !storage.isGenerationCurrent(storageGeneration)) {
           return;
@@ -821,7 +824,11 @@ export function StorageProvider({ children }: { children: ReactNode }) {
 
     setStatus((prev) => ({ ...prev, isRefreshing: true, refreshError: undefined }));
     try {
-      const next = await hydrate();
+      const next = await retryExpectedStorageCancellation(
+        hydrate,
+        () => storage.isGenerationCurrent(storageGeneration),
+      );
+      if (!next) return;
       if (!storage.isGenerationCurrent(storageGeneration)) return;
       const budgetChanged = next.selectedBudget.id !== state.selectedBudget.id;
       setState((prev) => ({

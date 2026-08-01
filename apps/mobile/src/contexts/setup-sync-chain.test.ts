@@ -40,6 +40,45 @@ describe('runSetupSyncChain', () => {
     expect(completed).toBe(true);
   });
 
+  it('does not start the full sync when ownership changes while cards load', async () => {
+    let currentGeneration = 12;
+    const runFullSync = vi.fn(async () => {});
+
+    const completed = await runSetupSyncChain({
+      expectedGeneration: 12,
+      isCurrent: (generation) => generation === currentGeneration,
+      runInitialSync: async () => {},
+      shouldRunFullSync: true,
+      loadCards: async () => {
+        currentGeneration = 13;
+        return ['stale-card'];
+      },
+      runFullSync,
+    });
+
+    expect(runFullSync).not.toHaveBeenCalled();
+    expect(completed).toBe(false);
+  });
+
+  it('reports cancellation when ownership changes during the full sync', async () => {
+    let currentGeneration = 21;
+    const runFullSync = vi.fn(async () => {
+      currentGeneration = 22;
+    });
+
+    const completed = await runSetupSyncChain({
+      expectedGeneration: 21,
+      isCurrent: (generation) => generation === currentGeneration,
+      runInitialSync: async () => {},
+      shouldRunFullSync: true,
+      loadCards: async () => ['current-card'],
+      runFullSync,
+    });
+
+    expect(runFullSync).toHaveBeenCalledWith(['current-card'], 21);
+    expect(completed).toBe(false);
+  });
+
   it('does not let an older overlapping chain resume after a newer owner starts', async () => {
     let currentGeneration = 1;
     let releaseFirstSync: (() => void) | undefined;

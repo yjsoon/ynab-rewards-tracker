@@ -49,6 +49,9 @@ const LEGACY_PAT_SECURE_STORE_KEYS = [
   'ynab-counter:pat',
 ] as const;
 
+class StorageOperationCancelledError extends Error {}
+class SettingsImportConflictError extends Error {}
+
 export class StorageService {
   private static readonly DASHBOARD_CACHE_LIMIT = DASHBOARD_TRANSACTION_CACHE_LIMIT;
   private static readonly DASHBOARD_CACHE_MAX_ENTRIES = 5;
@@ -158,9 +161,9 @@ export class StorageService {
     return generation === this.operationGeneration;
   }
 
-  private enqueueWrite(operation: () => Promise<void>): Promise<void> {
+  private enqueueWrite<T>(operation: () => Promise<T>): Promise<T> {
     const queued = this.writeBarrier.then(operation, operation);
-    this.writeBarrier = queued.catch(() => undefined);
+    this.writeBarrier = queued.then(() => undefined, () => undefined);
     return queued;
   }
 
@@ -198,7 +201,7 @@ export class StorageService {
 
   private assertGeneration(generation: number): void {
     if (!this.isGenerationCurrent(generation)) {
-      throw new Error('Storage operation was cancelled.');
+      throw new StorageOperationCancelledError('Storage operation was cancelled.');
     }
   }
 
@@ -206,10 +209,10 @@ export class StorageService {
     data: StorageData,
     expectedGeneration = this.operationGeneration,
   ): Promise<void> {
-    const serialized = JSON.stringify(data);
     try {
       await this.enqueueWrite(async () => {
         this.assertGeneration(expectedGeneration);
+        const serialized = JSON.stringify(data);
         await AsyncStorageService.setString(STORAGE_KEY, serialized);
         await AsyncStorageService.setString(STORAGE_VERSION_KEY, STORAGE_VERSION);
         this.assertGeneration(expectedGeneration);
@@ -235,6 +238,55 @@ export class StorageService {
     return true;
   }
 
+  private cloneStorage(data: StorageData): MutableStorageData {
+    return JSON.parse(JSON.stringify(data)) as MutableStorageData;
+  }
+
+  private async updateStorageAtomically<T>(
+    expectedGeneration: number,
+    update: (draft: MutableStorageData) => T,
+    validate?: (current: Readonly<StorageData>) => void,
+  ): Promise<T> {
+    this.assertGeneration(expectedGeneration);
+    await this.load();
+    this.assertGeneration(expectedGeneration);
+
+    return this.enqueueWrite(async () => {
+      this.assertGeneration(expectedGeneration);
+      const current = this.cache;
+      if (!current) {
+        throw new StorageOperationCancelledError('Storage operation was cancelled.');
+      }
+
+      // Preconditions belong to the single barrier-current snapshot. The
+      // transformation below may be replayed after native persistence to fold
+      // in legacy cache edits, so validation must never run during that replay.
+      validate?.(current);
+      const draft = this.cloneStorage(current);
+      update(draft);
+      await AsyncStorageService.setString(STORAGE_KEY, JSON.stringify(draft));
+      await AsyncStorageService.setString(STORAGE_VERSION_KEY, STORAGE_VERSION);
+      this.assertGeneration(expectedGeneration);
+
+      // Existing mutators may have edited the cached object while persistence
+      // was awaiting native storage. Reapply this synchronous transformation
+      // to that latest object, preserving unrelated edits; their queued save
+      // will serialize after this critical section and persist the merged state.
+      const latest = this.cache;
+      if (!latest) {
+        throw new StorageOperationCancelledError('Storage operation was cancelled.');
+      }
+      const published = this.cloneStorage(latest);
+      const result = update(published);
+      Object.keys(latest).forEach((key) => {
+        Reflect.deleteProperty(latest, key);
+      });
+      Object.assign(latest, published);
+      this.cache = latest;
+      return result;
+    });
+  }
+
   async getSettings(): Promise<AppSettings> {
     return (await this.load()).settings || {};
   }
@@ -243,14 +295,12 @@ export class StorageService {
     settings: Partial<AppSettings>,
     expectedGeneration = this.operationGeneration,
   ): Promise<void> {
-    this.assertGeneration(expectedGeneration);
-    const storage = await this.load();
-    this.assertGeneration(expectedGeneration);
-    storage.settings = {
-      ...storage.settings,
-      ...settings,
-    };
-    await this.save(storage, expectedGeneration);
+    await this.updateStorageAtomically(expectedGeneration, (storage) => {
+      storage.settings = {
+        ...storage.settings,
+        ...settings,
+      };
+    });
   }
 
   async completeCloudSyncSnapshot(
@@ -467,29 +517,30 @@ export class StorageService {
 
   async replaceCards(
     cards: readonly CreditCard[],
+    expectedGeneration = this.operationGeneration,
   ): Promise<Pick<StorageData, 'cards' | 'rules' | 'tagMappings' | 'calculations' | 'themeGroups'>> {
-    const storage = await this.load() as MutableStorageData;
-    const flagNames = storage.cachedData?.flagNames;
-    const nextCards = cards.map((card) =>
-      normaliseCard({ ...card } as MutableCard, flagNames)
-    );
-    const nextCardIds = new Set(nextCards.map((card) => card.id));
+    return this.updateStorageAtomically(expectedGeneration, (storage) => {
+      const flagNames = storage.cachedData?.flagNames;
+      const nextCards = cards.map((card) =>
+        normaliseCard({ ...card } as MutableCard, flagNames)
+      );
+      const nextCardIds = new Set(nextCards.map((card) => card.id));
 
-    storage.cards = nextCards;
-    storage.rules = storage.rules.filter((rule) => nextCardIds.has(rule.cardId));
-    storage.tagMappings = storage.tagMappings.filter((mapping) => nextCardIds.has(mapping.cardId));
-    storage.calculations = storage.calculations.filter((calculation) => nextCardIds.has(calculation.cardId));
-    storage.hiddenCards = (storage.hiddenCards ?? [])
-      .filter((hiddenCard) => nextCardIds.has(hiddenCard.cardId));
-    pruneThemeGroups(storage);
-    await this.save(storage);
-    return {
-      cards: [...storage.cards],
-      rules: [...storage.rules],
-      tagMappings: [...storage.tagMappings],
-      calculations: [...storage.calculations],
-      themeGroups: [...storage.themeGroups],
-    };
+      storage.cards = nextCards;
+      storage.rules = storage.rules.filter((rule) => nextCardIds.has(rule.cardId));
+      storage.tagMappings = storage.tagMappings.filter((mapping) => nextCardIds.has(mapping.cardId));
+      storage.calculations = storage.calculations.filter((calculation) => nextCardIds.has(calculation.cardId));
+      storage.hiddenCards = (storage.hiddenCards ?? [])
+        .filter((hiddenCard) => nextCardIds.has(hiddenCard.cardId));
+      pruneThemeGroups(storage);
+      return {
+        cards: [...storage.cards],
+        rules: [...storage.rules],
+        tagMappings: [...storage.tagMappings],
+        calculations: [...storage.calculations],
+        themeGroups: [...storage.themeGroups],
+      };
+    });
   }
 
   async deleteCard(cardId: string): Promise<void> {
@@ -513,11 +564,14 @@ export class StorageService {
     await this.save(storage);
   }
 
-  async replaceRules(rules: readonly RewardRule[]): Promise<RewardRule[]> {
-    const storage = await this.load();
-    storage.rules = rules.map((rule) => ({ ...rule }));
-    await this.save(storage);
-    return [...storage.rules];
+  async replaceRules(
+    rules: readonly RewardRule[],
+    expectedGeneration = this.operationGeneration,
+  ): Promise<RewardRule[]> {
+    return this.updateStorageAtomically(expectedGeneration, (storage) => {
+      storage.rules = rules.map((rule) => ({ ...rule }));
+      return [...storage.rules];
+    });
   }
 
   async deleteRule(ruleId: string): Promise<void> {
@@ -562,14 +616,17 @@ export class StorageService {
     await this.save(storage);
   }
 
-  async replaceThemeGroups(groups: readonly ThemeGroup[]): Promise<ThemeGroup[]> {
-    const storage = await this.load() as MutableStorageData;
-    storage.themeGroups = groups.map((group, index) =>
-      normaliseThemeGroup({ ...group } as MutableThemeGroup, storage, index)
-    );
-    pruneThemeGroups(storage);
-    await this.save(storage);
-    return [...storage.themeGroups];
+  async replaceThemeGroups(
+    groups: readonly ThemeGroup[],
+    expectedGeneration = this.operationGeneration,
+  ): Promise<ThemeGroup[]> {
+    return this.updateStorageAtomically(expectedGeneration, (storage) => {
+      storage.themeGroups = groups.map((group, index) =>
+        normaliseThemeGroup({ ...group } as MutableThemeGroup, storage, index)
+      );
+      pruneThemeGroups(storage);
+      return [...storage.themeGroups];
+    });
   }
 
   async deleteThemeGroup(groupId: string): Promise<void> {
@@ -593,11 +650,14 @@ export class StorageService {
     await this.save(storage);
   }
 
-  async replaceTagMappings(mappings: readonly TagMapping[]): Promise<TagMapping[]> {
-    const storage = await this.load();
-    storage.tagMappings = mappings.map((mapping) => ({ ...mapping }));
-    await this.save(storage);
-    return [...storage.tagMappings];
+  async replaceTagMappings(
+    mappings: readonly TagMapping[],
+    expectedGeneration = this.operationGeneration,
+  ): Promise<TagMapping[]> {
+    return this.updateStorageAtomically(expectedGeneration, (storage) => {
+      storage.tagMappings = mappings.map((mapping) => ({ ...mapping }));
+      return [...storage.tagMappings];
+    });
   }
 
   async deleteTagMapping(mappingId: string): Promise<void> {
@@ -747,11 +807,14 @@ export class StorageService {
     await this.save(storage);
   }
 
-  async replaceHiddenCards(hiddenCards: readonly HiddenCard[]): Promise<HiddenCard[]> {
-    const storage = await this.load() as MutableStorageData;
-    storage.hiddenCards = normaliseHiddenCards([...hiddenCards]);
-    await this.save(storage);
-    return [...storage.hiddenCards];
+  async replaceHiddenCards(
+    hiddenCards: readonly HiddenCard[],
+    expectedGeneration = this.operationGeneration,
+  ): Promise<HiddenCard[]> {
+    return this.updateStorageAtomically(expectedGeneration, (storage) => {
+      storage.hiddenCards = normaliseHiddenCards([...hiddenCards]);
+      return [...storage.hiddenCards];
+    });
   }
 
   async unhideCard(cardId: string): Promise<void> {
@@ -904,81 +967,89 @@ export class StorageService {
     },
   ): Promise<void> {
     try {
-      const expectedGeneration = options?.expectedGeneration ?? this.operationGeneration;
-      this.assertGeneration(expectedGeneration);
       const imported = JSON.parse(jsonString) as Partial<MutableStorageData>;
+
       if (!imported || typeof imported !== 'object' || Array.isArray(imported)) {
         throw new Error('Expected a storage object');
       }
 
-      const storage = await this.load() as MutableStorageData;
-      this.assertGeneration(expectedGeneration);
-      if (
-        options
-        && Object.prototype.hasOwnProperty.call(options, 'expectedCloudSyncLocalChangedAt')
-        && (storage.settings.cloudSyncLocalChangedAt ?? null) !==
-          (options.expectedCloudSyncLocalChangedAt ?? null)
-      ) {
-        throw new Error('Local settings changed during Cloud Sync. Try again to reconcile.');
-      }
-      const localSettings = { ...storage.settings };
-      const localFormatterApiKeys = storage.settings.statementFormatter?.apiKeys;
+      const expectedGeneration = options?.expectedGeneration ?? this.operationGeneration;
+      await this.updateStorageAtomically(expectedGeneration, (storage) => {
+        const localSettings = { ...storage.settings };
+        const localFormatterApiKeys = storage.settings.statementFormatter?.apiKeys;
+        // The atomic helper may replay this transformation over cache edits
+        // made while native persistence was awaiting. Clone the parsed input
+        // for each run so migrations never mutate the replay source.
+        const importedDraft = JSON.parse(JSON.stringify(imported)) as Partial<MutableStorageData>;
 
-      Object.assign(storage, imported);
+        Object.assign(storage, importedDraft);
 
-      const importedYnab = imported.ynab && typeof imported.ynab === 'object'
-        ? imported.ynab
-        : {};
-      storage.ynab = { ...importedYnab };
-      // PAT ownership stays exclusively with SecureStore. Imported payloads
-      // must never replace it or reintroduce an embedded credential.
-      delete storage.ynab.pat;
+        const importedYnab = importedDraft.ynab && typeof importedDraft.ynab === 'object'
+          ? importedDraft.ynab
+          : {};
+        storage.ynab = { ...importedYnab };
+        // PAT ownership stays exclusively with SecureStore. Imported payloads
+        // must never replace it or reintroduce an embedded credential.
+        delete storage.ynab.pat;
 
-      storage.settings = storage.settings && typeof storage.settings === 'object'
-        ? { ...storage.settings }
-        : {};
+        storage.settings = storage.settings && typeof storage.settings === 'object'
+          ? { ...storage.settings }
+          : {};
 
-      const localSettingKeys = [
-        'cloudSyncKeyId',
-        'cloudSyncLastSyncedAt',
-        'cloudSyncLocalChangedAt',
-        'cloudSyncMnemonic',
-        'rememberCloudSyncCode',
-        'autoSyncEnabled',
-      ] as const;
-      for (const key of localSettingKeys) {
-        const localValue = localSettings[key];
-        if (localValue === undefined) {
-          Reflect.deleteProperty(storage.settings, key);
-        } else {
-          Object.assign(storage.settings, { [key]: localValue });
+        const localSettingKeys = [
+          'cloudSyncKeyId',
+          'cloudSyncLastSyncedAt',
+          'cloudSyncLocalChangedAt',
+          'cloudSyncMnemonic',
+          'rememberCloudSyncCode',
+          'autoSyncEnabled',
+        ] as const;
+        for (const key of localSettingKeys) {
+          const localValue = localSettings[key];
+          if (localValue === undefined) {
+            Reflect.deleteProperty(storage.settings, key);
+          } else {
+            Object.assign(storage.settings, { [key]: localValue });
+          }
         }
-      }
 
-      if (localFormatterApiKeys) {
-        storage.settings.statementFormatter = {
-          ...(storage.settings.statementFormatter ?? {}),
-          apiKeys: { ...localFormatterApiKeys },
-        };
-      } else if (storage.settings.statementFormatter) {
-        const formatter = { ...storage.settings.statementFormatter };
-        delete formatter.apiKeys;
-        storage.settings.statementFormatter = formatter;
-      }
+        if (localFormatterApiKeys) {
+          storage.settings.statementFormatter = {
+            ...(storage.settings.statementFormatter ?? {}),
+            apiKeys: { ...localFormatterApiKeys },
+          };
+        } else if (storage.settings.statementFormatter) {
+          const formatter = { ...storage.settings.statementFormatter };
+          delete formatter.apiKeys;
+          storage.settings.statementFormatter = formatter;
+        }
 
-      applyStorageMigrations(storage);
-      storage.cards = Array.isArray(storage.cards)
-        ? storage.cards.map((card) =>
-            normaliseCard({ ...card } as MutableCard, storage.cachedData?.flagNames)
-          )
-        : [];
-      pruneThemeGroups(storage);
-      storage.hiddenCards = normaliseHiddenCards(storage.hiddenCards || []);
-      invalidateDerivedDataAfterSettingsImport(storage);
-      await this.save(storage, expectedGeneration);
+        applyStorageMigrations(storage);
+        storage.cards = Array.isArray(storage.cards)
+          ? storage.cards.map((card) =>
+              normaliseCard({ ...card } as MutableCard, storage.cachedData?.flagNames)
+            )
+          : [];
+        pruneThemeGroups(storage);
+        storage.hiddenCards = normaliseHiddenCards(storage.hiddenCards || []);
+        invalidateDerivedDataAfterSettingsImport(storage);
+      }, (current) => {
+        if (
+          options
+          && Object.prototype.hasOwnProperty.call(options, 'expectedCloudSyncLocalChangedAt')
+          && (current.settings.cloudSyncLocalChangedAt ?? null) !==
+            (options.expectedCloudSyncLocalChangedAt ?? null)
+        ) {
+          throw new SettingsImportConflictError(
+            'Local settings changed during Cloud Sync. Try again to reconcile.',
+          );
+        }
+      });
     } catch (error) {
-      if (options?.expectedGeneration !== undefined
-        && !this.isGenerationCurrent(options.expectedGeneration)) {
+      if (
+        error instanceof StorageOperationCancelledError
+        || error instanceof SettingsImportConflictError
+      ) {
         throw error;
       }
       throw new Error('Invalid settings file');

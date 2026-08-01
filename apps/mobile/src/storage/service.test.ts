@@ -40,6 +40,7 @@ vi.mock('expo-secure-store', () => ({
 }));
 
 import { StorageService } from './service';
+import { retryExpectedStorageCancellation } from '../contexts/storage-cancellation';
 
 const SECURE_PAT_KEY = 'ynab_counter_pat';
 
@@ -51,6 +52,46 @@ beforeEach(() => {
 });
 
 describe('PAT generation ownership', () => {
+  it('retries expected credential cancellation while hydration still owns the generation', async () => {
+    const hydrate = vi.fn()
+      .mockRejectedValueOnce(new Error('Credential read was cancelled.'))
+      .mockResolvedValueOnce('hydrated');
+
+    await expect(retryExpectedStorageCancellation(hydrate, () => true))
+      .resolves.toBe('hydrated');
+    expect(hydrate).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not retry storage cancellation after hydration loses ownership', async () => {
+    let current = true;
+    const hydrate = vi.fn(async () => {
+      current = false;
+      throw new Error('Storage operation was cancelled.');
+    });
+
+    await expect(retryExpectedStorageCancellation(hydrate, () => current))
+      .resolves.toBeUndefined();
+    expect(hydrate).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves real hydration failures', async () => {
+    const failure = new Error('SecureStore is unavailable.');
+    const hydrate = vi.fn().mockRejectedValue(failure);
+
+    await expect(retryExpectedStorageCancellation(hydrate, () => true))
+      .rejects.toBe(failure);
+    expect(hydrate).toHaveBeenCalledTimes(1);
+  });
+
+  it('bounds repeated expected hydration cancellations', async () => {
+    const cancellation = new Error('Credential read was cancelled.');
+    const hydrate = vi.fn().mockRejectedValue(cancellation);
+
+    await expect(retryExpectedStorageCancellation(hydrate, () => true))
+      .rejects.toBe(cancellation);
+    expect(hydrate).toHaveBeenCalledTimes(3);
+  });
+
   it('does not let a late PAT write survive a newer erase', async () => {
     let releaseWrite: (() => void) | undefined;
     const writeStarted = new Promise<void>((resolve) => {
@@ -181,6 +222,194 @@ describe('PAT generation ownership', () => {
 });
 
 describe('snapshot restore publication ownership', () => {
+  it('cancels bulk replacements that began before a restore boundary', async () => {
+    const initial = createDefaultStorage();
+    initial.settings.currency = 'SGD';
+    mocks.asyncValues.set(STORAGE_VERSION_KEY, STORAGE_VERSION);
+    mocks.asyncValues.set(STORAGE_KEY, JSON.stringify(initial));
+
+    const service = new StorageService();
+    await service.getSettings();
+
+    const staleReplacements = [
+      service.replaceCards([]),
+      service.replaceRules([]),
+      service.replaceThemeGroups([]),
+      service.replaceTagMappings([]),
+      service.replaceHiddenCards([]),
+    ];
+    service.invalidatePendingOperations();
+
+    await Promise.all(staleReplacements.map(async (replacement) => {
+      await expect(replacement).rejects.toThrow('cancelled');
+    }));
+
+    const persisted = JSON.parse(mocks.asyncValues.get(STORAGE_KEY)!);
+    expect(persisted.settings.currency).toBe('SGD');
+  });
+
+  it('discards bulk replacement drafts cancelled after mutation', async () => {
+    const initial = createDefaultStorage();
+    initial.cards = [{
+      id: 'original-card',
+      name: 'Original card',
+      issuer: 'Original bank',
+      type: 'cashback',
+      featured: true,
+      earningRate: 1,
+      ynabAccountId: 'original-account',
+    }];
+    initial.rules = [{
+      id: 'original-rule',
+      cardId: 'original-card',
+      name: 'Original rule',
+      rewardType: 'cashback',
+      rewardValue: 1,
+      startDate: '2026-01-01',
+      endDate: '2026-12-31',
+      active: true,
+      priority: 0,
+    }];
+    initial.tagMappings = [{
+      id: 'original-mapping',
+      cardId: 'original-card',
+      ynabTag: 'original',
+      rewardCategory: 'general',
+    }];
+    initial.themeGroups = [{
+      id: 'original-group',
+      name: 'Original group',
+      subcategories: [],
+      cards: [{ cardId: 'original-card' }],
+      priority: 0,
+      createdAt: '2026-08-01T00:00:00.000Z',
+      updatedAt: '2026-08-01T00:00:00.000Z',
+    }];
+    initial.hiddenCards = [{
+      cardId: 'original-card',
+      hiddenUntil: '2099-08-01T00:00:00.000Z',
+      reason: 'maximum_spend_reached',
+    }];
+    mocks.asyncValues.set(STORAGE_VERSION_KEY, STORAGE_VERSION);
+    mocks.asyncValues.set(STORAGE_KEY, JSON.stringify(initial));
+
+    const service = new StorageService();
+    await service.getSettings();
+    const staleReplacements = [
+      service.replaceCards([]),
+      service.replaceRules([]),
+      service.replaceThemeGroups([]),
+      service.replaceTagMappings([]),
+      service.replaceHiddenCards([]),
+    ];
+
+    // Let every replacement build its draft and enqueue its write, then cross
+    // the publication boundary before the queued writes can begin.
+    await Promise.resolve();
+    service.invalidatePendingOperations();
+
+    await Promise.all(staleReplacements.map(async (replacement) => {
+      await expect(replacement).rejects.toThrow('cancelled');
+    }));
+
+    expect((await service.getCards()).map((card) => card.id)).toEqual(['original-card']);
+    expect((await service.getRules()).map((rule) => rule.id)).toEqual(['original-rule']);
+    expect((await service.getThemeGroups()).map((group) => group.id)).toEqual(['original-group']);
+    expect((await service.getTagMappings()).map((mapping) => mapping.id)).toEqual(['original-mapping']);
+    expect((await service.getHiddenCards()).map((hidden) => hidden.cardId)).toEqual(['original-card']);
+
+    const persisted = JSON.parse(mocks.asyncValues.get(STORAGE_KEY)!);
+    expect(persisted.cards.map((card: { id: string }) => card.id)).toEqual(['original-card']);
+    expect(persisted.rules.map((rule: { id: string }) => rule.id)).toEqual(['original-rule']);
+    expect(persisted.themeGroups.map((group: { id: string }) => group.id)).toEqual(['original-group']);
+    expect(persisted.tagMappings.map((mapping: { id: string }) => mapping.id)).toEqual(['original-mapping']);
+    expect(persisted.hiddenCards.map((hidden: { cardId: string }) => hidden.cardId)).toEqual(['original-card']);
+  });
+
+  it('preserves a later unrelated edit when replacement persistence is already running', async () => {
+    const initial = createDefaultStorage();
+    mocks.asyncValues.set(STORAGE_VERSION_KEY, STORAGE_VERSION);
+    mocks.asyncValues.set(STORAGE_KEY, JSON.stringify(initial));
+    const service = new StorageService();
+    await service.getSettings();
+
+    let releaseWrite: (() => void) | undefined;
+    const writeStarted = new Promise<void>((resolve) => {
+      mocks.setString.mockImplementationOnce(async (key: string, value: string) => {
+        resolve();
+        await new Promise<void>((release) => {
+          releaseWrite = release;
+        });
+        mocks.asyncValues.set(key, value);
+      });
+    });
+    const replacement = service.replaceRules([{
+      id: 'replacement-rule',
+      cardId: 'card-1',
+      name: 'Replacement rule',
+      rewardType: 'cashback',
+      rewardValue: 2,
+      startDate: '2026-01-01',
+      endDate: '2026-12-31',
+      active: true,
+      priority: 0,
+    }]);
+    await writeStarted;
+
+    const unrelatedEdit = service.updateSettings({ currency: 'SGD' });
+    await Promise.resolve();
+    releaseWrite?.();
+    await Promise.all([replacement, unrelatedEdit]);
+
+    expect((await service.getRules()).map((rule) => rule.id)).toEqual(['replacement-rule']);
+    expect((await service.getSettings()).currency).toBe('SGD');
+    const persisted = JSON.parse(mocks.asyncValues.get(STORAGE_KEY)!);
+    expect(persisted.rules.map((rule: { id: string }) => rule.id)).toEqual(['replacement-rule']);
+    expect(persisted.settings.currency).toBe('SGD');
+  });
+
+  it('applies a later replacement over the latest completed unrelated edit', async () => {
+    const initial = createDefaultStorage();
+    mocks.asyncValues.set(STORAGE_VERSION_KEY, STORAGE_VERSION);
+    mocks.asyncValues.set(STORAGE_KEY, JSON.stringify(initial));
+    const service = new StorageService();
+    await service.getSettings();
+
+    let releaseWrite: (() => void) | undefined;
+    const writeStarted = new Promise<void>((resolve) => {
+      mocks.setString.mockImplementationOnce(async (key: string, value: string) => {
+        resolve();
+        await new Promise<void>((release) => {
+          releaseWrite = release;
+        });
+        mocks.asyncValues.set(key, value);
+      });
+    });
+    const unrelatedEdit = service.updateSettings({ currency: 'SGD' });
+    await writeStarted;
+
+    const replacement = service.replaceRules([{
+      id: 'replacement-rule',
+      cardId: 'card-1',
+      name: 'Replacement rule',
+      rewardType: 'cashback',
+      rewardValue: 2,
+      startDate: '2026-01-01',
+      endDate: '2026-12-31',
+      active: true,
+      priority: 0,
+    }]);
+    await Promise.resolve();
+    releaseWrite?.();
+    await Promise.all([unrelatedEdit, replacement]);
+
+    expect((await service.getRules()).map((rule) => rule.id)).toEqual(['replacement-rule']);
+    expect((await service.getSettings()).currency).toBe('SGD');
+    const persisted = JSON.parse(mocks.asyncValues.get(STORAGE_KEY)!);
+    expect(persisted.rules.map((rule: { id: string }) => rule.id)).toEqual(['replacement-rule']);
+    expect(persisted.settings.currency).toBe('SGD');
+  });
+
   it('rejects YNAB card and calculation publishers from before the restore boundary', async () => {
     const initial = createDefaultStorage();
     const restored = createDefaultStorage();
@@ -289,11 +518,201 @@ describe('settings import dirty-marker preconditions', () => {
     await expect(service.importSettings(JSON.stringify(createDefaultStorage()), {
       expectedGeneration: service.captureGeneration(),
       expectedCloudSyncLocalChangedAt: null,
-    })).rejects.toThrow('Invalid settings file');
+    })).rejects.toThrow('Local settings changed during Cloud Sync');
 
     await expect(service.importSettings(JSON.stringify(createDefaultStorage()), {
       expectedGeneration: service.captureGeneration(),
       expectedCloudSyncLocalChangedAt: '2026-08-01T02:00:00.000Z',
     })).resolves.toBeUndefined();
+  });
+
+  it('reports parse and top-level shape failures as invalid settings files', async () => {
+    const service = new StorageService();
+
+    await expect(service.importSettings('{not json')).rejects.toThrow(
+      'Invalid settings file',
+    );
+    await expect(service.importSettings('[]')).rejects.toThrow(
+      'Invalid settings file',
+    );
+  });
+
+  it('preserves a storage cancellation instead of reporting an invalid file', async () => {
+    const service = new StorageService();
+    const staleGeneration = service.captureGeneration();
+    service.invalidatePendingOperations();
+
+    await expect(service.importSettings(JSON.stringify(createDefaultStorage()), {
+      expectedGeneration: staleGeneration,
+    })).rejects.toThrow('Storage operation was cancelled');
+  });
+
+  it('keeps cached and persisted settings unchanged when import persistence fails', async () => {
+    const initial = createDefaultStorage();
+    initial.settings.currency = 'SGD';
+    const imported = createDefaultStorage();
+    imported.settings.currency = 'USD';
+    mocks.asyncValues.set(STORAGE_VERSION_KEY, STORAGE_VERSION);
+    mocks.asyncValues.set(STORAGE_KEY, JSON.stringify(initial));
+
+    const service = new StorageService();
+    await service.getSettings();
+    mocks.setString.mockRejectedValueOnce(new Error('disk write failed'));
+
+    await expect(service.importSettings(JSON.stringify(imported))).rejects.toThrow(
+      'Invalid settings file',
+    );
+
+    const cached = JSON.parse(await service.exportSettings());
+    const persisted = JSON.parse(mocks.asyncValues.get(STORAGE_KEY)!);
+    expect(cached.settings.currency).toBe('SGD');
+    expect(persisted.settings.currency).toBe('SGD');
+  });
+
+  it('does not expose internal storage failures through the import error', async () => {
+    mocks.getString.mockRejectedValueOnce(new Error('database unavailable'));
+    const service = new StorageService();
+
+    await expect(service.importSettings(JSON.stringify(createDefaultStorage())))
+      .rejects.toThrow('Invalid settings file');
+  });
+
+  it('imports over the latest completed local replacement without losing it', async () => {
+    const initial = createDefaultStorage();
+    mocks.asyncValues.set(STORAGE_VERSION_KEY, STORAGE_VERSION);
+    mocks.asyncValues.set(STORAGE_KEY, JSON.stringify(initial));
+    const replacementCard = {
+      id: 'replacement-card',
+      name: 'Replacement card',
+      issuer: 'Replacement bank',
+      type: 'cashback' as const,
+      featured: true,
+      earningRate: 2,
+      ynabAccountId: 'replacement-account',
+    };
+    const service = new StorageService();
+    await service.getSettings();
+
+    let releaseWrite: (() => void) | undefined;
+    const writeStarted = new Promise<void>((resolve) => {
+      mocks.setString.mockImplementationOnce(async (key: string, value: string) => {
+        await new Promise<void>((release) => {
+          releaseWrite = release;
+          resolve();
+        });
+        mocks.asyncValues.set(key, value);
+      });
+    });
+
+    const replace = service.replaceCards([replacementCard]);
+    await writeStarted;
+    const importing = service.importSettings(JSON.stringify({
+      settings: { currency: 'USD' },
+    }));
+    releaseWrite?.();
+    await Promise.all([replace, importing]);
+
+    const cached = JSON.parse(await service.exportSettings());
+    const persisted = JSON.parse(mocks.asyncValues.get(STORAGE_KEY)!);
+    expect(cached.cards.map((card: { id: string }) => card.id)).toEqual(['replacement-card']);
+    expect(cached.settings.currency).toBe('USD');
+    expect(persisted.cards.map((card: { id: string }) => card.id)).toEqual(['replacement-card']);
+    expect(persisted.settings.currency).toBe('USD');
+  });
+
+  it('lets a later local replacement build on a completed import', async () => {
+    const initial = createDefaultStorage();
+    initial.settings.currency = 'SGD';
+    mocks.asyncValues.set(STORAGE_VERSION_KEY, STORAGE_VERSION);
+    mocks.asyncValues.set(STORAGE_KEY, JSON.stringify(initial));
+    const replacementCard = {
+      id: 'local-card',
+      name: 'Local card',
+      issuer: 'Local bank',
+      type: 'cashback' as const,
+      featured: true,
+      earningRate: 3,
+      ynabAccountId: 'local-account',
+    };
+    const service = new StorageService();
+    await service.getSettings();
+
+    let releaseWrite: (() => void) | undefined;
+    const writeStarted = new Promise<void>((resolve) => {
+      mocks.setString.mockImplementationOnce(async (key: string, value: string) => {
+        await new Promise<void>((release) => {
+          releaseWrite = release;
+          resolve();
+        });
+        mocks.asyncValues.set(key, value);
+      });
+    });
+
+    const importing = service.importSettings(JSON.stringify({
+      settings: { currency: 'USD' },
+    }));
+    await writeStarted;
+    const replace = service.replaceCards([replacementCard]);
+    releaseWrite?.();
+    await Promise.all([importing, replace]);
+
+    const cached = JSON.parse(await service.exportSettings());
+    const persisted = JSON.parse(mocks.asyncValues.get(STORAGE_KEY)!);
+    expect(cached.settings.currency).toBe('USD');
+    expect(cached.cards.map((card: { id: string }) => card.id)).toEqual(['local-card']);
+    expect(persisted.settings.currency).toBe('USD');
+    expect(persisted.cards.map((card: { id: string }) => card.id)).toEqual(['local-card']);
+  });
+
+  it('does not recheck import lineage after a sync snapshot completes during native persistence', async () => {
+    const snapshotMarker = '2026-08-01T05:00:00.000Z';
+    const syncedAt = '2026-08-01T05:01:00.000Z';
+    const initial = createDefaultStorage();
+    initial.settings.currency = 'SGD';
+    initial.settings.cloudSyncLocalChangedAt = snapshotMarker;
+    mocks.asyncValues.set(STORAGE_VERSION_KEY, STORAGE_VERSION);
+    mocks.asyncValues.set(STORAGE_KEY, JSON.stringify(initial));
+    const service = new StorageService();
+    await service.getSettings();
+
+    let releaseWrite: (() => void) | undefined;
+    const writeStarted = new Promise<void>((resolve) => {
+      mocks.setString.mockImplementationOnce(async (key: string, value: string) => {
+        await new Promise<void>((release) => {
+          releaseWrite = release;
+          resolve();
+        });
+        mocks.asyncValues.set(key, value);
+      });
+    });
+
+    const importing = service.importSettings(JSON.stringify({
+      settings: { currency: 'USD' },
+    }), {
+      expectedCloudSyncLocalChangedAt: snapshotMarker,
+      expectedGeneration: service.captureGeneration(),
+    });
+    await writeStarted;
+    const completingSnapshot = service.completeCloudSyncSnapshot(snapshotMarker, {
+      cloudSyncKeyId: 'cloud-key',
+      cloudSyncLastSyncedAt: syncedAt,
+    });
+    releaseWrite?.();
+
+    await expect(importing).resolves.toBeUndefined();
+    await expect(completingSnapshot).resolves.toMatchObject({
+      currency: 'USD',
+      cloudSyncKeyId: 'cloud-key',
+      cloudSyncLastSyncedAt: syncedAt,
+    });
+
+    const cached = JSON.parse(await service.exportSettings());
+    const persisted = JSON.parse(mocks.asyncValues.get(STORAGE_KEY)!);
+    for (const snapshot of [cached, persisted]) {
+      expect(snapshot.settings.currency).toBe('USD');
+      expect(snapshot.settings.cloudSyncKeyId).toBe('cloud-key');
+      expect(snapshot.settings.cloudSyncLastSyncedAt).toBe(syncedAt);
+      expect(snapshot.settings).not.toHaveProperty('cloudSyncLocalChangedAt');
+    }
   });
 });
