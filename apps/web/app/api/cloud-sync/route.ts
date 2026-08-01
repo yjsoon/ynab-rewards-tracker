@@ -23,6 +23,28 @@ interface KVNamespace {
   delete(key: string): Promise<void>;
 }
 
+const localOperationTails = new Map<string, Promise<void>>();
+
+/**
+ * Keeps local/dev route calls ordered inside one Node process. Production
+ * requests bypass this route and use the per-key Durable Object authority.
+ */
+async function withLocalKeyOperationQueue<T>(key: string, operation: () => Promise<T>): Promise<T> {
+  const previous = localOperationTails.get(key) ?? Promise.resolve();
+  let release!: () => void;
+  const current = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  localOperationTails.set(key, current);
+  await previous;
+  try {
+    return await operation();
+  } finally {
+    release();
+    if (localOperationTails.get(key) === current) localOperationTails.delete(key);
+  }
+}
+
 /**
  * Get native KV binding if running on Cloudflare, otherwise null.
  */
@@ -210,6 +232,42 @@ async function deleteValue(key: string, requestUrl: string): Promise<void> {
   await deleteValueREST(key, requestUrl);
 }
 
+interface StoredCloudBackup {
+  ciphertext: string;
+  iv: string;
+  version: number;
+  updatedAt: string;
+}
+
+async function readRevisionedValue(
+  key: string,
+  requestUrl: string,
+  retrieve: (key: string, requestUrl: string) => Promise<string | null>,
+): Promise<StoredCloudBackup | null> {
+  const stored = await retrieve(key, requestUrl);
+  if (!stored) {
+    return null;
+  }
+
+  const parsed = JSON.parse(stored) as Partial<StoredCloudBackup>;
+  if (typeof parsed.ciphertext !== 'string' || typeof parsed.iv !== 'string') {
+    throw new Error('Stored cloud backup is invalid');
+  }
+
+  const revisioned: StoredCloudBackup = {
+    ciphertext: parsed.ciphertext,
+    iv: parsed.iv,
+    version: typeof parsed.version === 'number' ? parsed.version : VERSION,
+    updatedAt: typeof parsed.updatedAt === 'string'
+      ? parsed.updatedAt
+      : new Date().toISOString(),
+  };
+  if (typeof parsed.updatedAt !== 'string') {
+    await storeValue(key, JSON.stringify(revisioned), requestUrl);
+  }
+  return revisioned;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Route handlers
 // ─────────────────────────────────────────────────────────────────────────────
@@ -217,17 +275,45 @@ async function deleteValue(key: string, requestUrl: string): Promise<void> {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { keyId, ciphertext, iv } = body ?? {};
+    const { keyId, ciphertext, iv, expectedUpdatedAt } = body ?? {};
+    const hasExpectedRevision = body !== null
+      && typeof body === 'object'
+      && Object.prototype.hasOwnProperty.call(body, 'expectedUpdatedAt');
 
-    if (typeof keyId !== 'string' || typeof ciphertext !== 'string' || typeof iv !== 'string') {
+    if (
+      typeof keyId !== 'string'
+      || typeof ciphertext !== 'string'
+      || typeof iv !== 'string'
+      || (hasExpectedRevision && expectedUpdatedAt !== null && typeof expectedUpdatedAt !== 'string')
+    ) {
       return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
     }
 
-    const updatedAt = new Date().toISOString();
-    const payload = JSON.stringify({ ciphertext, iv, version: VERSION, updatedAt });
-    await storeValue(keyId, payload, request.url);
+    return await withLocalKeyOperationQueue(keyId, async () => {
+      const current = await readRevisionedValue(keyId, request.url, retrieveValueREST);
+      if (hasExpectedRevision) {
+        if ((current?.updatedAt ?? null) !== expectedUpdatedAt) {
+          return NextResponse.json(
+            { error: 'Cloud backup changed on another device. Restore it before saving again.' },
+            { status: 409 },
+          );
+        }
+      }
 
-    return NextResponse.json({ updatedAt, version: VERSION });
+      const currentTimestamp = typeof current?.updatedAt === 'string'
+        ? Date.parse(current.updatedAt)
+        : Number.NaN;
+      const now = Date.now();
+      const updatedAt = new Date(
+        Number.isFinite(currentTimestamp) && currentTimestamp >= now
+          ? currentTimestamp + 1
+          : now,
+      ).toISOString();
+      const payload = JSON.stringify({ ciphertext, iv, version: VERSION, updatedAt });
+      await storeValue(keyId, payload, request.url);
+
+      return NextResponse.json({ updatedAt, version: VERSION });
+    });
   } catch (error) {
     if (error instanceof CloudflareKVError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
@@ -246,17 +332,13 @@ export async function GET(request: Request) {
   }
 
   try {
-    const stored = await retrieveValue(keyId, request.url);
-    if (!stored) {
-      return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    }
+    return await withLocalKeyOperationQueue(keyId, async () => {
+      const stored = await readRevisionedValue(keyId, request.url, retrieveValue);
+      if (!stored) {
+        return NextResponse.json({ error: 'Not found' }, { status: 404 });
+      }
 
-    const parsed = JSON.parse(stored) as { ciphertext: string; iv: string; version?: number; updatedAt?: string };
-    return NextResponse.json({
-      ciphertext: parsed.ciphertext,
-      iv: parsed.iv,
-      version: parsed.version ?? VERSION,
-      updatedAt: parsed.updatedAt ?? new Date().toISOString(),
+      return NextResponse.json(stored);
     });
   } catch (error) {
     if (error instanceof CloudflareKVError) {
@@ -276,8 +358,10 @@ export async function DELETE(request: Request) {
   }
 
   try {
-    await deleteValue(keyId, request.url);
-    return NextResponse.json({ success: true });
+    return await withLocalKeyOperationQueue(keyId, async () => {
+      await deleteValue(keyId, request.url);
+      return NextResponse.json({ success: true });
+    });
   } catch (error) {
     if (error instanceof CloudflareKVError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

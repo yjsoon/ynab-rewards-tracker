@@ -1,13 +1,14 @@
 import { gcm } from '@noble/ciphers/aes';
-import { pbkdf2 } from '@noble/hashes/pbkdf2.js';
+import { pbkdf2, pbkdf2Async } from '@noble/hashes/pbkdf2.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 
 import { normaliseMnemonic, type RandomBytes } from './mnemonic';
 
-const SALT = 'ynab-rewards-cloud-sync-v1';
+export const CLOUD_SYNC_PBKDF2_SALT = 'ynab-rewards-cloud-sync-v1';
+export const CLOUD_SYNC_PBKDF2_ITERATIONS = 210_000;
+export const CLOUD_SYNC_KEY_LENGTH_BITS = 256;
 const KEY_ID_PREFIX = 'ynab-rewards-key:';
-const PBKDF2_ITERATIONS = 210_000;
-const KEY_LENGTH_BYTES = 32;
+const KEY_LENGTH_BYTES = CLOUD_SYNC_KEY_LENGTH_BITS / 8;
 const IV_LENGTH_BYTES = 12;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -25,12 +26,28 @@ function defaultRandomBytes(length: number): Uint8Array {
   return globalThis.crypto.getRandomValues(new Uint8Array(length));
 }
 
-function deriveKey(mnemonic: string): Uint8Array {
+export type CloudSyncKeyDeriver = (mnemonic: string) => Promise<Uint8Array>;
+
+export function deriveCloudSyncKey(mnemonic: string): Uint8Array {
   return pbkdf2(
     sha256,
     encoder.encode(normaliseMnemonic(mnemonic)),
-    encoder.encode(SALT),
-    { c: PBKDF2_ITERATIONS, dkLen: KEY_LENGTH_BYTES },
+    encoder.encode(CLOUD_SYNC_PBKDF2_SALT),
+    { c: CLOUD_SYNC_PBKDF2_ITERATIONS, dkLen: KEY_LENGTH_BYTES },
+  );
+}
+
+/** Cooperative JS fallback for runtimes, such as Expo Go, without native PBKDF2. */
+export function deriveCloudSyncKeyAsync(mnemonic: string): Promise<Uint8Array> {
+  return pbkdf2Async(
+    sha256,
+    encoder.encode(normaliseMnemonic(mnemonic)),
+    encoder.encode(CLOUD_SYNC_PBKDF2_SALT),
+    {
+      c: CLOUD_SYNC_PBKDF2_ITERATIONS,
+      dkLen: KEY_LENGTH_BYTES,
+      asyncTick: 10,
+    },
   );
 }
 
@@ -100,7 +117,7 @@ export function encryptJsonWithIv<T>(mnemonic: string, data: T, iv: Uint8Array):
     throw new Error(`Cloud Sync requires a ${IV_LENGTH_BYTES}-byte IV`);
   }
 
-  const encrypted = gcm(deriveKey(mnemonic), iv).encrypt(encoder.encode(JSON.stringify(data)));
+  const encrypted = gcm(deriveCloudSyncKey(mnemonic), iv).encrypt(encoder.encode(JSON.stringify(data)));
   return {
     ciphertext: toBase64Url(encrypted),
     iv: toBase64Url(iv),
@@ -111,20 +128,28 @@ export async function encryptJson<T>(
   mnemonic: string,
   data: T,
   randomBytes: RandomBytes = defaultRandomBytes,
+  deriveKey: CloudSyncKeyDeriver = async (value) => deriveCloudSyncKey(value),
 ): Promise<EncryptedJson> {
-  return encryptJsonWithIv(mnemonic, data, randomBytes(IV_LENGTH_BYTES));
+  const iv = randomBytes(IV_LENGTH_BYTES);
+  const encrypted = gcm(await deriveKey(mnemonic), iv)
+    .encrypt(encoder.encode(JSON.stringify(data)));
+  return {
+    ciphertext: toBase64Url(encrypted),
+    iv: toBase64Url(iv),
+  };
 }
 
 export async function decryptJson<T>(
   mnemonic: string,
   ciphertext: string,
   iv: string,
+  deriveKey: CloudSyncKeyDeriver = async (value) => deriveCloudSyncKey(value),
 ): Promise<T> {
   const nonce = fromBase64Url(iv);
   if (nonce.length !== IV_LENGTH_BYTES) {
     throw new Error('Invalid Cloud Sync IV');
   }
 
-  const decrypted = gcm(deriveKey(mnemonic), nonce).decrypt(fromBase64Url(ciphertext));
+  const decrypted = gcm(await deriveKey(mnemonic), nonce).decrypt(fromBase64Url(ciphertext));
   return JSON.parse(decoder.decode(decrypted)) as T;
 }

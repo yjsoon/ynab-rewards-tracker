@@ -183,6 +183,15 @@ export function useSettings() {
     triggerRefresh();
   }, [triggerRefresh]);
 
+  const completeCloudSyncSnapshot = useCallback((
+    snapshotMarker: string | undefined,
+    metadata: Pick<AppSettings, 'cloudSyncKeyId' | 'cloudSyncLastSyncedAt'>,
+  ) => {
+    const completed = storage.completeCloudSyncSnapshot(snapshotMarker, metadata);
+    triggerRefresh();
+    return completed;
+  }, [triggerRefresh]);
+
   const exportSettings = useCallback(() => {
     return storage.exportSettings();
   }, []);
@@ -197,7 +206,15 @@ export function useSettings() {
     triggerRefresh();
   }, [triggerRefresh]);
 
-  return { settings, updateSettings, exportSettings, importSettings, clearAll, isLoading };
+  return {
+    settings,
+    updateSettings,
+    completeCloudSyncSnapshot,
+    exportSettings,
+    importSettings,
+    clearAll,
+    isLoading,
+  };
 }
 
 export function useStatementFormatterSettings() {

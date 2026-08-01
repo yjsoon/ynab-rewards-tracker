@@ -2,6 +2,7 @@ export interface EncryptedSyncPayload {
   keyId: string;
   ciphertext: string;
   iv: string;
+  expectedUpdatedAt: string | null;
 }
 
 export interface CloudSyncMetadata {

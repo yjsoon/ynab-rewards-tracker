@@ -7,12 +7,29 @@ export function millisecondsUntilNextLocalMidnight(now = new Date()): number {
   return Math.max(1, nextMidnight.getTime() - now.getTime());
 }
 
+export function millisecondsUntilNextDashboardUpdate(
+  now = new Date(),
+  cacheFreshnessDeadline?: number,
+): number {
+  const midnightDelay = millisecondsUntilNextLocalMidnight(now);
+  if (
+    cacheFreshnessDeadline === undefined
+    || !Number.isFinite(cacheFreshnessDeadline)
+    || cacheFreshnessDeadline <= now.getTime()
+  ) {
+    return midnightDelay;
+  }
+
+  return Math.min(midnightDelay, cacheFreshnessDeadline - now.getTime());
+}
+
 /**
  * Notify once per local calendar-day rollover without polling. Recomputing the
  * delay after every tick keeps the schedule correct across DST transitions.
  */
-export function startLocalMidnightTicker(
-  onMidnight: (timestamp: number) => void,
+export function startDashboardClock(
+  onUpdate: (timestamp: number) => void,
+  cacheFreshnessDeadline?: number,
 ): () => void {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let stopped = false;
@@ -22,9 +39,9 @@ export function startLocalMidnightTicker(
       if (stopped) {
         return;
       }
-      onMidnight(Date.now());
+      onUpdate(Date.now());
       scheduleNext();
-    }, millisecondsUntilNextLocalMidnight());
+    }, millisecondsUntilNextDashboardUpdate(new Date(), cacheFreshnessDeadline));
   };
 
   scheduleNext();

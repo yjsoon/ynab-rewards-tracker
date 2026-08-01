@@ -642,9 +642,6 @@ export default function CardDetailScreen() {
           ) : (
             <View style={styles.simpleRate}>
               <Title3>{formatRate(card, formatting)}</Title3>
-              <Body color="secondary">
-                Applied to eligible spend{card.earningBlockSize ? ` in ${formatting.currencyCompact(card.earningBlockSize)} transaction blocks` : ''}.
-              </Body>
             </View>
           )}
         </View>

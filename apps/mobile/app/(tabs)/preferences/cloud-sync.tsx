@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 
-import { Button, Card, Footnote, Headline, SectionHeader } from '@/components/ios';
+import { Button, Card, SectionHeader } from '@/components/ios';
 import { StatusPill } from '@/components/native';
 import { useStorage } from '@/contexts/StorageContext';
 import { SettingsFooter, SettingsRow } from '@/features/preferences/SettingsRow';
@@ -23,6 +23,7 @@ import {
   restoreSettingsFromCloud,
   saveSettingsToCloud,
 } from '@/lib/cloud-sync';
+import { expectedCloudSyncRevision } from '@/lib/cloud-sync-revision';
 import {
   acquireCloudSyncLease,
   type CloudSyncLease,
@@ -168,7 +169,9 @@ export default function CloudSyncScreen() {
       const raw = JSON.parse(await storage.exportSettings()) as StorageData;
       if (!mountedRef.current || !storage.isGenerationCurrent(storageGeneration)) return;
       const payload = createCloudSyncPayload(raw);
-      const result = await saveSettingsToCloud(phrase, payload);
+      const phraseKeyId = await computeKeyId(normaliseMnemonic(phrase));
+      const expectedUpdatedAt = expectedCloudSyncRevision(raw.settings, phraseKeyId);
+      const result = await saveSettingsToCloud(phrase, payload, expectedUpdatedAt);
       if (!storage.isGenerationCurrent(storageGeneration)) return;
       const completedSettings = await storage.completeCloudSyncSnapshot(
         raw.settings.cloudSyncLocalChangedAt,
@@ -422,13 +425,6 @@ export default function CloudSyncScreen() {
       keyboardDismissMode="interactive"
       keyboardShouldPersistTaps="handled"
     >
-      <View style={styles.intro}>
-        <Headline>One code, web and iPhone</Headline>
-        <Footnote color="secondary">
-          Card configuration is encrypted on this device before it reaches the Cloud Sync service.
-        </Footnote>
-      </View>
-
       <View>
         <SectionHeader>RECOVERY CODE</SectionHeader>
         <Card style={styles.codeCard}>
@@ -556,10 +552,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingBottom: 48,
     gap: spacing.xxl,
-  },
-  intro: {
-    gap: spacing.sm,
-    paddingTop: spacing.sm,
   },
   codeCard: {
     padding: spacing.lg,

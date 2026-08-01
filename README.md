@@ -36,7 +36,7 @@ pnpm dev                    # or: pnpm --filter ./apps/web dev
 
 # Mobile app
 pnpm mobile:start          # starts Metro bundler
-pnpm mobile:ios             # launches iOS simulator
+pnpm mobile:ios             # builds the native app and launches iOS simulator
 pnpm mobile:android         # launches Android emulator
 ```
 
@@ -56,7 +56,7 @@ pnpm --filter ./apps/web deploy:cloudflare
 - `pnpm build` — prepares a production build.
 - `pnpm start` — runs the built app.
 - `pnpm mobile:start` — starts the mobile app Metro bundler.
-- `pnpm mobile:ios` — launches mobile app in iOS simulator.
+- `pnpm mobile:ios` — builds the native app and launches it in iOS simulator.
 - `pnpm mobile:android` — launches mobile app in Android emulator.
 - `pnpm lint`, `pnpm typecheck`, `pnpm test` — quality tooling.
 

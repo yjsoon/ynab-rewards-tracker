@@ -215,6 +215,52 @@ describe('SimpleRewardsCalculator.calculateCardRewards', () => {
     });
   });
 
+  it('attributes a same-day shared cap deterministically by transaction ID', () => {
+    const card: CreditCard = {
+      ...createMilesCardWithSubcategories(),
+      maximumSpend: 10,
+      subcategories: [
+        {
+          ...createMilesCardWithSubcategories().subcategories![0],
+          id: 'higher-rate',
+          rewardValue: 4,
+        },
+        {
+          ...createMilesCardWithSubcategories().subcategories![0],
+          id: 'lower-rate',
+          flagColor: 'orange',
+          rewardValue: 2,
+        },
+      ],
+    };
+    const lowerRateFirstByID = {
+      ...createTransaction('a-lower-rate', -10_000),
+      flag_color: 'orange' as const,
+    };
+    const higherRateSecondByID = createTransaction('z-higher-rate', -10_000);
+
+    const forward = SimpleRewardsCalculator.calculateCardRewards(
+      card,
+      [lowerRateFirstByID, higherRateSecondByID],
+      period,
+    );
+    const shuffled = SimpleRewardsCalculator.calculateCardRewards(
+      card,
+      [higherRateSecondByID, lowerRateFirstByID],
+      period,
+    );
+
+    expect(shuffled.rewardEarned).toBe(forward.rewardEarned);
+    expect(shuffled.transactionRewards).toEqual(forward.transactionRewards);
+    expect(shuffled.subcategoryBreakdowns).toEqual(forward.subcategoryBreakdowns);
+    expect(forward.rewardEarned).toBe(20);
+    expect(forward.transactionRewards['a-lower-rate']).toMatchObject({ reward: 20 });
+    expect(forward.transactionRewards['z-higher-rate']).toMatchObject({
+      reward: 0,
+      reason: 'cap_reached',
+    });
+  });
+
   it('consumes a period cap chronologically when transactions arrive newest-first', () => {
     const card: CreditCard = {
       ...createMilesCardWithSubcategories(),
@@ -249,7 +295,10 @@ describe('SimpleRewardsCalculator.calculateCardRewards', () => {
       card,
       [
         createTransaction('first', -10_000),
-        createTransaction('after-unusable-headroom', -10_000),
+        {
+          ...createTransaction('after-unusable-headroom', -10_000),
+          date: '2026-02-10',
+        },
       ],
       period,
     );
@@ -277,7 +326,10 @@ describe('SimpleRewardsCalculator.calculateCardRewards', () => {
       card,
       [
         createTransaction('first', -10_000),
-        createTransaction('after-unusable-headroom', -10_000),
+        {
+          ...createTransaction('after-unusable-headroom', -10_000),
+          date: '2026-02-10',
+        },
       ],
       period,
     );

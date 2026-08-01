@@ -20,12 +20,13 @@ import type {
   DashboardTransactionsCacheEntry,
 } from '@ynab-counter/app-core/storage';
 import {
+  DASHBOARD_CACHE_FRESH_WINDOW_MS,
   getDashboardProjectionCompleteness,
   isDashboardCacheEntryComplete,
   isDashboardCacheEntryTrusted,
 } from '@ynab-counter/app-core/storage';
 
-import { startLocalMidnightTicker } from './local-day-clock';
+import { startDashboardClock } from './local-day-clock';
 
 export type DashboardSyncState = 'synced' | 'syncing' | 'attention' | 'offline';
 
@@ -218,13 +219,6 @@ export function useRewardsDashboard(referenceDate?: Date): RewardsDashboardModel
     }
   }, [referenceDate, state.metadata.lastSuccessfulSync]);
 
-  useEffect(() => {
-    if (referenceDate) {
-      return;
-    }
-    return startLocalMidnightTicker(setCurrentTimestamp);
-  }, [referenceDate]);
-
   const asOf = useMemo(
     () => referenceDate ?? new Date(currentTimestamp),
     [currentTimestamp, referenceDate],
@@ -245,6 +239,22 @@ export function useRewardsDashboard(referenceDate?: Date): RewardsDashboardModel
     () => cacheEntry?.transactions ?? [],
     [cacheEntry],
   );
+  const cacheFreshnessDeadline = useMemo(() => {
+    const fetchedTimestamp = cacheEntry
+      ? new Date(cacheEntry.fetchedAt).getTime()
+      : Number.NaN;
+    return Number.isFinite(fetchedTimestamp)
+      ? fetchedTimestamp + DASHBOARD_CACHE_FRESH_WINDOW_MS + 1
+      : undefined;
+  }, [cacheEntry]);
+
+  useEffect(() => {
+    if (referenceDate) {
+      return;
+    }
+    return startDashboardClock(setCurrentTimestamp, cacheFreshnessDeadline);
+  }, [cacheFreshnessDeadline, referenceDate]);
+
   const cacheIsComplete = isDashboardCacheEntryComplete(cacheEntry);
   const dashboard = useMemo(
     () => buildRewardsDashboard(

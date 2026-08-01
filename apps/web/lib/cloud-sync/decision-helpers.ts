@@ -19,7 +19,16 @@ export interface OutdatedUploadCheckParams {
   phraseKeyId: string;
 }
 
-const CLOCK_SKEW_TOLERANCE_MS = 60_000;
+export interface UploadRevisionParams {
+  localKeyId: string | undefined;
+  localLastSyncedAt: string | undefined;
+  phraseKeyId: string;
+  confirmedCloudUpdatedAt?: string | null;
+}
+
+interface RevisionedCloudBackup {
+  updatedAt: string;
+}
 
 /**
  * Determines if uploading empty settings would overwrite an existing cloud backup.
@@ -44,7 +53,7 @@ export function shouldWarnAboutEmptyUpload(params: EmptyUploadCheckParams): bool
  * Warns when:
  * 1. Cloud has data but no local timestamp (new device - unknown freshness)
  * 2. KeyIds don't match (different sync code - can't trust timestamp comparison)
- * 3. Cloud timestamp is >60s newer than local (cloud has newer data)
+ * 3. Cloud and local revisions differ
  *
  * This prevents accidentally overwriting newer cloud backups with older local data.
  */
@@ -66,16 +75,28 @@ export function shouldWarnAboutOutdatedUpload(params: OutdatedUploadCheckParams)
     return true; // Different code - warn to prevent overwrite
   }
 
-  // Case 3: Same keyId - compare timestamps
-  const cloudTime = new Date(params.cloudUpdatedAt).getTime();
-  const localTime = new Date(params.localLastSyncedAt).getTime();
+  // Revisions are opaque CAS tokens. Any inequality means local data is based
+  // on a different cloud snapshot, regardless of timestamp ordering or skew.
+  return params.cloudUpdatedAt !== params.localLastSyncedAt;
+}
 
-  // If either timestamp is invalid, err on the side of caution and warn
-  if (Number.isNaN(cloudTime) || Number.isNaN(localTime)) {
-    return true;
+/**
+ * A revision explicitly fetched for an overwrite confirmation is the base the
+ * user reviewed. CAS will still reject a change that lands after confirmation.
+ */
+export function resolveUploadExpectedRevision(params: UploadRevisionParams): string | null {
+  if (params.confirmedCloudUpdatedAt !== undefined) {
+    return params.confirmedCloudUpdatedAt;
   }
+  return params.localKeyId === params.phraseKeyId
+    ? params.localLastSyncedAt ?? null
+    : null;
+}
 
-  // Warn if cloud is newer than local (with 1-minute tolerance for clock skew)
-  const timeDiff = cloudTime - localTime;
-  return timeDiff > CLOCK_SKEW_TOLERANCE_MS;
+/** Fetches the exact cloud revision immediately before a confirmed overwrite. */
+export async function fetchCurrentCloudRevision(
+  keyId: string,
+  fetchBackup: (keyId: string) => Promise<RevisionedCloudBackup | null>,
+): Promise<string | null> {
+  return (await fetchBackup(keyId))?.updatedAt ?? null;
 }

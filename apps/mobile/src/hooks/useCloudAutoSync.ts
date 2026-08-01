@@ -8,6 +8,7 @@ import {
   saveSettingsToCloud,
 } from '@/lib/cloud-sync';
 import { acquireCloudSyncLease } from '@/lib/cloud-sync-coordinator';
+import { hasDivergentCloudLineage } from '@/lib/cloud-sync-revision';
 import { storage } from '@/storage/service';
 import {
   createCloudSyncPayload,
@@ -152,7 +153,7 @@ export function useCloudAutoSync(): void {
         if (!isMissingBackup(error)) throw error;
         const latestLocal = await readLocalSnapshot();
         assertCurrentGeneration();
-        const seeded = await saveSettingsToCloud(phrase, latestLocal.payload);
+        const seeded = await saveSettingsToCloud(phrase, latestLocal.payload, null);
         assertCurrentGeneration();
         const afterSeed = await storage.getSettings();
         assertCurrentGeneration();
@@ -217,8 +218,21 @@ export function useCloudAutoSync(): void {
         return;
       }
 
+      if (
+        hasDivergentCloudLineage(
+          localSettings,
+          restored.keyId,
+          restored.updatedAt,
+          payloadsDiffer,
+        )
+      ) {
+        // An older cloud revision is a different lineage, not a safe base for
+        // overwriting either side automatically. Require manual reconciliation.
+        return;
+      }
+
       if (payloadsDiffer) {
-        const pushed = await saveSettingsToCloud(phrase, localPayload);
+        const pushed = await saveSettingsToCloud(phrase, localPayload, restored.updatedAt);
         assertCurrentGeneration();
         const afterPush = await storage.getSettings();
         assertCurrentGeneration();

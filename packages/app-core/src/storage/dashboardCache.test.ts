@@ -80,6 +80,23 @@ describe('shouldRefreshDashboardCache', () => {
 });
 
 describe('legacy dashboard cache completeness', () => {
+  it('rejects malformed transactions even when explicitly marked complete', () => {
+    const malformed = {
+      ...cache(),
+      transactions: undefined,
+    } as unknown as DashboardTransactionsCacheEntry;
+
+    expect(isDashboardCacheEntryComplete(malformed)).toBe(false);
+    expect(isDashboardCacheEntryComplete({ ...malformed, isComplete: false })).toBe(false);
+    expect(isDashboardCacheEntryComplete({ ...malformed, isComplete: true })).toBe(false);
+    expect(isDashboardCacheEntryTrusted({ ...malformed, isComplete: true })).toBe(false);
+    expect(shouldRefreshDashboardCache(
+      { ...malformed, isComplete: true },
+      '2026-07-01',
+      new Date('2026-07-10T10:10:00.000Z'),
+    )).toBe(true);
+  });
+
   it('treats an unmarked entry at the row cap as incomplete', () => {
     const entry = cache({
       transactions: Array.from(

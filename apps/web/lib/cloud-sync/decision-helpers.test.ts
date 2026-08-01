@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
+  fetchCurrentCloudRevision,
+  resolveUploadExpectedRevision,
   shouldWarnAboutEmptyUpload,
   shouldWarnAboutOutdatedUpload,
 } from './decision-helpers';
@@ -12,6 +14,55 @@ import {
  */
 
 describe('cloud sync decision helpers', () => {
+  describe('fetchCurrentCloudRevision', () => {
+    it('uses the exact revision fetched immediately before confirmation upload', async () => {
+      const fetchBackup = vi.fn().mockResolvedValue({ updatedAt: 'current-cloud-revision' });
+
+      await expect(fetchCurrentCloudRevision('key-1', fetchBackup))
+        .resolves.toBe('current-cloud-revision');
+      expect(fetchBackup).toHaveBeenCalledOnce();
+      expect(fetchBackup).toHaveBeenCalledWith('key-1');
+    });
+
+    it('returns a null CAS base when the confirmed key has no backup', async () => {
+      await expect(fetchCurrentCloudRevision('key-1', async () => null))
+        .resolves.toBeNull();
+    });
+  });
+
+  describe('resolveUploadExpectedRevision', () => {
+    it('uses the freshly confirmed cloud revision for an intentional overwrite', () => {
+      expect(resolveUploadExpectedRevision({
+        localKeyId: 'key-1',
+        localLastSyncedAt: 'old-revision',
+        phraseKeyId: 'key-1',
+        confirmedCloudUpdatedAt: 'confirmed-revision',
+      })).toBe('confirmed-revision');
+    });
+
+    it('keeps an explicitly confirmed missing backup as a null CAS revision', () => {
+      expect(resolveUploadExpectedRevision({
+        localKeyId: 'key-1',
+        localLastSyncedAt: 'stale-local-revision',
+        phraseKeyId: 'key-1',
+        confirmedCloudUpdatedAt: null,
+      })).toBeNull();
+    });
+
+    it('uses the local base revision when no overwrite was confirmed', () => {
+      expect(resolveUploadExpectedRevision({
+        localKeyId: 'key-1',
+        localLastSyncedAt: 'base-revision',
+        phraseKeyId: 'key-1',
+      })).toBe('base-revision');
+      expect(resolveUploadExpectedRevision({
+        localKeyId: 'another-key',
+        localLastSyncedAt: 'base-revision',
+        phraseKeyId: 'key-1',
+      })).toBeNull();
+    });
+  });
+
   describe('shouldWarnAboutOutdatedUpload', () => {
 
     it('warns when cloud backup exists but no local timestamp (new device)', () => {
@@ -47,7 +98,7 @@ describe('cloud sync decision helpers', () => {
       expect(result).toBe(true);
     });
 
-    it('does not warn when local is newer than cloud (same keyId)', () => {
+    it('warns when local and cloud revisions differ even if local looks newer', () => {
       const result = shouldWarnAboutOutdatedUpload({
         cloudUpdatedAt: '2025-11-22T17:00:00Z',
         localLastSyncedAt: '2025-11-22T18:00:00Z', // Local is newer
@@ -55,31 +106,30 @@ describe('cloud sync decision helpers', () => {
         phraseKeyId: 'keyId123',
       });
 
+      expect(result).toBe(true);
+    });
+
+    it('warns when revisions differ by only a few milliseconds', () => {
+      const now = Date.now();
+      const result = shouldWarnAboutOutdatedUpload({
+        cloudUpdatedAt: new Date(now + 1).toISOString(),
+        localLastSyncedAt: new Date(now).toISOString(),
+        localKeyId: 'keyId123',
+        phraseKeyId: 'keyId123',
+      });
+
+      expect(result).toBe(true);
+    });
+
+    it('does not warn when cloud and local revisions match exactly', () => {
+      const result = shouldWarnAboutOutdatedUpload({
+        cloudUpdatedAt: 'opaque-revision-token',
+        localLastSyncedAt: 'opaque-revision-token',
+        localKeyId: 'keyId123',
+        phraseKeyId: 'keyId123',
+      });
+
       expect(result).toBe(false);
-    });
-
-    it('does not warn when timestamps are within tolerance (same keyId)', () => {
-      const now = Date.now();
-      const result = shouldWarnAboutOutdatedUpload({
-        cloudUpdatedAt: new Date(now + 30000).toISOString(), // 30s newer
-        localLastSyncedAt: new Date(now).toISOString(),
-        localKeyId: 'keyId123',
-        phraseKeyId: 'keyId123',
-      });
-
-      expect(result).toBe(false); // Within 60s tolerance
-    });
-
-    it('warns when cloud is just over tolerance threshold (same keyId)', () => {
-      const now = Date.now();
-      const result = shouldWarnAboutOutdatedUpload({
-        cloudUpdatedAt: new Date(now + 61000).toISOString(), // 61s newer
-        localLastSyncedAt: new Date(now).toISOString(),
-        localKeyId: 'keyId123',
-        phraseKeyId: 'keyId123',
-      });
-
-      expect(result).toBe(true); // Just over 60s tolerance
     });
 
     it('does not warn when no cloud backup exists', () => {
@@ -104,7 +154,7 @@ describe('cloud sync decision helpers', () => {
       expect(result).toBe(false);
     });
 
-    it('warns when either timestamp is invalid', () => {
+    it('warns when opaque revisions are unequal', () => {
       const result = shouldWarnAboutOutdatedUpload({
         cloudUpdatedAt: 'not-a-date',
         localLastSyncedAt: '2025-11-22T18:00:00Z',

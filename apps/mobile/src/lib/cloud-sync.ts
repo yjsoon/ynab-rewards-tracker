@@ -9,6 +9,7 @@ import {
   isValidMnemonic,
   normaliseMnemonic,
 } from '@ynab-counter/app-core/cloud-sync';
+import { deriveCloudSyncKeyNative } from './cloud-sync-key';
 
 const DEFAULT_CLOUD_SYNC_ENDPOINT = 'https://rewards.soon.sg/api/cloud-sync';
 const CLOUD_SYNC_CODE_KEY = 'ynab_counter_cloud_sync_code';
@@ -96,14 +97,20 @@ export async function forgetCloudSyncCode(): Promise<void> {
 export async function saveSettingsToCloud<T>(
   inputPhrase: string,
   data: T,
+  expectedUpdatedAt: string | null,
 ): Promise<CloudSyncMetadata & { keyId: string; phrase: string }> {
   const phrase = validPhrase(inputPhrase);
   const keyId = await computeKeyId(phrase);
-  const encrypted = await encryptJson(phrase, data, (length) => Crypto.getRandomBytes(length));
+  const encrypted = await encryptJson(
+    phrase,
+    data,
+    (length) => Crypto.getRandomBytes(length),
+    deriveCloudSyncKeyNative,
+  );
   const response = await request(endpoint(), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ keyId, ...encrypted }),
+    body: JSON.stringify({ keyId, ...encrypted, expectedUpdatedAt }),
   });
   const metadata = await handleResponse<CloudSyncMetadata>(response);
   return { ...metadata, keyId, phrase };
@@ -129,7 +136,12 @@ export async function restoreSettingsFromCloud<T>(
   ) {
     throw new Error('Cloud Sync returned an unreadable backup.');
   }
-  const data = await decryptJson<T>(phrase, stored.ciphertext, stored.iv);
+  const data = await decryptJson<T>(
+    phrase,
+    stored.ciphertext,
+    stored.iv,
+    deriveCloudSyncKeyNative,
+  );
   return { data, keyId, phrase, updatedAt: stored.updatedAt, version: stored.version };
 }
 

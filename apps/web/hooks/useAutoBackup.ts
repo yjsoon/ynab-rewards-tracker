@@ -15,7 +15,7 @@ import { storage } from '@/lib/storage';
  * Returns a debounced function that silently uploads settings when auto-sync is enabled.
  */
 export function useAutoBackup() {
-  const { settings, updateSettings } = useSettings();
+  const { settings, completeCloudSyncSnapshot } = useSettings();
   const debounceTimerRef = useRef<NodeJS.Timeout | undefined>(undefined);
   const pendingPromiseRef = useRef<Promise<void> | null>(null);
   const pendingResolveRef = useRef<(() => void) | null>(null);
@@ -79,14 +79,31 @@ export function useAutoBackup() {
 
         // Export current settings
         const exportedSettings = storage.exportSettings();
-        const payload = JSON.parse(exportedSettings);
+        const payload = JSON.parse(exportedSettings) as {
+          settings?: {
+            cloudSyncKeyId?: string;
+            cloudSyncLastSyncedAt?: string;
+            cloudSyncLocalChangedAt?: string;
+          };
+        };
 
         const keyId = await computeKeyId(normalised);
         const { ciphertext, iv } = await encryptJson(normalised, payload);
-        const { updatedAt } = await uploadEncryptedSettings({ keyId, ciphertext, iv });
+        const expectedUpdatedAt = payload.settings?.cloudSyncKeyId === keyId
+          ? payload.settings.cloudSyncLastSyncedAt ?? null
+          : null;
+        const { updatedAt } = await uploadEncryptedSettings({
+          keyId,
+          ciphertext,
+          iv,
+          expectedUpdatedAt,
+        });
 
         // Keep metadata aligned to avoid false local-vs-cloud drift checks.
-        updateSettings({ cloudSyncKeyId: keyId, cloudSyncLastSyncedAt: updatedAt });
+        completeCloudSyncSnapshot(payload.settings?.cloudSyncLocalChangedAt, {
+          cloudSyncKeyId: keyId,
+          cloudSyncLastSyncedAt: updatedAt,
+        });
 
         console.log('Auto-sync: Uploaded latest local settings to cloud');
         settlePending();
@@ -100,7 +117,7 @@ export function useAutoBackup() {
     }, 2000); // 2 second debounce
 
     return pendingPromiseRef.current;
-  }, [settings, updateSettings, settlePending]);
+  }, [settings, completeCloudSyncSnapshot, settlePending]);
 
   return { autoBackup };
 }

@@ -221,7 +221,9 @@ export class SimpleRewardsCalculator {
         const txnDate = txn.date;
         return txnDate >= period.start && txnDate <= period.end && txn.amount < 0;
       })
-      .sort((left, right) => left.date.localeCompare(right.date));
+      .sort((left, right) => (
+        left.date.localeCompare(right.date) || left.id.localeCompare(right.id)
+      ));
 
     const transactionRewards = Object.fromEntries(
       periodTransactions.map((transaction) => [

@@ -797,6 +797,7 @@ describe('projectTransactions', () => {
         createTransaction({
           id: 'within-cap',
           account_id: 'capped-account',
+          date: '2026-02-09',
           amount: -50_000,
         }),
         createTransaction({

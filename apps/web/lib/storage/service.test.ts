@@ -310,3 +310,52 @@ describe("StorageService importSettings", () => {
     });
   });
 });
+
+describe("StorageService Cloud Sync dirtiness", () => {
+  beforeEach(() => {
+    Object.defineProperty(globalThis, "window", {
+      value: {
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      },
+      configurable: true,
+      writable: true,
+    });
+    Object.defineProperty(globalThis, "localStorage", {
+      value: createLocalStorageMock(),
+      configurable: true,
+      writable: true,
+    });
+  });
+
+  it("marks payload changes but not device-only Cloud Sync metadata", () => {
+    const service = new StorageService();
+
+    service.updateSettings({ cloudSyncKeyId: "key-1", cloudSyncLastSyncedAt: "revision-1" });
+    expect(service.getSettings().cloudSyncLocalChangedAt).toBeUndefined();
+
+    service.updateSettings({ currency: "SGD" });
+    expect(service.getSettings().cloudSyncLocalChangedAt).toEqual(expect.any(String));
+  });
+
+  it("clears only the marker belonging to the completed snapshot", () => {
+    const service = new StorageService();
+    service.updateSettings({ currency: "SGD" });
+    const snapshotMarker = service.getSettings().cloudSyncLocalChangedAt;
+
+    service.updateSettings({ theme: "dark" });
+    const laterMarker = service.getSettings().cloudSyncLocalChangedAt;
+    expect(laterMarker).not.toBe(snapshotMarker);
+
+    service.completeCloudSyncSnapshot(snapshotMarker, {
+      cloudSyncKeyId: "key-1",
+      cloudSyncLastSyncedAt: "revision-1",
+    });
+
+    expect(service.getSettings()).toMatchObject({
+      cloudSyncKeyId: "key-1",
+      cloudSyncLastSyncedAt: "revision-1",
+      cloudSyncLocalChangedAt: laterMarker,
+    });
+  });
+});

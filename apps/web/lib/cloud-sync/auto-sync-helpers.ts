@@ -1,6 +1,10 @@
-import { shouldWarnAboutOutdatedUpload } from './decision-helpers';
-
-export type AutoSyncAction = 'skip' | 'seed_cloud' | 'pull_cloud' | 'push_local' | 'in_sync';
+export type AutoSyncAction =
+  | 'skip'
+  | 'seed_cloud'
+  | 'pull_cloud'
+  | 'push_local'
+  | 'in_sync'
+  | 'conflict';
 
 interface DetermineAutoSyncActionParams {
   localPayload: unknown;
@@ -9,6 +13,7 @@ interface DetermineAutoSyncActionParams {
   localLastSyncedAt: string | undefined;
   localKeyId: string | undefined;
   phraseKeyId: string;
+  localIsDirty: boolean;
 }
 
 export function validateImportedSettings(data: unknown): data is Record<string, unknown> {
@@ -105,6 +110,7 @@ export function createComparableSnapshot(payload: unknown): string {
     const settings = root.settings as Record<string, unknown>;
     delete settings.cloudSyncLastSyncedAt;
     delete settings.cloudSyncKeyId;
+    delete settings.cloudSyncLocalChangedAt;
     delete settings.cloudSyncMnemonic;
     delete settings.rememberCloudSyncCode;
     delete settings.autoSyncEnabled;
@@ -128,19 +134,34 @@ export function determineAutoSyncAction(params: DetermineAutoSyncActionParams): 
     throw new Error('Invalid settings data');
   }
 
-  const shouldPreferCloud = shouldWarnAboutOutdatedUpload({
-    cloudUpdatedAt: params.cloudUpdatedAt,
-    localLastSyncedAt: params.localLastSyncedAt,
-    localKeyId: params.localKeyId,
-    phraseKeyId: params.phraseKeyId,
-  });
-
-  if (shouldPreferCloud) {
-    return 'pull_cloud';
-  }
-
   const localSnapshot = createComparableSnapshot(params.localPayload);
   const cloudSnapshot = createComparableSnapshot(params.cloudPayload);
+  if (localSnapshot === cloudSnapshot) {
+    return 'in_sync';
+  }
 
-  return localSnapshot === cloudSnapshot ? 'in_sync' : 'push_local';
+  const localRevision = params.localLastSyncedAt
+    ? Date.parse(params.localLastSyncedAt)
+    : Number.NaN;
+  const cloudRevision = params.cloudUpdatedAt
+    ? Date.parse(params.cloudUpdatedAt)
+    : Number.NaN;
+  const hasSharedBase = params.localKeyId === params.phraseKeyId
+    && Number.isFinite(localRevision)
+    && Number.isFinite(cloudRevision);
+
+  if (!hasSharedBase) {
+    return params.localIsDirty ? 'conflict' : 'pull_cloud';
+  }
+
+  if (cloudRevision < localRevision) {
+    // A stale read must never roll local state back or become the base of a push.
+    return 'conflict';
+  }
+
+  if (cloudRevision > localRevision) {
+    return params.localIsDirty ? 'conflict' : 'pull_cloud';
+  }
+
+  return 'push_local';
 }

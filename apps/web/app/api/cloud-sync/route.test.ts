@@ -72,21 +72,28 @@ describe('cloud sync route', () => {
         CLOUDFLARE_API_TOKEN: 'worker-token',
       },
     });
-    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(null, { status: 404 }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
 
     const response = await POST(
       new Request('https://example.test/api/cloud-sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ keyId: 'sync-key', ciphertext: 'ciphertext', iv: 'iv' }),
+        body: JSON.stringify({
+          keyId: 'sync-key',
+          ciphertext: 'ciphertext',
+          iv: 'iv',
+          expectedUpdatedAt: null,
+        }),
       })
     );
 
     expect(response.status).toBe(200);
     expect(kv.put).not.toHaveBeenCalled();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [endpoint, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const [endpoint, init] = fetchMock.mock.calls[1] as [URL, RequestInit];
     expect(endpoint.href).toBe(
       'https://api.cloudflare.com/client/v4/accounts/worker-account/storage/kv/namespaces/worker-namespace/values/sync-key'
     );
@@ -97,6 +104,111 @@ describe('cloud sync route', () => {
         'Content-Type': 'text/plain',
       },
     });
+  });
+
+  it('rejects concurrent uploads that share the same stale revision', async () => {
+    getCloudflareContext.mockResolvedValue({
+      env: {
+        CLOUDFLARE_ACCOUNT_ID: 'worker-account',
+        CLOUDFLARE_KV_NAMESPACE_ID: 'worker-namespace',
+        CLOUDFLARE_API_TOKEN: 'worker-token',
+      },
+    });
+    let stored: string | null = null;
+    vi.stubGlobal('fetch', vi.fn(async (_url: URL, init: RequestInit) => {
+      if (init.method === 'GET') {
+        return stored === null
+          ? new Response(null, { status: 404 })
+          : new Response(stored, { status: 200 });
+      }
+      if (init.method === 'PUT') {
+        stored = String(init.body);
+        return new Response(null, { status: 200 });
+      }
+      throw new Error(`Unexpected ${init.method} request`);
+    }));
+
+    const upload = (ciphertext: string) => POST(
+      new Request('https://example.test/api/cloud-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          keyId: 'sync-key',
+          ciphertext,
+          iv: 'iv',
+          expectedUpdatedAt: null,
+        }),
+      }),
+    );
+    const responses = await Promise.all([upload('device-a'), upload('device-b')]);
+
+    expect(responses.map((response) => response.status).sort()).toEqual([200, 409]);
+    const conflict = responses.find((response) => response.status === 409)!;
+    await expect(conflict.json()).resolves.toEqual({
+      error: 'Cloud backup changed on another device. Restore it before saving again.',
+    });
+    expect(JSON.parse(stored!).ciphertext).toMatch(/^device-[ab]$/);
+  });
+
+  it('keeps uploads from older clients without expectedUpdatedAt compatible', async () => {
+    getCloudflareContext.mockResolvedValue({
+      env: {
+        CLOUDFLARE_ACCOUNT_ID: 'worker-account',
+        CLOUDFLARE_KV_NAMESPACE_ID: 'worker-namespace',
+        CLOUDFLARE_API_TOKEN: 'worker-token',
+      },
+    });
+    let stored = JSON.stringify({
+      ciphertext: 'current',
+      iv: 'iv',
+      version: 1,
+      updatedAt: '2026-07-31T00:00:00.000Z',
+    });
+    vi.stubGlobal('fetch', vi.fn(async (_url: URL, init: RequestInit) => {
+      if (init.method === 'GET') return new Response(stored, { status: 200 });
+      if (init.method === 'PUT') {
+        stored = String(init.body);
+        return new Response(null, { status: 200 });
+      }
+      throw new Error(`Unexpected ${init.method} request`);
+    }));
+
+    const response = await POST(new Request('https://example.test/api/cloud-sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keyId: 'sync-key', ciphertext: 'older-client', iv: 'iv' }),
+    }));
+
+    expect(response.status).toBe(200);
+    expect(JSON.parse(stored).ciphertext).toBe('older-client');
+  });
+
+  it('persists one stable revision when reading a legacy record without updatedAt', async () => {
+    getCloudflareContext.mockResolvedValue({
+      env: {
+        CLOUDFLARE_ACCOUNT_ID: 'worker-account',
+        CLOUDFLARE_KV_NAMESPACE_ID: 'worker-namespace',
+        CLOUDFLARE_API_TOKEN: 'worker-token',
+      },
+    });
+    let stored = JSON.stringify({ ciphertext: 'legacy', iv: 'legacy-iv' });
+    vi.stubGlobal('fetch', vi.fn(async (_url: URL, init: RequestInit) => {
+      if (init.method === 'GET') return new Response(stored, { status: 200 });
+      if (init.method === 'PUT') {
+        stored = String(init.body);
+        return new Response(null, { status: 200 });
+      }
+      throw new Error(`Unexpected ${init.method} request`);
+    }));
+
+    const request = () => new Request('https://example.test/api/cloud-sync?key=legacy-key');
+    const first = await GET(request());
+    const second = await GET(request());
+    const firstBody = await first.json() as { updatedAt: string };
+    const secondBody = await second.json() as { updatedAt: string };
+
+    expect(firstBody.updatedAt).toEqual(expect.any(String));
+    expect(secondBody.updatedAt).toBe(firstBody.updatedAt);
   });
 
   it('uses REST for DELETE without calling the native KV mutation', async () => {

@@ -39,6 +39,7 @@ describe('auto-sync helpers', () => {
       localLastSyncedAt: undefined,
       localKeyId: undefined,
       phraseKeyId: 'key-1',
+      localIsDirty: false,
     });
 
     expect(action).toBe('skip');
@@ -52,6 +53,7 @@ describe('auto-sync helpers', () => {
       localLastSyncedAt: undefined,
       localKeyId: undefined,
       phraseKeyId: 'key-1',
+      localIsDirty: true,
     });
 
     expect(action).toBe('seed_cloud');
@@ -60,11 +62,12 @@ describe('auto-sync helpers', () => {
   it('returns pull_cloud when cloud is newer/unknown freshness', () => {
     const action = determineAutoSyncAction({
       localPayload: basePayload,
-      cloudPayload: basePayload,
+      cloudPayload: { ...basePayload, cards: [{ id: 'cloud-card' }] },
       cloudUpdatedAt: '2026-01-01T12:00:00Z',
       localLastSyncedAt: undefined,
       localKeyId: undefined,
       phraseKeyId: 'key-1',
+      localIsDirty: false,
     });
 
     expect(action).toBe('pull_cloud');
@@ -75,9 +78,10 @@ describe('auto-sync helpers', () => {
       localPayload: { ...basePayload, cards: [{ id: 'card-1' }, { id: 'card-2' }] },
       cloudPayload: basePayload,
       cloudUpdatedAt: '2026-01-01T12:00:00Z',
-      localLastSyncedAt: '2026-01-02T12:00:00Z',
+      localLastSyncedAt: '2026-01-01T12:00:00Z',
       localKeyId: 'key-1',
       phraseKeyId: 'key-1',
+      localIsDirty: true,
     });
 
     expect(action).toBe('push_local');
@@ -110,7 +114,36 @@ describe('auto-sync helpers', () => {
       localLastSyncedAt: '2026-01-01T12:00:00Z',
       localKeyId: 'key-1',
       phraseKeyId: 'key-1',
+      localIsDirty: false,
     });
     expect(action).toBe('in_sync');
+  });
+
+  it('returns conflict when both local and cloud changed from the shared revision', () => {
+    const action = determineAutoSyncAction({
+      localPayload: { ...basePayload, cards: [{ id: 'local-card' }] },
+      cloudPayload: { ...basePayload, cards: [{ id: 'cloud-card' }] },
+      cloudUpdatedAt: '2026-01-01T12:00:30Z',
+      localLastSyncedAt: '2026-01-01T12:00:00Z',
+      localKeyId: 'key-1',
+      phraseKeyId: 'key-1',
+      localIsDirty: true,
+    });
+
+    expect(action).toBe('conflict');
+  });
+
+  it('pulls an exact newer server revision when local remains clean', () => {
+    const action = determineAutoSyncAction({
+      localPayload: basePayload,
+      cloudPayload: { ...basePayload, cards: [{ id: 'cloud-card' }] },
+      cloudUpdatedAt: '2026-01-01T12:00:30Z',
+      localLastSyncedAt: '2026-01-01T12:00:00Z',
+      localKeyId: 'key-1',
+      phraseKeyId: 'key-1',
+      localIsDirty: false,
+    });
+
+    expect(action).toBe('pull_cloud');
   });
 });

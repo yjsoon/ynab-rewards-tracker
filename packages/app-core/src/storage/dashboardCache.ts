@@ -12,6 +12,7 @@ export function isDashboardCacheEntryComplete(
   entry: Pick<DashboardTransactionsCacheEntry, 'isComplete' | 'transactions'> | undefined,
 ): boolean {
   if (!entry) return false;
+  if (!Array.isArray(entry.transactions)) return false;
   if (typeof entry.isComplete === 'boolean') return entry.isComplete;
   return entry.transactions.length < DASHBOARD_TRANSACTION_CACHE_LIMIT;
 }
