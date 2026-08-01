@@ -60,12 +60,20 @@ export class CloudSyncBackup {
       return await this.state.storage.get(BACKUP_STORAGE_KEY) ?? null;
     }
 
+    // A durable write is authoritative even if a previous request failed before
+    // recording the migration marker. Never let a later-visible KV value replace it.
+    const durableBackup = await this.state.storage.get(BACKUP_STORAGE_KEY);
+    if (durableBackup) {
+      await this.state.storage.put(KV_MIGRATION_STORAGE_KEY, true);
+      return durableBackup;
+    }
+
     const legacyValue = await this.env.CLOUD_SYNC_KV.get(keyId);
     const backup = legacyValue === null ? null : parseBackup(legacyValue);
     if (backup) {
       await this.state.storage.put(BACKUP_STORAGE_KEY, backup);
+      await this.state.storage.put(KV_MIGRATION_STORAGE_KEY, true);
     }
-    await this.state.storage.put(KV_MIGRATION_STORAGE_KEY, true);
     return backup;
   }
 
@@ -113,14 +121,18 @@ export class CloudSyncBackup {
       const updatedAt = nextRevision(current?.updatedAt);
       const backup = { ciphertext, iv, version: CLOUD_SYNC_VERSION, updatedAt };
       await this.state.storage.put(BACKUP_STORAGE_KEY, backup);
+      // Once this object has accepted a write, KV must never become authoritative
+      // for it, even if the initial migration lookup was a transient miss.
+      await this.state.storage.put(KV_MIGRATION_STORAGE_KEY, true);
       return json({ updatedAt, version: CLOUD_SYNC_VERSION });
     }
 
     if (request.method === "DELETE") {
-      // Remove the legacy copy as well. The durable migration marker remains so
-      // an eventually visible KV value can never resurrect this backup.
-      await this.env.CLOUD_SYNC_KV.delete(keyId);
+      // Record the tombstone before touching either copy. A stale or eventually
+      // visible KV value can then never resurrect the deleted backup.
+      await this.state.storage.put(KV_MIGRATION_STORAGE_KEY, true);
       await this.state.storage.delete(BACKUP_STORAGE_KEY);
+      await this.env.CLOUD_SYNC_KV.delete(keyId);
       return json({ success: true });
     }
 

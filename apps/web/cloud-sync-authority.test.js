@@ -95,6 +95,61 @@ describe("production Cloud Sync Durable Object authority", () => {
     expect(kv.get).toHaveBeenCalledTimes(1);
   });
 
+  it("retries migration after a transient KV miss", async () => {
+    const { env, kv } = createEnvironment(new Map([
+      ["delayed-key", JSON.stringify({ ciphertext: "legacy", iv: "legacy-iv" })],
+    ]));
+    kv.get.mockResolvedValueOnce(null);
+    const request = () => new Request("https://example.test/api/cloud-sync?key=delayed-key");
+
+    const first = await handleCloudSyncRequest(request(), env);
+    const second = await handleCloudSyncRequest(request(), env);
+
+    expect(first.status).toBe(404);
+    expect(second.status).toBe(200);
+    expect(await second.json()).toMatchObject({ ciphertext: "legacy", iv: "legacy-iv" });
+    expect(kv.get).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not let a delayed legacy value overwrite a new durable write", async () => {
+    const { env, kv } = createEnvironment(new Map([
+      ["write-key", JSON.stringify({ ciphertext: "legacy", iv: "legacy-iv" })],
+    ]));
+    kv.get.mockResolvedValueOnce(null);
+
+    const write = await handleCloudSyncRequest(upload("write-key", "replacement", null), env);
+    const stored = await handleCloudSyncRequest(
+      new Request("https://example.test/api/cloud-sync?key=write-key"),
+      env,
+    );
+
+    expect(write.status).toBe(200);
+    expect(await stored.json()).toMatchObject({ ciphertext: "replacement", iv: "iv" });
+    expect(kv.get).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not resurrect a delayed legacy value after deletion", async () => {
+    const { env, kv } = createEnvironment(new Map([
+      ["delete-key", JSON.stringify({ ciphertext: "legacy", iv: "legacy-iv" })],
+    ]));
+    kv.get.mockResolvedValueOnce(null);
+    // Model a stale KV replica that remains readable after the delete request.
+    kv.delete.mockResolvedValueOnce(false);
+
+    const deletion = await handleCloudSyncRequest(
+      new Request("https://example.test/api/cloud-sync?key=delete-key", { method: "DELETE" }),
+      env,
+    );
+    const stored = await handleCloudSyncRequest(
+      new Request("https://example.test/api/cloud-sync?key=delete-key"),
+      env,
+    );
+
+    expect(deletion.status).toBe(200);
+    expect(stored.status).toBe(404);
+    expect(kv.get).toHaveBeenCalledTimes(1);
+  });
+
   it("serializes delete followed by an older-client write without resurrecting KV", async () => {
     const { env, kvValues } = createEnvironment(new Map([
       ["ordered-key", JSON.stringify({

@@ -1,4 +1,5 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AppState } from 'react-native';
 
 import { useStorage } from '@/contexts/StorageContext';
 import {
@@ -12,8 +13,12 @@ import {
 } from '@ynab-counter/app-core/rewards-engine';
 import { getEarliestPeriodStart } from '@ynab-counter/app-core/rewards-engine/utils/periods';
 import type { DashboardTransactionsCacheEntry } from '@ynab-counter/app-core/storage';
+import { DASHBOARD_CACHE_FRESH_WINDOW_MS } from '@ynab-counter/app-core/storage';
+import {
+  nextActivityClockDeadline,
+  startDashboardClock,
+} from '@/features/cards/local-day-clock';
 
-const FRESH_WINDOW_MS = 30 * 60 * 1000;
 
 export type ActivityFreshnessState = 'fresh' | 'stale' | 'syncing' | 'offline' | 'missing';
 
@@ -163,7 +168,7 @@ function getFreshness(params: {
   }
 
   const age = now - new Date(params.timestamp).getTime();
-  if (Number.isFinite(age) && age <= FRESH_WINDOW_MS) {
+  if (Number.isFinite(age) && age <= DASHBOARD_CACHE_FRESH_WINDOW_MS) {
     return {
       freshnessState: 'fresh',
       freshnessLabel: `Fresh · ${updateAge}`,
@@ -200,6 +205,15 @@ function matchesQuery(projection: TransactionProjection, query: string): boolean
 
 export function useActivityModel(query = ''): ActivityModel {
   const { state, status, actions } = useStorage();
+  const [currentTimestamp, setCurrentTimestamp] = useState(() => Date.now());
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        setCurrentTimestamp(Date.now());
+      }
+    });
+    return () => subscription.remove();
+  }, []);
   const cacheEntry = useMemo(
     () => findBestDashboardEntry(
       state.cachedData?.dashboardTransactions,
@@ -235,7 +249,10 @@ export function useActivityModel(query = ''): ActivityModel {
     () => projected.filter((projection) => matchesQuery(projection, query)),
     [projected, query],
   );
-  const sections = useMemo(() => groupActivityByDate(transactions), [transactions]);
+  const sections = useMemo(
+    () => groupActivityByDate(transactions, new Date(currentTimestamp)),
+    [currentTimestamp, transactions],
+  );
   const canSync = Boolean(
     state.pat &&
       state.selectedBudget.id &&
@@ -243,6 +260,23 @@ export function useActivityModel(query = ''): ActivityModel {
   );
   const isRefreshing = state.isSyncing || status.isRefreshing;
   const lastUpdatedAt = cacheEntry?.fetchedAt ?? state.metadata.lastSuccessfulSync;
+  const cacheFreshnessDeadline = useMemo(() => {
+    const fetchedTimestamp = cacheEntry
+      ? new Date(cacheEntry.fetchedAt).getTime()
+      : Number.NaN;
+    return Number.isFinite(fetchedTimestamp)
+      ? fetchedTimestamp + DASHBOARD_CACHE_FRESH_WINDOW_MS + 1
+      : undefined;
+  }, [cacheEntry]);
+  const activityClockDeadline = nextActivityClockDeadline(
+    lastUpdatedAt,
+    cacheFreshnessDeadline,
+    currentTimestamp,
+  );
+  useEffect(
+    () => startDashboardClock(setCurrentTimestamp, activityClockDeadline),
+    [activityClockDeadline],
+  );
   const freshness = getFreshness({
     timestamp: lastUpdatedAt,
     isSyncing: isRefreshing,
@@ -250,6 +284,7 @@ export function useActivityModel(query = ''): ActivityModel {
     connectionError: state.connectionError,
     hasConnection: canSync,
     hasCache: Boolean(cacheEntry),
+    now: currentTimestamp,
   });
 
   const refresh = useCallback(async () => {

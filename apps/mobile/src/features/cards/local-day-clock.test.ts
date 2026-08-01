@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   millisecondsUntilNextDashboardUpdate,
   millisecondsUntilNextLocalMidnight,
+  nextActivityClockDeadline,
+  nextRelativeAgeUpdateAt,
   startDashboardClock,
 } from './local-day-clock';
 
@@ -65,5 +67,27 @@ describe('local day clock', () => {
     expect(millisecondsUntilNextDashboardUpdate(now, Number.NaN)).toBe(midnightDelay);
     expect(millisecondsUntilNextDashboardUpdate(now, now.getTime())).toBe(midnightDelay);
     expect(millisecondsUntilNextDashboardUpdate(now, now.getTime() - 1)).toBe(midnightDelay);
+  });
+
+  it('schedules relative labels by minute, then hour, until their date label takes over', () => {
+    const updatedAt = new Date(2026, 7, 1, 10, 0).toISOString();
+
+    expect(nextRelativeAgeUpdateAt(updatedAt, new Date(2026, 7, 1, 10, 0, 30).getTime()))
+      .toBe(new Date(2026, 7, 1, 10, 1).getTime());
+    expect(nextRelativeAgeUpdateAt(updatedAt, new Date(2026, 7, 1, 12, 20).getTime()))
+      .toBe(new Date(2026, 7, 1, 13, 0).getTime());
+    expect(nextRelativeAgeUpdateAt(updatedAt, new Date(2026, 7, 2, 10, 0).getTime()))
+      .toBeUndefined();
+    expect(nextRelativeAgeUpdateAt('not-a-date')).toBeUndefined();
+  });
+
+  it('chooses the earliest relative-age or freshness transition', () => {
+    const now = new Date(2026, 7, 1, 10, 0, 30).getTime();
+    const updatedAt = new Date(2026, 7, 1, 10, 0).toISOString();
+
+    expect(nextActivityClockDeadline(updatedAt, now + 10_000, now)).toBe(now + 10_000);
+    expect(nextActivityClockDeadline(updatedAt, now + 90_000, now))
+      .toBe(new Date(2026, 7, 1, 10, 1).getTime());
+    expect(nextActivityClockDeadline(undefined, now - 1, now)).toBeUndefined();
   });
 });
