@@ -292,9 +292,9 @@ export class RealTimeRecommendations {
     if (wholeCardLinked) {
       // For whole card, just use base rate - we'll check subcategory limits later
       if (card.type === 'cashback') {
-        effectiveRate = (card.earningRate ?? 1) / 100;
+        effectiveRate = (card.earningRate ?? 0) / 100;
       } else {
-        const milesPerDollar = card.earningRate ?? 1;
+        const milesPerDollar = card.earningRate ?? 0;
         effectiveRate = milesPerDollar * this.milesValuation;
       }
     } else if (linkedSubs.length > 0 && card.subcategoriesEnabled && card.subcategories) {
@@ -324,9 +324,9 @@ export class RealTimeRecommendations {
       && maxedSubcategoryIds.size >= eligibleLinkedSubcategoryCount;
     if (!subcategoryMaxed && effectiveRate === 0 && (wholeCardLinked || theme.subcategories.some(ref => ref?.cardId === card.id))) {
       if (card.type === 'cashback') {
-        effectiveRate = (card.earningRate ?? 1) / 100;
+        effectiveRate = (card.earningRate ?? 0) / 100;
       } else {
-        const milesPerDollar = card.earningRate ?? 1;
+        const milesPerDollar = card.earningRate ?? 0;
         effectiveRate = milesPerDollar * this.milesValuation;
       }
     }
@@ -397,7 +397,7 @@ export class RealTimeRecommendations {
       cardName: card.name,
       cardType: card.type,
       effectiveRate,
-      earningRate: card.earningRate,
+      earningRate: card.earningRate ?? undefined,
       currentSpend,
       minimumSpend: card.minimumSpend,
       maximumSpend: card.maximumSpend,

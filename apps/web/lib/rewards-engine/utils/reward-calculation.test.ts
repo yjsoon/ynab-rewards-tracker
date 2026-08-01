@@ -53,6 +53,7 @@ describe('createRewardCalculationFromSimple', () => {
       maximumSpend: 800,
       maximumSpendExceeded: false,
       maximumSpendProgress: 50,
+      transactionRewards: {},
       subcategoryBreakdowns: [
         createSubcategory({ id: 'sub-1', name: 'Dining', flagColor: 'blue' }),
         createSubcategory({ id: 'sub-2', name: 'Groceries', flagColor: 'green', totalSpend: 80 }),
@@ -98,6 +99,7 @@ describe('createRewardCalculationFromSimple', () => {
       rewardType: 'cashback',
       minimumSpendMet: false,
       maximumSpendExceeded: false,
+      transactionRewards: {},
     };
 
     const rewardCalc = createRewardCalculationFromSimple(baseCard, simpleCalc, 'custom-rule');

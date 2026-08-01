@@ -19,3 +19,29 @@ export {
   Caption1,
   Caption2,
 } from './Typography';
+export type { TextColor, TextVariant, TypographyProps } from './Typography';
+export {
+  CardStatusRow,
+  EmptyState,
+  MetricValue,
+  ProgressRail,
+  SectionTitle,
+  StatusPill,
+  SyncBadge,
+} from '../native';
+export type {
+  CardStatusDescriptor,
+  CardStatusRowProps,
+  CardTrackingStatus,
+  EmptyStateAction,
+  EmptyStateProps,
+  MetricTone,
+  MetricValueProps,
+  ProgressRailProps,
+  SectionTitleAction,
+  SectionTitleProps,
+  StatusPillProps,
+  StatusTone,
+  SyncBadgeProps,
+  SyncState,
+} from '../native';

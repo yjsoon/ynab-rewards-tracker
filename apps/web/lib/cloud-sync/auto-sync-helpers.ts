@@ -1,6 +1,10 @@
-import { shouldWarnAboutOutdatedUpload } from './decision-helpers';
-
-export type AutoSyncAction = 'skip' | 'seed_cloud' | 'pull_cloud' | 'push_local' | 'in_sync';
+export type AutoSyncAction =
+  | 'skip'
+  | 'seed_cloud'
+  | 'pull_cloud'
+  | 'push_local'
+  | 'in_sync'
+  | 'conflict';
 
 interface DetermineAutoSyncActionParams {
   localPayload: unknown;
@@ -9,6 +13,7 @@ interface DetermineAutoSyncActionParams {
   localLastSyncedAt: string | undefined;
   localKeyId: string | undefined;
   phraseKeyId: string;
+  localIsDirty: boolean;
 }
 
 export function validateImportedSettings(data: unknown): data is Record<string, unknown> {
@@ -76,7 +81,7 @@ function toStableObject(value: unknown): unknown {
 
   if (value && typeof value === 'object') {
     const entries = Object.entries(value as Record<string, unknown>)
-      .filter(([, entryValue]) => entryValue !== undefined && entryValue !== null)
+      .filter(([, entryValue]) => entryValue !== undefined)
       .sort(([left], [right]) => left.localeCompare(right));
 
     const normalisedEntries = entries.map(([key, entryValue]) => [key, toStableObject(entryValue)] as const);
@@ -105,6 +110,7 @@ export function createComparableSnapshot(payload: unknown): string {
     const settings = root.settings as Record<string, unknown>;
     delete settings.cloudSyncLastSyncedAt;
     delete settings.cloudSyncKeyId;
+    delete settings.cloudSyncLocalChangedAt;
     delete settings.cloudSyncMnemonic;
     delete settings.rememberCloudSyncCode;
     delete settings.autoSyncEnabled;
@@ -121,26 +127,56 @@ export function createComparableSnapshot(payload: unknown): string {
 
 export function determineAutoSyncAction(params: DetermineAutoSyncActionParams): AutoSyncAction {
   if (!params.cloudPayload) {
-    return hasPrimaryData(params.localPayload) ? 'seed_cloud' : 'skip';
+    return hasPrimaryData(params.localPayload) || params.localIsDirty
+      ? 'seed_cloud'
+      : 'skip';
   }
 
   if (!validateImportedSettings(params.cloudPayload)) {
     throw new Error('Invalid settings data');
   }
 
-  const shouldPreferCloud = shouldWarnAboutOutdatedUpload({
-    cloudUpdatedAt: params.cloudUpdatedAt,
-    localLastSyncedAt: params.localLastSyncedAt,
-    localKeyId: params.localKeyId,
-    phraseKeyId: params.phraseKeyId,
-  });
-
-  if (shouldPreferCloud) {
-    return 'pull_cloud';
-  }
-
   const localSnapshot = createComparableSnapshot(params.localPayload);
   const cloudSnapshot = createComparableSnapshot(params.cloudPayload);
+  if (localSnapshot === cloudSnapshot) {
+    return 'in_sync';
+  }
 
-  return localSnapshot === cloudSnapshot ? 'in_sync' : 'push_local';
+  const localRevision = params.localLastSyncedAt
+    ? Date.parse(params.localLastSyncedAt)
+    : Number.NaN;
+  const cloudRevision = params.cloudUpdatedAt
+    ? Date.parse(params.cloudUpdatedAt)
+    : Number.NaN;
+  const hasSharedBase = params.localKeyId === params.phraseKeyId
+    && Number.isFinite(localRevision)
+    && Number.isFinite(cloudRevision);
+
+  if (!hasSharedBase) {
+    return params.localIsDirty ? 'conflict' : 'pull_cloud';
+  }
+
+  if (cloudRevision < localRevision) {
+    // A stale read must never roll local state back or become the base of a push.
+    return 'conflict';
+  }
+
+  if (cloudRevision > localRevision) {
+    return params.localIsDirty ? 'conflict' : 'pull_cloud';
+  }
+
+  return 'push_local';
+}
+
+interface LocalSnapshotCheckParams {
+  expectedPayload: unknown;
+  expectedDirtyMarker: string | undefined;
+  currentPayload: unknown;
+  currentDirtyMarker: string | undefined;
+}
+
+/** Prevent a cloud pull from replacing edits made while the request was in flight. */
+export function isLocalSnapshotCurrent(params: LocalSnapshotCheckParams): boolean {
+  return params.currentDirtyMarker === params.expectedDirtyMarker
+    && createComparableSnapshot(params.currentPayload) === createComparableSnapshot(params.expectedPayload);
 }

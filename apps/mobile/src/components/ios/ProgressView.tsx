@@ -46,7 +46,7 @@ export function ProgressView({
           styles.progress,
           {
             width: `${clampedValue * 100}%`,
-            backgroundColor: tintColor || semanticColors.systemBlue,
+            backgroundColor: tintColor || semanticColors.action,
           },
         ]}
       />
@@ -57,7 +57,7 @@ export function ProgressView({
 const styles = StyleSheet.create({
   track: {
     height: 4,
-    backgroundColor: semanticColors.systemGray5,
+    backgroundColor: semanticColors.progressTrack,
     borderRadius: 2,
     overflow: 'hidden',
   },

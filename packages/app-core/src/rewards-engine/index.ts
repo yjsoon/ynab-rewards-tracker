@@ -4,13 +4,47 @@
 
 export { RewardsCalculator } from './calculator';
 export { SimpleRewardsCalculator } from './simple-calculator';
+export {
+  buildRewardsDashboard,
+  buildTransactionProjections,
+  NEAR_CAP_RATIO,
+  projectRewardCategories,
+  projectRewardsPortfolio,
+  projectTransactions,
+} from './dashboard-projection';
 export type { Transaction, TransactionWithRewards } from '../storage/types';
 export { TransactionMatcher } from './matcher';
 export { RecommendationEngine } from './recommendations';
 export { computeCurrentPeriod } from './compute';
 
 export type { CalculationPeriod } from './calculator';
-export type { CalculationPeriod as SimplePeriod, SimplifiedCalculation, SubcategoryCalculation } from './simple-calculator';
+export type {
+  CalculationPeriod as SimplePeriod,
+  SimplifiedCalculation,
+  SubcategoryCalculation,
+  TransactionRewardBlock,
+  TransactionRewardReason,
+  TransactionRewardResult,
+} from './simple-calculator';
+export type {
+  AccountNameLookup,
+  CardBlockProjection,
+  CardDashboardProjection,
+  CardPortfolioStatus,
+  CardProgressProjection,
+  CardRewardProjection,
+  CardStatusCounts,
+  MaximumThresholdProjection,
+  RewardCategoryBlockProjection,
+  RewardCategoryProjection,
+  RewardsDashboardProjection,
+  RewardsPortfolioTotals,
+  SpendProjection,
+  ThresholdProjection,
+  TransactionProjection,
+  TransactionProjectionStatus,
+  TransactionRewardProjection,
+} from './dashboard-projection';
 export type {
   CardRecommendation,
   CategoryCardInsight,

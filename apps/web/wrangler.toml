@@ -21,6 +21,14 @@ binding = "CLOUD_SYNC_KV"
 id = "4f5e97d2a1184897993e3a04a09eb200"
 preview_id = "daa5caf25fb14a9bbfd1f4be2a8eb69b"
 
+[[durable_objects.bindings]]
+name = "CLOUD_SYNC_BACKUPS"
+class_name = "CloudSyncBackup"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["CloudSyncBackup"]
+
 [vars]
 CF_WORKER_NAME = "yjab-web"
 CF_PREVIEW_DOMAIN = "__CF_PREVIEW_DOMAIN__"

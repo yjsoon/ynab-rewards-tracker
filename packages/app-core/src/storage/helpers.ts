@@ -5,11 +5,26 @@
  */
 
 import type {
+  RewardCalculation,
   Transaction,
   CachedTransaction,
   DashboardTransactionsCacheEntry,
   StorageData,
 } from './types';
+import type { MutableStorageData } from './internal-types';
+
+/**
+ * Removes device-local projections after settings from another snapshot are
+ * applied. Those projections were calculated from the previous card/rule
+ * configuration and an omitted `cachedData` property must not preserve them.
+ */
+export function invalidateDerivedDataAfterSettingsImport(
+  storage: MutableStorageData,
+): void {
+  const flagNames = storage.cachedData?.flagNames;
+  storage.calculations = [];
+  storage.cachedData = flagNames ? { flagNames: { ...flagNames } } : undefined;
+}
 
 /**
  * Validates and sanitizes a transaction for cache storage.
@@ -119,13 +134,16 @@ export function findDashboardCacheEntry(
  * @param cardId - ID of card to delete
  */
 export function applyCardDeletion(
-  storage: Pick<StorageData, 'cards' | 'rules' | 'tagMappings'>,
+  storage: Pick<StorageData, 'cards' | 'rules' | 'tagMappings' | 'hiddenCards'>,
   cardId: string
 ): void {
   storage.cards = storage.cards.filter((card) => card.id !== cardId);
   storage.rules = storage.rules.filter((rule) => rule.cardId !== cardId);
   storage.tagMappings = storage.tagMappings.filter(
     (mapping) => mapping.cardId !== cardId
+  );
+  storage.hiddenCards = (storage.hiddenCards ?? []).filter(
+    (hiddenCard) => hiddenCard.cardId !== cardId
   );
 }
 
@@ -163,6 +181,45 @@ export function normalizePeriod(period: string): {
 
   const [start, end] = period.split(' → ');
   return { start, end };
+}
+
+/**
+ * Serializes a calculation period without losing its exact date boundaries.
+ */
+export function formatCalculationPeriod(period: {
+  start: string;
+  end: string;
+}): string {
+  return `${period.start} → ${period.end}`;
+}
+
+function createCalculationIdentity(calculation: RewardCalculation): string {
+  const period = normalizePeriod(calculation.period);
+  return JSON.stringify([
+    calculation.cardId,
+    calculation.ruleId ?? null,
+    period.start,
+    period.end,
+  ]);
+}
+
+/**
+ * Replaces calculations with the same card, rule, and exact period while
+ * retaining historical calculations for other periods.
+ */
+export function mergeRewardCalculations(
+  existing: readonly RewardCalculation[],
+  replacements: readonly RewardCalculation[]
+): RewardCalculation[] {
+  if (replacements.length === 0) {
+    return [...existing];
+  }
+
+  const replacementKeys = new Set(replacements.map(createCalculationIdentity));
+  return [
+    ...existing.filter((calculation) => !replacementKeys.has(createCalculationIdentity(calculation))),
+    ...replacements,
+  ];
 }
 
 /**

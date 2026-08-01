@@ -23,6 +23,16 @@ export interface YnabPlanSummary {
 
 export type YnabBudgetSummary = YnabPlanSummary;
 
+/** Colours accepted by YNAB when setting or clearing a transaction flag. */
+export type YnabTransactionFlagColor =
+  | 'red'
+  | 'orange'
+  | 'yellow'
+  | 'green'
+  | 'blue'
+  | 'purple'
+  | null;
+
 export interface YnabAccountSummary {
   id: string;
   name: string;
@@ -58,7 +68,7 @@ export interface YnabTransactionSummary {
   memo?: string | null;
   cleared?: 'cleared' | 'uncleared' | 'reconciled';
   approved?: boolean;
-  flag_color?: string | null;
+  flag_color?: YnabTransactionFlagColor;
   flag_name?: string | null;
   import_id?: string | null;
   import_payee_name?: string | null;
@@ -122,4 +132,13 @@ export interface YnabCategory {
  */
 export interface YnabApiResponse<T> {
   data: T;
+}
+
+/** Response data returned by YNAB's bulk transaction save endpoint. */
+export interface YnabSaveTransactionsData {
+  transaction_ids: string[];
+  transaction?: YnabTransactionSummary;
+  transactions?: YnabTransactionSummary[];
+  duplicate_import_ids?: string[];
+  server_knowledge: number;
 }

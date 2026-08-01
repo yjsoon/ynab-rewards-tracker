@@ -11,6 +11,8 @@ import type {
   YnabAccountSummary,
   YnabCategoryGroup,
   YnabPayee,
+  YnabSaveTransactionsData,
+  YnabTransactionFlagColor,
   YnabTransactionSummary,
 } from './types';
 
@@ -42,6 +44,11 @@ export interface TransactionFilterOptions extends ListOptions {
   /** Filter by transaction type */
   type?: 'uncategorized' | 'unapproved';
 }
+
+type ClientRequestOptions = Pick<
+  RequestOptions,
+  'body' | 'headers' | 'method' | 'signal'
+>;
 
 /**
  * YNAB API client with standardised error handling.
@@ -131,6 +138,39 @@ export class YnabClient {
   }
 
   /**
+   * Set or clear the flag on one plan transaction.
+   *
+   * YNAB exposes partial transaction updates through the collection PATCH
+   * endpoint. Sending only the id and flag protects every unrelated field
+   * from being overwritten.
+   */
+  async updateTransactionFlag(
+    budgetId: string,
+    transactionId: string,
+    flagColor: YnabTransactionFlagColor,
+    options?: { signal?: AbortSignal },
+  ): Promise<YnabTransactionSummary | undefined> {
+    assertTransactionFlagColor(flagColor);
+
+    const response = await this.request<YnabApiResponse<YnabSaveTransactionsData>>(
+      `/plans/${budgetId}/transactions`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({
+          transactions: [{
+            id: transactionId,
+            flag_color: flagColor,
+          }],
+        }),
+        signal: options?.signal,
+      },
+    );
+
+    return response.data.transactions?.find((transaction) => transaction.id === transactionId)
+      ?? response.data.transaction;
+  }
+
+  /**
    * Validate the access token by attempting to fetch budgets.
    * Returns true if valid, false if invalid/expired.
    * Throws for network errors and other non-auth failures.
@@ -152,7 +192,7 @@ export class YnabClient {
    */
   private async request<T>(
     path: string,
-    options?: { signal?: AbortSignal },
+    options?: ClientRequestOptions,
   ): Promise<T> {
     return requestJson<T>({
       path,
@@ -162,8 +202,29 @@ export class YnabClient {
       timeoutMs: this.options.timeoutMs,
       maxRetries: this.options.maxRetries,
       backoffMs: this.options.backoffMs,
+      method: options?.method,
+      headers: options?.headers,
+      body: options?.body,
       signal: options?.signal,
     });
+  }
+}
+
+const TRANSACTION_FLAG_COLORS = new Set<YnabTransactionFlagColor>([
+  'red',
+  'orange',
+  'yellow',
+  'green',
+  'blue',
+  'purple',
+  null,
+]);
+
+function assertTransactionFlagColor(
+  flagColor: YnabTransactionFlagColor,
+): asserts flagColor is YnabTransactionFlagColor {
+  if (!TRANSACTION_FLAG_COLORS.has(flagColor)) {
+    throw new TypeError('Unsupported YNAB transaction flag colour');
   }
 }
 

@@ -31,4 +31,6 @@ export type {
   YnabSubtransaction,
   YnabCategoryGroup,
   YnabCategory,
+  YnabSaveTransactionsData,
+  YnabTransactionFlagColor,
 } from './types';

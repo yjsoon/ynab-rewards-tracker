@@ -10,7 +10,14 @@ import {
   uploadEncryptedSettings,
   isAutoSyncEnabled,
 } from '@/lib/cloud-sync';
-import { determineAutoSyncAction } from '@/lib/cloud-sync/auto-sync-helpers';
+import {
+  determineAutoSyncAction,
+  isLocalSnapshotCurrent,
+} from '@/lib/cloud-sync/auto-sync-helpers';
+import {
+  clearCloudSyncConflict,
+  markCloudSyncConflict,
+} from '@/lib/cloud-sync/conflict-state';
 import { storage } from '@/lib/storage';
 
 const SYNC_COOLDOWN = 30 * 60 * 1000; // 30 minutes
@@ -26,7 +33,12 @@ const LAST_PARSE_ERROR_KEY = 'ynab-rewards-tracker:lastAutoSyncParseError';
  * - otherwise, if local differs -> local uploads to cloud
  */
 export function useAutoSync() {
-  const { settings, updateSettings, importSettings } = useSettings();
+  const {
+    settings,
+    updateSettings,
+    completeCloudSyncSnapshot,
+    importSettings,
+  } = useSettings();
   const inFlightRef = useRef<Promise<void> | null>(null);
 
   const autoSync = useCallback(async () => {
@@ -77,6 +89,12 @@ export function useAutoSync() {
           console.error('Auto-sync: Failed to parse local export payload', error);
           return;
         }
+        const snapshotSettings = (
+          localPayload as { settings?: { cloudSyncLocalChangedAt?: unknown } }
+        ).settings;
+        const snapshotMarker = typeof snapshotSettings?.cloudSyncLocalChangedAt === 'string'
+          ? snapshotSettings.cloudSyncLocalChangedAt
+          : undefined;
 
         const stored = await fetchEncryptedSettings(keyId);
 
@@ -91,6 +109,7 @@ export function useAutoSync() {
           localLastSyncedAt: settings.cloudSyncLastSyncedAt,
           localKeyId: settings.cloudSyncKeyId,
           phraseKeyId: keyId,
+          localIsDirty: Boolean(snapshotMarker),
         });
 
         if (action === 'skip') {
@@ -100,10 +119,25 @@ export function useAutoSync() {
 
         if (action === 'seed_cloud') {
           const { ciphertext, iv } = await encryptJson(normalised, localPayload);
-          const { updatedAt } = await uploadEncryptedSettings({ keyId, ciphertext, iv });
-          updateSettings({ cloudSyncKeyId: keyId, cloudSyncLastSyncedAt: updatedAt });
+          const { updatedAt } = await uploadEncryptedSettings({
+            keyId,
+            ciphertext,
+            iv,
+            expectedUpdatedAt: null,
+          });
+          completeCloudSyncSnapshot(snapshotMarker, {
+            cloudSyncKeyId: keyId,
+            cloudSyncLastSyncedAt: updatedAt,
+          });
+          clearCloudSyncConflict();
           localStorage.setItem(LAST_SYNC_KEY, now.toString());
           console.log('Auto-sync: Seeded cloud backup from local settings');
+          return;
+        }
+
+        if (action === 'conflict') {
+          markCloudSyncConflict();
+          console.warn('Auto-sync: Local and cloud settings both changed; manual reconciliation required');
           return;
         }
 
@@ -112,8 +146,30 @@ export function useAutoSync() {
         }
 
         if (action === 'pull_cloud') {
+          const currentSnapshot = storage.exportSettings();
+          const currentPayload = JSON.parse(currentSnapshot) as {
+            settings?: { cloudSyncLocalChangedAt?: unknown };
+          };
+          const currentMarker = typeof currentPayload.settings?.cloudSyncLocalChangedAt === 'string'
+            ? currentPayload.settings.cloudSyncLocalChangedAt
+            : undefined;
+          if (!isLocalSnapshotCurrent({
+            expectedPayload: localPayload,
+            expectedDirtyMarker: snapshotMarker,
+            currentPayload,
+            currentDirtyMarker: currentMarker,
+          })) {
+            markCloudSyncConflict();
+            console.warn('Auto-sync: Local settings changed while cloud data was loading');
+            return;
+          }
           importSettings(JSON.stringify(decrypted, null, 2));
-          updateSettings({ cloudSyncKeyId: keyId, cloudSyncLastSyncedAt: stored.updatedAt });
+          updateSettings({
+            cloudSyncKeyId: keyId,
+            cloudSyncLastSyncedAt: stored.updatedAt,
+            cloudSyncLocalChangedAt: undefined,
+          });
+          clearCloudSyncConflict();
           localStorage.setItem(LAST_SYNC_KEY, now.toString());
           console.log('Auto-sync: Pulled newer cloud settings');
           return;
@@ -121,14 +177,27 @@ export function useAutoSync() {
 
         if (action === 'push_local') {
           const { ciphertext, iv } = await encryptJson(normalised, localPayload);
-          const { updatedAt } = await uploadEncryptedSettings({ keyId, ciphertext, iv });
-          updateSettings({ cloudSyncKeyId: keyId, cloudSyncLastSyncedAt: updatedAt });
+          const { updatedAt } = await uploadEncryptedSettings({
+            keyId,
+            ciphertext,
+            iv,
+            expectedUpdatedAt: stored.updatedAt,
+          });
+          completeCloudSyncSnapshot(snapshotMarker, {
+            cloudSyncKeyId: keyId,
+            cloudSyncLastSyncedAt: updatedAt,
+          });
+          clearCloudSyncConflict();
           localStorage.setItem(LAST_SYNC_KEY, now.toString());
           console.log('Auto-sync: Pushed newer local settings to cloud');
           return;
         }
 
-        updateSettings({ cloudSyncKeyId: keyId, cloudSyncLastSyncedAt: stored.updatedAt });
+        completeCloudSyncSnapshot(snapshotMarker, {
+          cloudSyncKeyId: keyId,
+          cloudSyncLastSyncedAt: stored.updatedAt,
+        });
+        clearCloudSyncConflict();
         localStorage.setItem(LAST_SYNC_KEY, now.toString());
         console.log('Auto-sync: Local and cloud settings are already in sync');
       } catch (error) {
@@ -142,7 +211,7 @@ export function useAutoSync() {
     } finally {
       inFlightRef.current = null;
     }
-  }, [settings, importSettings, updateSettings]);
+  }, [completeCloudSyncSnapshot, settings, importSettings, updateSettings]);
 
   useEffect(() => {
     // Intentionally re-run when settings change; cooldown prevents repeated network churn.

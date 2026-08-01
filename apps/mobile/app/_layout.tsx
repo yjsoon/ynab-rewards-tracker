@@ -1,44 +1,58 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
 import { Stack } from 'expo-router';
-import { TamaguiProvider, Theme } from 'tamagui';
-import { useFonts } from 'expo-font';
-import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import {
+  ActivityIndicator,
+  Appearance,
+  Platform,
+  StyleSheet,
+  Text,
+  useColorScheme,
+  View,
+} from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import * as SplashScreen from 'expo-splash-screen';
+import { TamaguiProvider, Theme } from 'tamagui';
+
 import { StorageProvider, useStorage } from '@/contexts/StorageContext';
 import { ToastProvider } from '@/contexts/ToastContext';
-import { semanticColors } from '@/theme/semanticColors';
+import { useCloudAutoSync } from '@/hooks/useCloudAutoSync';
+import { nativeStackScreenOptions, semanticColors } from '@/theme';
 import config from '../tamagui.config';
 
 SplashScreen.preventAutoHideAsync().catch(() => {
-  // Reloading the app might trigger an exception, so swallow silently.
+  // A fast refresh can race with an already-hidden splash screen.
 });
 
 function AppShell() {
   const { status, state } = useStorage();
-
-  const isSetupComplete = useMemo(
-    () =>
-      Boolean(state.pat) &&
-      Boolean(state.selectedBudget.id) &&
-      state.trackedAccountIds.length > 0,
-    [state.pat, state.selectedBudget.id, state.trackedAccountIds.length]
-  );
+  useCloudAutoSync();
+  const systemScheme = useColorScheme();
+  const preference = state.settings.theme ?? 'auto';
+  const activeScheme = Platform.OS === 'android'
+    ? 'light'
+    : preference === 'auto' ? systemScheme ?? 'light' : preference;
 
   useEffect(() => {
-    if (status.isHydrated) {
+    Appearance.setColorScheme(
+      Platform.OS === 'android' ? 'light' : preference === 'auto' ? null : preference,
+    );
+  }, [preference]);
+
+  useEffect(() => {
+    if (status.isHydrated || status.error) {
       SplashScreen.hideAsync().catch(() => {
-        // Ignore hide errors
+        // Nothing to do if the native splash has already been hidden.
       });
     }
-  }, [status.isHydrated]);
+  }, [status.error, status.isHydrated]);
 
   if (status.error) {
     return (
-      <View style={styles.centered}>
-        <Text style={styles.errorTitle}>Something went wrong</Text>
+      <View style={styles.centered} accessibilityRole="alert">
+        <Text style={styles.errorTitle}>Rewards Tracker couldn’t start</Text>
         <Text style={styles.errorMessage}>{status.error.message}</Text>
       </View>
     );
@@ -46,70 +60,47 @@ function AppShell() {
 
   if (!status.isHydrated) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" />
+      <View style={styles.centered} accessibilityLabel="Loading Rewards Tracker">
+        <ActivityIndicator size="large" color={semanticColors.action} />
       </View>
     );
   }
 
   return (
-    <Theme name="dark">
-      <Stack
-        screenOptions={{ headerShown: false }}
-        initialRouteName={isSetupComplete ? '(tabs)' : 'settings'}
-      >
-        {isSetupComplete && (
+    <Theme name={activeScheme}>
+      <ThemeProvider value={activeScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <Stack
+          initialRouteName="index"
+          screenOptions={{
+            ...nativeStackScreenOptions(activeScheme === 'dark'),
+            contentStyle: { backgroundColor: semanticColors.systemGroupedBackground },
+          }}
+        >
+          <Stack.Screen name="index" options={{ headerShown: false }} />
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen
-            name="(tabs)"
+            name="settings"
             options={{
+              presentation: 'modal',
               headerShown: true,
-              headerLargeTitle: false,
-              headerStyle: { backgroundColor: semanticColors.systemBackground as string },
-              headerTintColor: semanticColors.label as string,
-              headerTitleStyle: { color: semanticColors.label as string },
+              title: 'YNAB connection',
             }}
           />
-        )}
-        <Stack.Screen
-          name="settings"
-          options={{
-            presentation: 'modal',
-            headerShown: true,
-            headerTitle: 'Settings',
-            headerLargeTitle: false,
-            headerBackVisible: isSetupComplete,
-            gestureEnabled: isSetupComplete,
-            headerStyle: { backgroundColor: semanticColors.systemBackground as string },
-            headerTintColor: semanticColors.label as string,
-            headerTitleStyle: { color: semanticColors.label as string },
-          }}
-        />
-      </Stack>
-      <StatusBar style="light" />
+          <Stack.Screen name="card/[id]/index" options={{ headerShown: true, title: 'Card' }} />
+          <Stack.Screen
+            name="card/[id]/edit"
+            options={{ headerShown: true, title: 'Edit card', presentation: 'formSheet' }}
+          />
+        </Stack>
+      </ThemeProvider>
+      <StatusBar style={activeScheme === 'dark' ? 'light' : 'dark'} />
     </Theme>
   );
 }
 
 export default function RootLayout() {
-  const [fontsLoaded, fontError] = useFonts({
-    Inter: require('@tamagui/font-inter/otf/Inter-Medium.otf'),
-    InterBold: require('@tamagui/font-inter/otf/Inter-Bold.otf'),
-  });
-
-  useEffect(() => {
-    if (fontsLoaded || fontError) {
-      SplashScreen.hideAsync().catch(() => {
-        // Ignore hide errors
-      });
-    }
-  }, [fontsLoaded, fontError]);
-
-  if (!fontsLoaded && !fontError) {
-    return null;
-  }
-
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={styles.flex}>
       <SafeAreaProvider>
         <TamaguiProvider config={config}>
           <StorageProvider>
@@ -124,22 +115,25 @@ export default function RootLayout() {
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   centered: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#000',
+    gap: 10,
+    paddingHorizontal: 28,
+    backgroundColor: semanticColors.systemBackground,
   },
   errorTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#fff',
-    marginBottom: 8,
+    color: semanticColors.label,
+    fontSize: 20,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   errorMessage: {
-    fontSize: 14,
-    color: '#ccc',
+    color: semanticColors.secondaryLabel,
+    fontSize: 15,
+    lineHeight: 21,
     textAlign: 'center',
-    paddingHorizontal: 24,
   },
 });

@@ -66,6 +66,29 @@ const createTransaction = (
 });
 
 describe('RealTimeRecommendations', () => {
+  it.each([null, undefined])('treats a blank %s base rate as unconfigured', (earningRate) => {
+    const card = createCard({
+      earningRate,
+      subcategoriesEnabled: false,
+    });
+    const theme = createTheme({ cards: [{ cardId: card.id }] });
+
+    const [recommendation] = new RealTimeRecommendations().generateRecommendations(
+      [theme],
+      [card],
+      [],
+    );
+
+    const option = [
+      recommendation.bestCard,
+      ...recommendation.alternatives,
+      ...recommendation.notRecommended,
+    ].find((candidate) => candidate?.cardId === card.id);
+    expect(option?.effectiveRate).toBe(0);
+    expect(option?.earningRate).toBeUndefined();
+    expect(option?.reasons).not.toContain('1.0% reward rate');
+  });
+
   it('uses the shared unflagged fallback when a transaction flag is unknown', () => {
     const card = createCard({
       subcategories: [

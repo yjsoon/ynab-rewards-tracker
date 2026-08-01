@@ -167,7 +167,7 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
           : { type: 'calendar' },
         promotionalPeriod: formData.promotionalPeriodEnabled && formData.promotionalPeriodEnd
           ? {
-              startDate: formData.promotionalPeriodStart || undefined,
+              startDate: formData.promotionalPeriodStart || null,
               endDate: formData.promotionalPeriodEnd,
               description: formData.promotionalPeriodDescription || undefined,
             }

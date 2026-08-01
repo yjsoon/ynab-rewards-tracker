@@ -74,7 +74,7 @@ img.onload = () => {
   } catch (e) { document.body.textContent = 'ERR:' + e.message; }
 };
 img.src = 'data:image/svg+xml;base64,${svgB64}';
-<\/script></body></html>`;
+</script></body></html>`;
 
 const workDir = mkdtempSync(join(tmpdir(), 'gen-icons-'));
 try {

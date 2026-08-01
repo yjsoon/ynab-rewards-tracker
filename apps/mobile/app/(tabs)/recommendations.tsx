@@ -11,9 +11,9 @@ import { ScrollView, View, StyleSheet, type ColorValue } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { RecommendationEngine } from '@ynab-counter/app-core/rewards-engine';
+import { selectCurrentCardCalculations } from '@ynab-counter/app-core/rewards-engine/utils/recommendation-helpers';
 import type { CardRecommendation } from '@ynab-counter/app-core/rewards-engine/types';
 import { useStorage } from '@/contexts/StorageContext';
-import { useCardSummaries } from './index';
 import { Card, ListItem, Headline, Body, Footnote, Caption1 } from '@/components/ios';
 import { semanticColors } from '@/theme/semanticColors';
 
@@ -31,28 +31,34 @@ function getActionDetails(action: CardRecommendation['action']): { label: string
 
 export default function RecommendationsScreen() {
   const navigation = useNavigation();
-  const { summaries, calculations, isLoading } = useCardSummaries();
   const { state, status } = useStorage();
+  const calculations = state.calculations;
+  const [referenceDate, setReferenceDate] = React.useState(() => new Date());
+  const isLoading = !status.isHydrated || state.isSyncing;
+  const currentCalculations = useMemo(
+    () => selectCurrentCardCalculations(state.cards, calculations, referenceDate),
+    [calculations, referenceDate, state.cards],
+  );
 
   const recommendations = useMemo(() => {
-    if (calculations.length === 0 || summaries.length === 0) {
+    if (state.cards.length === 0) {
       return [] as CardRecommendation[];
     }
 
-    const cards = summaries.map((summary) => summary.card);
-    return RecommendationEngine.generateCardRecommendations(cards, calculations);
-  }, [calculations, summaries]);
+    return RecommendationEngine.generateCardRecommendations(state.cards, currentCalculations);
+  }, [currentCalculations, state.cards]);
 
   const infoMessage = isLoading
     ? 'Loading recommendations…'
     : state.connectionStatus !== 'connected'
     ? 'Complete setup to see recommendations.'
-    : calculations.length === 0
+    : currentCalculations.length === 0
     ? 'Sync your data from Home to generate recommendations.'
     : undefined;
 
   useFocusEffect(
     React.useCallback(() => {
+      setReferenceDate(new Date());
       const parent = navigation.getParent();
       parent?.setOptions({
         headerLargeTitle: false,
@@ -121,11 +127,6 @@ export default function RecommendationsScreen() {
             })
           )}
 
-          <View style={styles.footer}>
-            <Footnote color="tertiary" style={styles.footerText}>
-              Recommendations powered by shared rewards engine
-            </Footnote>
-          </View>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -175,12 +176,5 @@ const styles = StyleSheet.create({
   },
   prioritylow: {
     backgroundColor: semanticColors.systemGreen,
-  },
-  footer: {
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-  footerText: {
-    textAlign: 'center',
   },
 });

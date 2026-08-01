@@ -132,6 +132,11 @@ interface KVNamespace {
   get(key: string): Promise<string | null>;
 }
 
+interface DurableObjectNamespace {
+  idFromName(name: string): unknown;
+  get(id: unknown): { fetch(request: Request): Promise<Response> };
+}
+
 class AgentApiError extends Error {
   status: number;
 
@@ -204,22 +209,32 @@ async function fetchCloudSyncPayload(keyId: string): Promise<CloudSyncPayload> {
   return parsed;
 }
 
-async function getNativeKV(): Promise<KVNamespace | null> {
+async function getNativeCloudSyncBindings(): Promise<{
+  backups: DurableObjectNamespace | null;
+  kv: KVNamespace | null;
+}> {
   try {
     const ctx = await getCloudflareContext();
     const env = ctx?.env as Record<string, unknown> | undefined;
+    const backups = env?.CLOUD_SYNC_BACKUPS;
     const kv = env?.CLOUD_SYNC_KV;
-    if (
+    const validBackups = (
+      backups
+      && typeof backups === 'object'
+      && 'idFromName' in backups
+      && typeof (backups as Record<string, unknown>).idFromName === 'function'
+      && 'get' in backups
+      && typeof (backups as Record<string, unknown>).get === 'function'
+    ) ? backups as DurableObjectNamespace : null;
+    const validKV = (
       kv &&
       typeof kv === 'object' &&
       'get' in kv &&
       typeof (kv as Record<string, unknown>).get === 'function'
-    ) {
-      return kv as KVNamespace;
-    }
-    return null;
+    ) ? kv as KVNamespace : null;
+    return { backups: validBackups, kv: validKV };
   } catch {
-    return null;
+    return { backups: null, kv: null };
   }
 }
 
@@ -279,7 +294,29 @@ async function retrieveValueREST(key: string): Promise<string | null> {
 }
 
 async function retrieveCloudSyncValue(key: string): Promise<string | null> {
-  const kv = await getNativeKV();
+  const { backups, kv } = await getNativeCloudSyncBindings();
+  if (backups) {
+    try {
+      const id = backups.idFromName(key);
+      const response = await backups.get(id).fetch(
+        new Request(`https://cloud-sync.internal/api/cloud-sync?key=${encodeURIComponent(key)}`),
+      );
+      if (response.status === 404) {
+        return null;
+      }
+      if (!response.ok) {
+        throw new AgentApiError('Cloud sync storage request failed.', response.status || 502);
+      }
+      return await response.text();
+    } catch (error) {
+      if (error instanceof AgentApiError) {
+        throw error;
+      }
+      const message = error instanceof Error ? error.message : 'Failed to retrieve cloud sync data';
+      throw new AgentApiError(`Durable Object error: ${message}`, 502);
+    }
+  }
+
   if (kv) {
     try {
       return await kv.get(key);

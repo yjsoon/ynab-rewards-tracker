@@ -17,9 +17,12 @@ import {
   isAutoSyncEnabled,
 } from '@/lib/cloud-sync';
 import {
+  fetchCurrentCloudRevision,
+  resolveUploadExpectedRevision,
   shouldWarnAboutEmptyUpload as checkEmptyUpload,
   shouldWarnAboutOutdatedUpload as checkOutdatedUpload,
 } from '@/lib/cloud-sync/decision-helpers';
+import { clearCloudSyncConflict } from '@/lib/cloud-sync/conflict-state';
 import { YnabClient } from '@/lib/ynab-client';
 import { toIsoDateString } from '@/lib/date';
 import type { CreditCard } from '@/lib/storage';
@@ -193,7 +196,14 @@ function TrackedAccountCard({ account, isTracked, linkedCard, onToggle }: Tracke
 export default function SettingsPage() {
   const { pat, setPAT, isLoading: patLoading } = useYnabPAT();
   const { cards, saveCard, deleteCard, isLoading: cardsLoading } = useCreditCards();
-  const { settings, updateSettings, exportSettings, importSettings, clearAll } = useSettings();
+  const {
+    settings,
+    updateSettings,
+    completeCloudSyncSnapshot,
+    exportSettings,
+    importSettings,
+    clearAll,
+  } = useSettings();
   const { autoBackup } = useAutoBackup();
   
   const [tokenInput, setTokenInput] = useState('');
@@ -654,16 +664,36 @@ export default function SettingsPage() {
     }
   }
 
-  async function uploadWithPhrase(phrase: string, options: { generated?: boolean } = {}) {
+  async function uploadWithPhrase(
+    phrase: string,
+    options: { generated?: boolean; confirmedCloudUpdatedAt?: string | null } = {},
+  ) {
     const normalised = normaliseMnemonic(phrase);
     if (!isValidMnemonic(normalised)) {
       throw new Error('Invalid sync code. Check the words and try again.');
     }
 
-    const payload = parseExportedSettings();
+    const payload = parseExportedSettings() as {
+      settings?: {
+        cloudSyncKeyId?: string;
+        cloudSyncLastSyncedAt?: string;
+        cloudSyncLocalChangedAt?: string;
+      };
+    };
     const keyId = await computeKeyId(normalised);
     const { ciphertext, iv } = await encryptJson(normalised, payload);
-    const { updatedAt } = await uploadEncryptedSettings({ keyId, ciphertext, iv });
+    const expectedUpdatedAt = resolveUploadExpectedRevision({
+      localKeyId: payload.settings?.cloudSyncKeyId,
+      localLastSyncedAt: payload.settings?.cloudSyncLastSyncedAt,
+      phraseKeyId: keyId,
+      confirmedCloudUpdatedAt: options.confirmedCloudUpdatedAt,
+    });
+    const { updatedAt } = await uploadEncryptedSettings({
+      keyId,
+      ciphertext,
+      iv,
+      expectedUpdatedAt,
+    });
 
     // Update settings with new keyId, timestamp, and mnemonic (if remember is enabled)
     const settingsUpdate: {
@@ -680,7 +710,8 @@ export default function SettingsPage() {
       settingsUpdate.cloudSyncMnemonic = normalised;
     }
 
-    updateSettings(settingsUpdate);
+    completeCloudSyncSnapshot(payload.settings?.cloudSyncLocalChangedAt, settingsUpdate);
+    clearCloudSyncConflict();
     setCloudSyncPhrase(normalised);
     setGeneratedCloudPhrase(options.generated ? normalised : null);
     setCloudSyncMessage('Settings uploaded to Cloudflare KV. Copy your sync code to keep it safe.');
@@ -776,7 +807,12 @@ export default function SettingsPage() {
       validateImportedSettings(decrypted);
 
       importSettings(JSON.stringify(decrypted, null, 2));
-      updateSettings({ cloudSyncKeyId: keyId, cloudSyncLastSyncedAt: stored.updatedAt });
+      updateSettings({
+        cloudSyncKeyId: keyId,
+        cloudSyncLastSyncedAt: stored.updatedAt,
+        cloudSyncLocalChangedAt: undefined,
+      });
+      clearCloudSyncConflict();
       setCloudSyncPhrase(normalised);
       setGeneratedCloudPhrase(null);
 
@@ -817,6 +853,7 @@ export default function SettingsPage() {
     try {
       await deleteEncryptedSettings(keyId);
       updateSettings({ cloudSyncKeyId: undefined, cloudSyncLastSyncedAt: undefined });
+      clearCloudSyncConflict();
       setGeneratedCloudPhrase(null);
       setCloudSyncPhrase('');
       setCloudSyncMessage('Cloud backup deleted.');
@@ -944,7 +981,19 @@ export default function SettingsPage() {
     resetCloudSyncStatus();
     setCloudSyncAction('upload');
     try {
-      await uploadWithPhrase(cloudSyncPhrase);
+      const normalised = normaliseMnemonic(cloudSyncPhrase);
+      if (!isValidMnemonic(normalised)) {
+        throw new Error('Invalid sync code. Check the words and try again.');
+      }
+
+      const keyId = await computeKeyId(normalised);
+      const confirmedCloudUpdatedAt = await fetchCurrentCloudRevision(
+        keyId,
+        fetchEncryptedSettings,
+      );
+      await uploadWithPhrase(normalised, {
+        confirmedCloudUpdatedAt,
+      });
     } catch (error) {
       setCloudSyncError(getErrorMessage(error));
     } finally {
@@ -962,7 +1011,9 @@ export default function SettingsPage() {
     resetCloudSyncStatus();
     setCloudSyncAction('upload');
     try {
-      await uploadWithPhrase(cloudSyncPhrase);
+      await uploadWithPhrase(cloudSyncPhrase, {
+        confirmedCloudUpdatedAt: cloudTimestamp ?? undefined,
+      });
     } catch (error) {
       setCloudSyncError(getErrorMessage(error));
     } finally {

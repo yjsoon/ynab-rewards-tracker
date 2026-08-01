@@ -1,9 +1,9 @@
 import React from 'react';
 import { Text, StyleSheet } from 'react-native';
-import type { TextStyle } from 'react-native';
+import type { StyleProp, TextProps, TextStyle } from 'react-native';
 import { semanticColors } from '../../theme/semanticColors';
 
-type TextVariant =
+export type TextVariant =
   | 'largeTitle'
   | 'title1'
   | 'title2'
@@ -16,13 +16,21 @@ type TextVariant =
   | 'caption1'
   | 'caption2';
 
-interface TypographyProps {
-  children: React.ReactNode;
+export type TextColor =
+  | 'primary'
+  | 'secondary'
+  | 'tertiary'
+  | 'quaternary'
+  | 'action'
+  | 'positive'
+  | 'attention'
+  | 'destructive'
+  | 'inverse';
+
+export interface TypographyProps extends Omit<TextProps, 'style'> {
   variant?: TextVariant;
-  color?: 'primary' | 'secondary' | 'tertiary' | 'quaternary';
-  style?: TextStyle;
-  numberOfLines?: number;
-  allowFontScaling?: boolean;
+  color?: TextColor;
+  style?: StyleProp<TextStyle>;
 }
 
 /**
@@ -34,8 +42,8 @@ export function Typography({
   variant = 'body',
   color = 'primary',
   style,
-  numberOfLines,
   allowFontScaling = true,
+  ...textProps
 }: TypographyProps) {
   // Safe color style mapping
   const getColorStyle = (c: NonNullable<TypographyProps['color']>) => {
@@ -44,14 +52,22 @@ export function Typography({
       case 'secondary': return styles.secondaryColor;
       case 'tertiary': return styles.tertiaryColor;
       case 'quaternary': return styles.quaternaryColor;
+      case 'action': return styles.actionColor;
+      case 'positive': return styles.positiveColor;
+      case 'attention': return styles.attentionColor;
+      case 'destructive': return styles.destructiveColor;
+      case 'inverse': return styles.inverseColor;
     }
   };
 
   return (
     <Text
+      {...textProps}
       style={[styles[variant], getColorStyle(color), style]}
-      numberOfLines={numberOfLines}
       allowFontScaling={allowFontScaling}
+      dynamicTypeRamp={variant}
+      lineBreakStrategyIOS="standard"
+      textBreakStrategy="highQuality"
     >
       {children}
     </Text>
@@ -104,61 +120,53 @@ export function Caption2(props: Omit<TypographyProps, 'variant'>) {
 }
 
 const styles = StyleSheet.create({
-  // Text styles (iOS Dynamic Type scale)
+  // Base sizes match iOS text styles. dynamicTypeRamp handles every
+  // accessibility category; omitting fixed line heights prevents clipping.
   largeTitle: {
     fontSize: 34,
     fontWeight: '700',
-    lineHeight: 41,
+    letterSpacing: 0.2,
   },
   title1: {
     fontSize: 28,
     fontWeight: '700',
-    lineHeight: 34,
+    letterSpacing: 0.15,
   },
   title2: {
     fontSize: 22,
     fontWeight: '700',
-    lineHeight: 28,
   },
   title3: {
     fontSize: 20,
     fontWeight: '600',
-    lineHeight: 25,
   },
   headline: {
     fontSize: 17,
     fontWeight: '600',
-    lineHeight: 22,
   },
   body: {
     fontSize: 17,
     fontWeight: '400',
-    lineHeight: 22,
   },
   callout: {
     fontSize: 16,
     fontWeight: '400',
-    lineHeight: 21,
   },
   subheadline: {
     fontSize: 15,
     fontWeight: '400',
-    lineHeight: 20,
   },
   footnote: {
     fontSize: 13,
     fontWeight: '400',
-    lineHeight: 18,
   },
   caption1: {
     fontSize: 12,
     fontWeight: '400',
-    lineHeight: 16,
   },
   caption2: {
     fontSize: 11,
     fontWeight: '400',
-    lineHeight: 13,
   },
 
   // Color variants using semantic iOS colors
@@ -173,5 +181,20 @@ const styles = StyleSheet.create({
   },
   quaternaryColor: {
     color: semanticColors.quaternaryLabel,
+  },
+  actionColor: {
+    color: semanticColors.action,
+  },
+  positiveColor: {
+    color: semanticColors.positive,
+  },
+  attentionColor: {
+    color: semanticColors.attention,
+  },
+  destructiveColor: {
+    color: semanticColors.destructive,
+  },
+  inverseColor: {
+    color: semanticColors.primaryButtonForeground,
   },
 });

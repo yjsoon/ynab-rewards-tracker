@@ -48,11 +48,14 @@ export function applyStorageMigrations(data: MutableStorageData): void {
           mutableCard.type = 'miles';
         }
         if ('milesBlockSize' in mutableCard) {
-          const { milesBlockSize, ...cleanCard } = mutableCard;
-          return cleanCard as CreditCard;
+          Reflect.deleteProperty(mutableCard, 'milesBlockSize');
         }
-        // Migrate promotional periods without startDate: default to 1st of previous month
-        if (mutableCard.promotionalPeriod && !mutableCard.promotionalPeriod.startDate) {
+        // Legacy promotions omitted the field entirely. New saves persist null
+        // to represent the intentional "use current card period" behaviour.
+        if (
+          mutableCard.promotionalPeriod
+          && !Object.prototype.hasOwnProperty.call(mutableCard.promotionalPeriod, 'startDate')
+        ) {
           const now = new Date();
           const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
           mutableCard.promotionalPeriod = {
@@ -94,13 +97,15 @@ export function applyStorageMigrations(data: MutableStorageData): void {
     if (Array.isArray(data.cards)) {
       data.cards = data.cards.map((card) => {
         const mutableCard: MutableCard = { ...card } as MutableCard;
-        if (!mutableCard.earningRate) {
+        if (!Object.prototype.hasOwnProperty.call(mutableCard, 'earningRate')) {
           const cardRules = Array.isArray(data.rules)
             ? data.rules.filter((rule) => rule.cardId === mutableCard.id && rule.active)
             : [];
           if (cardRules.length > 0) {
             const firstRule = cardRules[0];
-            mutableCard.earningRate = firstRule.rewardValue || 1;
+            mutableCard.earningRate = typeof firstRule.rewardValue === 'number'
+              ? firstRule.rewardValue
+              : 1;
           } else {
             mutableCard.earningRate = 1;
           }

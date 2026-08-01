@@ -4,6 +4,7 @@ import {
   type YnabBudgetSummary,
   type YnabAccountSummary,
   type YnabTransactionSummary,
+  type YnabTransactionFlagColor,
 } from './ynab-client';
 
 export interface ValidateTokenResult {
@@ -51,4 +52,14 @@ export async function fetchTransactions(
 ): Promise<YnabTransactionSummary[]> {
   const client = new YnabClient(pat.trim());
   return client.getTransactions(budgetId, options);
+}
+
+export async function updateTransactionFlag(
+  pat: string,
+  budgetId: string,
+  transactionId: string,
+  flagColor: YnabTransactionFlagColor,
+): Promise<YnabTransactionSummary | undefined> {
+  const client = new YnabClient(pat.trim());
+  return client.updateTransactionFlag(budgetId, transactionId, flagColor);
 }

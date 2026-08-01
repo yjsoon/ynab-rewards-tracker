@@ -1,8 +1,9 @@
 import React, { type ReactNode } from 'react';
-import { Pressable, Text, StyleSheet } from 'react-native';
-import type { ViewStyle, TextStyle } from 'react-native';
+import { Pressable, Text, StyleSheet, View } from 'react-native';
+import type { StyleProp, ViewStyle, TextStyle } from 'react-native';
 import { useHaptics } from '../../hooks/useHaptics';
 import { semanticColors } from '../../theme/semanticColors';
+import { interaction, nativeMetrics } from '../../theme/tokens';
 
 type ButtonVariant = 'filled' | 'tinted' | 'plain';
 type ButtonSize = 'small' | 'medium' | 'large';
@@ -13,10 +14,11 @@ interface ButtonProps {
   variant?: ButtonVariant;
   size?: ButtonSize;
   disabled?: boolean;
-  style?: ViewStyle;
-  textStyle?: TextStyle;
+  style?: StyleProp<ViewStyle>;
+  textStyle?: StyleProp<TextStyle>;
   accessibilityLabel?: string;
   accessibilityHint?: string;
+  testID?: string;
 }
 
 /**
@@ -33,11 +35,12 @@ export function Button({
   textStyle,
   accessibilityLabel,
   accessibilityHint,
+  testID,
 }: ButtonProps) {
   const { impact } = useHaptics();
 
   const handlePress = () => {
-    impact('medium');
+    impact(size === 'large' ? 'medium' : 'light');
     onPress();
   };
 
@@ -90,6 +93,7 @@ export function Button({
       accessibilityHint={accessibilityHint}
       accessibilityRole="button"
       accessibilityState={{ disabled }}
+      testID={testID}
       style={({ pressed }) => [
         styles.base,
         getContainerStyle(variant),
@@ -99,17 +103,23 @@ export function Button({
         style,
       ]}
     >
-      <Text
-        style={[
-          styles.baseText,
-          getTextStyle(variant),
-          getSizeTextStyle(size),
-          disabled && styles.disabledText,
-          textStyle,
-        ]}
-      >
-        {children}
-      </Text>
+      {typeof children === 'string' || typeof children === 'number' ? (
+        <Text
+          style={[
+            styles.baseText,
+            getTextStyle(variant),
+            getSizeTextStyle(size),
+            disabled && styles.disabledText,
+            textStyle,
+          ]}
+          allowFontScaling
+          dynamicTypeRamp={size === 'small' ? 'subheadline' : size === 'large' ? 'headline' : 'body'}
+        >
+          {children}
+        </Text>
+      ) : (
+        <View style={styles.customContent}>{children}</View>
+      )}
     </Pressable>
   );
 }
@@ -123,10 +133,11 @@ const styles = StyleSheet.create({
   
   // Variants
   filledContainer: {
-    backgroundColor: semanticColors.systemBlue,
+    backgroundColor: semanticColors.action,
   },
   filledPressed: {
-    opacity: 0.8,
+    backgroundColor: semanticColors.actionPressed,
+    opacity: interaction.pressedOpacity,
   },
   filledText: {
     color: semanticColors.primaryButtonForeground,
@@ -134,13 +145,13 @@ const styles = StyleSheet.create({
   },
   
   tintedContainer: {
-    backgroundColor: '#007AFF26', // systemBlue at 15% opacity
+    backgroundColor: semanticColors.actionTint,
   },
   tintedPressed: {
-    backgroundColor: '#007AFF40', // systemBlue at 25% opacity
+    opacity: interaction.pressedOpacity,
   },
   tintedText: {
-    color: semanticColors.systemBlue,
+    color: semanticColors.action,
     fontWeight: '600',
   },
   
@@ -148,18 +159,18 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   plainPressed: {
-    opacity: 0.6,
+    opacity: interaction.pressedOpacity,
   },
   plainText: {
-    color: semanticColors.systemBlue,
+    color: semanticColors.action,
     fontWeight: '400',
   },
   
   // Sizes
   smallContainer: {
-    paddingVertical: 6,
+    paddingVertical: 8,
     paddingHorizontal: 12,
-    minHeight: 28,
+    minHeight: nativeMetrics.minimumTouchTarget,
   },
   smallText: {
     fontSize: 13,
@@ -168,7 +179,7 @@ const styles = StyleSheet.create({
   mediumContainer: {
     paddingVertical: 10,
     paddingHorizontal: 16,
-    minHeight: 44,
+    minHeight: nativeMetrics.minimumTouchTarget,
   },
   mediumText: {
     fontSize: 17,
@@ -185,7 +196,7 @@ const styles = StyleSheet.create({
   
   // States
   disabled: {
-    opacity: 0.3,
+    opacity: interaction.disabledOpacity,
   },
   disabledText: {
     opacity: 1,
@@ -193,5 +204,9 @@ const styles = StyleSheet.create({
   
   baseText: {
     textAlign: 'center',
+  },
+  customContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

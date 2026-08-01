@@ -136,6 +136,15 @@ export function normaliseCard(
 
   const mutableCard = { ...card } as MutableCard;
 
+  // Preserve the editor's intentional blank rate across JSON persistence.
+  // A truly absent property is handled by the legacy migration before this.
+  if (
+    Object.prototype.hasOwnProperty.call(mutableCard, 'earningRate')
+    && mutableCard.earningRate === undefined
+  ) {
+    mutableCard.earningRate = null;
+  }
+
   if ('active' in mutableCard) {
     Reflect.deleteProperty(mutableCard, 'active');
   }
@@ -192,6 +201,16 @@ export function normaliseCard(
 
   if (typeof mutableCard.issuer !== 'string') {
     mutableCard.issuer = 'Unknown';
+  }
+
+  if (
+    mutableCard.promotionalPeriod
+    && !Object.prototype.hasOwnProperty.call(mutableCard.promotionalPeriod, 'startDate')
+  ) {
+    mutableCard.promotionalPeriod = {
+      ...mutableCard.promotionalPeriod,
+      startDate: null,
+    };
   }
 
   return mutableCard as CreditCard;

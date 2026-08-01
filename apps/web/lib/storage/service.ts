@@ -1,4 +1,8 @@
 import type { YnabFlagColor } from "@ynab-counter/app-core/ynab";
+import {
+  createCloudSyncPayload,
+  resolveCloudSyncDirtyMarker,
+} from "@ynab-counter/app-core/cloud-sync";
 
 import {
   STORAGE_KEY,
@@ -18,6 +22,7 @@ import {
   createDashboardCacheKey,
   findDashboardCacheEntry,
   applyCardDeletion,
+  invalidateDerivedDataAfterSettingsImport,
   validateHiddenUntilDate,
 } from "@ynab-counter/app-core/storage";
 import type {
@@ -43,6 +48,7 @@ import type {
   MutableStorageData,
   MutableThemeGroup,
 } from "@ynab-counter/app-core/storage";
+import { clearCloudSyncConflict } from "@/lib/cloud-sync/conflict-state";
 
 export class StorageService {
   private static readonly DASHBOARD_CACHE_LIMIT = 500;
@@ -154,6 +160,23 @@ export class StorageService {
 
     try {
       const normalized = this.normalizeStorage(data as MutableStorageData);
+      const previousRaw = localStorage.getItem(STORAGE_KEY);
+      const previous = previousRaw
+        ? this.normalizeStorage(JSON.parse(previousRaw) as MutableStorageData)
+        : createDefaultStorage();
+      if (
+        JSON.stringify(createCloudSyncPayload(previous)) !==
+        JSON.stringify(createCloudSyncPayload(normalized))
+      ) {
+        const currentMarker = normalized.settings.cloudSyncLocalChangedAt;
+        const currentMarkerTime = currentMarker ? Date.parse(currentMarker) : Number.NaN;
+        const now = Date.now();
+        normalized.settings.cloudSyncLocalChangedAt = new Date(
+          Number.isFinite(currentMarkerTime) && currentMarkerTime >= now
+            ? currentMarkerTime + 1
+            : now,
+        ).toISOString();
+      }
       localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
       localStorage.setItem(STORAGE_VERSION_KEY, STORAGE_VERSION);
       this.cachedStorage = normalized;
@@ -178,6 +201,23 @@ export class StorageService {
       ...settings,
     };
     this.setStorage(storage);
+  }
+
+  completeCloudSyncSnapshot(
+    snapshotMarker: string | undefined,
+    metadata: Pick<AppSettings, "cloudSyncKeyId" | "cloudSyncLastSyncedAt">,
+  ): AppSettings {
+    const storage = this.getStorage();
+    storage.settings = {
+      ...storage.settings,
+      ...metadata,
+      cloudSyncLocalChangedAt: resolveCloudSyncDirtyMarker(
+        snapshotMarker,
+        storage.settings.cloudSyncLocalChangedAt,
+      ),
+    };
+    this.setStorage(storage);
+    return { ...storage.settings };
   }
 
   getStatementFormatterSettings(): StatementFormatterSettings {
@@ -847,6 +887,7 @@ export class StorageService {
       }
 
       pruneThemeGroups(storage);
+      invalidateDerivedDataAfterSettingsImport(storage);
       this.setStorage(storage);
     } catch (error) {
       throw new Error("Invalid settings file");
@@ -930,6 +971,7 @@ export class StorageService {
     }
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(STORAGE_VERSION_KEY);
+    clearCloudSyncConflict();
     this.invalidateCache();
   }
 }

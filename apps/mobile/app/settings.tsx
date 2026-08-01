@@ -180,8 +180,8 @@ export default function SettingsScreen() {
           if (hasLocalTrackedChanges) {
             actions.stageTrackedAccountIds(trackedAccounts);
           }
-          await actions.applyPendingChanges();
-          notification('success');
+          const completed = await actions.applyPendingChanges();
+          if (completed) notification('success');
         } catch (error) {
           notification('error');
         } finally {
@@ -204,7 +204,7 @@ export default function SettingsScreen() {
     // Navigate immediately if in setup mode to avoid label change
     if (wasInSetupMode) {
       if (hadNoBackStack) {
-        router.replace('/(tabs)');
+        router.replace('/(tabs)/overview');
       } else {
         router.back();
       }
@@ -212,8 +212,8 @@ export default function SettingsScreen() {
     
     try {
       actions.stageTrackedAccountIds(trackedAccounts);
-      await actions.applyPendingChanges();
-      notification('success');
+      const completed = await actions.applyPendingChanges();
+      if (completed) notification('success');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : undefined;
       const toastMessage = errorMessage || 'Couldn\'t finish setup. Failed to sync with YNAB';
@@ -256,7 +256,7 @@ export default function SettingsScreen() {
   useFocusEffect(
     React.useCallback(() => {
       navigation.setOptions({
-        title: 'Settings',
+        title: 'YNAB connection',
         headerLargeTitle: false,
         headerBackVisible: !isSetupMode,
         gestureEnabled: !isSetupMode,
@@ -297,8 +297,8 @@ export default function SettingsScreen() {
     impact('light');
     setValidationError(undefined);
     try {
-      await actions.setPAT(trimmed);
-      notification('success');
+      const completed = await actions.setPAT(trimmed);
+      if (completed) notification('success');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to connect to YNAB';
       setValidationError(message);
@@ -337,8 +337,12 @@ export default function SettingsScreen() {
     setValidationError(undefined);
     try {
       actions.stageBudgetSelection(budget.id, budget.name);
-      await actions.applyPendingChanges();
-      notification('success');
+      const completed = await actions.applyPendingChanges();
+      if (completed) {
+        notification('success');
+      } else {
+        setActiveBudgetSyncId(undefined);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to sync budget';
       setValidationError(message);

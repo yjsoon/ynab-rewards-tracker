@@ -188,7 +188,7 @@ pnpm --filter ./apps/web dev
 
 # Run mobile app (choose platform)
 pnpm --filter ./apps/mobile start      # Metro bundler (QR code)
-pnpm --filter ./apps/mobile ios        # Launch iOS simulator via Expo
+pnpm --filter ./apps/mobile ios        # Build native app and launch iOS simulator
 pnpm --filter ./apps/mobile android    # Launch Android emulator via Expo
 ```
 

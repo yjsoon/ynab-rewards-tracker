@@ -3,8 +3,9 @@
     "name": "Rewards Tracker",
     "slug": "rewards-tracker-ynab",
     "version": "0.1.0",
-    "scheme": "ynabcounter",
-    "orientation": "portrait",
+    "scheme": "rewardstracker",
+    "orientation": "default",
+    "userInterfaceStyle": "automatic",
     "icon": "./assets/icon.png",
     "experiments": {
       "typedRoutes": true
@@ -18,7 +19,16 @@
     },
     "plugins": [
       "expo-router",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#F2F2F7",
+          "dark": {
+            "backgroundColor": "#000000"
+          }
+        }
+      ]
     ]
   }
 }

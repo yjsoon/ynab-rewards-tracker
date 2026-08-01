@@ -29,7 +29,7 @@ export class RewardsCalculator {
     settings?: AppSettings
   ): RewardCalculation {
     // Get valuation rates from settings (default 1 cent per mile/point)
-    const milesValuation = settings?.milesValuation || 0.01;
+    const milesValuation = settings?.milesValuation ?? 0.01;
 
     // Filter transactions to this period using string comparison on YNAB's
     // YYYY-MM-DD dates, which is ordering-equivalent to Date comparison.
