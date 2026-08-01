@@ -208,10 +208,10 @@ pnpm --filter ./apps/mobile android    # Launch Android emulator via Expo
 
 ### Web App
 - Hosted on **Cloudflare Workers** via OpenNext adapter
-- Auto-deploys on push to `main` via GitHub Actions
+- Production deployments normally happen by pushing the intended app changes to `main` and monitoring the `Deploy to Cloudflare Workers` GitHub Actions workflow.
 - Live at https://rewards.soon.sg
 - Cloud sync uses native Cloudflare KV bindings through the custom Worker entrypoint
-- Manual deploy: `pnpm --filter ./apps/web deploy:cloudflare`
+- Manual deploy: `pnpm --filter ./apps/web deploy:cloudflare`. Use this only when a local deploy is specifically required. OpenNext skew protection also requires `CF_WORKER_NAME`, `CF_WORKERS_SCRIPTS_API_TOKEN`, and `CF_ACCOUNT_ID` as configured in `.github/workflows/deploy-cloudflare.yml`; a successful `wrangler whoami` is not sufficient if the token cannot read Worker versions.
 
 ### Mobile App
 - Use the scripts in `apps/mobile/package.json` for local Expo builds. Inspect the current Expo/EAS configuration before changing release workflows.
