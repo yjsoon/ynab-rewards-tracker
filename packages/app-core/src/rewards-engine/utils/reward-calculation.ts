@@ -2,6 +2,34 @@ import type { RewardCalculation, CreditCard, SubcategoryBreakdown } from '../../
 
 import type { SimplifiedCalculation, SubcategoryCalculation } from '../simple-calculator';
 
+/**
+ * Recomputes the dollar-denominated fields that depend only on the user's
+ * current miles valuation. Raw miles and cashback calculations stay intact.
+ */
+export function revalueRewardCalculations(
+  calculations: readonly RewardCalculation[],
+  milesValuation: number,
+): RewardCalculation[] {
+  return calculations.map((calculation) => {
+    if (calculation.rewardType !== 'miles') {
+      return { ...calculation };
+    }
+
+    return {
+      ...calculation,
+      rewardEarnedDollars: calculation.rewardEarned * milesValuation,
+      categoryBreakdowns: calculation.categoryBreakdowns?.map((breakdown) => ({
+        ...breakdown,
+        rewardDollars: breakdown.reward * milesValuation,
+      })),
+      subcategoryBreakdowns: calculation.subcategoryBreakdowns?.map((breakdown) => ({
+        ...breakdown,
+        rewardEarnedDollars: breakdown.rewardEarned * milesValuation,
+      })),
+    };
+  });
+}
+
 function mapSubcategoryBreakdown(subcategory: SubcategoryCalculation): SubcategoryBreakdown {
   return {
     subcategoryId: subcategory.id,

@@ -148,9 +148,9 @@ export default function CloudSyncScreen() {
     try {
       setRemember(nextRemember);
       if (nextRemember && isValidMnemonic(normaliseMnemonic(code))) {
-        await rememberCloudSyncCode(code);
+        await rememberCloudSyncCode(code, storageGeneration);
       } else if (!nextRemember) {
-        await forgetCloudSyncCode();
+        await forgetCloudSyncCode(storageGeneration);
       }
       if (!storage.isGenerationCurrent(storageGeneration)) return;
       await storage.updateSettings({
@@ -190,9 +190,9 @@ export default function CloudSyncScreen() {
     if (!storage.isGenerationCurrent(storageGeneration)) return;
     const shouldRemember = completedSettings.rememberCloudSyncCode ?? remember;
     if (shouldRemember) {
-      await rememberCloudSyncCode(result.phrase);
+      await rememberCloudSyncCode(result.phrase, storageGeneration);
     } else {
-      await forgetCloudSyncCode();
+      await forgetCloudSyncCode(storageGeneration);
     }
     if (!storage.isGenerationCurrent(storageGeneration)) return;
     if (mountedRef.current) setRemember(shouldRemember);
@@ -304,7 +304,7 @@ export default function CloudSyncScreen() {
       autoSyncEnabled: state.settings.autoSyncEnabled ?? false,
     }, storageGeneration);
     if (!storage.isGenerationCurrent(storageGeneration)) return;
-    if (remember) await rememberCloudSyncCode(metadata.phrase);
+    if (remember) await rememberCloudSyncCode(metadata.phrase, storageGeneration);
     if (!storage.isGenerationCurrent(storageGeneration)) return;
     await actions.refresh(storageGeneration);
     if (!storage.isGenerationCurrent(storageGeneration) || !mountedRef.current) return;
@@ -457,7 +457,7 @@ export default function CloudSyncScreen() {
           throw new Error('Save or restore this recovery code before turning on automatic sync.');
         }
         setRemember(true);
-        await rememberCloudSyncCode(phrase);
+        await rememberCloudSyncCode(phrase, storageGeneration);
         if (!storage.isGenerationCurrent(storageGeneration)) return;
         await storage.updateSettings(
           { rememberCloudSyncCode: true, autoSyncEnabled: true },

@@ -17,18 +17,43 @@ export function isDashboardCacheEntryComplete(
   return entry.transactions.length < DASHBOARD_TRANSACTION_CACHE_LIMIT;
 }
 
-/** A trusted entry is complete and has no durable full-refresh marker. */
+/**
+ * A successful full fetch can still produce a locally truncated transaction
+ * preview. Its persisted calculations remain usable, and repeating the same
+ * fetch cannot make the 500-row preview complete.
+ */
+export function isDashboardCacheEntryLocallyTruncated(
+  entry: Pick<
+    DashboardTransactionsCacheEntry,
+    'isComplete' | 'requiresFullRefresh' | 'transactions'
+  > | undefined,
+): boolean {
+  return Boolean(
+    entry
+    && entry.isComplete === false
+    && entry.requiresFullRefresh !== true
+    && Array.isArray(entry.transactions)
+    && entry.transactions.length === DASHBOARD_TRANSACTION_CACHE_LIMIT,
+  );
+}
+
+/** A trusted entry is usable without another full refresh. */
 export function isDashboardCacheEntryTrusted(
   entry: DashboardTransactionsCacheEntry | undefined,
 ): boolean {
-  return isDashboardCacheEntryComplete(entry) && entry?.requiresFullRefresh !== true;
+  return entry?.requiresFullRefresh !== true && (
+    isDashboardCacheEntryComplete(entry)
+    || isDashboardCacheEntryLocallyTruncated(entry)
+  );
 }
 
 export function getDashboardProjectionCompleteness(
   entry: DashboardTransactionsCacheEntry | undefined,
 ): { periodDataComplete: boolean; periodDataSinceDate?: string } {
   return {
-    periodDataComplete: isDashboardCacheEntryTrusted(entry),
+    periodDataComplete:
+      isDashboardCacheEntryComplete(entry)
+      && entry?.requiresFullRefresh !== true,
     periodDataSinceDate: entry?.sinceDate,
   };
 }
@@ -127,8 +152,7 @@ export function shouldRefreshDashboardCache(
 ): boolean {
   if (
     !entry
-    || !isDashboardCacheEntryComplete(entry)
-    || entry.requiresFullRefresh === true
+    || !isDashboardCacheEntryTrusted(entry)
     || entry.sinceDate > requiredSinceDate
   ) {
     return true;

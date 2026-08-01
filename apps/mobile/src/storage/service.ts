@@ -37,6 +37,7 @@ import type {
   CachedTransaction,
 } from '@ynab-counter/app-core/storage';
 import { resolveCloudSyncDirtyMarker } from '@ynab-counter/app-core/cloud-sync';
+import { revalueRewardCalculations } from '@ynab-counter/app-core/rewards-engine/utils/reward-calculation';
 import type {
   MutableCard,
   MutableStorageData,
@@ -44,6 +45,7 @@ import type {
 } from '@ynab-counter/app-core/storage';
 
 const PAT_SECURE_STORE_KEY = 'ynab_counter_pat';
+const CLOUD_SYNC_CODE_SECURE_STORE_KEY = 'ynab_counter_cloud_sync_code';
 const LEGACY_PAT_SECURE_STORE_KEYS = [
   'ynab_counter_pat_legacy',
   'ynab-counter:pat',
@@ -300,6 +302,12 @@ export class StorageService {
         ...storage.settings,
         ...settings,
       };
+      if (Object.prototype.hasOwnProperty.call(settings, 'milesValuation')) {
+        storage.calculations = revalueRewardCalculations(
+          storage.calculations,
+          settings.milesValuation ?? 0.01,
+        );
+      }
     });
   }
 
@@ -351,6 +359,30 @@ export class StorageService {
         SecureStore.deleteItemAsync(PAT_SECURE_STORE_KEY),
         ...LEGACY_PAT_SECURE_STORE_KEYS.map((key) => SecureStore.deleteItemAsync(key)),
       ]);
+      this.assertGeneration(expectedGeneration);
+    });
+  }
+
+  async getRecoveryCode(): Promise<string | null> {
+    const credentialResetVersion = await this.waitForCredentialResets();
+    const expectedGeneration = this.captureGeneration();
+    const code = await SecureStore.getItemAsync(CLOUD_SYNC_CODE_SECURE_STORE_KEY);
+    this.assertCredentialReadCurrent(expectedGeneration, credentialResetVersion);
+    return code;
+  }
+
+  async setRecoveryCode(code: string, expectedGeneration: number): Promise<void> {
+    await this.enqueueCredentialOperation(async () => {
+      this.assertGeneration(expectedGeneration);
+      await SecureStore.setItemAsync(CLOUD_SYNC_CODE_SECURE_STORE_KEY, code);
+      this.assertGeneration(expectedGeneration);
+    });
+  }
+
+  async deleteRecoveryCode(expectedGeneration: number): Promise<void> {
+    await this.enqueueCredentialOperation(async () => {
+      this.assertGeneration(expectedGeneration);
+      await SecureStore.deleteItemAsync(CLOUD_SYNC_CODE_SECURE_STORE_KEY);
       this.assertGeneration(expectedGeneration);
     });
   }
@@ -1069,6 +1101,7 @@ export class StorageService {
           this.assertGeneration(expectedGeneration);
         });
         await this.deleteSecurePAT(expectedGeneration);
+        await this.deleteRecoveryCode(expectedGeneration);
       });
     } finally {
       this.cache = null;

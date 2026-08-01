@@ -7,7 +7,6 @@ import { Card, SectionHeader } from '@/components/ios';
 import { StatusPill } from '@/components/native';
 import { useStorage } from '@/contexts/StorageContext';
 import { SettingsFooter, SettingsRow } from '@/features/preferences/SettingsRow';
-import { forgetCloudSyncCode } from '@/lib/cloud-sync';
 import { storage } from '@/storage/service';
 import { semanticColors, spacing } from '@/theme';
 import { createCloudSyncPayload, parseCloudSyncPayload } from '@ynab-counter/app-core/cloud-sync';
@@ -86,7 +85,7 @@ export default function DataPreferencesScreen() {
           onPress: () => {
             void (async () => {
               actions.invalidatePendingOperations();
-              await Promise.all([storage.clearAll(), forgetCloudSyncCode()]);
+              await storage.clearAll();
               await actions.refresh();
               router.replace('/');
             })().catch((error: unknown) => {

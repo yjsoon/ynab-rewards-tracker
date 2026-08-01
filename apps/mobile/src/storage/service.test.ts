@@ -5,6 +5,7 @@ import {
   STORAGE_VERSION,
   STORAGE_VERSION_KEY,
 } from '@ynab-counter/app-core/storage';
+import { RecommendationEngine } from '@ynab-counter/app-core/rewards-engine';
 
 const mocks = vi.hoisted(() => ({
   asyncValues: new Map<string, string>(),
@@ -43,6 +44,7 @@ import { StorageService } from './service';
 import { retryExpectedStorageCancellation } from '../contexts/storage-cancellation';
 
 const SECURE_PAT_KEY = 'ynab_counter_pat';
+const SECURE_RECOVERY_CODE_KEY = 'ynab_counter_cloud_sync_code';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -51,7 +53,75 @@ beforeEach(() => {
   vi.stubGlobal('__DEV__', false);
 });
 
-describe('PAT generation ownership', () => {
+describe('derived reward valuation', () => {
+  it('revalues persisted miles calculations before recommendations are read', async () => {
+    const initial = createDefaultStorage();
+    initial.settings.milesValuation = 0.01;
+    initial.calculations = [{
+      cardId: 'miles-card',
+      ruleId: 'card-miles-card',
+      period: '2026-08',
+      totalSpend: 100,
+      eligibleSpend: 100,
+      rewardEarned: 100,
+      rewardEarnedDollars: 1,
+      rewardType: 'miles',
+      minimumMet: true,
+      maximumExceeded: false,
+      shouldStopUsing: false,
+      categoryBreakdowns: [{
+        category: 'Dining',
+        spend: 100,
+        reward: 100,
+        rewardDollars: 1,
+        capReached: false,
+      }],
+      subcategoryBreakdowns: [{
+        subcategoryId: 'dining',
+        name: 'Dining',
+        flagColor: 'red',
+        totalSpend: 100,
+        eligibleSpend: 100,
+        rewardEarned: 100,
+        rewardEarnedDollars: 1,
+        minimumSpendMet: true,
+        maximumSpendExceeded: false,
+      }],
+    }];
+    mocks.asyncValues.set(STORAGE_VERSION_KEY, STORAGE_VERSION);
+    mocks.asyncValues.set(STORAGE_KEY, JSON.stringify(initial));
+    const service = new StorageService();
+
+    await service.updateSettings({ milesValuation: 0.03 });
+
+    const persisted = JSON.parse(await service.exportSettings());
+    expect(persisted.calculations[0]).toMatchObject({
+      rewardEarned: 100,
+      rewardEarnedDollars: 3,
+      categoryBreakdowns: [{ reward: 100, rewardDollars: 3 }],
+      subcategoryBreakdowns: [{ rewardEarned: 100, rewardEarnedDollars: 3 }],
+    });
+
+    const recommendations = RecommendationEngine.generateCardRecommendations([{
+      id: 'miles-card',
+      name: 'Miles Card',
+      issuer: 'Bank',
+      type: 'miles',
+      featured: true,
+      earningRate: 1,
+      ynabAccountId: 'account-1',
+    }], persisted.calculations);
+    expect(recommendations).toEqual([
+      expect.objectContaining({
+        cardId: 'miles-card',
+        reason: 'Good reward rate (3.0%)',
+        action: 'use',
+      }),
+    ]);
+  });
+});
+
+describe('credential generation ownership', () => {
   it('retries expected credential cancellation while hydration still owns the generation', async () => {
     const hydrate = vi.fn()
       .mockRejectedValueOnce(new Error('Credential read was cancelled.'))
@@ -176,6 +246,32 @@ describe('PAT generation ownership', () => {
     await expect(connect).rejects.toThrow('cancelled');
     await erase;
     expect(mocks.secureValues.has(SECURE_PAT_KEY)).toBe(false);
+  });
+
+  it('does not let a late recovery-code write survive clearing all data', async () => {
+    let releaseWrite: (() => void) | undefined;
+    const writeStarted = new Promise<void>((resolve) => {
+      mocks.setSecure.mockImplementationOnce(async (key: string, value: string) => {
+        await new Promise<void>((release) => {
+          releaseWrite = release;
+          resolve();
+        });
+        mocks.secureValues.set(key, value);
+      });
+    });
+    const service = new StorageService();
+    const remember = service.setRecoveryCode(
+      'late recovery phrase',
+      service.captureGeneration(),
+    );
+    await writeStarted;
+
+    const erase = service.clearAll();
+    releaseWrite?.();
+
+    await expect(remember).rejects.toThrow('cancelled');
+    await erase;
+    expect(mocks.secureValues.has(SECURE_RECOVERY_CODE_KEY)).toBe(false);
   });
 
   it('makes credential reads wait for an in-progress reset', async () => {

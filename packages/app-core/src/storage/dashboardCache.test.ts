@@ -6,6 +6,7 @@ import {
   findExactDashboardEntry,
   getDashboardProjectionCompleteness,
   isDashboardCacheEntryComplete,
+  isDashboardCacheEntryLocallyTruncated,
   isDashboardCacheEntryTrusted,
   shouldRefreshDashboardCache,
 } from './dashboardCache';
@@ -73,6 +74,45 @@ describe('shouldRefreshDashboardCache', () => {
           }),
         ),
       }),
+      '2026-07-01',
+      new Date('2026-07-10T10:10:00.000Z'),
+    )).toBe(true);
+  });
+
+  it('does not continuously refresh a successful fetch with a locally truncated preview', () => {
+    const entry = cache({
+      isComplete: false,
+      transactions: Array.from(
+        { length: DASHBOARD_TRANSACTION_CACHE_LIMIT },
+        (_, index) => ({
+          id: `transaction-${index}`,
+          date: '2026-07-01',
+          amount: -100,
+          account_id: 'account-1',
+        }),
+      ),
+    });
+
+    expect(isDashboardCacheEntryLocallyTruncated(entry)).toBe(true);
+    expect(isDashboardCacheEntryTrusted(entry)).toBe(true);
+    expect(shouldRefreshDashboardCache(
+      entry,
+      '2026-07-01',
+      new Date('2026-07-10T10:10:00.000Z'),
+    )).toBe(false);
+    expect(getDashboardProjectionCompleteness(entry)).toEqual({
+      periodDataComplete: false,
+      periodDataSinceDate: '2026-07-01',
+    });
+  });
+
+  it('still retries explicitly incomplete snapshots that were not locally capped', () => {
+    const entry = cache({ isComplete: false });
+
+    expect(isDashboardCacheEntryLocallyTruncated(entry)).toBe(false);
+    expect(isDashboardCacheEntryTrusted(entry)).toBe(false);
+    expect(shouldRefreshDashboardCache(
+      entry,
       '2026-07-01',
       new Date('2026-07-10T10:10:00.000Z'),
     )).toBe(true);

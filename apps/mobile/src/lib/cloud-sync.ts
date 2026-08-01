@@ -1,5 +1,4 @@
 import * as Crypto from 'expo-crypto';
-import * as SecureStore from 'expo-secure-store';
 
 import {
   computeKeyId,
@@ -10,9 +9,9 @@ import {
   normaliseMnemonic,
 } from '@ynab-counter/app-core/cloud-sync';
 import { deriveCloudSyncKeyNative } from './cloud-sync-key';
+import { storage } from '@/storage/service';
 
 const DEFAULT_CLOUD_SYNC_ENDPOINT = 'https://rewards.soon.sg/api/cloud-sync';
-const CLOUD_SYNC_CODE_KEY = 'ynab_counter_cloud_sync_code';
 const REQUEST_TIMEOUT_MS = 20_000;
 
 export type CloudSyncMetadata = {
@@ -87,17 +86,20 @@ export function generateCloudSyncCode(): string {
 }
 
 export async function loadRememberedCloudSyncCode(): Promise<string | null> {
-  return SecureStore.getItemAsync(CLOUD_SYNC_CODE_KEY);
+  return storage.getRecoveryCode();
 }
 
-export async function rememberCloudSyncCode(inputPhrase: string): Promise<string> {
+export async function rememberCloudSyncCode(
+  inputPhrase: string,
+  expectedGeneration: number,
+): Promise<string> {
   const phrase = validPhrase(inputPhrase);
-  await SecureStore.setItemAsync(CLOUD_SYNC_CODE_KEY, phrase);
+  await storage.setRecoveryCode(phrase, expectedGeneration);
   return phrase;
 }
 
-export async function forgetCloudSyncCode(): Promise<void> {
-  await SecureStore.deleteItemAsync(CLOUD_SYNC_CODE_KEY);
+export async function forgetCloudSyncCode(expectedGeneration: number): Promise<void> {
+  await storage.deleteRecoveryCode(expectedGeneration);
 }
 
 export async function saveSettingsToCloud<T>(

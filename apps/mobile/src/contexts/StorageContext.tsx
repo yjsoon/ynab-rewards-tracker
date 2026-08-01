@@ -16,7 +16,10 @@ import { createDemoStorageFixture } from '@/lib/demo-data';
 import { runSetupSyncChain } from './setup-sync-chain';
 import { retryExpectedStorageCancellation } from './storage-cancellation';
 import { SimpleRewardsCalculator } from '@ynab-counter/app-core/rewards-engine';
-import { createRewardCalculationFromSimple } from '@ynab-counter/app-core/rewards-engine/utils/reward-calculation';
+import {
+  createRewardCalculationFromSimple,
+  revalueRewardCalculations,
+} from '@ynab-counter/app-core/rewards-engine/utils/reward-calculation';
 import { getEarliestPeriodStart } from '@ynab-counter/app-core/rewards-engine/utils/periods';
 import {
   formatCalculationPeriod,
@@ -939,6 +942,12 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         setState((prev) => ({
           ...prev,
           settings: { ...prev.settings, ...settings },
+          calculations: Object.prototype.hasOwnProperty.call(settings, 'milesValuation')
+            ? revalueRewardCalculations(
+                prev.calculations,
+                settings.milesValuation ?? 0.01,
+              )
+            : prev.calculations,
         }));
       },
       setCards: async (cards) => {
@@ -1191,6 +1200,12 @@ export function StorageProvider({ children }: { children: ReactNode }) {
             ...prev.settings,
             ...updates,
           },
+          calculations: Object.prototype.hasOwnProperty.call(settings, 'milesValuation')
+            ? revalueRewardCalculations(
+                prev.calculations,
+                settings.milesValuation ?? 0.01,
+              )
+            : prev.calculations,
         }));
       },
       setCards: async (cards) => {
