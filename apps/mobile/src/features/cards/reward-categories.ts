@@ -79,3 +79,26 @@ export function rankRewardCategoryPreview(
     })
     .slice(0, Math.max(0, limit));
 }
+
+/** Rank earned reward tiers by estimated cross-card value, preserving stable configured order for ties. */
+export function rankRewardCategoryEarnings(
+  categories: PortfolioRewardCategory[],
+  limit = 3,
+): PortfolioRewardCategory[] {
+  return categories
+    .filter(({ category }) => !category.excluded && category.reward.amount > 0)
+    .sort((left, right) => {
+      const valueDifference = right.category.reward.dollars - left.category.reward.dollars;
+      if (valueDifference !== 0) {
+        return valueDifference;
+      }
+
+      const cardOrderDifference = left.cardOrder - right.cardOrder;
+      if (cardOrderDifference !== 0) {
+        return cardOrderDifference;
+      }
+
+      return left.category.priority - right.category.priority;
+    })
+    .slice(0, Math.max(0, limit));
+}
