@@ -247,7 +247,7 @@ export class SimpleRewardsCalculator {
         const flagColour = normaliseFlagColor(txn.flag_color);
         const subcategory = resolveSubcategory(context, flagColour);
         const txnSpend = Math.abs(txn.amount) / 1000;
-        if (!subcategory?.excludeFromRewards) {
+        if (subcategory && !subcategory.excludeFromRewards) {
           totalSpend += txnSpend;
         }
 

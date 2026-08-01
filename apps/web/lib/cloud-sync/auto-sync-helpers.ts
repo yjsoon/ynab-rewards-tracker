@@ -81,7 +81,7 @@ function toStableObject(value: unknown): unknown {
 
   if (value && typeof value === 'object') {
     const entries = Object.entries(value as Record<string, unknown>)
-      .filter(([, entryValue]) => entryValue !== undefined && entryValue !== null)
+      .filter(([, entryValue]) => entryValue !== undefined)
       .sort(([left], [right]) => left.localeCompare(right));
 
     const normalisedEntries = entries.map(([key, entryValue]) => [key, toStableObject(entryValue)] as const);

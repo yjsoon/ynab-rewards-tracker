@@ -138,6 +138,26 @@ describe('auto-sync helpers', () => {
     expect(action).toBe('in_sync');
   });
 
+  it('keeps an intentional null distinct from an absent legacy field', () => {
+    const localPayload = {
+      ...basePayload,
+      cards: [{ id: 'card-1', earningRate: null }],
+    };
+
+    expect(createComparableSnapshot(localPayload)).not.toBe(
+      createComparableSnapshot(basePayload),
+    );
+    expect(determineAutoSyncAction({
+      localPayload,
+      cloudPayload: basePayload,
+      cloudUpdatedAt: '2026-01-01T12:00:00Z',
+      localLastSyncedAt: '2026-01-01T12:00:00Z',
+      localKeyId: 'key-1',
+      phraseKeyId: 'key-1',
+      localIsDirty: true,
+    })).toBe('push_local');
+  });
+
   it('returns conflict when both local and cloud changed from the shared revision', () => {
     const action = determineAutoSyncAction({
       localPayload: { ...basePayload, cards: [{ id: 'local-card' }] },

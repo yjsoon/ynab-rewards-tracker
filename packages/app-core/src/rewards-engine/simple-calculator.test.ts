@@ -142,6 +142,34 @@ describe('SimpleRewardsCalculator.calculateCardRewards', () => {
     });
   });
 
+  it('does not let unmatched tier spend advance the card minimum', () => {
+    const card = createMilesCardWithMinimum(10);
+    const matched = createTransaction('matched', -5_000);
+    const unmatched = {
+      ...createTransaction('unmatched', -5_000),
+      flag_color: 'orange' as const,
+    };
+
+    const calculation = SimpleRewardsCalculator.calculateCardRewards(
+      card,
+      [matched, unmatched],
+      period,
+    );
+
+    expect(calculation.totalSpend).toBe(5);
+    expect(calculation.minimumSpendProgress).toBe(50);
+    expect(calculation.minimumSpendMet).toBe(false);
+    expect(calculation.rewardEarned).toBe(0);
+    expect(calculation.transactionRewards.matched).toMatchObject({
+      reward: 0,
+      reason: 'below_minimum',
+    });
+    expect(calculation.transactionRewards.unmatched).toMatchObject({
+      reward: 0,
+      reason: 'zero_rate',
+    });
+  });
+
   it('does not fall back to the card rate when every enabled flag tier is inactive', () => {
     const card: CreditCard = {
       ...createMilesCardWithSubcategories(),
