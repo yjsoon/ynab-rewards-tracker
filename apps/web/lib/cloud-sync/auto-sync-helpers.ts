@@ -127,7 +127,9 @@ export function createComparableSnapshot(payload: unknown): string {
 
 export function determineAutoSyncAction(params: DetermineAutoSyncActionParams): AutoSyncAction {
   if (!params.cloudPayload) {
-    return hasPrimaryData(params.localPayload) ? 'seed_cloud' : 'skip';
+    return hasPrimaryData(params.localPayload) || params.localIsDirty
+      ? 'seed_cloud'
+      : 'skip';
   }
 
   if (!validateImportedSettings(params.cloudPayload)) {
@@ -164,4 +166,17 @@ export function determineAutoSyncAction(params: DetermineAutoSyncActionParams): 
   }
 
   return 'push_local';
+}
+
+interface LocalSnapshotCheckParams {
+  expectedPayload: unknown;
+  expectedDirtyMarker: string | undefined;
+  currentPayload: unknown;
+  currentDirtyMarker: string | undefined;
+}
+
+/** Prevent a cloud pull from replacing edits made while the request was in flight. */
+export function isLocalSnapshotCurrent(params: LocalSnapshotCheckParams): boolean {
+  return params.currentDirtyMarker === params.expectedDirtyMarker
+    && createComparableSnapshot(params.currentPayload) === createComparableSnapshot(params.expectedPayload);
 }

@@ -29,26 +29,27 @@ class FakeState {
   }
 }
 
-function createEnvironment(initialKV = new Map()) {
+function createEnvironment(initialKV = new Map(), { bindLegacyKV = true } = {}) {
   const kvValues = new Map(initialKV);
   const instances = new Map();
   const kv = {
     get: vi.fn(async (key) => kvValues.get(key) ?? null),
     delete: vi.fn(async (key) => kvValues.delete(key)),
   };
+  const authorityEnv = bindLegacyKV ? { CLOUD_SYNC_KV: kv } : {};
   const env = {
-    CLOUD_SYNC_KV: kv,
+    ...(bindLegacyKV ? { CLOUD_SYNC_KV: kv } : {}),
     CLOUD_SYNC_BACKUPS: {
       idFromName: (key) => key,
       get: (id) => {
         if (!instances.has(id)) {
-          instances.set(id, new CloudSyncBackup(new FakeState(), { CLOUD_SYNC_KV: kv }));
+          instances.set(id, new CloudSyncBackup(new FakeState(), authorityEnv));
         }
         return instances.get(id);
       },
     },
   };
-  return { env, kv, kvValues };
+  return { env, kv, kvValues, authorityEnv };
 }
 
 function upload(keyId, ciphertext, expectedUpdatedAt, includeExpected = true) {
@@ -62,6 +63,109 @@ function upload(keyId, ciphertext, expectedUpdatedAt, includeExpected = true) {
 }
 
 describe("production Cloud Sync Durable Object authority", () => {
+  it("retries legacy migration when a missing KV binding appears later", async () => {
+    const { env, kv, authorityEnv } = createEnvironment(new Map([
+      ["optional-key", JSON.stringify({ ciphertext: "legacy", iv: "legacy-iv" })],
+    ]), { bindLegacyKV: false });
+    const request = () => new Request("https://example.test/api/cloud-sync?key=optional-key");
+
+    const first = await handleCloudSyncRequest(request(), env);
+    authorityEnv.CLOUD_SYNC_KV = kv;
+    const afterBindingAppears = await handleCloudSyncRequest(request(), env);
+
+    expect(first.status).toBe(404);
+    expect(afterBindingAppears.status).toBe(200);
+    expect(await afterBindingAppears.json()).toMatchObject({ ciphertext: "legacy" });
+    expect(kv.get).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a delete authoritative when the optional legacy KV binding appears later", async () => {
+    const { env, kv, authorityEnv } = createEnvironment(new Map([
+      ["optional-delete", JSON.stringify({ ciphertext: "legacy", iv: "legacy-iv" })],
+    ]), { bindLegacyKV: false });
+
+    const response = await handleCloudSyncRequest(
+      new Request("https://example.test/api/cloud-sync?key=optional-delete", { method: "DELETE" }),
+      env,
+    );
+    authorityEnv.CLOUD_SYNC_KV = kv;
+    const afterBindingAppears = await handleCloudSyncRequest(
+      new Request("https://example.test/api/cloud-sync?key=optional-delete"),
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ success: true });
+    expect(afterBindingAppears.status).toBe(404);
+    expect(kv.get).not.toHaveBeenCalled();
+  });
+
+  it("keeps a write authoritative when the optional legacy KV binding appears later", async () => {
+    const { env, kv, authorityEnv } = createEnvironment(new Map([
+      ["optional-write", JSON.stringify({ ciphertext: "legacy", iv: "legacy-iv" })],
+    ]), { bindLegacyKV: false });
+
+    const response = await handleCloudSyncRequest(upload("optional-write", "replacement", null), env);
+    authorityEnv.CLOUD_SYNC_KV = kv;
+    const stored = await handleCloudSyncRequest(
+      new Request("https://example.test/api/cloud-sync?key=optional-write"),
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    expect(await stored.json()).toMatchObject({ ciphertext: "replacement" });
+    expect(kv.get).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 for malformed POST JSON without routing it to storage", async () => {
+    const { env } = createEnvironment();
+    const route = vi.spyOn(env.CLOUD_SYNC_BACKUPS, "idFromName");
+
+    const response = await handleCloudSyncRequest(
+      new Request("https://example.test/api/cloud-sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{not-json",
+      }),
+      env,
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "Invalid payload" });
+    expect(route).not.toHaveBeenCalled();
+  });
+
+  it("keeps Durable Object storage failures classified as 502", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const state = new FakeState();
+    state.storage.get = vi.fn(async () => {
+      throw new Error("storage unavailable");
+    });
+    const authority = new CloudSyncBackup(state, {});
+
+    const response = await authority.fetch(
+      new Request("https://example.test/api/cloud-sync?key=storage-failure"),
+    );
+
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({ error: "Cloud sync storage request failed" });
+    expect(consoleError).toHaveBeenCalledOnce();
+    consoleError.mockRestore();
+  });
+
+  it("returns 400 when malformed JSON reaches the Durable Object directly", async () => {
+    const authority = new CloudSyncBackup(new FakeState(), {});
+
+    const response = await authority.fetch(new Request("https://example.test/api/cloud-sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{not-json",
+    }));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "Invalid payload" });
+  });
+
   it("rejects one of two concurrent writes sharing a stale revision", async () => {
     const { env } = createEnvironment();
 

@@ -22,6 +22,7 @@ import {
   shouldWarnAboutEmptyUpload as checkEmptyUpload,
   shouldWarnAboutOutdatedUpload as checkOutdatedUpload,
 } from '@/lib/cloud-sync/decision-helpers';
+import { clearCloudSyncConflict } from '@/lib/cloud-sync/conflict-state';
 import { YnabClient } from '@/lib/ynab-client';
 import { toIsoDateString } from '@/lib/date';
 import type { CreditCard } from '@/lib/storage';
@@ -710,6 +711,7 @@ export default function SettingsPage() {
     }
 
     completeCloudSyncSnapshot(payload.settings?.cloudSyncLocalChangedAt, settingsUpdate);
+    clearCloudSyncConflict();
     setCloudSyncPhrase(normalised);
     setGeneratedCloudPhrase(options.generated ? normalised : null);
     setCloudSyncMessage('Settings uploaded to Cloudflare KV. Copy your sync code to keep it safe.');
@@ -810,6 +812,7 @@ export default function SettingsPage() {
         cloudSyncLastSyncedAt: stored.updatedAt,
         cloudSyncLocalChangedAt: undefined,
       });
+      clearCloudSyncConflict();
       setCloudSyncPhrase(normalised);
       setGeneratedCloudPhrase(null);
 
@@ -850,6 +853,7 @@ export default function SettingsPage() {
     try {
       await deleteEncryptedSettings(keyId);
       updateSettings({ cloudSyncKeyId: undefined, cloudSyncLastSyncedAt: undefined });
+      clearCloudSyncConflict();
       setGeneratedCloudPhrase(null);
       setCloudSyncPhrase('');
       setCloudSyncMessage('Cloud backup deleted.');

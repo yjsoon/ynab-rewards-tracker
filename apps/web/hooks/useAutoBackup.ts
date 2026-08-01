@@ -9,6 +9,7 @@ import {
   isAutoSyncEnabled,
 } from '@/lib/cloud-sync';
 import { storage } from '@/lib/storage';
+import { clearCloudSyncConflict } from '@/lib/cloud-sync/conflict-state';
 
 /**
  * Hook for background cloud upload after save actions.
@@ -104,6 +105,7 @@ export function useAutoBackup() {
           cloudSyncKeyId: keyId,
           cloudSyncLastSyncedAt: updatedAt,
         });
+        clearCloudSyncConflict();
 
         console.log('Auto-sync: Uploaded latest local settings to cloud');
         settlePending();

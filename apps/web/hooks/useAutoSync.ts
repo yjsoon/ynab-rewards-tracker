@@ -10,7 +10,14 @@ import {
   uploadEncryptedSettings,
   isAutoSyncEnabled,
 } from '@/lib/cloud-sync';
-import { determineAutoSyncAction } from '@/lib/cloud-sync/auto-sync-helpers';
+import {
+  determineAutoSyncAction,
+  isLocalSnapshotCurrent,
+} from '@/lib/cloud-sync/auto-sync-helpers';
+import {
+  clearCloudSyncConflict,
+  markCloudSyncConflict,
+} from '@/lib/cloud-sync/conflict-state';
 import { storage } from '@/lib/storage';
 
 const SYNC_COOLDOWN = 30 * 60 * 1000; // 30 minutes
@@ -122,12 +129,14 @@ export function useAutoSync() {
             cloudSyncKeyId: keyId,
             cloudSyncLastSyncedAt: updatedAt,
           });
+          clearCloudSyncConflict();
           localStorage.setItem(LAST_SYNC_KEY, now.toString());
           console.log('Auto-sync: Seeded cloud backup from local settings');
           return;
         }
 
         if (action === 'conflict') {
+          markCloudSyncConflict();
           console.warn('Auto-sync: Local and cloud settings both changed; manual reconciliation required');
           return;
         }
@@ -137,12 +146,30 @@ export function useAutoSync() {
         }
 
         if (action === 'pull_cloud') {
+          const currentSnapshot = storage.exportSettings();
+          const currentPayload = JSON.parse(currentSnapshot) as {
+            settings?: { cloudSyncLocalChangedAt?: unknown };
+          };
+          const currentMarker = typeof currentPayload.settings?.cloudSyncLocalChangedAt === 'string'
+            ? currentPayload.settings.cloudSyncLocalChangedAt
+            : undefined;
+          if (!isLocalSnapshotCurrent({
+            expectedPayload: localPayload,
+            expectedDirtyMarker: snapshotMarker,
+            currentPayload,
+            currentDirtyMarker: currentMarker,
+          })) {
+            markCloudSyncConflict();
+            console.warn('Auto-sync: Local settings changed while cloud data was loading');
+            return;
+          }
           importSettings(JSON.stringify(decrypted, null, 2));
           updateSettings({
             cloudSyncKeyId: keyId,
             cloudSyncLastSyncedAt: stored.updatedAt,
             cloudSyncLocalChangedAt: undefined,
           });
+          clearCloudSyncConflict();
           localStorage.setItem(LAST_SYNC_KEY, now.toString());
           console.log('Auto-sync: Pulled newer cloud settings');
           return;
@@ -160,6 +187,7 @@ export function useAutoSync() {
             cloudSyncKeyId: keyId,
             cloudSyncLastSyncedAt: updatedAt,
           });
+          clearCloudSyncConflict();
           localStorage.setItem(LAST_SYNC_KEY, now.toString());
           console.log('Auto-sync: Pushed newer local settings to cloud');
           return;
@@ -169,6 +197,7 @@ export function useAutoSync() {
           cloudSyncKeyId: keyId,
           cloudSyncLastSyncedAt: stored.updatedAt,
         });
+        clearCloudSyncConflict();
         localStorage.setItem(LAST_SYNC_KEY, now.toString());
         console.log('Auto-sync: Local and cloud settings are already in sync');
       } catch (error) {

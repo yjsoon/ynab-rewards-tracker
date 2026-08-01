@@ -215,11 +215,25 @@ async function storeValue(key: string, value: string, requestUrl: string): Promi
   await storeValueREST(key, value, requestUrl);
 }
 
+async function storeLegacyRevision(key: string, value: string, requestUrl: string): Promise<void> {
+  const kv = await getNativeKV();
+  if (kv) {
+    try {
+      await kv.put(key, value);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to update cloud sync data';
+      throw new CloudflareKVError(`KV error: ${message}`, 502);
+    }
+    return;
+  }
+  await storeValueREST(key, value, requestUrl);
+}
+
 async function retrieveValue(key: string, requestUrl: string): Promise<string | null> {
   const kv = await getNativeKV();
   if (kv) {
     try {
-      return kv.get(key);
+      return await kv.get(key);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to retrieve cloud sync data';
       throw new CloudflareKVError(`KV error: ${message}`, 502);
@@ -254,17 +268,26 @@ async function readRevisionedValue(
     throw new Error('Stored cloud backup is invalid');
   }
 
+  if (typeof parsed.updatedAt === 'string') {
+    return {
+      ciphertext: parsed.ciphertext,
+      iv: parsed.iv,
+      version: typeof parsed.version === 'number' ? parsed.version : VERSION,
+      updatedAt: parsed.updatedAt,
+    };
+  }
+
+  const updatedAt = new Date().toISOString();
+
   const revisioned: StoredCloudBackup = {
     ciphertext: parsed.ciphertext,
     iv: parsed.iv,
     version: typeof parsed.version === 'number' ? parsed.version : VERSION,
-    updatedAt: typeof parsed.updatedAt === 'string'
-      ? parsed.updatedAt
-      : new Date().toISOString(),
+    updatedAt,
   };
-  if (typeof parsed.updatedAt !== 'string') {
-    await storeValue(key, JSON.stringify(revisioned), requestUrl);
-  }
+  // Do not expose a CAS token until it has been durably backfilled. Returning
+  // an error is safer than serving a revision that could change after restart.
+  await storeLegacyRevision(key, JSON.stringify(revisioned), requestUrl);
   return revisioned;
 }
 
@@ -274,8 +297,16 @@ async function readRevisionedValue(
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { keyId, ciphertext, iv, expectedUpdatedAt } = body ?? {};
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
+    }
+    const parsedBody = body !== null && typeof body === 'object'
+      ? body as Record<string, unknown>
+      : {};
+    const { keyId, ciphertext, iv, expectedUpdatedAt } = parsedBody;
     const hasExpectedRevision = body !== null
       && typeof body === 'object'
       && Object.prototype.hasOwnProperty.call(body, 'expectedUpdatedAt');

@@ -35,7 +35,20 @@ describe('cloud sync route', () => {
     delete process.env.CLOUDFLARE_API_TOKEN;
   });
 
+  it('returns 400 for malformed POST JSON', async () => {
+    const response = await POST(new Request('https://example.test/api/cloud-sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{not-json',
+    }));
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: 'Invalid payload' });
+    expect(getCloudflareContext).not.toHaveBeenCalled();
+  });
+
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     if (originalCloudflareEnv.accountId === undefined) {
       delete process.env.CLOUDFLARE_ACCOUNT_ID;
@@ -211,6 +224,51 @@ describe('cloud sync route', () => {
     expect(secondBody.updatedAt).toBe(firstBody.updatedAt);
   });
 
+  it('backfills a legacy revision through a native binding-only runtime', async () => {
+    let stored = JSON.stringify({ ciphertext: 'legacy-native', iv: 'legacy-iv' });
+    const kv = createNativeKV();
+    kv.get.mockImplementation(async () => stored);
+    kv.put.mockImplementation(async (_key: string, value: string) => {
+      stored = value;
+    });
+    getCloudflareContext.mockResolvedValue({ env: { CLOUD_SYNC_KV: kv } });
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const request = () => new Request('https://example.test/api/cloud-sync?key=native-legacy-key');
+    const first = await GET(request());
+    const second = await GET(request());
+    const firstBody = await first.json() as { updatedAt: string };
+    const secondBody = await second.json() as { updatedAt: string };
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(firstBody.updatedAt).toEqual(expect.any(String));
+    expect(secondBody.updatedAt).toBe(firstBody.updatedAt);
+    expect(kv.put).toHaveBeenCalledTimes(1);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('fails safely when a legacy revision cannot be durably backfilled', async () => {
+    const kv = createNativeKV();
+    kv.get.mockResolvedValue(JSON.stringify({ ciphertext: 'legacy-failure', iv: 'legacy-iv' }));
+    kv.put.mockRejectedValue(new Error('binding unavailable'));
+    getCloudflareContext.mockResolvedValue({ env: { CLOUD_SYNC_KV: kv } });
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const request = () => new Request('https://example.test/api/cloud-sync?key=failing-legacy-key');
+    const first = await GET(request());
+    const second = await GET(request());
+
+    expect(first.status).toBe(502);
+    expect(second.status).toBe(502);
+    await expect(first.json()).resolves.toEqual({ error: 'KV error: binding unavailable' });
+    await expect(second.json()).resolves.toEqual({ error: 'KV error: binding unavailable' });
+    expect(kv.put).toHaveBeenCalledTimes(2);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('uses REST for DELETE without calling the native KV mutation', async () => {
     const kv = createNativeKV();
     getCloudflareContext.mockResolvedValue({
@@ -257,6 +315,22 @@ describe('cloud sync route', () => {
     });
     expect(kv.get).toHaveBeenCalledWith('sync-key');
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 502 when the native KV read rejects', async () => {
+    const kv = createNativeKV();
+    kv.get.mockRejectedValue(new Error('binding unavailable'));
+    getCloudflareContext.mockResolvedValue({ env: { CLOUD_SYNC_KV: kv } });
+    vi.stubGlobal('fetch', vi.fn());
+
+    const response = await GET(
+      new Request('https://example.test/api/cloud-sync?key=unavailable-key'),
+    );
+
+    expect(response.status).toBe(502);
+    await expect(response.json()).resolves.toEqual({
+      error: 'KV error: binding unavailable',
+    });
   });
 
   it('falls back to process.env when Worker configuration is unavailable', async () => {

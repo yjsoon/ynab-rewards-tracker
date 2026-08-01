@@ -68,7 +68,15 @@ export class CloudSyncBackup {
       return durableBackup;
     }
 
-    const legacyValue = await this.env.CLOUD_SYNC_KV.get(keyId);
+    const legacyKv = this.env.CLOUD_SYNC_KV;
+    if (!legacyKv) {
+      // A read cannot distinguish an intentionally absent legacy binding from
+      // a transient deployment misconfiguration. Leave migration retryable;
+      // POST and DELETE establish durable authority below.
+      return null;
+    }
+
+    const legacyValue = await legacyKv.get(keyId);
     const backup = legacyValue === null ? null : parseBackup(legacyValue);
     if (backup) {
       await this.state.storage.put(BACKUP_STORAGE_KEY, backup);
@@ -80,7 +88,11 @@ export class CloudSyncBackup {
   async handle(request) {
     let body;
     if (request.method === "POST") {
-      body = await request.json();
+      try {
+        body = await request.json();
+      } catch {
+        return json({ error: "Invalid payload" }, 400);
+      }
     }
     const keyId = keyFromRequest(request, body);
     if (!keyId) {
@@ -132,7 +144,9 @@ export class CloudSyncBackup {
       // visible KV value can then never resurrect the deleted backup.
       await this.state.storage.put(KV_MIGRATION_STORAGE_KEY, true);
       await this.state.storage.delete(BACKUP_STORAGE_KEY);
-      await this.env.CLOUD_SYNC_KV.delete(keyId);
+      if (this.env.CLOUD_SYNC_KV) {
+        await this.env.CLOUD_SYNC_KV.delete(keyId);
+      }
       return json({ success: true });
     }
 
@@ -157,8 +171,16 @@ export async function handleCloudSyncRequest(request, env) {
     return null;
   }
 
+  let body;
+  if (request.method === "POST") {
+    try {
+      body = await request.clone().json();
+    } catch {
+      return json({ error: "Invalid payload" }, 400);
+    }
+  }
+
   try {
-    const body = request.method === "POST" ? await request.clone().json() : undefined;
     const keyId = keyFromRequest(request, body);
     if (!keyId) {
       return json(
