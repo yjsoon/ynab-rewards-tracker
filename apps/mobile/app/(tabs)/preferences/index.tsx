@@ -2,11 +2,9 @@ import { useCallback, useMemo } from 'react';
 import { Linking, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
-import { BrandMark } from '@/components/brand';
-import { Card, SectionHeader, Title2 } from '@/components/ios';
+import { Card, SectionHeader } from '@/components/ios';
 import {
   LargeNavigationTitle,
-  StatusPill,
   SyncBadge,
 } from '@/components/native';
 import { useStorage } from '@/contexts/StorageContext';
@@ -78,39 +76,38 @@ export default function PreferencesScreen() {
       automaticallyAdjustsScrollIndicatorInsets
     >
       <LargeNavigationTitle>Settings</LargeNavigationTitle>
-      <View style={styles.identity} accessible accessibilityLabel="Rewards Tracker">
-        <BrandMark width={44} height={44} />
-        <View style={styles.identityCopy}>
-          <Title2>Rewards Tracker</Title2>
-        </View>
-      </View>
 
       <View>
         <SectionHeader>YNAB</SectionHeader>
         <Card>
           <SettingsRow
             isFirst
-            title={connected ? 'Connected' : 'Connection needed'}
+            title={connected ? state.selectedBudget.name ?? 'YNAB' : 'Connection needed'}
             subtitle={connected
-              ? `${state.selectedBudget.name ?? 'Selected budget'} · ${state.trackedAccountIds.length} card account${state.trackedAccountIds.length === 1 ? '' : 's'}`
+              ? `${state.trackedAccountIds.length} card account${state.trackedAccountIds.length === 1 ? '' : 's'}`
               : 'Connect a Personal Access Token and choose card accounts.'}
             symbol={connected ? 'checkmark.shield.fill' : 'exclamationmark.triangle.fill'}
             symbolColor={connected ? semanticColors.positive : semanticColors.attention}
-            trailing={<StatusPill label={connected ? 'Secure' : 'Setup'} tone={connected ? 'positive' : 'attention'} size="small" />}
           />
-          <SettingsRow
-            title="Last YNAB refresh"
-            subtitle={`Updated ${relativeTime(lastYnabSync).toLowerCase()}`}
-            symbol="arrow.triangle.2.circlepath"
-            trailingIsInteractive
-            trailing={(
-              <SyncBadge
-                state={ynabSyncState}
-                onPress={() => void refreshYnab()}
-                accessibilityHint="Refreshes cards and transactions from YNAB"
-              />
-            )}
-          />
+          {ynabSyncState !== 'synced' ? (
+            <SettingsRow
+              title="Last YNAB refresh"
+              subtitle={`Updated ${relativeTime(lastYnabSync).toLowerCase()}`}
+              symbol="arrow.triangle.2.circlepath"
+              trailingIsInteractive
+              trailing={(
+                <SyncBadge
+                  state={ynabSyncState}
+                  onPress={connected
+                    ? () => void refreshYnab()
+                    : () => router.push('/settings')}
+                  accessibilityHint={connected
+                    ? 'Refreshes cards and transactions from YNAB'
+                    : 'Opens YNAB connection settings'}
+                />
+              )}
+            />
+          ) : null}
           <SettingsRow
             title="Manage connection"
             subtitle="Budget, token and tracked accounts"
@@ -187,14 +184,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingBottom: 48,
     gap: spacing.xxl,
-  },
-  identity: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.lg,
-    paddingVertical: spacing.md,
-  },
-  identityCopy: {
-    flex: 1,
   },
 });

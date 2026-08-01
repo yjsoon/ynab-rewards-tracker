@@ -1,7 +1,6 @@
 import React from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Caption1 } from '../ios/Typography';
-import { SparkIcon } from '../brand';
 import { semanticColors } from '../../theme/semanticColors';
 import { nativeMetrics, radii, spacing } from '../../theme/tokens';
 
@@ -13,7 +12,6 @@ export interface ProgressRailProps {
   label?: string;
   formatValue?: (value: number) => string;
   showLegend?: boolean;
-  showSpark?: boolean;
   accessible?: boolean;
   style?: StyleProp<ViewStyle>;
 }
@@ -29,8 +27,7 @@ function defaultFormatValue(value: number): string {
 }
 
 /**
- * A single spend rail with explicit minimum and cap semantics. The gold spark
- * is only the current-position terminal; capped state switches to system red.
+ * A single spend rail with explicit minimum and cap semantics.
  */
 export function ProgressRail({
   value,
@@ -39,7 +36,6 @@ export function ProgressRail({
   label = 'Spend progress',
   formatValue = defaultFormatValue,
   showLegend = true,
-  showSpark = true,
   accessible = true,
   style,
 }: ProgressRailProps) {
@@ -120,11 +116,6 @@ export function ProgressRail({
           <View style={[styles.capMarker, capped && styles.cappedMarker]} />
         ) : null}
 
-        {showSpark && progressPercent > 1 ? (
-          <View style={[styles.sparkTerminal, { left: `${progressPercent}%` }]}>
-            <SparkIcon width={14} height={14} />
-          </View>
-        ) : null}
       </View>
 
       {showLegend && (hasMinimum || hasMaximum) ? (
@@ -197,13 +188,6 @@ const styles = StyleSheet.create({
   },
   cappedMarker: {
     backgroundColor: semanticColors.capped,
-  },
-  sparkTerminal: {
-    position: 'absolute',
-    top: -3,
-    width: 14,
-    height: 14,
-    marginLeft: -7,
   },
   legend: {
     flexDirection: 'row',

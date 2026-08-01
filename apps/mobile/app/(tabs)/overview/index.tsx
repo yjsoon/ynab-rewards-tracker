@@ -3,7 +3,6 @@ import {
   RefreshControl,
   ScrollView,
   StyleSheet,
-  useWindowDimensions,
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -19,7 +18,6 @@ import {
 } from '@/components/native';
 import {
   Body,
-  Caption1,
   LargeTitle,
 } from '@/components/ios';
 import {
@@ -84,8 +82,6 @@ function CardProjectionRow({
 
 export default function OverviewScreen() {
   const router = useRouter();
-  const { fontScale } = useWindowDimensions();
-  const usesStackedHeroHeading = fontScale >= 1.3;
   const { state } = useStorage();
   const model = useRewardsDashboard();
   const formatting = useMemo(() => createCardFormatting(state.settings), [state.settings]);
@@ -191,20 +187,12 @@ export default function OverviewScreen() {
       ) : (
         <>
           <View style={styles.hero}>
-            <View style={[
-              styles.heroHeading,
-              usesStackedHeroHeading && styles.heroHeadingStacked,
-            ]}>
-              <Caption1 color="secondary" style={styles.eyebrow}>
-                CURRENT PERIODS
-              </Caption1>
-              <SyncBadge
-                state={model.syncState}
-                label={model.syncLabel}
-                onPress={model.canSync ? model.refresh : () => router.push('/settings')}
-                accessibilityHint={model.canSync ? 'Refreshes rewards from YNAB' : 'Opens YNAB settings'}
-              />
-            </View>
+            <SyncBadge
+              state={model.syncState}
+              label={model.syncLabel}
+              onPress={model.canSync ? model.refresh : () => router.push('/settings')}
+              accessibilityHint={model.canSync ? 'Refreshes rewards from YNAB' : 'Opens YNAB settings'}
+            />
 
             <View accessible accessibilityRole="summary" accessibilityLabel={`Estimated reward value ${formatting.currencyExact(visibleTotals.value)}`}>
               <LargeTitle style={styles.heroValue} accessible={false}>
@@ -324,21 +312,6 @@ const styles = StyleSheet.create({
   hero: {
     paddingTop: spacing.sm,
     gap: spacing.xl,
-  },
-  heroHeading: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    columnGap: spacing.lg,
-  },
-  heroHeadingStacked: {
-    flexDirection: 'column',
-    alignItems: 'flex-start',
-  },
-  eyebrow: {
-    letterSpacing: 0.7,
-    fontWeight: '600',
   },
   heroValue: {
     fontSize: 44,

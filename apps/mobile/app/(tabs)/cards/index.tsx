@@ -291,6 +291,7 @@ const styles = StyleSheet.create({
   },
   manageButton: {
     minHeight: nativeMetrics.minimumTouchTarget,
+    marginLeft: 'auto',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,

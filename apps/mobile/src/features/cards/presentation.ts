@@ -166,19 +166,13 @@ export function formatThresholdSummary(
   card: CreditCard,
   formatting: CardFormatting,
 ): string {
-  const values = [
-    card.featured === false ? 'Not on Overview' : 'On Overview',
-    formatRate(card, formatting),
-  ];
+  const values = card.featured === false ? ['Not on Overview'] : [];
+  values.push(formatRate(card, formatting));
   if (typeof card.minimumSpend === 'number' && card.minimumSpend > 0) {
     values.push(`Min ${formatting.currencyCompact(card.minimumSpend)}`);
-  } else {
-    values.push('No minimum');
   }
   if (typeof card.maximumSpend === 'number' && card.maximumSpend > 0) {
     values.push(`Cap ${formatting.currencyCompact(card.maximumSpend)}`);
-  } else {
-    values.push('No cap');
   }
   if (typeof card.earningBlockSize === 'number' && card.earningBlockSize > 0) {
     values.push(`${formatting.currencyCompact(card.earningBlockSize)} blocks`);

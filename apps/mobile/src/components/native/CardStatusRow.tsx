@@ -114,6 +114,9 @@ export function CardStatusRow({
   const groupsAccessibilityContent = Boolean(onPress);
   const resolvedStatus = resolveStatus(status, spend, minimumSpend, maximumSpend);
   const context = joinContext(issuer, periodLabel);
+  const showsStatus = resolvedStatus.tone === 'attention' ||
+    resolvedStatus.tone === 'capped' ||
+    resolvedStatus.tone === 'inactive';
   const hasMinimum = isPositiveThreshold(minimumSpend);
   const hasMaximum = isPositiveThreshold(maximumSpend);
 
@@ -150,12 +153,14 @@ export function CardStatusRow({
         </View>
 
         <View style={styles.trailing}>
-          <StatusPill
-            label={resolvedStatus.label}
-            tone={resolvedStatus.tone}
-            size="small"
-            accessible={!groupsAccessibilityContent}
-          />
+          {showsStatus ? (
+            <StatusPill
+              label={resolvedStatus.label}
+              tone={resolvedStatus.tone}
+              size="small"
+              accessible={!groupsAccessibilityContent}
+            />
+          ) : null}
           {onPress ? (
             <Body color="tertiary" accessible={false} style={styles.disclosure}>
               {'\u203A'}

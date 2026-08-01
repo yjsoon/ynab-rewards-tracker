@@ -518,11 +518,13 @@ function TierEditor({
             <Footnote color="secondary">YNAB {tier.flagColor === 'unflagged' ? 'unflagged' : `${tier.flagColor} flag`}</Footnote>
           </View>
         </View>
-        <StatusPill
-          label={tier.active ? (tier.excludeFromRewards ? 'Excluded' : 'Active') : 'Inactive'}
-          tone={tier.active ? (tier.excludeFromRewards ? 'attention' : 'positive') : 'inactive'}
-          size="small"
-        />
+        {!tier.active || tier.excludeFromRewards ? (
+          <StatusPill
+            label={tier.active ? 'Excluded' : 'Inactive'}
+            tone={tier.active ? 'attention' : 'inactive'}
+            size="small"
+          />
+        ) : null}
       </View>
 
       <TierFlagPicker
@@ -785,18 +787,6 @@ export default function EditCardScreen() {
         options={{
           title: 'Edit card',
           gestureEnabled: !saving,
-          headerRight: () => (
-            <Button
-              variant="plain"
-              size="small"
-              onPress={save}
-              disabled={saving || !form.name.trim()}
-              accessibilityLabel={saving ? 'Saving card' : 'Save card'}
-              style={styles.headerButton}
-            >
-              {saving ? 'Saving…' : 'Save'}
-            </Button>
-          ),
         }}
       />
       <ScrollView
@@ -839,7 +829,6 @@ export default function EditCardScreen() {
             <View style={styles.toggleCopy}>
               <Headline>{accountName ?? sourceCard.name}</Headline>
             </View>
-            <StatusPill label="Linked" tone="positive" size="small" />
           </View>
           <Pressable
             onPress={() => router.push('/settings')}
@@ -999,14 +988,6 @@ export default function EditCardScreen() {
           >
             {saving ? 'Saving…' : 'Save changes'}
           </Button>
-          <Button
-            variant="plain"
-            size="medium"
-            onPress={() => router.back()}
-            disabled={saving}
-          >
-            Cancel
-          </Button>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -1032,9 +1013,6 @@ const styles = StyleSheet.create({
     paddingTop: spacing.xl,
     paddingBottom: 60,
     gap: spacing.xxl,
-  },
-  headerButton: {
-    marginHorizontal: -spacing.sm,
   },
   errorBanner: {
     padding: spacing.lg,
