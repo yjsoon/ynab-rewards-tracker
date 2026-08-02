@@ -378,7 +378,12 @@ export default function SettingsScreen() {
       return 'Token verified. Select a budget and at least one account, then tap Finish setup.';
     }
     if (isConnected) {
-      return isSetupMode ? 'Connected. Choose a budget below to continue.' : null;
+      if (!isSetupMode) {
+        return null;
+      }
+      return state.selectedBudget.id
+        ? 'Connected. Choose at least one account below to continue.'
+        : 'Connected. Choose a budget below to continue.';
     }
     return null;
   })();

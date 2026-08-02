@@ -46,9 +46,7 @@ function decisionCurrency(value: number, formatting: CardFormatting): string {
   if (value !== 0 && Math.abs(value) < 1) {
     return formatting.currencyExact(value);
   }
-  return `${formatting.currency} ${new Intl.NumberFormat('en-GB', {
-    maximumFractionDigits: 0,
-  }).format(value)}`;
+  return formatting.currencyRounded(value);
 }
 
 function thresholdCurrency(value: number, formatting: CardFormatting): string {
@@ -130,7 +128,11 @@ function CardUseRow({
         pressed && styles.pressed,
       ]}
     >
-      <View style={styles.rowCopy} accessibilityElementsHidden>
+      <View
+        style={styles.rowCopy}
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+      >
         <Headline>{compactCardName(item.card.card.name)}</Headline>
         <View style={styles.useLabelRow}>
           {item.use.flagColor ? (
@@ -174,8 +176,12 @@ function SetupCardRow({
         pressed && styles.pressed,
       ]}
     >
-      <View style={styles.rowCopy} accessibilityElementsHidden>
-        <Headline>{projection.card.name}</Headline>
+      <View
+        style={styles.rowCopy}
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+      >
+        <Headline>{compactCardName(projection.card.name)}</Headline>
         <Footnote color="secondary">Add an earning rate</Footnote>
       </View>
     </Pressable>
@@ -262,7 +268,11 @@ function CategorySpendRow({
         style={styles.categoryFlagIcon}
         accessibilityElementsHidden
       />
-      <View style={styles.rowCopy} accessibilityElementsHidden>
+      <View
+        style={styles.rowCopy}
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+      >
         <Headline>{item.category.name}</Headline>
         <Footnote color="secondary">{context}</Footnote>
         <Headline style={styles.tabular}>{spendLabel}</Headline>

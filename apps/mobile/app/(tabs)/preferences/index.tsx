@@ -86,8 +86,8 @@ export default function PreferencesScreen() {
             subtitle={connected
               ? `${state.trackedAccountIds.length} card account${state.trackedAccountIds.length === 1 ? '' : 's'}`
               : 'Connect a Personal Access Token and choose card accounts.'}
-            symbol={connected ? 'checkmark.shield.fill' : 'exclamationmark.triangle.fill'}
-            symbolColor={connected ? semanticColors.positive : semanticColors.attention}
+            symbol={connected ? undefined : 'exclamationmark.triangle.fill'}
+            symbolColor={semanticColors.attention}
           />
           {ynabSyncState !== 'synced' ? (
             <SettingsRow

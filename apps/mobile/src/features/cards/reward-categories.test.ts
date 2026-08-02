@@ -50,7 +50,13 @@ describe('rankCardUses', () => {
     expect(uses).toEqual([]);
   });
 
-  it('omits a block card when its remaining room cannot fit another block', () => {
+  it.each([
+    { remaining: 5, expected: true },
+    { remaining: 2, expected: false },
+  ])('keeps a block card only when a whole block fits with $remaining room', ({
+    remaining,
+    expected,
+  }) => {
     const { dashboard, fixture } = demoDashboard();
     const orbit = dashboard.cards.find((item) => item.card.id === 'demo-card-orbit');
     expect(orbit).toBeDefined();
@@ -61,12 +67,12 @@ describe('rankCardUses', () => {
       maximum: {
         ...orbit!.maximum,
         target: 1_000,
-        remaining: 2,
+        remaining,
         reached: false,
       },
     }], fixture.settings);
 
-    expect(uses).toEqual([]);
+    expect(uses.length > 0).toBe(expected);
   });
 
   it.each([

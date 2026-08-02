@@ -15,6 +15,7 @@ export interface CardFormatting {
   currency: string;
   currencyCompact: (value: number) => string;
   currencyExact: (value: number) => string;
+  currencyRounded: (value: number) => string;
   number: (value: number) => string;
 }
 
@@ -33,6 +34,11 @@ export function createCardFormatting(settings: AppSettings): CardFormatting {
       locale,
       currency,
       decimals: 2,
+    }),
+    currencyRounded: (value) => formatCurrencyCore(value, {
+      locale,
+      currency,
+      decimals: 0,
     }),
     number: (value) => new Intl.NumberFormat(locale, {
       maximumFractionDigits: Number.isInteger(value) ? 0 : 2,
