@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { type ReactElement } from 'react';
 import { Pressable, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { interaction, nativeMetrics } from '../../theme/tokens';
 import { StatusPill, type StatusTone } from './StatusPill';
@@ -29,7 +29,11 @@ export function SyncBadge({
   accessibilityLabel,
   accessibilityHint,
   style,
-}: SyncBadgeProps) {
+}: SyncBadgeProps): ReactElement | null {
+  if (state === 'synced') {
+    return null;
+  }
+
   const presentation = statePresentation[state];
   const resolvedLabel = label ?? presentation.label;
   const badge = (

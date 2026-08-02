@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
 import { useHaptics } from '@/hooks/useHaptics';
 import { useToast } from '@/contexts/ToastContext';
 import { Card, ListItem, Button, Footnote, SectionHeader, Separator, Headline, Caption1 } from '@/components/ios';
@@ -21,13 +22,13 @@ import type { YnabAccountSummary, YnabBudgetSummary } from '@/lib/ynab-client';
 
 const connectionStatusCopy: Record<
   'disconnected' | 'authenticating' | 'awaiting_budget' | 'connected' | 'error',
-  { label: string; tone: 'primary' | 'secondary' | 'danger' }
+  string
 > = {
-  disconnected: { label: 'Disconnected', tone: 'secondary' },
-  authenticating: { label: 'Connecting…', tone: 'primary' },
-  awaiting_budget: { label: 'Awaiting budget selection', tone: 'primary' },
-  connected: { label: 'Connected', tone: 'primary' },
-  error: { label: 'Connection error', tone: 'danger' },
+  disconnected: 'Disconnected',
+  authenticating: 'Connecting…',
+  awaiting_budget: 'Awaiting budget selection',
+  connected: 'Connected',
+  error: 'Connection error',
 };
 
 export default function SettingsScreen() {
@@ -377,7 +378,12 @@ export default function SettingsScreen() {
       return 'Token verified. Select a budget and at least one account, then tap Finish setup.';
     }
     if (isConnected) {
-      return isSetupMode ? 'Connected. Choose a budget below to continue.' : 'Connected.';
+      if (!isSetupMode) {
+        return null;
+      }
+      return state.selectedBudget.id
+        ? 'Connected. Choose at least one account below to continue.'
+        : 'Connected. Choose a budget below to continue.';
     }
     return null;
   })();
@@ -413,8 +419,7 @@ export default function SettingsScreen() {
                 <View style={styles.fieldGroup}>
                   <Footnote color="secondary">Status</Footnote>
                   <View style={styles.statusRow}>
-                    <View style={[styles.statusDot, styles[`statusDot_${statusMeta.tone}`]]} />
-                    <Headline>{statusMeta.label}</Headline>
+                    <Headline>{statusMeta}</Headline>
                     {(isAuthenticating || isSyncing) ? (
                       <ActivityIndicator size="small" color={semanticHex.systemBlue} />
                     ) : null}
@@ -590,11 +595,15 @@ export default function SettingsScreen() {
                               <Headline>{account.name}</Headline>
                               <Caption1 color="secondary">{formatAccountType(account.type)}</Caption1>
                             </View>
-                            <View style={[styles.trackBadge, trackedAccounts.includes(account.id) && styles.trackBadgeActive]}>
-                              <Caption1 color={trackedAccounts.includes(account.id) ? 'primary' : 'secondary'}>
-                                {trackedAccounts.includes(account.id) ? 'Tracking' : 'Track'}
-                              </Caption1>
-                            </View>
+                            {trackedAccounts.includes(account.id) ? (
+                              <SymbolView
+                                name="checkmark"
+                                size={17}
+                                weight="semibold"
+                                tintColor={semanticColors.action}
+                                accessibilityElementsHidden
+                              />
+                            ) : null}
                           </View>
                         </ListItem>
                       </React.Fragment>
@@ -657,21 +666,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-  },
-  statusDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: semanticColors.separator,
-  },
-  statusDot_primary: {
-    backgroundColor: semanticColors.systemBlue,
-  },
-  statusDot_secondary: {
-    backgroundColor: semanticColors.systemGray2,
-  },
-  statusDot_danger: {
-    backgroundColor: semanticColors.systemRed,
   },
   statusError: {
     color: semanticColors.systemRed,
@@ -746,15 +740,6 @@ const styles = StyleSheet.create({
   accountInfo: {
     flex: 1,
     gap: 4,
-  },
-  trackBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: semanticColors.secondarySystemFill,
-  },
-  trackBadgeActive: {
-    backgroundColor: withAlpha(semanticHex.systemBlue, '22'),
   },
   doneButton: {
     paddingHorizontal: 8,

@@ -110,11 +110,9 @@ export default function RecommendationsScreen() {
                     <View style={styles.recommendationContent}>
                       <View style={styles.recommendationHeader}>
                         <Headline>{rec.cardName}</Headline>
-                        <View style={[styles.priorityBadge, styles[`priority${rec.priority}`]]}>
-                          <Caption1 style={styles.priorityBadgeText}>
-                            {rec.priority.toUpperCase()}
-                          </Caption1>
-                        </View>
+                        <Caption1 color="secondary" style={styles.priorityText}>
+                          {rec.priority.charAt(0).toUpperCase() + rec.priority.slice(1)} priority
+                        </Caption1>
                       </View>
                       <Body color="secondary">{rec.reason}</Body>
                       <Footnote style={{ marginTop: 4, fontWeight: '600', color: actionDetails.color }}>
@@ -159,22 +157,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
-  priorityBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  priorityBadgeText: {
-    color: semanticColors.primaryButtonForeground,
+  priorityText: {
+    flexShrink: 0,
     fontWeight: '600',
-  },
-  priorityhigh: {
-    backgroundColor: semanticColors.systemRed,
-  },
-  prioritymedium: {
-    backgroundColor: semanticColors.systemOrange,
-  },
-  prioritylow: {
-    backgroundColor: semanticColors.systemGreen,
   },
 });

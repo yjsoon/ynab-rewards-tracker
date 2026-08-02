@@ -351,7 +351,7 @@ export default function TransactionDetailScreen() {
         automaticallyAdjustsScrollIndicatorInsets
       >
         <View style={styles.hero}>
-          <Caption1 color="secondary" style={styles.eyebrow}>TRANSACTION</Caption1>
+          <Caption1 color="secondary">Transaction</Caption1>
           <Title1 accessibilityRole="header">{payee}</Title1>
           <LargeTitle
             style={projection.status === 'incoming' ? styles.incoming : undefined}
@@ -462,10 +462,6 @@ const styles = StyleSheet.create({
   },
   hero: {
     gap: spacing.sm,
-  },
-  eyebrow: {
-    fontWeight: '700',
-    letterSpacing: 0.7,
   },
   incoming: {
     color: semanticColors.positive,

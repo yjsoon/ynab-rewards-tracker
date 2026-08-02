@@ -24,7 +24,6 @@ import {
   Footnote,
   Headline,
   LargeTitle,
-  Title2,
   Title3,
 } from '@/components/ios';
 import {
@@ -41,7 +40,6 @@ import {
   formatRate,
   formatRewardForCard,
   formatResetDate,
-  statusPresentation,
   type CardFormatting,
 } from '@/features/cards/presentation';
 import { semanticColors } from '@/theme';
@@ -61,6 +59,16 @@ function formatHiddenUntil(value: string): string {
     day: 'numeric',
     month: 'short',
   }).format(new Date(value));
+}
+
+function removeCardNamePrefix(accountName: string | undefined, cardName: string): string | undefined {
+  if (!accountName) return undefined;
+  const prefix = accountName.slice(0, cardName.length);
+  const suffix = accountName.slice(cardName.length);
+  if (prefix.toLocaleLowerCase() !== cardName.toLocaleLowerCase() || !/^[\s·—–-]/.test(suffix)) {
+    return accountName;
+  }
+  return suffix.replace(/^[\s·—–-]+/, '') || undefined;
 }
 
 function ConfigRow({ label, value, showDivider = true }: {
@@ -207,7 +215,9 @@ function SubcategoryRow({
             </Footnote>
           </View>
         </View>
-        <StatusPill label={stateLabel.label} tone={stateLabel.tone} size="small" accessible={false} />
+        {stateLabel.tone !== 'positive' ? (
+          <StatusPill label={stateLabel.label} tone={stateLabel.tone} size="small" accessible={false} />
+        ) : null}
       </View>
 
       <View style={styles.subcategoryMetrics} accessibilityElementsHidden>
@@ -373,12 +383,25 @@ export default function CardDetailScreen() {
     : hiddenEntry
       ? `Hidden until ${formatHiddenUntil(hiddenEntry.hiddenUntil)}`
       : 'Shown';
-  const overviewPillLabel = card.featured === false
+  const overviewContext = card.featured === false
     ? 'Not on Overview'
     : hiddenEntry
       ? 'Hidden until reset'
-      : 'On Overview';
+      : undefined;
   const accountName = getCardAccountName(card, model.cacheEntry);
+  const accountContext = removeCardNamePrefix(accountName, card.name);
+  const seenIdentityLabels = new Set([card.name.trim().toLocaleLowerCase()]);
+  const identityContext = [
+    card.issuer !== 'Unknown' ? card.issuer : undefined,
+    accountContext,
+    overviewContext,
+  ].filter((value): value is string => {
+    if (!value) return false;
+    const key = value.trim().toLocaleLowerCase();
+    if (seenIdentityLabels.has(key)) return false;
+    seenIdentityLabels.add(key);
+    return true;
+  }).join(' · ');
   const subcategories = [...(card.subcategories ?? [])].sort((left, right) => left.priority - right.priority);
   const blockCopy = projection.blockInfo
     ? [
@@ -395,24 +418,41 @@ export default function CardDetailScreen() {
   const nativeRewardLabel = card.type === 'cashback'
     ? 'cashback earned'
     : `miles earned · ≈ ${formatting.currencyExact(projection.reward.dollars)}`;
+  const earningSetupRows = [
+    { label: 'Reward type', value: card.type === 'cashback' ? 'Cashback' : 'Miles' },
+    { label: 'Rate', value: formatRate(card, formatting) },
+    (card.minimumSpend ?? 0) > 0
+      ? { label: 'Minimum', value: formatting.currencyCompact(card.minimumSpend!) }
+      : undefined,
+    (card.maximumSpend ?? 0) > 0
+      ? { label: 'Cap', value: formatting.currencyCompact(card.maximumSpend!) }
+      : undefined,
+    (card.earningBlockSize ?? 0) > 0
+      ? {
+          label: 'Earning method',
+          value: `${formatting.currencyCompact(card.earningBlockSize!)} transaction blocks`,
+        }
+      : undefined,
+    card.billingCycle?.type === 'billing'
+      ? {
+          label: 'Cycle',
+          value: `Resets monthly after day ${card.billingCycle.dayOfMonth ?? 1}`,
+        }
+      : undefined,
+    card.promotionalPeriod
+      ? {
+          label: 'Promotion',
+          value: `${card.promotionalPeriod.description || 'Active promotion'} · until ${formatResetDate(card.promotionalPeriod.endDate)}`,
+        }
+      : undefined,
+  ].filter((row): row is { label: string; value: string } => Boolean(row));
+  const showsDetailHeading = Boolean(identityContext) || model.syncState !== 'synced';
 
   return (
     <>
       <Stack.Screen
         options={{
-          title: 'Card',
-          headerRight: () => (
-            <Button
-              variant="plain"
-              size="small"
-              onPress={edit}
-              accessibilityLabel={`Edit ${card.name}`}
-              accessibilityHint="Opens card settings"
-              style={styles.headerButton}
-            >
-              Edit
-            </Button>
-          ),
+          title: card.name,
         }}
       />
       <ScrollView
@@ -431,36 +471,23 @@ export default function CardDetailScreen() {
           />
         )}
       >
-        <View style={styles.detailHeading}>
-          <View style={styles.titleRow}>
-            <View style={styles.titleCopy}>
-              <Title2 accessibilityRole="header">{card.name}</Title2>
-              <Footnote color="secondary">
-                {[card.issuer !== 'Unknown' ? card.issuer : undefined, accountName].filter(Boolean).join(' · ')}
-              </Footnote>
-            </View>
-            <StatusPill
-              label={overviewPillLabel}
-              tone={card.featured === false || hiddenEntry ? 'inactive' : 'accent'}
+        {showsDetailHeading ? (
+          <View style={styles.detailHeading}>
+            {identityContext ? (
+              <Footnote color="secondary">{identityContext}</Footnote>
+            ) : null}
+            <SyncBadge
+              state={model.syncState}
+              label={model.syncLabel}
+              onPress={model.canSync ? model.refresh : () => router.push('/settings')}
             />
           </View>
-          <SyncBadge
-            state={model.syncState}
-            label={model.syncLabel}
-            onPress={model.canSync ? model.refresh : () => router.push('/settings')}
-          />
-        </View>
+        ) : null}
 
         <View style={styles.hero}>
-          <View style={styles.heroTopRow}>
-            <View style={styles.heroPeriod}>
-              <Caption1 color="secondary" style={styles.eyebrow}>CURRENT PERIOD</Caption1>
-              <Footnote color="secondary">{formatPeriod(projection.period)}</Footnote>
-            </View>
-            <StatusPill
-              label={statusPresentation(projection.status).label}
-              tone={statusPresentation(projection.status).tone}
-            />
+          <View style={styles.heroPeriod}>
+            <Caption1 color="secondary">Current period</Caption1>
+            <Footnote color="secondary">{formatPeriod(projection.period)}</Footnote>
           </View>
 
           <View
@@ -509,11 +536,11 @@ export default function CardDetailScreen() {
           ) : null}
 
           <View style={styles.heroFooter}>
-            <Headline color={projection.status === 'capped' ? 'destructive' : projection.status === 'near_cap' || projection.status === 'building' || projection.status === 'unconfigured' ? 'attention' : 'positive'}>
-              {projection.status === 'earning' || projection.status === 'open'
-                ? 'Earning is on track.'
-                : attentionCopy(projection, formatting)}
-            </Headline>
+            {projection.status !== 'earning' && projection.status !== 'open' ? (
+              <Headline color={projection.status === 'capped' ? 'destructive' : 'attention'}>
+                {attentionCopy(projection, formatting)}
+              </Headline>
+            ) : null}
             <Footnote color="secondary">
               {formatDaysRemaining(projection.daysRemaining, projection.resetsOn)}
             </Footnote>
@@ -523,18 +550,20 @@ export default function CardDetailScreen() {
 
         <View style={styles.section}>
           <SectionTitle
-            title="Overview & order"
+            title="Card order"
           />
           <View style={styles.overviewControlCard}>
-            <ConfigRow label="Overview" value={overviewLabel} />
+            {card.featured === false || hiddenEntry ? (
+              <ConfigRow label="Overview" value={overviewLabel} />
+            ) : null}
             <ConfigRow
-              label="Card order"
+              label="Position"
               value={orderIndex >= 0 ? `${orderIndex + 1} of ${orderedCards.length}` : 'Not ordered'}
               showDivider={false}
             />
             <View style={styles.orderButtons}>
               <Button
-                variant="tinted"
+                variant="plain"
                 size="small"
                 disabled={orderIndex <= 0}
                 onPress={() => void moveCard(-1)}
@@ -543,7 +572,7 @@ export default function CardDetailScreen() {
                 Move earlier
               </Button>
               <Button
-                variant="tinted"
+                variant="plain"
                 size="small"
                 disabled={orderIndex < 0 || orderIndex >= orderedCards.length - 1}
                 onPress={() => void moveCard(1)}
@@ -568,38 +597,17 @@ export default function CardDetailScreen() {
         <View style={styles.section}>
           <SectionTitle
             title="Earning setup"
-            action={{ label: 'Edit', onPress: edit, accessibilityHint: 'Opens card settings' }}
+            action={{ label: 'Edit card', onPress: edit, accessibilityHint: 'Opens card settings' }}
           />
           <View style={styles.group}>
-            <ConfigRow label="Reward type" value={card.type === 'cashback' ? 'Cashback' : 'Miles'} />
-            <ConfigRow label="Rate" value={formatRate(card, formatting)} />
-            <ConfigRow
-              label="Minimum"
-              value={(card.minimumSpend ?? 0) > 0 ? formatting.currencyCompact(card.minimumSpend!) : 'None'}
-            />
-            <ConfigRow
-              label="Cap"
-              value={(card.maximumSpend ?? 0) > 0 ? formatting.currencyCompact(card.maximumSpend!) : 'None'}
-            />
-            <ConfigRow
-              label="Earning method"
-              value={(card.earningBlockSize ?? 0) > 0
-                ? `${formatting.currencyCompact(card.earningBlockSize!)} transaction blocks`
-                : 'Exact transaction amount'}
-            />
-            <ConfigRow
-              label="Cycle"
-              value={card.billingCycle?.type === 'billing'
-                ? `Resets monthly after day ${card.billingCycle.dayOfMonth ?? 1}`
-                : 'Calendar month'}
-            />
-            <ConfigRow
-              label="Promotion"
-              value={card.promotionalPeriod
-                ? `${card.promotionalPeriod.description || 'Active promotion'} · until ${formatResetDate(card.promotionalPeriod.endDate)}`
-                : 'None'}
-              showDivider={false}
-            />
+            {earningSetupRows.map((row, index) => (
+              <ConfigRow
+                key={row.label}
+                label={row.label}
+                value={row.value}
+                showDivider={index < earningSetupRows.length - 1}
+              />
+            ))}
           </View>
         </View>
 
@@ -700,24 +708,8 @@ const styles = StyleSheet.create({
     paddingBottom: 80,
     gap: spacing.xxxl,
   },
-  headerButton: {
-    marginHorizontal: -spacing.sm,
-  },
   detailHeading: {
     gap: spacing.md,
-  },
-  titleRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    columnGap: spacing.lg,
-    rowGap: spacing.sm,
-  },
-  titleCopy: {
-    flex: 1,
-    minWidth: 200,
-    gap: spacing.xs,
   },
   hero: {
     marginHorizontal: -spacing.xs,
@@ -727,20 +719,8 @@ const styles = StyleSheet.create({
     borderRadius: radii.xlarge,
     backgroundColor: semanticColors.secondarySystemGroupedBackground,
   },
-  heroTopRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    columnGap: spacing.lg,
-    rowGap: spacing.sm,
-  },
   heroPeriod: {
     gap: spacing.xs,
-  },
-  eyebrow: {
-    letterSpacing: 0.7,
-    fontWeight: '600',
   },
   rewardValue: {
     fontSize: 42,

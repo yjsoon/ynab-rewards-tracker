@@ -15,6 +15,7 @@ export interface CardFormatting {
   currency: string;
   currencyCompact: (value: number) => string;
   currencyExact: (value: number) => string;
+  currencyRounded: (value: number) => string;
   number: (value: number) => string;
 }
 
@@ -33,6 +34,11 @@ export function createCardFormatting(settings: AppSettings): CardFormatting {
       locale,
       currency,
       decimals: 2,
+    }),
+    currencyRounded: (value) => formatCurrencyCore(value, {
+      locale,
+      currency,
+      decimals: 0,
     }),
     number: (value) => new Intl.NumberFormat(locale, {
       maximumFractionDigits: Number.isInteger(value) ? 0 : 2,
@@ -166,19 +172,13 @@ export function formatThresholdSummary(
   card: CreditCard,
   formatting: CardFormatting,
 ): string {
-  const values = [
-    card.featured === false ? 'Not on Overview' : 'On Overview',
-    formatRate(card, formatting),
-  ];
+  const values = card.featured === false ? ['Not on Overview'] : [];
+  values.push(formatRate(card, formatting));
   if (typeof card.minimumSpend === 'number' && card.minimumSpend > 0) {
     values.push(`Min ${formatting.currencyCompact(card.minimumSpend)}`);
-  } else {
-    values.push('No minimum');
   }
   if (typeof card.maximumSpend === 'number' && card.maximumSpend > 0) {
     values.push(`Cap ${formatting.currencyCompact(card.maximumSpend)}`);
-  } else {
-    values.push('No cap');
   }
   if (typeof card.earningBlockSize === 'number' && card.earningBlockSize > 0) {
     values.push(`${formatting.currencyCompact(card.earningBlockSize)} blocks`);

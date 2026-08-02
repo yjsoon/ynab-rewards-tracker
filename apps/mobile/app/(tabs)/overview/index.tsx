@@ -1,147 +1,342 @@
 import React, { useMemo } from 'react';
 import {
+  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
-  useWindowDimensions,
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
 
 import { useStorage } from '@/contexts/StorageContext';
 import {
-  CardStatusRow,
   EmptyState,
   LargeNavigationTitle,
-  MetricValue,
   SectionTitle,
-  SyncBadge,
 } from '@/components/native';
-import {
-  Body,
-  Caption1,
-  LargeTitle,
-} from '@/components/ios';
+import { Body, Footnote, Headline } from '@/components/ios';
 import {
   createCardFormatting,
-  formatDaysRemaining,
-  formatPeriod,
-  formatReward,
-  primaryProgress,
-  statusPresentation,
-  attentionCopy,
+  flagColor,
+  formatResetDate,
+  type CardFormatting,
 } from '@/features/cards/presentation';
 import { useRewardsDashboard } from '@/features/cards/dashboard';
-import { RewardCategorySummary } from '@/features/cards/RewardCategoryBreakdown';
 import {
   collectRewardCategories,
+  rankCardUses,
   rankRewardCategoryPreview,
+  type PortfolioRewardCategory,
+  type RankedCardUse,
 } from '@/features/cards/reward-categories';
 import { semanticColors } from '@/theme';
-import { nativeMetrics, spacing } from '@/theme/tokens';
+import { interaction, nativeMetrics, radii, spacing } from '@/theme/tokens';
 import type { CardDashboardProjection } from '@ynab-counter/app-core/rewards-engine';
 
-function CardProjectionRow({
+function compactCardName(name: string): string {
+  const segments = name
+    .split(/\s+·\s+/u)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  return segments.at(-1) ?? name;
+}
+
+function decisionCurrency(value: number, formatting: CardFormatting): string {
+  if (value !== 0 && Math.abs(value) < 1) {
+    return formatting.currencyExact(value);
+  }
+  return formatting.currencyRounded(value);
+}
+
+function thresholdCurrency(value: number, formatting: CardFormatting): string {
+  return Number.isInteger(value)
+    ? decisionCurrency(value, formatting)
+    : formatting.currencyExact(value);
+}
+
+function categoryRateLabel(
+  item: PortfolioRewardCategory,
+  formatting: CardFormatting,
+): string {
+  const rate = formatting.number(item.category.rate);
+  const label = item.card.card.type === 'cashback'
+    ? `${rate}% cashback`
+    : `${rate} ${item.category.rate === 1 ? 'mile' : 'miles'}/${formatting.currency} 1`;
+  return item.category.blockInfo
+    ? `${label} · ${thresholdCurrency(item.category.blockInfo.size, formatting)} blocks`
+    : label;
+}
+
+function cardUseRateLabel(
+  item: RankedCardUse,
+  formatting: CardFormatting,
+): string {
+  const rate = formatting.number(item.rate.value);
+  const nativeRate = item.rate.type === 'cashback'
+    ? `${rate}% cashback`
+    : `${rate} ${item.rate.value === 1 ? 'mile' : 'miles'}/${formatting.currency} 1`;
+  const blockAwareRate = item.rate.blockSize === null
+    ? nativeRate
+    : `${nativeRate} · ${thresholdCurrency(item.rate.blockSize, formatting)} blocks`;
+  return item.rate.prospective ? `${blockAwareRate} after unlock` : blockAwareRate;
+}
+
+function cardUseOperationalLabel(
+  item: RankedCardUse,
+  formatting: CardFormatting,
+): string | undefined {
+  if (item.operational?.kind === 'minimum') {
+    const category = item.operational.category
+      ? ` on ${item.operational.category}`
+      : '';
+    return `${thresholdCurrency(item.operational.remaining, formatting)} more${category} before ${formatResetDate(item.operational.resetsOn)} to unlock`;
+  }
+  if (item.operational?.kind === 'cap') {
+    return `${thresholdCurrency(item.operational.remaining, formatting)} cap room`;
+  }
+  return undefined;
+}
+
+function CardUseRow({
+  item,
+  formatting,
+  onPress,
+  showDivider,
+}: {
+  item: RankedCardUse;
+  formatting: CardFormatting;
+  onPress: () => void;
+  showDivider: boolean;
+}) {
+  const rateLabel = cardUseRateLabel(item, formatting);
+  const operationalLabel = cardUseOperationalLabel(item, formatting);
+
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={[
+        item.card.card.name,
+        item.use.label,
+        rateLabel,
+        operationalLabel,
+      ].filter(Boolean).join(', ')}
+      accessibilityHint={item.use.categoryId
+        ? `Opens the ${item.use.label} earning tier on ${item.card.card.name}`
+        : `Opens details for ${item.card.card.name}`}
+      style={({ pressed }) => [
+        styles.cardUseRow,
+        showDivider && styles.rowDivider,
+        pressed && styles.pressed,
+      ]}
+    >
+      <View
+        style={styles.rowCopy}
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+      >
+        <Headline>{compactCardName(item.card.card.name)}</Headline>
+        <View style={styles.useLabelRow}>
+          {item.use.flagColor ? (
+            <SymbolView
+              name="flag.fill"
+              size={14}
+              tintColor={flagColor(item.use.flagColor)}
+              style={styles.flagIcon}
+            />
+          ) : null}
+          <Body style={styles.flexibleText}>{item.use.label} · {rateLabel}</Body>
+        </View>
+        {operationalLabel ? (
+          <Footnote color="secondary" style={styles.tabular}>
+            {operationalLabel}
+          </Footnote>
+        ) : null}
+      </View>
+    </Pressable>
+  );
+}
+
+function SetupCardRow({
   projection,
-  formatCurrency,
-  rewardValue,
-  context,
   onPress,
   showDivider,
 }: {
   projection: CardDashboardProjection;
-  formatCurrency: (value: number) => string;
-  rewardValue: string;
-  context: string;
   onPress: () => void;
   showDivider: boolean;
 }) {
-  const blockDetail = projection.blockInfo
-    ? projection.blockInfo.uncountedEligibleSpend > 0
-      ? `${projection.blockInfo.sizes.map((size) => formatCurrency(size)).join('/')} blocks · ${formatCurrency(projection.blockInfo.uncountedEligibleSpend)} not counted`
-      : `${projection.blockInfo.sizes.map((size) => formatCurrency(size)).join('/')} blocks`
-    : undefined;
-  const periodLabel = [context, blockDetail].filter(Boolean).join(' · ');
-  const progress = primaryProgress(projection);
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${projection.card.name}, Add an earning rate`}
+      accessibilityHint={`Opens details for ${projection.card.name}`}
+      style={({ pressed }) => [
+        styles.setupRow,
+        showDivider && styles.rowDivider,
+        pressed && styles.pressed,
+      ]}
+    >
+      <View
+        style={styles.rowCopy}
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+      >
+        <Headline>{compactCardName(projection.card.name)}</Headline>
+        <Footnote color="secondary">Add an earning rate</Footnote>
+      </View>
+    </Pressable>
+  );
+}
+
+function categorySpendOperationalState(
+  item: PortfolioRewardCategory,
+  formatting: CardFormatting,
+): {
+  label: string;
+  color: 'secondary' | 'attention' | 'destructive';
+} | undefined {
+  const { category } = item;
+  if (category.excluded) {
+    return { label: 'Excluded', color: 'secondary' };
+  }
+  if (category.maximum.reached) {
+    return { label: 'Cap reached', color: 'destructive' };
+  }
+  if ((category.maximum.progress ?? 0) >= 0.8) {
+    return {
+      label: `${thresholdCurrency(category.maximum.remaining ?? 0, formatting)} cap room`,
+      color: 'attention',
+    };
+  }
+  // Card minimums are already communicated on the relevant Keep using row.
+  if (category.blockedByCardMinimum) {
+    return undefined;
+  }
+  if (category.minimum.target !== null && category.minimum.met === false) {
+    return {
+      label: `${thresholdCurrency(category.minimum.remaining ?? 0, formatting)} more to meet tier minimum`,
+      color: 'attention',
+    };
+  }
+  if (category.maximum.target !== null) {
+    return {
+      label: `${thresholdCurrency(category.maximum.remaining ?? 0, formatting)} cap room`,
+      color: 'secondary',
+    };
+  }
+  return undefined;
+}
+
+function CategorySpendRow({
+  item,
+  formatting,
+  onPress,
+  showDivider,
+}: {
+  item: PortfolioRewardCategory;
+  formatting: CardFormatting;
+  onPress: () => void;
+  showDivider: boolean;
+}) {
+  const rateLabel = categoryRateLabel(item, formatting);
+  const spendLabel = `${decisionCurrency(item.category.spend.total, formatting)} spent`;
+  const operationalState = categorySpendOperationalState(item, formatting);
+  const context = `${compactCardName(item.card.card.name)}, ${rateLabel}`;
 
   return (
-    <CardStatusRow
-      name={projection.card.name}
-      issuer={projection.card.issuer === 'Unknown' ? undefined : projection.card.issuer}
-      periodLabel={periodLabel}
-      rewardValue={rewardValue}
-      rewardLabel={projection.card.type === 'miles' ? 'Miles earned' : 'Cashback earned'}
-      spend={progress.spend}
-      formatValue={formatCurrency}
-      minimumSpend={progress.minimum}
-      maximumSpend={progress.maximum}
-      status={statusPresentation(projection.status)}
+    <Pressable
       onPress={onPress}
-      showDivider={showDivider}
-    />
+      accessibilityRole="button"
+      accessibilityLabel={[
+        item.category.name,
+        item.card.card.name,
+        rateLabel,
+        spendLabel,
+        operationalState?.label,
+      ].filter(Boolean).join(', ')}
+      accessibilityHint={`Opens the ${item.category.name} reward tier on ${item.card.card.name}`}
+      style={({ pressed }) => [
+        styles.categoryRow,
+        showDivider && styles.rowDivider,
+        pressed && styles.pressed,
+      ]}
+    >
+      <SymbolView
+        name="flag.fill"
+        size={15}
+        tintColor={flagColor(item.category.flagColor)}
+        style={styles.categoryFlagIcon}
+        accessibilityElementsHidden
+      />
+      <View
+        style={styles.rowCopy}
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+      >
+        <Headline>{item.category.name}</Headline>
+        <Footnote color="secondary">{context}</Footnote>
+        <Headline style={styles.tabular}>{spendLabel}</Headline>
+        {operationalState ? (
+          <Footnote color={operationalState.color} style={styles.tabular}>
+            {operationalState.label}
+          </Footnote>
+        ) : null}
+      </View>
+    </Pressable>
   );
 }
 
 export default function OverviewScreen() {
   const router = useRouter();
-  const { fontScale } = useWindowDimensions();
-  const usesStackedHeroHeading = fontScale >= 1.3;
   const { state } = useStorage();
   const model = useRewardsDashboard();
   const formatting = useMemo(() => createCardFormatting(state.settings), [state.settings]);
 
-  const visibleTotals = useMemo(
-    () => model.visibleCards.reduce(
-      (totals, projection) => {
-        totals.value += projection.reward.dollars;
-        totals.cashback += projection.reward.type === 'cashback' ? projection.reward.amount : 0;
-        totals.miles += projection.reward.type === 'miles' ? projection.reward.amount : 0;
-        totals.milesValue += projection.reward.type === 'miles' ? projection.reward.dollars : 0;
-        totals.spend += projection.spend.total;
-        totals.counts[projection.status] += 1;
-        return totals;
-      },
-      {
-        value: 0,
-        cashback: 0,
-        miles: 0,
-        milesValue: 0,
-        spend: 0,
-        counts: {
-          unconfigured: 0,
-          building: 0,
-          earning: 0,
-          near_cap: 0,
-          capped: 0,
-          open: 0,
-        } satisfies Record<CardDashboardProjection['status'], number>,
-      },
-    ),
+  const nonCappedCards = useMemo(
+    () => model.visibleCards.filter((projection) => projection.status !== 'capped'),
     [model.visibleCards],
   );
-
+  const cardUses = useMemo(
+    () => rankCardUses(nonCappedCards, state.settings),
+    [nonCappedCards, state.settings],
+  );
+  const setupCards = useMemo(
+    () => nonCappedCards.filter((projection) => projection.status === 'unconfigured'),
+    [nonCappedCards],
+  );
   const rewardCategories = useMemo(
-    () => collectRewardCategories(model.visibleCards),
-    [model.visibleCards],
+    () => collectRewardCategories(nonCappedCards),
+    [nonCappedCards],
   );
   const categoryPreview = useMemo(
     () => rankRewardCategoryPreview(rewardCategories),
     [rewardCategories],
   );
+  const syncActionLabel = model.canSync
+    ? `${model.syncLabel} — Retry`
+    : `${model.syncLabel} — Review settings`;
+  const connected = Boolean(state.pat && state.selectedBudget.id);
+  const hasUsableOrSetupCards = cardUses.length > 0 || setupCards.length > 0;
 
   const openCard = (id: string) => {
     router.push({ pathname: '/card/[id]', params: { id } });
   };
 
+  const openCardUse = (item: RankedCardUse) => {
+    router.push({
+      pathname: '/card/[id]',
+      params: item.use.categoryId
+        ? { id: item.card.card.id, categoryId: item.use.categoryId }
+        : { id: item.card.card.id },
+    });
+  };
+
   const openRewardCategory = (id: string, categoryId: string) => {
     router.push({ pathname: '/card/[id]', params: { id, categoryId } });
   };
-
-  const openRewardCategories = () => {
-    router.push('/(tabs)/overview/categories');
-  };
-
-  const canShowDashboard = state.cards.length > 0 && model.visibleCards.length > 0;
 
   return (
     <ScrollView
@@ -159,10 +354,30 @@ export default function OverviewScreen() {
         />
       )}
     >
-      <LargeNavigationTitle style={styles.navigationTitle}>
-        Overview
-      </LargeNavigationTitle>
-      {!state.pat || !state.selectedBudget.id ? (
+      <View style={styles.top}>
+        <LargeNavigationTitle style={styles.navigationTitle}>
+          Overview
+        </LargeNavigationTitle>
+        {connected && state.cards.length > 0 &&
+        (model.syncState === 'offline' || model.syncState === 'attention') ? (
+          <Pressable
+            onPress={model.canSync ? model.refresh : () => router.push('/settings')}
+            accessibilityRole="button"
+            accessibilityLabel={syncActionLabel}
+            accessibilityHint={model.canSync
+              ? 'Retries syncing rewards from YNAB'
+              : 'Opens YNAB connection settings'}
+            style={({ pressed }) => [
+              styles.syncAction,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Footnote color="action">{syncActionLabel}</Footnote>
+          </Pressable>
+        ) : null}
+      </View>
+
+      {!connected ? (
         <EmptyState
           title="Connect YNAB to begin"
           action={{
@@ -180,126 +395,72 @@ export default function OverviewScreen() {
             accessibilityHint: 'Opens tracked account settings',
           }}
         />
-      ) : !canShowDashboard ? (
+      ) : !hasUsableOrSetupCards ? (
         <EmptyState
-          title="No cards on Overview"
+          title="No cards to use right now"
           action={{
-            label: 'View all cards',
+            label: 'View cards',
             onPress: () => router.push('/(tabs)/cards'),
+            accessibilityHint: 'Opens all cards',
           }}
         />
       ) : (
         <>
-          <View style={styles.hero}>
-            <View style={[
-              styles.heroHeading,
-              usesStackedHeroHeading && styles.heroHeadingStacked,
-            ]}>
-              <Caption1 color="secondary" style={styles.eyebrow}>
-                CURRENT PERIODS
-              </Caption1>
-              <SyncBadge
-                state={model.syncState}
-                label={model.syncLabel}
-                onPress={model.canSync ? model.refresh : () => router.push('/settings')}
-                accessibilityHint={model.canSync ? 'Refreshes rewards from YNAB' : 'Opens YNAB settings'}
-              />
-            </View>
-
-            <View accessible accessibilityRole="summary" accessibilityLabel={`Estimated reward value ${formatting.currencyExact(visibleTotals.value)}`}>
-              <LargeTitle style={styles.heroValue} accessible={false}>
-                {formatting.currencyExact(visibleTotals.value)}
-              </LargeTitle>
-              <Body color="secondary" accessible={false}>
-                Estimated reward value
-              </Body>
-            </View>
-
-            <View style={styles.nativeTotals}>
-              <MetricValue
-                label="Cashback"
-                value={formatting.currencyExact(visibleTotals.cashback)}
-                size="compact"
-              />
-              <View style={styles.metricDivider} />
-              <MetricValue
-                label="Miles"
-                value={formatting.number(visibleTotals.miles)}
-                detail={`≈ ${formatting.currencyExact(visibleTotals.milesValue)}`}
-                size="compact"
-              />
-              <View style={styles.metricDivider} />
-              <MetricValue
-                label="Spend tracked"
-                value={formatting.currencyCompact(visibleTotals.spend)}
-                size="compact"
-              />
-            </View>
-
-            <RewardCategorySummary
-              categories={rewardCategories}
-              preview={categoryPreview}
-              formatting={formatting}
-              setupCount={visibleTotals.counts.unconfigured}
-              onSeeAll={openRewardCategories}
-              onOpenCard={openRewardCategory}
-              onReviewCards={() => router.push('/(tabs)/cards')}
-            />
-          </View>
-
-          {model.attentionCards.length > 0 ? (
+          {cardUses.length > 0 ? (
             <View style={styles.section}>
-              <SectionTitle
-                title="Needs attention"
-              />
+              <SectionTitle title="Keep using" />
               <View style={styles.rows}>
-                {model.attentionCards.map((projection, index) => (
-                  <CardProjectionRow
-                    key={projection.card.id}
-                    projection={projection}
-                    rewardValue={formatReward(projection, formatting)}
-                    formatCurrency={formatting.currencyCompact}
-                    context={attentionCopy(projection, formatting)}
-                    onPress={() => openCard(projection.card.id)}
-                    showDivider={index < model.attentionCards.length - 1}
+                {cardUses.map((item, index) => (
+                  <CardUseRow
+                    key={item.key}
+                    item={item}
+                    formatting={formatting}
+                    onPress={() => openCardUse(item)}
+                    showDivider={index < cardUses.length - 1}
                   />
                 ))}
               </View>
             </View>
           ) : null}
 
-          {model.trackingCards.length > 0 ? (
+          {setupCards.length > 0 ? (
+            <View style={styles.section}>
+              <SectionTitle title="Set up" />
+              <View style={styles.rows}>
+                {setupCards.map((projection, index) => (
+                  <SetupCardRow
+                    key={projection.card.id}
+                    projection={projection}
+                    onPress={() => openCard(projection.card.id)}
+                    showDivider={index < setupCards.length - 1}
+                  />
+                ))}
+              </View>
+            </View>
+          ) : null}
+
+          {categoryPreview.length > 0 ? (
             <View style={styles.section}>
               <SectionTitle
-                title={model.attentionCards.length > 0 ? 'On track' : 'Your cards'}
-                subtitle={`${model.trackingCards.length} ${model.trackingCards.length === 1 ? 'card' : 'cards'} on Overview`}
+                title="Category activity"
                 action={{
-                  label: 'All cards',
-                  onPress: () => router.push('/(tabs)/cards'),
-                  accessibilityHint: 'Opens card management',
+                  label: 'See all',
+                  onPress: () => router.push('/(tabs)/overview/categories'),
+                  accessibilityHint: 'Opens every reward category on Overview, grouped by card',
                 }}
               />
               <View style={styles.rows}>
-                {model.trackingCards.map((projection, index) => (
-                  <CardProjectionRow
-                    key={projection.card.id}
-                    projection={projection}
-                    rewardValue={formatReward(projection, formatting)}
-                    formatCurrency={formatting.currencyCompact}
-                    context={`${formatPeriod(projection.period)} · ${formatDaysRemaining(projection.daysRemaining, projection.resetsOn)}`}
-                    onPress={() => openCard(projection.card.id)}
-                    showDivider={index < model.trackingCards.length - 1}
+                {categoryPreview.map((item, index) => (
+                  <CategorySpendRow
+                    key={item.key}
+                    item={item}
+                    formatting={formatting}
+                    onPress={() => openRewardCategory(item.card.card.id, item.category.id)}
+                    showDivider={index < categoryPreview.length - 1}
                   />
                 ))}
               </View>
             </View>
-          ) : null}
-
-          {model.trackingCards.length === 0 ? (
-            <SectionTitle
-              title="Card management"
-              action={{ label: 'All cards', onPress: () => router.push('/(tabs)/cards') }}
-            />
           ) : null}
         </>
       )}
@@ -316,55 +477,77 @@ const styles = StyleSheet.create({
     paddingHorizontal: nativeMetrics.screenGutter,
     paddingTop: spacing.md,
     paddingBottom: 120,
-    gap: spacing.xxxl,
+    gap: spacing.xxl,
+  },
+  top: {
+    gap: spacing.sm,
   },
   navigationTitle: {
     marginTop: spacing.sm,
   },
-  hero: {
-    paddingTop: spacing.sm,
-    gap: spacing.xl,
-  },
-  heroHeading: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    columnGap: spacing.lg,
-  },
-  heroHeadingStacked: {
-    flexDirection: 'column',
-    alignItems: 'flex-start',
-  },
-  eyebrow: {
-    letterSpacing: 0.7,
-    fontWeight: '600',
-  },
-  heroValue: {
-    fontSize: 44,
-    fontWeight: '700',
-    fontVariant: ['tabular-nums'],
-    letterSpacing: -1.2,
-  },
-  nativeTotals: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'stretch',
-    columnGap: spacing.lg,
-    rowGap: spacing.lg,
-  },
-  metricDivider: {
-    width: StyleSheet.hairlineWidth,
-    minHeight: 42,
-    backgroundColor: semanticColors.separator,
+  syncAction: {
+    minHeight: nativeMetrics.minimumTouchTarget,
+    alignSelf: 'flex-start',
+    justifyContent: 'center',
   },
   section: {
     gap: spacing.md,
   },
   rows: {
     marginHorizontal: -spacing.md,
-    borderRadius: 16,
+    borderRadius: radii.large,
     backgroundColor: semanticColors.secondarySystemGroupedBackground,
     overflow: 'hidden',
+  },
+  cardUseRow: {
+    minHeight: nativeMetrics.minimumTouchTarget,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  setupRow: {
+    minHeight: nativeMetrics.minimumTouchTarget,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  categoryRow: {
+    minHeight: nativeMetrics.minimumTouchTarget,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  rowCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: spacing.xs,
+  },
+  useLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  flexibleText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  flagIcon: {
+    flexShrink: 0,
+    marginTop: 3,
+  },
+  categoryFlagIcon: {
+    flexShrink: 0,
+    marginTop: 2,
+  },
+  tabular: {
+    fontVariant: ['tabular-nums'],
+  },
+  rowDivider: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: semanticColors.separator,
+  },
+  pressed: {
+    opacity: interaction.subtlePressedOpacity,
   },
 });

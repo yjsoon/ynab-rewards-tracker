@@ -215,6 +215,11 @@ pnpm --filter ./apps/mobile android    # Launch Android emulator via Expo
 
 ### Mobile App
 - Use the scripts in `apps/mobile/package.json` for local Expo builds. Inspect the current Expo/EAS configuration before changing release workflows.
+- Keep iOS information hierarchy quiet and native: navigation titles should name the current object or destination, and screen content must not repeat them.
+- Do not decorate routine facts with dots, pills, badges, colours, uppercase eyebrows, or success labels. Normal states such as connected, active, linked, tracking, earning, and up to date should usually be silent; reserve emphasis for actions, decisions, warnings, errors, and exceptional states.
+- Prefer deleting redundant copy or controls over restyling them. Pull-to-refresh owns routine refresh, native navigation owns dismissal, and one clear content action should own a form commit.
+- Make the mobile Overview forward-looking: prioritise which cards can still earn and their strongest factual use over prominent earned-value totals. Omit cards whose current-cycle cap is already reached; Cards and card detail remain the complete portfolio record.
+- Preserve meaningful data encodings such as YNAB flag colours and threshold/cap progress. Review optical alignment on a simulator rather than assuming a technically centred custom navigation view will look native.
 
 ## Contributing Guidelines
 - TypeScript-first development
