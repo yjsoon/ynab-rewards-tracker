@@ -75,32 +75,63 @@ describe('rankCardUses', () => {
     expect(uses.length > 0).toBe(expected);
   });
 
-  it.each([
-    { room: 100, expected: true },
-    { room: 80, expected: true },
-    { room: 79, expected: false },
-  ])('includes a near-cap minimum only when it is reachable with $room room', ({
-    room,
-    expected,
-  }) => {
+  it.each([100, 80, 79])(
+    'keeps card-wide minimum guidance with %d selected-tier cap room',
+    (room) => {
+      const { dashboard, fixture } = demoDashboard();
+      const ember = dashboard.cards.find((item) => item.card.id === 'demo-card-ember');
+      expect(ember).toBeDefined();
+
+      const uses = rankCardUses([{
+        ...ember!,
+        status: 'near_cap',
+        maximum: {
+          ...ember!.maximum,
+          target: 500,
+          remaining: room,
+          reached: false,
+        },
+      }], fixture.settings);
+
+      expect(uses).toHaveLength(1);
+      expect(uses[0]?.rankGroup).toBe('building');
+    },
+  );
+
+  it('recommends the strongest prospective tier when every tier minimum is unmet', () => {
     const { dashboard, fixture } = demoDashboard();
     const ember = dashboard.cards.find((item) => item.card.id === 'demo-card-ember');
     expect(ember).toBeDefined();
 
     const uses = rankCardUses([{
       ...ember!,
-      status: 'near_cap',
-      maximum: {
-        ...ember!.maximum,
-        target: 500,
-        remaining: room,
-        reached: false,
+      minimum: {
+        target: null,
+        remaining: null,
+        progress: null,
+        met: null,
       },
+      rewardCategories: ember!.rewardCategories.map((category) => ({
+        ...category,
+        minimum: {
+          target: 500,
+          remaining: 500 - category.spend.total,
+          progress: category.spend.total / 500,
+          met: false,
+        },
+      })),
     }], fixture.settings);
 
-    expect(uses.length > 0).toBe(expected);
-    if (expected) {
-      expect(uses[0]?.rankGroup).toBe('building');
-    }
+    expect(uses).toHaveLength(1);
+    expect(uses[0]).toMatchObject({
+      use: { label: 'Groceries' },
+      rate: { prospective: true },
+      rankGroup: 'building',
+      operational: {
+        kind: 'minimum',
+        remaining: 375,
+        category: 'Groceries',
+      },
+    });
   });
 });

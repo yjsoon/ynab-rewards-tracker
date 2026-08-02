@@ -87,7 +87,10 @@ function cardUseOperationalLabel(
   formatting: CardFormatting,
 ): string | undefined {
   if (item.operational?.kind === 'minimum') {
-    return `${thresholdCurrency(item.operational.remaining, formatting)} more by ${formatResetDate(item.operational.resetsOn)} to unlock`;
+    const category = item.operational.category
+      ? ` on ${item.operational.category}`
+      : '';
+    return `${thresholdCurrency(item.operational.remaining, formatting)} more${category} before ${formatResetDate(item.operational.resetsOn)} to unlock`;
   }
   if (item.operational?.kind === 'cap') {
     return `${thresholdCurrency(item.operational.remaining, formatting)} cap room`;

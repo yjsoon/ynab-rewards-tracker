@@ -24,7 +24,7 @@ export interface RankedCardUse {
   };
   effectiveEarningRoom: number | null;
   operational:
-    | { kind: 'minimum'; remaining: number; resetsOn: string }
+    | { kind: 'minimum'; remaining: number; resetsOn: string; category: string | null }
     | { kind: 'cap'; remaining: number }
     | null;
   rankGroup: CardUseRankGroup;
@@ -94,13 +94,20 @@ function selectStrongestTier(
       const rate = positiveFinite(category.rate);
       const tierUnavailable = category.excluded ||
         category.maximum.reached ||
-        remainingRoom(category.maximum) === 0 ||
-        (category.minimum.target !== null && category.minimum.met === false);
+        remainingRoom(category.maximum) === 0;
       if (rate === null || tierUnavailable) {
         return strongest;
       }
       if (!strongest) {
         return category;
+      }
+
+      const categoryMinimumUnmet = category.minimum.target !== null &&
+        category.minimum.met === false;
+      const strongestMinimumUnmet = strongest.minimum.target !== null &&
+        strongest.minimum.met === false;
+      if (categoryMinimumUnmet !== strongestMinimumUnmet) {
+        return categoryMinimumUnmet ? strongest : category;
       }
 
       const categoryRate = normalizedRate(projection.card.type, rate, settings);
@@ -166,16 +173,12 @@ export function rankCardUses(
 
     const cardMinimumUnmet = projection.minimum.target !== null &&
       projection.minimum.met === false;
+    const tierMinimumUnmet = selectedTier?.minimum.target !== null &&
+      selectedTier?.minimum.met === false;
+    const minimumUnmet = cardMinimumUnmet || tierMinimumUnmet;
     const capLimited = projection.status === 'near_cap' ||
       (selectedTier?.maximum.progress ?? 0) >= 0.8;
-    if (
-      cardMinimumUnmet &&
-      effectiveEarningRoom !== null &&
-      (projection.minimum.remaining ?? 0) > effectiveEarningRoom
-    ) {
-      return [];
-    }
-    const rankGroup: CardUseRankGroup = cardMinimumUnmet
+    const rankGroup: CardUseRankGroup = minimumUnmet
       ? 'building'
       : capLimited
         ? 'cap_limited'
@@ -195,14 +198,18 @@ export function rankCardUses(
         value: nativeRate,
         normalized: normalizedRate(projection.card.type, nativeRate, settings),
         blockSize,
-        prospective: cardMinimumUnmet,
+        prospective: minimumUnmet,
       },
       effectiveEarningRoom,
-      operational: cardMinimumUnmet
+      operational: minimumUnmet
         ? {
             kind: 'minimum',
-            remaining: projection.minimum.remaining ?? 0,
+            remaining: Math.max(
+              cardMinimumUnmet ? (projection.minimum.remaining ?? 0) : 0,
+              tierMinimumUnmet ? (selectedTier?.minimum.remaining ?? 0) : 0,
+            ),
             resetsOn: projection.resetsOn,
+            category: tierMinimumUnmet ? (selectedTier?.name ?? null) : null,
           }
         : effectiveEarningRoom !== null
           ? { kind: 'cap', remaining: effectiveEarningRoom }
