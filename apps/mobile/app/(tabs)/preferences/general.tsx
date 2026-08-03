@@ -5,6 +5,7 @@ import { SymbolView } from 'expo-symbols';
 import { Card, Headline, ListItem, SectionHeader } from '@/components/ios';
 import { StatusPill } from '@/components/native';
 import { useStorage } from '@/contexts/StorageContext';
+import { formatMilesValueSample } from '@/features/preferences/currency-sample';
 import { SettingsFooter, SettingsRow } from '@/features/preferences/SettingsRow';
 import { semanticColors, spacing } from '@/theme';
 import { normalizeCurrencyCode } from '@ynab-counter/app-core/utils/currency';
@@ -32,21 +33,7 @@ export default function GeneralPreferencesScreen() {
   );
 
   const sample = useMemo(() => {
-    const numeric = Number.parseFloat(milesValue);
-    if (!Number.isFinite(numeric) || numeric < 0) return undefined;
-    const candidate = currency.trim().toUpperCase();
-    if (!/^[A-Z]{3}$/.test(candidate)) return undefined;
-    try {
-      new Intl.NumberFormat(undefined, { style: 'currency', currency: candidate });
-      const code = normalizeCurrencyCode(candidate);
-      return new Intl.NumberFormat(undefined, {
-        style: 'currency',
-        currency: code,
-        maximumFractionDigits: 2,
-      }).format(numeric * 1000);
-    } catch {
-      return undefined;
-    }
+    return formatMilesValueSample(currency, milesValue);
   }, [currency, milesValue]);
 
   const selectTheme = async (theme: NonNullable<AppSettings['theme']>) => {

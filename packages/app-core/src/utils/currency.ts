@@ -3,7 +3,7 @@
  */
 export type CurrencyFormatterOptions = {
   /** BCP 47 locale string (e.g., 'en-US', 'en-GB') */
-  locale: string;
+  locale?: string;
   /** ISO 4217 currency code (e.g., 'USD', 'GBP') */
   currency: string;
   /** Number of decimal places (default: 2) */
@@ -13,13 +13,22 @@ export type CurrencyFormatterOptions = {
 const currencyFormatters = new Map<string, Intl.NumberFormat>();
 
 /**
+ * Some iOS Intl implementations ignore `currencyDisplay: 'narrowSymbol'`
+ * and render USD as `US$` for non-US locales. Keep the default dollar display
+ * stable across platforms while preserving the locale's number formatting.
+ */
+const currencySymbolOverrides: Record<string, string> = {
+  USD: '$',
+};
+
+/**
  * Create an Intl.NumberFormat instance for currency formatting.
  * Requires explicit locale and currency - use platform-specific
  * resolution for defaults (navigator.language, user settings, etc.).
  */
 export function createCurrencyFormatter(options: CurrencyFormatterOptions): Intl.NumberFormat {
   const { locale, currency, decimals = 2 } = options;
-  const cacheKey = `${locale}:${currency}:${decimals}`;
+  const cacheKey = `${locale ?? 'default'}:${currency}:${decimals}`;
   const cached = currencyFormatters.get(cacheKey);
   if (cached) {
     return cached;
@@ -41,7 +50,7 @@ export function createCurrencyFormatter(options: CurrencyFormatterOptions): Intl
  * Requires explicit locale and currency options.
  */
 export function formatCurrency(value: number, options: CurrencyFormatterOptions): string {
-  return createCurrencyFormatter(options).format(value);
+  return formatCurrencyParts(value, options).map((part) => part.value).join('');
 }
 
 /**
@@ -52,7 +61,16 @@ export function formatCurrencyParts(
   value: number,
   options: CurrencyFormatterOptions,
 ): Intl.NumberFormatPart[] {
-  return createCurrencyFormatter(options).formatToParts(value);
+  const parts = createCurrencyFormatter(options).formatToParts(value);
+  const replacement = currencySymbolOverrides[options.currency.toUpperCase()];
+
+  if (!replacement) {
+    return parts;
+  }
+
+  return parts.map((part) => (
+    part.type === 'currency' ? { ...part, value: replacement } : part
+  ));
 }
 
 /**

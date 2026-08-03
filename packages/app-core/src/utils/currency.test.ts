@@ -36,6 +36,10 @@ describe('formatCurrency', () => {
     expect(formatCurrency(1234.56, { locale: 'en-US', currency: 'USD' })).toBe('$1,234.56');
   });
 
+  it('keeps USD as a dollar sign outside the US locale', () => {
+    expect(formatCurrency(1234.56, { locale: 'en-GB', currency: 'USD' })).toBe('$1,234.56');
+  });
+
   it('formats EUR correctly', () => {
     const result = formatCurrency(1234.56, { locale: 'de-DE', currency: 'EUR' });
     // German locale uses different separators
@@ -59,6 +63,12 @@ describe('formatCurrencyParts', () => {
     expect(parts.some(p => p.type === 'currency')).toBe(true);
     expect(parts.some(p => p.type === 'integer')).toBe(true);
     expect(parts.some(p => p.type === 'fraction')).toBe(true);
+  });
+
+  it('uses the dollar symbol for USD in non-US locales', () => {
+    const currencyPart = formatCurrencyParts(123.45, { locale: 'en-GB', currency: 'USD' })
+      .find((part) => part.type === 'currency');
+    expect(currencyPart?.value).toBe('$');
   });
 });
 
