@@ -44,6 +44,10 @@ build/
 # Tamagui
 apps/mobile/.tamagui/
 
+# Expo prebuild output (regenerate with `expo prebuild`)
+apps/mobile/ios/
+apps/mobile/android/
+
 # Local Netlify folder
 .netlify
 
