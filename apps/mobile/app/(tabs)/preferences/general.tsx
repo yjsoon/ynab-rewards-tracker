@@ -5,9 +5,10 @@ import { SymbolView } from 'expo-symbols';
 import { Card, Headline, ListItem, SectionHeader } from '@/components/ios';
 import { StatusPill } from '@/components/native';
 import { useStorage } from '@/contexts/StorageContext';
+import { MAX_MILES_VALUATION, formatMilesValueSample } from '@/features/preferences/currency-sample';
 import { SettingsFooter, SettingsRow } from '@/features/preferences/SettingsRow';
 import { semanticColors, spacing } from '@/theme';
-import { normalizeCurrencyCode } from '@ynab-counter/app-core/utils/currency';
+import { isSupportedCurrencyCode, normalizeCurrencyCode } from '@ynab-counter/app-core/utils/currency';
 import type { AppSettings } from '@ynab-counter/app-core/storage';
 
 const themes: Array<{ value: NonNullable<AppSettings['theme']>; label: string; detail?: string }> = [
@@ -32,21 +33,7 @@ export default function GeneralPreferencesScreen() {
   );
 
   const sample = useMemo(() => {
-    const numeric = Number.parseFloat(milesValue);
-    if (!Number.isFinite(numeric) || numeric < 0) return undefined;
-    const candidate = currency.trim().toUpperCase();
-    if (!/^[A-Z]{3}$/.test(candidate)) return undefined;
-    try {
-      new Intl.NumberFormat(undefined, { style: 'currency', currency: candidate });
-      const code = normalizeCurrencyCode(candidate);
-      return new Intl.NumberFormat(undefined, {
-        style: 'currency',
-        currency: code,
-        maximumFractionDigits: 2,
-      }).format(numeric * 1000);
-    } catch {
-      return undefined;
-    }
+    return formatMilesValueSample(currency, milesValue);
   }, [currency, milesValue]);
 
   const selectTheme = async (theme: NonNullable<AppSettings['theme']>) => {
@@ -60,22 +47,22 @@ export default function GeneralPreferencesScreen() {
       setMessage('Enter a three-letter currency code, such as SGD.');
       return;
     }
-    try {
-      new Intl.NumberFormat(undefined, { style: 'currency', currency: candidate });
-    } catch {
+    // Constructing an Intl.NumberFormat is not a validity check: it accepts any
+    // well-formed code, so an unknown one would reach normalizeCurrencyCode and
+    // be saved silently as USD.
+    if (!isSupportedCurrencyCode(candidate)) {
       setMessage('That currency code is not supported on this device.');
       return;
     }
-    const code = normalizeCurrencyCode(candidate);
-    setCurrency(code);
-    await actions.setSettings({ currency: code });
+    setCurrency(candidate);
+    await actions.setSettings({ currency: candidate });
     setMessage('Currency saved');
   };
 
   const saveMilesValue = async () => {
     const candidate = Number.parseFloat(milesValue);
-    if (!Number.isFinite(candidate) || candidate < 0 || candidate > 10) {
-      setMessage('Enter a value between 0 and 10.');
+    if (!Number.isFinite(candidate) || candidate < 0 || candidate > MAX_MILES_VALUATION) {
+      setMessage(`Enter a value between 0 and ${MAX_MILES_VALUATION}.`);
       return;
     }
     await actions.setSettings({ milesValuation: candidate });

@@ -36,6 +36,10 @@ describe('formatCurrency', () => {
     expect(formatCurrency(1234.56, { locale: 'en-US', currency: 'USD' })).toBe('$1,234.56');
   });
 
+  it('keeps USD as a dollar sign outside the US locale', () => {
+    expect(formatCurrency(1234.56, { locale: 'en-GB', currency: 'USD' })).toBe('$1,234.56');
+  });
+
   it('formats EUR correctly', () => {
     const result = formatCurrency(1234.56, { locale: 'de-DE', currency: 'EUR' });
     // German locale uses different separators
@@ -59,6 +63,31 @@ describe('formatCurrencyParts', () => {
     expect(parts.some(p => p.type === 'currency')).toBe(true);
     expect(parts.some(p => p.type === 'integer')).toBe(true);
     expect(parts.some(p => p.type === 'fraction')).toBe(true);
+  });
+
+  it('uses the dollar symbol for USD in non-US locales', () => {
+    const currencyPart = formatCurrencyParts(123.45, { locale: 'en-GB', currency: 'USD' })
+      .find((part) => part.type === 'currency');
+    expect(currencyPart?.value).toBe('$');
+  });
+
+  it('uses the dollar symbol for USD when no locale is given', () => {
+    const currencyPart = formatCurrencyParts(123.45, { currency: 'USD' })
+      .find((part) => part.type === 'currency');
+    expect(currencyPart?.value).toBe('$');
+  });
+
+  it('leaves a non-USD currency symbol untouched', () => {
+    const currencyPart = formatCurrencyParts(123.45, { locale: 'en-GB', currency: 'EUR' })
+      .find((part) => part.type === 'currency');
+    expect(currencyPart?.value).toBe('€');
+  });
+
+  it('preserves part ordering in locales where the symbol trails the amount', () => {
+    const parts = formatCurrencyParts(1234.56, { locale: 'fr-FR', currency: 'USD' });
+    expect(parts.at(-1)).toMatchObject({ type: 'currency', value: '$' });
+    // The leading part stays numeric, so substitution did not reorder anything.
+    expect(parts[0]?.type).toBe('integer');
   });
 });
 
