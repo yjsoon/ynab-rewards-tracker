@@ -70,6 +70,25 @@ describe('formatCurrencyParts', () => {
       .find((part) => part.type === 'currency');
     expect(currencyPart?.value).toBe('$');
   });
+
+  it('uses the dollar symbol for USD when no locale is given', () => {
+    const currencyPart = formatCurrencyParts(123.45, { currency: 'USD' })
+      .find((part) => part.type === 'currency');
+    expect(currencyPart?.value).toBe('$');
+  });
+
+  it('leaves a non-USD currency symbol untouched', () => {
+    const currencyPart = formatCurrencyParts(123.45, { locale: 'en-GB', currency: 'EUR' })
+      .find((part) => part.type === 'currency');
+    expect(currencyPart?.value).toBe('€');
+  });
+
+  it('preserves part ordering in locales where the symbol trails the amount', () => {
+    const parts = formatCurrencyParts(1234.56, { locale: 'fr-FR', currency: 'USD' });
+    expect(parts.at(-1)).toMatchObject({ type: 'currency', value: '$' });
+    // The leading part stays numeric, so substitution did not reorder anything.
+    expect(parts[0]?.type).toBe('integer');
+  });
 });
 
 describe('normalizeCurrencyCode', () => {

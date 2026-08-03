@@ -135,7 +135,14 @@ export function normalizeCurrencyCode(input: string | undefined): string {
   return 'USD';
 }
 
-function isSupportedCurrencyCode(currency: string): boolean {
+/**
+ * Report whether the runtime recognises an ISO 4217 code.
+ *
+ * `Intl.NumberFormat` accepts any well-formed three-letter code, so
+ * constructing one is not a validity check. Callers that must reject unknown
+ * codes should use this rather than relying on a constructor throwing.
+ */
+export function isSupportedCurrencyCode(currency: string): boolean {
   if (typeof Intl.supportedValuesOf === 'function') {
     return Intl.supportedValuesOf('currency').includes(currency);
   }
