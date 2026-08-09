@@ -12,12 +12,13 @@ import {
 interface FlagColorPickerProps {
   value: YnabFlagColor | null | undefined;
   onChange: (color: YnabFlagColor | null) => void;
+  ariaLabel?: string;
   disabled?: boolean;
   customNames?: Partial<Record<YnabFlagColor, string>>;
   rewardCategories?: Map<string, string>; // Card-specific subcategories: flagColor -> subcategoryName
 }
 
-export function FlagColorPicker({ value, onChange, disabled, customNames, rewardCategories }: FlagColorPickerProps) {
+export function FlagColorPicker({ value, onChange, ariaLabel, disabled, customNames, rewardCategories }: FlagColorPickerProps) {
   const allFlags = [UNFLAGGED_FLAG, ...YNAB_FLAG_COLORS];
 
   const normalizedValue = value || UNFLAGGED_FLAG.value;
@@ -37,27 +38,34 @@ export function FlagColorPicker({ value, onChange, disabled, customNames, reward
       onValueChange={(val) => onChange(val === UNFLAGGED_FLAG.value ? null : val as YnabFlagColor)}
       disabled={disabled}
     >
-      <SelectTrigger className="w-full text-left justify-start">
+      <SelectTrigger
+        className="w-full text-left justify-start"
+        aria-label={ariaLabel
+          ? `${ariaLabel}: ${getDisplayName(normalizedValue)}`
+          : undefined}
+      >
         <SelectValue>
-          <div className="flex items-center gap-2">
-            <div
-              className="w-3 h-3 rounded-full border flex-shrink-0"
+          <span className="flex items-center gap-2">
+            <span
+              className="inline-block w-3 h-3 rounded-full border flex-shrink-0"
               style={{ backgroundColor: allFlags.find(f => f.value === normalizedValue)?.color }}
             />
             <span className="truncate">{getDisplayName(normalizedValue)}</span>
-          </div>
+          </span>
         </SelectValue>
       </SelectTrigger>
-      <SelectContent>
+      <SelectContent className="max-w-[var(--radix-select-content-available-width)]">
         {allFlags.map((flag) => (
           <SelectItem key={flag.value} value={flag.value}>
-            <div className="flex items-center gap-2">
-              <div
-                className="w-3 h-3 rounded-full border"
+            <span className="flex min-w-0 max-w-full items-center gap-2">
+              <span
+                className="inline-block w-3 h-3 shrink-0 rounded-full border"
                 style={{ backgroundColor: flag.color }}
               />
-              <span>{getDisplayName(flag.value)}</span>
-            </div>
+              <span className="min-w-0 break-all">
+                {getDisplayName(flag.value)}
+              </span>
+            </span>
           </SelectItem>
         ))}
       </SelectContent>

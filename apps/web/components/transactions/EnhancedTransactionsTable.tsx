@@ -51,12 +51,124 @@ interface EnhancedTransactionsTableProps {
 type SortField = "date" | "amount" | "payee" | "account" | "reward";
 type SortDirection = "asc" | "desc";
 
+const MOBILE_SORT_OPTIONS: Array<{
+  value: `${SortField}:${SortDirection}`;
+  label: string;
+}> = [
+  { value: "date:desc", label: "Newest first" },
+  { value: "date:asc", label: "Oldest first" },
+  { value: "amount:desc", label: "Highest amount" },
+  { value: "amount:asc", label: "Lowest amount" },
+  { value: "payee:asc", label: "Payee A–Z" },
+  { value: "payee:desc", label: "Payee Z–A" },
+  { value: "account:asc", label: "Account A–Z" },
+  { value: "account:desc", label: "Account Z–A" },
+  { value: "reward:desc", label: "Highest reward" },
+  { value: "reward:asc", label: "Lowest reward" },
+];
+
 interface TransactionWithComputedReward extends Transaction {
   blockInfo?: string;
   calculatedReward: number;
   card?: CreditCard;
   isIncoming: boolean;
   sortTimestamp: number;
+}
+
+function TransactionRewardDisplay({
+  transaction,
+  settings,
+}: {
+  transaction: TransactionWithComputedReward;
+  settings: AppSettings;
+}) {
+  const { calculatedReward: reward, card, isIncoming } = transaction;
+
+  if (isIncoming) {
+    return (
+      <Badge className="max-w-full whitespace-normal break-all bg-blue-100 text-xs text-blue-800 hover:bg-blue-100 dark:bg-blue-900 dark:text-blue-100 dark:hover:bg-blue-900">
+        Incoming
+      </Badge>
+    );
+  }
+
+  if (!card) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+
+  if (reward <= 0) {
+    return (
+      <Badge className="max-w-full whitespace-normal break-all bg-red-100 text-xs text-red-800 hover:bg-red-100 dark:bg-red-900 dark:text-red-100 dark:hover:bg-red-900">
+        No reward
+      </Badge>
+    );
+  }
+
+  return (
+    <Badge className="max-w-full whitespace-normal break-all bg-green-100 text-xs text-green-800 hover:bg-green-100 dark:bg-green-900 dark:text-green-100 dark:hover:bg-green-900">
+      {card.type === "cashback" ? (
+        <CurrencyAmount
+          value={reward}
+          currency={settings.currency}
+          showPlus
+        />
+      ) : (
+        `+${Math.round(reward)} miles`
+      )}
+    </Badge>
+  );
+}
+
+function TransactionDetails({
+  transaction,
+}: {
+  transaction: TransactionWithComputedReward;
+}) {
+  const { blockInfo, card, isIncoming } = transaction;
+
+  return (
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <div>
+        <Label className="text-xs font-medium text-muted-foreground">
+          Transaction ID
+        </Label>
+        <p className="break-all font-mono text-sm">{transaction.id}</p>
+      </div>
+
+      {transaction.memo && (
+        <div>
+          <Label className="text-xs font-medium text-muted-foreground">
+            Memo
+          </Label>
+          <p className="break-words text-sm">{transaction.memo}</p>
+        </div>
+      )}
+
+      {!isIncoming && card && blockInfo && (
+        <div>
+          <Label className="text-xs font-medium text-muted-foreground">
+            Reward Calculation
+          </Label>
+          <p className="text-sm">{blockInfo}</p>
+        </div>
+      )}
+
+      {!isIncoming && card && (
+        <div>
+          <Label className="text-xs font-medium text-muted-foreground">
+            Earning Rate
+          </Label>
+          <p className="text-sm">
+            {card.type === "cashback"
+              ? `${card.earningRate}% cashback`
+              : card.earningBlockSize
+                ? `${card.earningRate} miles per $${card.earningBlockSize}`
+                : `${card.earningRate} miles per dollar`}
+          </p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function EnhancedTransactionsTable({
@@ -274,6 +386,11 @@ export function EnhancedTransactionsTable({
       }
     });
   }, []);
+  const handleMobileSortChange = useCallback((value: string) => {
+    const [field, direction] = value.split(":") as [SortField, SortDirection];
+    setSortField(field);
+    setSortDirection(direction);
+  }, []);
   const uniqueAccounts = useMemo(
     () =>
       Array.from(
@@ -281,6 +398,13 @@ export function EnhancedTransactionsTable({
       ),
     [transactions],
   );
+  const selectedAccountLabel = selectedAccountFilter === "all"
+    ? "All accounts"
+    : accountsMap.get(selectedAccountFilter) || "Unknown account";
+  const mobileSortValue = `${sortField}:${sortDirection}` as const;
+  const mobileSortLabel = MOBILE_SORT_OPTIONS.find(
+    (option) => option.value === mobileSortValue,
+  )?.label ?? "Custom order";
 
   if (loading) {
     return (
@@ -336,6 +460,7 @@ export function EnhancedTransactionsTable({
             <Input
               type="text"
               placeholder="Search by payee, category, or memo..."
+              aria-label="Search transactions"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10"
@@ -350,14 +475,20 @@ export function EnhancedTransactionsTable({
               value={selectedAccountFilter}
               onValueChange={setSelectedAccountFilter}
             >
-              <SelectTrigger>
+              <SelectTrigger aria-label={`Filter by account: ${selectedAccountLabel}`}>
                 <SelectValue placeholder="All accounts" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="max-w-[var(--radix-select-content-available-width)]">
                 <SelectItem value="all">All accounts</SelectItem>
                 {uniqueAccounts.map((accountId) => (
-                  <SelectItem key={accountId} value={accountId}>
-                    {accountsMap.get(accountId) || "Unknown"}
+                  <SelectItem
+                    key={accountId}
+                    value={accountId}
+                    className="min-w-0"
+                  >
+                    <span className="min-w-0 max-w-full break-all">
+                      {accountsMap.get(accountId) || "Unknown"}
+                    </span>
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -382,14 +513,149 @@ export function EnhancedTransactionsTable({
         </Alert>
       )}
 
-      {/* Results count */}
-      <div className="text-sm text-muted-foreground">
-        Showing {sortedTransactions.length} of {transactions.length}{" "}
-        transactions
+      {/* Results count and mobile sorting */}
+      <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="text-sm text-muted-foreground">
+          Showing {sortedTransactions.length} of {transactions.length}{" "}
+          transactions
+        </div>
+        <div className="w-full sm:w-44 lg:hidden">
+          <Label htmlFor="mobile-transaction-sort" className="sr-only">
+            Sort transactions
+          </Label>
+          <Select
+            value={mobileSortValue}
+            onValueChange={handleMobileSortChange}
+          >
+            <SelectTrigger
+              id="mobile-transaction-sort"
+              aria-label={`Sort transactions: ${mobileSortLabel}`}
+            >
+              <SelectValue placeholder="Sort transactions" />
+            </SelectTrigger>
+            <SelectContent>
+              {MOBILE_SORT_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {/* Mobile transaction cards */}
+      <div
+        className="space-y-3 lg:hidden"
+        role="list"
+        aria-label={tableLabel ?? `Recent transactions (Last ${lookbackDays} Days)`}
+      >
+        {sortedTransactions.map((txn) => {
+          const isExpanded = expandedRows.has(txn.id);
+          const isSaving = savingTransaction === txn.id;
+          const amount = absFromMilliFn(txn.amount);
+          const accountName = accountsMap.get(txn.account_id) || "Unknown";
+          const payeeName = txn.payee_name || "Unknown payee";
+          const detailsId = `mobile-transaction-details-${txn.id}`;
+
+          return (
+            <article
+              key={txn.id}
+              className="overflow-hidden rounded-lg border bg-card"
+              role="listitem"
+            >
+              <button
+                type="button"
+                className="flex w-full items-start gap-3 p-4 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                onClick={() => toggleRow(txn.id)}
+                aria-expanded={isExpanded}
+                aria-controls={isExpanded ? detailsId : undefined}
+              >
+                <span className="sr-only">
+                  {isExpanded ? "Collapse" : "Expand"} transaction details for{" "}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block break-words font-medium">{payeeName}</span>
+                  <span className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
+                    <span>{new Date(txn.date).toLocaleDateString()}</span>
+                    {uniqueAccounts.length > 1 && (
+                      <>
+                        <span aria-hidden="true">•</span>
+                        <span className="min-w-0 max-w-full break-all">
+                          {accountName}
+                        </span>
+                      </>
+                    )}
+                  </span>
+                </span>
+                <span className="flex min-w-0 max-w-full items-start gap-2">
+                  <span
+                    className={cn(
+                      "min-w-0 break-all text-right font-mono text-sm font-medium",
+                      txn.isIncoming && "text-green-600 dark:text-green-400",
+                    )}
+                  >
+                    {txn.isIncoming && "+"}
+                    <CurrencyAmount
+                      value={amount}
+                      currency={settings.currency}
+                    />
+                  </span>
+                  {isExpanded ? (
+                    <ChevronUp
+                      className="h-4 w-4 shrink-0 text-muted-foreground"
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <ChevronDown
+                      className="h-4 w-4 shrink-0 text-muted-foreground"
+                      aria-hidden="true"
+                    />
+                  )}
+                </span>
+              </button>
+
+              <div className="flex flex-wrap items-center justify-between gap-2 px-4 pb-4">
+                <span className="min-w-0 break-words rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
+                  {txn.category_name || "Uncategorised"}
+                </span>
+                <TransactionRewardDisplay transaction={txn} settings={settings} />
+              </div>
+
+              <div className="grid grid-cols-[auto,minmax(0,1fr)] items-center gap-3 border-t px-4 py-3">
+                <span className="text-sm text-muted-foreground">YNAB flag</span>
+                {txn.isIncoming ? (
+                  <span className="text-right text-sm text-muted-foreground">—</span>
+                ) : (
+                  <FlagColorPicker
+                    value={txn.flag_color as YnabFlagColor}
+                    ariaLabel={`YNAB flag for ${payeeName}`}
+                    onChange={(newColor) =>
+                      updateTransactionFlag(txn.id, newColor)
+                    }
+                    disabled={isSaving}
+                    customNames={customFlagNames}
+                    rewardCategories={
+                      txn.card
+                        ? subcategoryMappingsByCard.get(txn.card.id)
+                        : undefined
+                    }
+                  />
+                )}
+              </div>
+
+              {isExpanded && (
+                <div id={detailsId} className="border-t bg-muted/20 p-4">
+                  <TransactionDetails transaction={txn} />
+                </div>
+              )}
+            </article>
+          );
+        })}
       </div>
 
       {/* Transactions Table */}
-      <div className="overflow-x-auto">
+      <div className="hidden overflow-x-auto lg:block">
         <table
           className="w-full"
           role="table"
@@ -459,8 +725,6 @@ export function EnhancedTransactionsTable({
               const isSaving = savingTransaction === txn.id;
               const amount = absFromMilliFn(txn.amount);
               const {
-                blockInfo,
-                calculatedReward: reward,
                 card,
                 isIncoming,
               } = txn;
@@ -502,6 +766,7 @@ export function EnhancedTransactionsTable({
                       ) : (
                         <FlagColorPicker
                           value={txn.flag_color as YnabFlagColor}
+                          ariaLabel={`YNAB flag for ${txn.payee_name || "Unknown payee"}`}
                           onChange={(newColor) =>
                             updateTransactionFlag(txn.id, newColor)
                           }
@@ -532,31 +797,10 @@ export function EnhancedTransactionsTable({
                       </span>
                     </td>
                     <td className="p-2 text-sm text-right">
-                      {isIncoming ? (
-                        <Badge className="text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100 hover:bg-blue-100 dark:hover:bg-blue-900">
-                          Incoming
-                        </Badge>
-                      ) : card ? (
-                        reward > 0 ? (
-                          <Badge className="text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100 hover:bg-green-100 dark:hover:bg-green-900">
-                            {card.type === "cashback" ? (
-                              <CurrencyAmount
-                                value={reward}
-                                currency={settings.currency}
-                                showPlus
-                              />
-                            ) : (
-                              `+${Math.round(reward)} miles`
-                            )}
-                          </Badge>
-                        ) : (
-                          <Badge className="text-xs bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-100 hover:bg-red-100 dark:hover:bg-red-900">
-                            No reward
-                          </Badge>
-                        )
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
+                      <TransactionRewardDisplay
+                        transaction={txn}
+                        settings={settings}
+                      />
                     </td>
                   </tr>
 
@@ -569,51 +813,7 @@ export function EnhancedTransactionsTable({
                       )}
                     >
                       <td colSpan={8} className="p-4 bg-muted/20">
-                        <div className="space-y-4">
-                          {/* Transaction Details */}
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                              <Label className="text-xs font-medium text-muted-foreground">
-                                Transaction ID
-                              </Label>
-                              <p className="text-sm font-mono">{txn.id}</p>
-                            </div>
-
-                            {txn.memo && (
-                              <div>
-                                <Label className="text-xs font-medium text-muted-foreground">
-                                  Memo
-                                </Label>
-                                <p className="text-sm">{txn.memo}</p>
-                              </div>
-                            )}
-
-                            {/* Only show reward info for spending transactions */}
-                            {!isIncoming && card && blockInfo && (
-                              <div>
-                                <Label className="text-xs font-medium text-muted-foreground">
-                                  Reward Calculation
-                                </Label>
-                                <p className="text-sm">{blockInfo}</p>
-                              </div>
-                            )}
-
-                            {!isIncoming && card && (
-                              <div>
-                                <Label className="text-xs font-medium text-muted-foreground">
-                                  Earning Rate
-                                </Label>
-                                <p className="text-sm">
-                                  {card.type === "cashback"
-                                    ? `${card.earningRate}% cashback`
-                                    : card.earningBlockSize
-                                      ? `${card.earningRate} miles per $${card.earningBlockSize}`
-                                      : `${card.earningRate} miles per dollar`}
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
+                        <TransactionDetails transaction={txn} />
                       </td>
                     </tr>
                   )}
