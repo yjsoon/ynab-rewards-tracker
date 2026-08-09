@@ -1,8 +1,14 @@
 import { SimpleRewardsCalculator, type SimplifiedCalculation, type SimplePeriod } from "@/lib/rewards-engine";
+import {
+  createSubcategoryContext,
+  normaliseFlagColor,
+  resolveSubcategory,
+} from "@/lib/rewards-engine/utils/subcategories";
 import type { AppSettings, CreditCard } from "@/lib/storage";
 import type { Transaction } from "@/types/transaction";
 import { formatDateValue } from "@/lib/dashboard-period";
 import { hasMinimumSpendRequirement } from "@/lib/minimum-spend-helpers";
+import { UNFLAGGED_FLAG, YNAB_FLAG_COLORS } from "@/lib/ynab-constants";
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
@@ -74,6 +80,60 @@ export function filterTransactionsForCardPeriod(
       transaction.date >= period.start &&
       transaction.date <= period.end,
   );
+}
+
+export function filterCardSpendingTransactions(
+  card: Pick<CreditCard, "ynabAccountId">,
+  transactions: Transaction[],
+  period?: Pick<SimplePeriod, "start" | "end">,
+): Transaction[] {
+  const cardTransactions = period
+    ? filterTransactionsForCardPeriod(card, transactions, period)
+    : transactions.filter(
+        (transaction) => transaction.account_id === card.ynabAccountId,
+      );
+
+  return cardTransactions.filter((transaction) => transaction.amount < 0);
+}
+
+export function filterTransactionsForSubcategory(
+  card: CreditCard,
+  transactions: Transaction[],
+  subcategoryId: string,
+): Transaction[] {
+  const context = createSubcategoryContext(card);
+  const selectedSubcategory = context.activeSubcategories.find(
+    (subcategory) => subcategory.id === subcategoryId,
+  );
+
+  if (!selectedSubcategory) {
+    return [];
+  }
+
+  return transactions.filter((transaction) => (
+    resolveSubcategory(context, normaliseFlagColor(transaction.flag_color))?.id
+      === selectedSubcategory.id
+  ));
+}
+
+export function buildRewardCategoryNamesByFlag(
+  card: CreditCard,
+): Map<string, string> {
+  const context = createSubcategoryContext(card);
+  const namesByFlag = new Map<string, string>();
+
+  if (!context.enabled) {
+    return namesByFlag;
+  }
+
+  for (const flag of [UNFLAGGED_FLAG, ...YNAB_FLAG_COLORS]) {
+    const category = resolveSubcategory(context, flag.value);
+    if (category) {
+      namesByFlag.set(flag.value, category.name);
+    }
+  }
+
+  return namesByFlag;
 }
 
 export function buildCardMetricsById(

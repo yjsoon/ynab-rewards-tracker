@@ -269,6 +269,7 @@ function DashboardContent() {
     lookbackDays: TRANSACTION_LOOKBACK_DAYS,
     recentLimit: RECENT_TRANSACTIONS_LIMIT,
     referenceDate: dashboardPeriod.referenceDate,
+    refreshKey: searchParams.get("refresh"),
   });
   const [flagNames, setFlagNames] = useState(() => storage.getFlagNames());
 

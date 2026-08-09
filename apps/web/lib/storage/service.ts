@@ -795,6 +795,57 @@ export class StorageService {
     this.setStorage(storage);
   }
 
+  updateDashboardTransactionFlag(
+    budgetId: string,
+    transactionId: string,
+    flagColor: YnabFlagColor | null,
+  ): void {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const storage = this.getStorage();
+    const entries = storage.cachedData?.dashboardTransactions;
+    if (!entries || entries.length === 0) {
+      return;
+    }
+
+    const flagName = flagColor
+      ? storage.cachedData?.flagNames?.[flagColor] ?? null
+      : null;
+    let updated = false;
+    const nextEntries = entries.map((entry) => {
+      if (entry.budgetId !== budgetId) {
+        return entry;
+      }
+
+      let entryUpdated = false;
+      const transactions = entry.transactions.map((transaction) => {
+        if (transaction.id !== transactionId) {
+          return transaction;
+        }
+
+        entryUpdated = true;
+        updated = true;
+        return {
+          ...transaction,
+          flag_color: flagColor,
+          flag_name: flagName,
+        };
+      });
+
+      return entryUpdated ? { ...entry, transactions } : entry;
+    });
+
+    if (!updated) {
+      return;
+    }
+
+    storage.cachedData = storage.cachedData || {};
+    storage.cachedData.dashboardTransactions = nextEntries;
+    this.setStorage(storage);
+  }
+
   pruneDashboardTransactionsCache(ttlMs = 5 * 60 * 1000): void {
     if (typeof window === "undefined") {
       return;

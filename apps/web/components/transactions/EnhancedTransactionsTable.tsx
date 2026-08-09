@@ -27,6 +27,8 @@ import { FlagColorPicker } from "./FlagColorPicker";
 import { cn, absFromMilli as absFromMilliFn } from "@/lib/utils";
 import { SimpleRewardsCalculator } from "@/lib/rewards-engine";
 import type { YnabFlagColor } from "@/lib/ynab-constants";
+import { buildRewardCategoryNamesByFlag } from "@/lib/card-metrics";
+import { updateTrackedTransactionFlagCache } from "@/hooks/useTrackedTransactions";
 
 interface EnhancedTransactionsTableProps {
   loading: boolean;
@@ -41,7 +43,9 @@ interface EnhancedTransactionsTableProps {
   customFlagNames?: Partial<Record<YnabFlagColor, string>>;
   selectedBudgetId?: string;
   pat?: string;
-  onTransactionUpdated?: () => void;
+  onTransactionUpdated?: () => void | Promise<void>;
+  showAccountFilter?: boolean;
+  tableLabel?: string;
 }
 
 type SortField = "date" | "amount" | "payee" | "account" | "reward";
@@ -69,6 +73,8 @@ export function EnhancedTransactionsTable({
   selectedBudgetId,
   pat,
   onTransactionUpdated,
+  showAccountFilter = true,
+  tableLabel,
 }: EnhancedTransactionsTableProps) {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [savingTransaction, setSavingTransaction] = useState<string | null>(
@@ -96,15 +102,8 @@ export function EnhancedTransactionsTable({
   const subcategoryMappingsByCard = useMemo(() => {
     const map = new Map<string, Map<string, string>>();
     cards.forEach((card) => {
-      if (
-        card.subcategoriesEnabled &&
-        card.subcategories &&
-        card.subcategories.length > 0
-      ) {
-        const flagMap = new Map<string, string>();
-        card.subcategories.forEach((subcat) => {
-          flagMap.set(subcat.flagColor, subcat.name);
-        });
+      const flagMap = buildRewardCategoryNamesByFlag(card);
+      if (flagMap.size > 0) {
         map.set(card.id, flagMap);
       }
     });
@@ -247,8 +246,12 @@ export function EnhancedTransactionsTable({
           throw new Error(errorData.message || "Failed to update transaction");
         }
 
-        // Trigger parent refresh to fetch updated data
-        onTransactionUpdated?.();
+        updateTrackedTransactionFlagCache(
+          selectedBudgetId,
+          transactionId,
+          newFlagColor,
+        );
+        await onTransactionUpdated?.();
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         setUpdateError(`Failed to update transaction: ${message}`);
@@ -341,24 +344,26 @@ export function EnhancedTransactionsTable({
         </div>
 
         {/* Account Filter */}
-        <div className="w-full sm:w-64">
-          <Select
-            value={selectedAccountFilter}
-            onValueChange={setSelectedAccountFilter}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="All accounts" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All accounts</SelectItem>
-              {uniqueAccounts.map((accountId) => (
-                <SelectItem key={accountId} value={accountId}>
-                  {accountsMap.get(accountId) || "Unknown"}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {showAccountFilter && (
+          <div className="w-full sm:w-64">
+            <Select
+              value={selectedAccountFilter}
+              onValueChange={setSelectedAccountFilter}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="All accounts" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All accounts</SelectItem>
+                {uniqueAccounts.map((accountId) => (
+                  <SelectItem key={accountId} value={accountId}>
+                    {accountsMap.get(accountId) || "Unknown"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
 
       {/* Refreshing indicator */}
@@ -388,7 +393,7 @@ export function EnhancedTransactionsTable({
         <table
           className="w-full"
           role="table"
-          aria-label={`Recent transactions (Last ${lookbackDays} Days)`}
+          aria-label={tableLabel ?? `Recent transactions (Last ${lookbackDays} Days)`}
         >
           <thead>
             <tr className="border-b" role="row">

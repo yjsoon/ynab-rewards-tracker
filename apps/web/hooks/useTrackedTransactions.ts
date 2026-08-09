@@ -8,12 +8,14 @@ import { SimpleRewardsCalculator } from "@/lib/rewards-engine";
 import { toIsoDateString } from "@/lib/date";
 import type { CreditCard, CachedTransaction } from "@/lib/storage";
 import type { Transaction } from "@/types/transaction";
+import type { YnabFlagColor } from "@/lib/ynab-constants";
 
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const BACKGROUND_REFRESH_MIN_AGE_MS = 60 * 1000; // Skip immediate revalidation for very recent data
 const CACHE_SCOPE_TRACKED_ACCOUNT_IDS: string[] = [];
 
 interface TrackedTransactionsSnapshot {
+  budgetId: string;
   fetchedAt: string;
   accounts: Array<{ id: string; name: string }>;
   transactions: Transaction[];
@@ -124,6 +126,7 @@ function getCachedTrackedTransactionsSnapshot(
   }
 
   const snapshot: TrackedTransactionsSnapshot = {
+    budgetId,
     fetchedAt: storedSnapshot.fetchedAt,
     accounts: storedSnapshot.accounts,
     transactions: storedSnapshot.transactions.map(cachedToTransaction),
@@ -165,6 +168,7 @@ async function fetchTrackedTransactionsSnapshot(
     ]);
 
     const snapshot: TrackedTransactionsSnapshot = {
+      budgetId,
       fetchedAt: new Date().toISOString(),
       accounts: accounts.map((account) => ({
         id: account.id,
@@ -206,6 +210,7 @@ interface UseTrackedTransactionsArgs {
   lookbackDays: number;
   recentLimit?: number;
   referenceDate?: Date;
+  refreshKey?: string | null;
 }
 
 interface UseTrackedTransactionsResult {
@@ -240,6 +245,7 @@ export function useTrackedTransactions({
   lookbackDays,
   recentLimit,
   referenceDate,
+  refreshKey,
 }: UseTrackedTransactionsArgs): UseTrackedTransactionsResult {
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
   const [accountsMap, setAccountsMap] = useState<Map<string, string>>(
@@ -352,6 +358,7 @@ export function useTrackedTransactions({
       selectedBudgetId,
       earliestTrackedWindow,
       trackedAccountsScopeKey,
+      refreshKey ?? "",
     ].join("::");
 
     if (lastFetchKeyRef.current === fetchKey) {
@@ -359,6 +366,11 @@ export function useTrackedTransactions({
     }
 
     lastFetchKeyRef.current = fetchKey;
+
+    if (refreshKey) {
+      void loadTransactions({ bypassCache: true });
+      return;
+    }
 
     // Attempt to hydrate from cache
     const cached = getCachedTrackedTransactionsSnapshot(
@@ -389,6 +401,7 @@ export function useTrackedTransactions({
     earliestTrackedWindow,
     trackedAccountIds,
     trackedAccountsScopeKey,
+    refreshKey,
     applySnapshot,
     loadTransactions,
   ]);
@@ -465,4 +478,35 @@ export function useTrackedTransactions({
     lastUpdatedAt,
     refreshing,
   };
+}
+
+export function updateTrackedTransactionFlagCache(
+  budgetId: string,
+  transactionId: string,
+  flagColor: YnabFlagColor | null,
+): void {
+  storage.updateDashboardTransactionFlag(budgetId, transactionId, flagColor);
+
+  const flagNames = storage.getFlagNames();
+  const flagName = flagColor ? flagNames[flagColor] ?? null : null;
+  for (const [key, snapshot] of trackedTransactionsMemoryCache) {
+    if (snapshot.budgetId !== budgetId) {
+      continue;
+    }
+
+    const transactionIndex = snapshot.transactions.findIndex(
+      (transaction) => transaction.id === transactionId,
+    );
+    if (transactionIndex === -1) {
+      continue;
+    }
+
+    const transactions = [...snapshot.transactions];
+    transactions[transactionIndex] = {
+      ...transactions[transactionIndex],
+      flag_color: flagColor,
+      flag_name: flagName,
+    };
+    trackedTransactionsMemoryCache.set(key, { ...snapshot, transactions });
+  }
 }

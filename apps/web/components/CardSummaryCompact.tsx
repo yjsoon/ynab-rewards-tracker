@@ -41,6 +41,7 @@ interface CardSummaryCompactContentProps {
   onToggleSubcategories?: () => void;
   settings?: AppSettings;
   allowHideCard?: boolean;
+  transactionsHref?: string;
 }
 
 export function CardSummaryCompactContent({
@@ -53,6 +54,7 @@ export function CardSummaryCompactContent({
   onToggleSubcategories,
   settings,
   allowHideCard = true,
+  transactionsHref,
 }: CardSummaryCompactContentProps) {
   const { calculation, daysRemaining, period } = metrics;
   const {
@@ -269,6 +271,7 @@ export function CardSummaryCompactContent({
           isExpanded={isSubcategoryExpanded}
           onToggleExpanded={onToggleSubcategories}
           compactSubtitles
+          transactionsHref={transactionsHref}
         />
       )}
 
@@ -300,6 +303,7 @@ interface CardSummaryCompactProps {
   isRefreshing?: boolean;
   referenceDate?: Date;
   allowHideCard?: boolean;
+  transactionsHref?: string;
 }
 
 export function CardSummaryCompact({
@@ -310,6 +314,7 @@ export function CardSummaryCompact({
   isRefreshing,
   referenceDate,
   allowHideCard = true,
+  transactionsHref,
 }: CardSummaryCompactProps) {
   const { settings, updateSettings } = useSettings();
   const { selectedBudget } = useSelectedBudget();
@@ -388,7 +393,7 @@ export function CardSummaryCompact({
         abortRef.current = null;
       }
     }
-  }, [prefetchedTransactions, pat, card.ynabAccountId, calculationPeriod, selectedBudget.id]);
+  }, [prefetchedTransactions, pat, card, calculationPeriod, selectedBudget.id]);
 
   useEffect(() => {
     loadTransactions();
@@ -462,6 +467,7 @@ export function CardSummaryCompact({
       onToggleSubcategories={handleToggleSubcategories}
       settings={settings}
       allowHideCard={allowHideCard}
+      transactionsHref={transactionsHref}
     />
   );
 }

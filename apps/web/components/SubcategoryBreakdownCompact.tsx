@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useId, useState } from 'react';
 import type { MouseEvent } from 'react';
 import { ChevronDown } from 'lucide-react';
@@ -8,6 +9,7 @@ import { CurrencyAmount } from './CurrencyAmount';
 import { getFlagHex, getFlagBorderColor } from '@/lib/flag-colors';
 
 interface SubcategoryBreakdown {
+  id?: string;
   subcategoryId?: string;
   flagColor: string;
   name: string;
@@ -28,6 +30,7 @@ interface SubcategoryBreakdownCompactProps {
   onToggleExpanded?: () => void;
   /** Controls decimal precision on the inline spent amount: true → 0dp, false → 2dp. */
   compactSubtitles?: boolean;
+  transactionsHref?: string;
 }
 
 const ROW_STAGGER_MS = 45;
@@ -38,6 +41,7 @@ export function SubcategoryBreakdownCompact({
   isExpanded: controlledIsExpanded,
   onToggleExpanded,
   compactSubtitles = false,
+  transactionsHref,
 }: SubcategoryBreakdownCompactProps) {
   const [internalIsExpanded, setInternalIsExpanded] = useState(false);
   const contentId = useId();
@@ -193,23 +197,25 @@ export function SubcategoryBreakdownCompact({
               }
 
               const isZero = entry.totalSpend <= 0;
-
-              return (
-                <div
-                  key={entry.subcategoryId || `${entry.flagColor}-${entry.name}`}
-                  className={cn(
-                    'relative overflow-hidden rounded-md border transition-all duration-300 ease-out',
-                    isExpanded
-                      ? isZero
-                        ? 'translate-y-0 opacity-50'
-                        : 'translate-y-0 opacity-100'
-                      : 'translate-y-1 opacity-0',
-                  )}
-                  style={{
-                    borderColor,
-                    transitionDelay: isExpanded ? `${index * ROW_STAGGER_MS}ms` : '0ms',
-                  }}
-                >
+              const subcategoryId = entry.subcategoryId ?? entry.id;
+              const categoryHref = transactionsHref && subcategoryId
+                ? `${transactionsHref}${transactionsHref.includes('?') ? '&' : '?'}category=${encodeURIComponent(subcategoryId)}`
+                : null;
+              const rowClassName = cn(
+                'relative block overflow-hidden rounded-md border transition-all duration-300 ease-out',
+                categoryHref && 'hover:brightness-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 dark:hover:brightness-110',
+                isExpanded
+                  ? isZero
+                    ? 'translate-y-0 opacity-50'
+                    : 'translate-y-0 opacity-100'
+                  : 'translate-y-1 opacity-0',
+              );
+              const rowStyle = {
+                borderColor,
+                transitionDelay: isExpanded ? `${index * ROW_STAGGER_MS}ms` : '0ms',
+              };
+              const rowContent = (
+                <>
                   <div
                     className="absolute inset-y-0 left-0 transition-[width] duration-500 ease-out"
                     style={{
@@ -241,6 +247,29 @@ export function SubcategoryBreakdownCompact({
                       )}
                     </span>
                   </div>
+                </>
+              );
+
+              return categoryHref ? (
+                <Link
+                  key={subcategoryId || `${entry.flagColor}-${entry.name}`}
+                  href={categoryHref}
+                  className={rowClassName}
+                  style={rowStyle}
+                  tabIndex={isExpanded ? 0 : -1}
+                  aria-hidden={!isExpanded}
+                  aria-label={`View ${entry.name} transactions`}
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  {rowContent}
+                </Link>
+              ) : (
+                <div
+                  key={subcategoryId || `${entry.flagColor}-${entry.name}`}
+                  className={rowClassName}
+                  style={rowStyle}
+                >
+                  {rowContent}
                 </div>
               );
             })}

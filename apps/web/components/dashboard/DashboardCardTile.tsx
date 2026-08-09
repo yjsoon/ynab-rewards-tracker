@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import {
@@ -38,6 +39,7 @@ import {
 import { hasMinimumSpendRequirement } from "@/lib/minimum-spend-helpers";
 import { getCardAttentionStatus } from "@/lib/card-metrics";
 import type { PrefetchedCardMetrics } from "@/lib/card-metrics";
+import { formatDateValue } from "@/lib/dashboard-period";
 
 const isExpansionMap = (
   value: SummaryViewSubcategoriesPreference | undefined,
@@ -88,6 +90,11 @@ export function DashboardCardTile({
   const isSubcategoryExpanded = isExpansionMap(summaryViewSubcategoriesExpanded)
     ? (summaryViewSubcategoriesExpanded[card.id] ?? false)
     : Boolean(summaryViewSubcategoriesExpanded);
+  const transactionsHref = `/cards/${card.id}/transactions?${new URLSearchParams({
+    asOf: formatDateValue(referenceDate ?? new Date()),
+    from: "dashboard",
+    scope: "period",
+  }).toString()}`;
 
   // Header reward chip — shows the dollar/flight icon plus this period's earned reward, rounded
   // to the nearest dollar (cashback) or whole mile (miles). Colour reflects card state.
@@ -186,7 +193,12 @@ export function DashboardCardTile({
             title={card.name}
             className="min-w-0 flex-1 truncate text-sm font-semibold tracking-tight sm:text-[0.95rem]"
           >
-            {card.name}
+            <Link
+              href={transactionsHref}
+              className="rounded-sm underline-offset-4 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+            >
+              {card.name}
+            </Link>
           </CardTitle>
           <div className="ml-auto flex shrink-0 items-center gap-1.5">
             {card.promotionalPeriod && (
@@ -243,6 +255,7 @@ export function DashboardCardTile({
             onToggleSubcategories={() => onToggleSummarySubcategories(card.id)}
             settings={settings}
             allowHideCard={allowHideCard}
+            transactionsHref={transactionsHref}
           />
         ) : (
           <CardSummaryCompact
@@ -253,6 +266,7 @@ export function DashboardCardTile({
             isRefreshing={isRefreshing}
             referenceDate={referenceDate}
             allowHideCard={allowHideCard}
+            transactionsHref={transactionsHref}
           />
         )}
       </CardContent>

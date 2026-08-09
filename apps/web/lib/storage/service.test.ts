@@ -142,6 +142,58 @@ describe("StorageService budget accounts cache", () => {
   });
 });
 
+describe("StorageService dashboard transactions cache", () => {
+  beforeEach(() => {
+    Object.defineProperty(globalThis, "window", {
+      value: {
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      },
+      configurable: true,
+      writable: true,
+    });
+    Object.defineProperty(globalThis, "localStorage", {
+      value: createLocalStorageMock(),
+      configurable: true,
+      writable: true,
+    });
+  });
+
+  it("updates every cached snapshot for a transaction flag mutation", () => {
+    const service = new StorageService();
+    service.setCachedData({ flagNames: { blue: "Travel" } });
+    for (const sinceDate of ["2026-07-01", "2026-08-01"]) {
+      service.setDashboardTransactionsCache({
+        budgetId: "budget-1",
+        sinceDate,
+        fetchedAt: "2026-08-09T00:00:00.000Z",
+        trackedAccountIds: [],
+        accounts: [{ id: "account-1", name: "Rewards Card" }],
+        transactions: [{
+          id: "transaction-1",
+          account_id: "account-1",
+          amount: -1000,
+          date: "2026-08-05",
+          flag_color: "red",
+          flag_name: "Dining",
+        }],
+      });
+    }
+
+    service.updateDashboardTransactionFlag(
+      "budget-1",
+      "transaction-1",
+      "blue",
+    );
+
+    expect(service.getCachedData()?.dashboardTransactions).toHaveLength(2);
+    expect(service.getCachedData()?.dashboardTransactions?.every(
+      (entry) => entry.transactions[0]?.flag_color === "blue"
+        && entry.transactions[0]?.flag_name === "Travel",
+    )).toBe(true);
+  });
+});
+
 describe("StorageService importSettings", () => {
   beforeEach(() => {
     const localStorageMock = createLocalStorageMock();
