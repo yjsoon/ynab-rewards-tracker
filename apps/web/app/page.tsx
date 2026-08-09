@@ -35,6 +35,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { storage } from "@/lib/storage";
 import { RefreshCw, SlidersHorizontal } from "lucide-react";
@@ -452,9 +459,24 @@ function DashboardContent() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-5 sm:py-6">
-      <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
-        <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Dashboard</h1>
-        <div className="shrink-0 flex items-center rounded-lg border bg-muted/30 p-0.5">
+      <div className="mb-3 flex items-center gap-1.5 sm:gap-3">
+        <h1 className="sr-only">Dashboard</h1>
+        <Select
+          value={activeTab}
+          onValueChange={(tab) => handleTabChange(tab as 'featured' | 'all')}
+        >
+          <SelectTrigger
+            className="h-8 w-[6.75rem] shrink-0 px-2 text-[13px] font-medium sm:hidden"
+            aria-label="Dashboard view"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent position="popper" align="end">
+            <SelectItem value="featured">Featured</SelectItem>
+            <SelectItem value="all">All Cards</SelectItem>
+          </SelectContent>
+        </Select>
+        <div className="hidden shrink-0 items-center rounded-lg border bg-muted/30 p-0.5 sm:flex">
           <button
             type="button"
             onClick={() => handleTabChange('featured')}
@@ -502,7 +524,7 @@ function DashboardContent() {
               variant="ghost"
               onClick={refresh}
               disabled={!shouldLoadTrackedTransactions || refreshing || loading}
-              className="rounded-full px-2.5"
+              className="h-8 w-8 rounded-full p-0 sm:h-9 sm:w-auto sm:px-2.5"
               title={lastUpdatedAt ? `Last updated: ${formatLastUpdated(lastUpdatedAt)}` : "Refresh data"}
               aria-label="Refresh dashboard data"
             >
@@ -519,7 +541,7 @@ function DashboardContent() {
                   type="button"
                   size="sm"
                   variant="ghost"
-                  className="rounded-full px-2.5"
+                  className="h-8 w-8 rounded-full p-0 sm:h-9 sm:w-auto sm:px-2.5"
                   aria-label="View options"
                   title="View options"
                 >

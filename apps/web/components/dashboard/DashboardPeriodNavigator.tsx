@@ -95,7 +95,7 @@ export function DashboardPeriodNavigator({
           type="button"
           variant="ghost"
           size="sm"
-          className="group shrink-0 gap-1.5 px-2.5 data-[state=open]:bg-red-50 data-[state=open]:text-red-700 hover:data-[state=open]:bg-red-50 hover:data-[state=open]:text-red-700 dark:data-[state=open]:bg-red-950/40 dark:data-[state=open]:text-red-300"
+          className="group h-8 shrink-0 gap-1.5 px-2 data-[state=open]:bg-red-50 data-[state=open]:text-red-700 hover:data-[state=open]:bg-red-50 hover:data-[state=open]:text-red-700 dark:data-[state=open]:bg-red-950/40 dark:data-[state=open]:text-red-300 sm:h-9 sm:px-2.5"
         >
           <span className="flex items-center gap-2">
             {isToday ? <CalendarDays className="h-4 w-4" /> : <History className="h-4 w-4" />}
