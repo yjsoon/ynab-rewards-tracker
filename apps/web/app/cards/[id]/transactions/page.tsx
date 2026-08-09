@@ -124,10 +124,10 @@ export default function CardTransactionsPage() {
   );
 
   useEffect(() => {
-    if (!cardsLoading && !card) {
+    if (!cardsLoading && cards.length > 0 && !card) {
       router.replace("/");
     }
-  }, [card, cardsLoading, router]);
+  }, [card, cards.length, cardsLoading, router]);
 
   const {
     transactions,
