@@ -22,11 +22,18 @@ interface UseCardTransactionsResult {
   transactions: Transaction[];
   loading: boolean;
   error: string;
+  hasLoadedCurrentRequest: boolean;
   refresh: () => Promise<void>;
   connection: ConnectionState;
 }
 
 const DEFAULT_LOOKBACK_DAYS = 90;
+
+interface TransactionsSnapshot {
+  key: string | null;
+  transactions: Transaction[];
+  loaded: boolean;
+}
 
 export function useCardTransactions(
   card: CreditCard | null,
@@ -36,19 +43,35 @@ export function useCardTransactions(
   const { pat } = useYnabPAT();
   const { selectedBudget, isLoading: budgetLoading } = useSelectedBudget();
 
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [snapshot, setSnapshot] = useState<TransactionsSnapshot>({
+    key: null,
+    transactions: [],
+    loaded: false,
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const abortRef = useRef<AbortController | null>(null);
+  const requestIdRef = useRef(0);
+  const requestKey = enabled && card && selectedBudget.id
+    ? [
+        selectedBudget.id,
+        card.ynabAccountId,
+        sinceDate ?? `lookback:${lookbackDays}`,
+      ].join(':')
+    : null;
 
   const fetchTransactions = useCallback(async () => {
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+
     if (!enabled || !card) {
       if (abortRef.current) {
         abortRef.current.abort();
         abortRef.current = null;
       }
-      setTransactions([]);
+      setSnapshot({ key: null, transactions: [], loaded: false });
       setError('');
+      setLoading(false);
       return;
     }
 
@@ -57,14 +80,16 @@ export function useCardTransactions(
     }
 
     if (!pat) {
-      setTransactions([]);
+      setSnapshot({ key: null, transactions: [], loaded: false });
       setError('YNAB access token missing. Please configure the integration.');
+      setLoading(false);
       return;
     }
 
     if (!selectedBudget.id) {
-      setTransactions([]);
+      setSnapshot({ key: null, transactions: [], loaded: false });
       setError('No budget selected. Please configure your YNAB connection.');
+      setLoading(false);
       return;
     }
 
@@ -95,7 +120,13 @@ export function useCardTransactions(
             new Date(b.date).getTime() - new Date(a.date).getTime()
         );
 
-      setTransactions(cardTransactions);
+      if (requestId === requestIdRef.current) {
+        setSnapshot({
+          key: requestKey,
+          transactions: cardTransactions,
+          loaded: true,
+        });
+      }
     } catch (err: unknown) {
       const isAbortError =
         (err instanceof DOMException && err.name === 'AbortError') ||
@@ -105,17 +136,35 @@ export function useCardTransactions(
         return;
       }
 
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      setError(`Failed to load transactions: ${errorMessage}`);
+      if (requestId === requestIdRef.current) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        setSnapshot((current) => current.key === requestKey && current.loaded
+          ? current
+          : { key: requestKey, transactions: [], loaded: false });
+        setError(`Failed to load transactions: ${errorMessage}`);
+      }
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) {
+        abortRef.current = null;
+        setLoading(false);
+      }
     }
-  }, [enabled, card, pat, lookbackDays, sinceDate, selectedBudget.id, budgetLoading]);
+  }, [
+    enabled,
+    card,
+    pat,
+    lookbackDays,
+    sinceDate,
+    selectedBudget.id,
+    budgetLoading,
+    requestKey,
+  ]);
 
   useEffect(() => {
     fetchTransactions();
 
     return () => {
+      requestIdRef.current += 1;
       abortRef.current?.abort();
     };
   }, [fetchTransactions]);
@@ -128,11 +177,22 @@ export function useCardTransactions(
     hasPat: Boolean(pat),
     hasBudget: Boolean(selectedBudget.id),
   };
+  const canFetchCurrentRequest = Boolean(
+    enabled && card && pat && selectedBudget.id && !budgetLoading && requestKey,
+  );
+  const transactions = canFetchCurrentRequest && snapshot.key === requestKey
+    ? snapshot.transactions
+    : [];
+  const hasLoadedCurrentRequest = Boolean(
+    canFetchCurrentRequest && snapshot.key === requestKey && snapshot.loaded,
+  );
+  const waitingForCurrentRequest = canFetchCurrentRequest && snapshot.key !== requestKey;
 
   return {
     transactions,
-    loading,
+    loading: loading || waitingForCurrentRequest,
     error,
+    hasLoadedCurrentRequest,
     refresh,
     connection,
   };

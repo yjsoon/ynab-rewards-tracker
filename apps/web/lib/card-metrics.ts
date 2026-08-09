@@ -11,6 +11,131 @@ import { hasMinimumSpendRequirement } from "@/lib/minimum-spend-helpers";
 import { UNFLAGGED_FLAG, YNAB_FLAG_COLORS } from "@/lib/ynab-constants";
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
+const DATE_VALUE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+export const CARD_TRANSACTION_DATE_PRESETS = [
+  "this-billing-cycle",
+  "last-billing-cycle",
+  "month-to-date",
+  "last-month",
+  "last-90-days",
+  "custom",
+] as const;
+
+export type CardTransactionDatePreset = typeof CARD_TRANSACTION_DATE_PRESETS[number];
+
+export interface CardTransactionDateRange {
+  start: string;
+  end: string;
+  isValid: boolean;
+}
+
+function parseDateValue(value: string | null | undefined): Date | null {
+  if (!value || !DATE_VALUE_PATTERN.test(value)) {
+    return null;
+  }
+
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  return date.getFullYear() === year
+    && date.getMonth() === month - 1
+    && date.getDate() === day
+    ? date
+    : null;
+}
+
+export function isCardTransactionDatePreset(
+  value: string | null,
+): value is CardTransactionDatePreset {
+  return CARD_TRANSACTION_DATE_PRESETS.some((preset) => preset === value);
+}
+
+export function resolveCardTransactionDateRange(
+  card: CreditCard,
+  preset: CardTransactionDatePreset,
+  referenceDate: Date,
+  customStart?: string | null,
+  customEnd?: string | null,
+): CardTransactionDateRange {
+  const referenceDateValue = formatDateValue(referenceDate);
+  const currentBillingPeriod = SimpleRewardsCalculator.calculatePeriod(card, referenceDate);
+  const currentBillingRange = {
+    start: currentBillingPeriod.start,
+    end: currentBillingPeriod.end < referenceDateValue
+      ? currentBillingPeriod.end
+      : referenceDateValue,
+    isValid: true,
+  };
+
+  switch (preset) {
+    case "this-billing-cycle":
+      return currentBillingRange;
+    case "last-billing-cycle": {
+      const currentStart = parseDateValue(currentBillingPeriod.start);
+      if (!currentStart) {
+        return { ...currentBillingRange, isValid: false };
+      }
+
+      currentStart.setDate(currentStart.getDate() - 1);
+      const previousPeriod = SimpleRewardsCalculator.calculatePeriod(card, currentStart);
+      return {
+        start: previousPeriod.start,
+        end: formatDateValue(currentStart),
+        isValid: true,
+      };
+    }
+    case "month-to-date":
+      return {
+        start: formatDateValue(new Date(
+          referenceDate.getFullYear(),
+          referenceDate.getMonth(),
+          1,
+        )),
+        end: referenceDateValue,
+        isValid: true,
+      };
+    case "last-month":
+      return {
+        start: formatDateValue(new Date(
+          referenceDate.getFullYear(),
+          referenceDate.getMonth() - 1,
+          1,
+        )),
+        end: formatDateValue(new Date(
+          referenceDate.getFullYear(),
+          referenceDate.getMonth(),
+          0,
+        )),
+        isValid: true,
+      };
+    case "last-90-days": {
+      const start = new Date(
+        referenceDate.getFullYear(),
+        referenceDate.getMonth(),
+        referenceDate.getDate(),
+      );
+      start.setDate(start.getDate() - 90);
+      return {
+        start: formatDateValue(start),
+        end: referenceDateValue,
+        isValid: true,
+      };
+    }
+    case "custom": {
+      const start = parseDateValue(customStart);
+      const end = parseDateValue(customEnd);
+      if (!start || !end || start > end) {
+        return { ...currentBillingRange, isValid: false };
+      }
+
+      return {
+        start: formatDateValue(start),
+        end: formatDateValue(end),
+        isValid: true,
+      };
+    }
+  }
+}
 
 /** Spend ratio against the cap at which a card is flagged as "near cap". */
 export const NEAR_CAP_RATIO = 0.8;
