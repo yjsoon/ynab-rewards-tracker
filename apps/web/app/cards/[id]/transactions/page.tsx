@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Calendar, Loader2, RefreshCw } from "lucide-react";
+import { ArrowLeft, Calendar, Loader2, RefreshCw, X } from "lucide-react";
 
 import { CurrencyAmount } from "@/components/CurrencyAmount";
 import { EnhancedTransactionsTable } from "@/components/transactions/EnhancedTransactionsTable";
@@ -15,6 +15,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   useCreditCards,
   useSelectedBudget,
@@ -32,6 +40,11 @@ import { storage } from "@/lib/storage";
 
 const DATE_VALUE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const TRANSACTION_LOOKBACK_DAYS = 90;
+const ALL_REWARD_CATEGORIES = "all-reward-categories";
+const ALL_YNAB_CATEGORIES = "all-ynab-categories";
+const UNCATEGORISED = "uncategorised";
+const REWARD_CATEGORY_PREFIX = "reward:";
+const YNAB_CATEGORY_PREFIX = "ynab:";
 
 function parseDateValue(value: string | null): Date | undefined {
   if (!value || !DATE_VALUE_PATTERN.test(value)) {
@@ -82,7 +95,9 @@ export default function CardTransactionsPage() {
   const cardId = params.id as string;
   const isPeriodScope = searchParams.get("scope") === "period";
   const asOfValue = searchParams.get("asOf");
-  const categoryId = isPeriodScope ? searchParams.get("category") : null;
+  const categoryId = searchParams.get("category");
+  const hasYnabCategoryFilter = searchParams.has("ynabCategory");
+  const ynabCategory = searchParams.get("ynabCategory");
   const fromDashboard = searchParams.get("from") === "dashboard";
 
   const { cards, isLoading: cardsLoading } = useCreditCards();
@@ -114,13 +129,19 @@ export default function CardTransactionsPage() {
       : null,
     [period, referenceDate],
   );
+  const activeSubcategories = useMemo(
+    () => card?.subcategoriesEnabled
+      ? [...(card.subcategories ?? [])]
+          .filter((subcategory) => subcategory.active !== false)
+          .sort((a, b) => a.priority - b.priority)
+      : [],
+    [card],
+  );
   const selectedSubcategory = useMemo(
     () => categoryId
-      ? card?.subcategories?.find(
-          (subcategory) => subcategory.id === categoryId && subcategory.active !== false,
-        ) ?? null
+      ? activeSubcategories.find((subcategory) => subcategory.id === categoryId) ?? null
       : null,
-    [card, categoryId],
+    [activeSubcategories, categoryId],
   );
 
   useEffect(() => {
@@ -149,7 +170,7 @@ export default function CardTransactionsPage() {
       : [],
     [calculationPeriod, card, isPeriodScope, transactions],
   );
-  const displayedTransactions = useMemo(
+  const rewardCategoryTransactions = useMemo(
     () => card && selectedSubcategory
       ? filterTransactionsForSubcategory(
           card,
@@ -158,6 +179,33 @@ export default function CardTransactionsPage() {
         )
       : periodTransactions,
     [card, periodTransactions, selectedSubcategory],
+  );
+  const displayedTransactions = useMemo(
+    () => hasYnabCategoryFilter
+      ? rewardCategoryTransactions.filter((transaction) => (
+          ynabCategory
+            ? transaction.category_name === ynabCategory
+            : !transaction.category_name
+        ))
+      : rewardCategoryTransactions,
+    [hasYnabCategoryFilter, rewardCategoryTransactions, ynabCategory],
+  );
+  const ynabCategoryNames = useMemo(() => {
+    const names = new Set(
+      periodTransactions.flatMap((transaction) => (
+        transaction.category_name ? [transaction.category_name] : []
+      )),
+    );
+    if (ynabCategory) {
+      names.add(ynabCategory);
+    }
+
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [periodTransactions, ynabCategory]);
+  const hasUncategorisedTransactions = useMemo(
+    () => periodTransactions.some((transaction) => !transaction.category_name)
+      || (hasYnabCategoryFilter && !ynabCategory),
+    [hasYnabCategoryFilter, periodTransactions, ynabCategory],
   );
   const totalSpent = useMemo(
     () => Math.abs(
@@ -174,6 +222,80 @@ export default function CardTransactionsPage() {
     setDashboardRefreshKey(Date.now().toString());
     await refresh();
   }, [refresh]);
+  const currentQuery = searchParams.toString();
+  const pendingQueryRef = useRef(currentQuery);
+  const committedQueryRef = useRef(currentQuery);
+  useEffect(() => {
+    const previousCommittedQuery = committedQueryRef.current;
+    committedQueryRef.current = currentQuery;
+
+    // Do not let an intermediate navigation overwrite newer filter selections.
+    if (
+      pendingQueryRef.current === previousCommittedQuery
+      || pendingQueryRef.current === currentQuery
+    ) {
+      pendingQueryRef.current = currentQuery;
+    }
+  }, [currentQuery]);
+  const replaceQuery = useCallback((update: (params: URLSearchParams) => void) => {
+    const pendingQuery = pendingQueryRef.current;
+    const nextParams = new URLSearchParams(pendingQuery);
+    update(nextParams);
+
+    const query = nextParams.toString();
+    if (query === pendingQuery) {
+      return;
+    }
+
+    pendingQueryRef.current = query;
+    router.replace(
+      `/cards/${cardId}/transactions${query ? `?${query}` : ""}`,
+      { scroll: false },
+    );
+  }, [cardId, router]);
+  const updateFilter = useCallback((name: "category" | "ynabCategory", value: string | null) => {
+    replaceQuery((nextParams) => {
+      if (value === null) {
+        nextParams.delete(name);
+      } else {
+        nextParams.set(name, value);
+      }
+    });
+  }, [replaceQuery]);
+  const handleRewardCategoryChange = useCallback((value: string) => {
+    updateFilter(
+      "category",
+      value === ALL_REWARD_CATEGORIES
+        ? null
+        : value.slice(REWARD_CATEGORY_PREFIX.length),
+    );
+  }, [updateFilter]);
+  const handleYnabCategoryChange = useCallback((value: string) => {
+    updateFilter(
+      "ynabCategory",
+      value === ALL_YNAB_CATEGORIES
+        ? null
+        : value === UNCATEGORISED
+          ? ""
+          : value.slice(YNAB_CATEGORY_PREFIX.length),
+    );
+  }, [updateFilter]);
+  const clearFilters = useCallback(() => {
+    replaceQuery((nextParams) => {
+      nextParams.delete("category");
+      nextParams.delete("ynabCategory");
+    });
+  }, [replaceQuery]);
+
+  useEffect(() => {
+    if (card && categoryId !== null && !selectedSubcategory) {
+      replaceQuery((nextParams) => {
+        if (nextParams.get("category") === categoryId) {
+          nextParams.delete("category");
+        }
+      });
+    }
+  }, [card, categoryId, replaceQuery, selectedSubcategory]);
 
   if (!card || !period || !calculationPeriod) {
     return (
@@ -205,16 +327,32 @@ export default function CardTransactionsPage() {
   const backHref = fromDashboard
     ? `/${dashboardParams.size > 0 ? `?${dashboardParams.toString()}` : ""}`
     : `/cards/${cardId}`;
-  const allTransactionsParams = new URLSearchParams(searchParams.toString());
-  allTransactionsParams.delete("category");
-  const allTransactionsHref = `/cards/${cardId}/transactions${
-    allTransactionsParams.size > 0 ? `?${allTransactionsParams.toString()}` : ""
-  }`;
-  const scopeDescription = selectedSubcategory
-    ? `${selectedSubcategory.name} spending in this billing period`
+  const filterDescriptions = [
+    selectedSubcategory ? `reward category: ${selectedSubcategory.name}` : null,
+    hasYnabCategoryFilter
+      ? `YNAB category: ${ynabCategory || "Uncategorised"}`
+      : null,
+  ].filter((description): description is string => Boolean(description));
+  const filterDescription = filterDescriptions.join(" • ");
+  const scopeDescription = filterDescription
+    ? `Filtered by ${filterDescription}`
     : isPeriodScope
       ? "Spending in this billing period"
       : `Spending in the last ${TRANSACTION_LOOKBACK_DAYS} days`;
+  const rewardCategoryValue = selectedSubcategory
+    ? `${REWARD_CATEGORY_PREFIX}${selectedSubcategory.id}`
+    : ALL_REWARD_CATEGORIES;
+  const ynabCategoryValue = !hasYnabCategoryFilter
+    ? ALL_YNAB_CATEGORIES
+    : ynabCategory
+      ? `${YNAB_CATEGORY_PREFIX}${ynabCategory}`
+      : UNCATEGORISED;
+  const tableScopeLabel = isPeriodScope
+    ? `${card.name} transactions, ${periodLabel}`
+    : `${card.name} transactions, last ${TRANSACTION_LOOKBACK_DAYS} days`;
+  const tableLabel = `${tableScopeLabel}${
+    filterDescription ? `, filtered by ${filterDescription}` : ""
+  }`;
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
@@ -228,16 +366,7 @@ export default function CardTransactionsPage() {
       </div>
 
       <div className="mb-6 space-y-2">
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-3xl font-bold">{card.name} Transactions</h1>
-          {selectedSubcategory && (
-            <Button variant="outline" size="sm" asChild>
-              <Link href={allTransactionsHref}>
-                {selectedSubcategory.name} ×
-              </Link>
-            </Button>
-          )}
-        </div>
+        <h1 className="text-3xl font-bold">{card.name} Transactions</h1>
         <p className="text-muted-foreground">
           {isPeriodScope ? `Billing period ${periodLabel}` : `Last ${TRANSACTION_LOOKBACK_DAYS} days`}
           {isPeriodScope && throughLabel ? ` • Through ${throughLabel}` : ""}
@@ -275,11 +404,10 @@ export default function CardTransactionsPage() {
             <div>
               <CardTitle>Transactions</CardTitle>
               <CardDescription>
-                {selectedSubcategory
-                  ? `${selectedSubcategory.name} transactions in this billing period${throughLabel ? ` through ${throughLabel}` : ""}`
-                  : isPeriodScope
-                    ? `Spending transactions in this billing period${throughLabel ? ` through ${throughLabel}` : ""}`
-                    : `Spending transactions from the last ${TRANSACTION_LOOKBACK_DAYS} days`}
+                {isPeriodScope
+                  ? `Spending transactions in this billing period${throughLabel ? ` through ${throughLabel}` : ""}`
+                  : `Spending transactions from the last ${TRANSACTION_LOOKBACK_DAYS} days`}
+                {filterDescription ? `. Filtered by ${filterDescription}` : ""}
               </CardDescription>
             </div>
             <Button
@@ -299,13 +427,86 @@ export default function CardTransactionsPage() {
           </div>
         </CardHeader>
         <CardContent>
+          <div className="mb-6 flex flex-col gap-4 rounded-lg border bg-muted/20 p-4 sm:flex-row sm:flex-wrap sm:items-end">
+            {activeSubcategories.length > 0 && (
+              <div className="w-full space-y-2 sm:w-64">
+                <Label htmlFor="reward-category-filter">Reward category</Label>
+                <Select
+                  value={rewardCategoryValue}
+                  onValueChange={handleRewardCategoryChange}
+                >
+                  <SelectTrigger id="reward-category-filter">
+                    <SelectValue placeholder="All reward categories" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ALL_REWARD_CATEGORIES}>
+                      All reward categories
+                    </SelectItem>
+                    {activeSubcategories.map((subcategory) => (
+                      <SelectItem
+                        key={subcategory.id}
+                        value={`${REWARD_CATEGORY_PREFIX}${subcategory.id}`}
+                      >
+                        {subcategory.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <div className="w-full space-y-2 sm:w-64">
+              <Label htmlFor="ynab-category-filter">YNAB category</Label>
+              <Select
+                value={ynabCategoryValue}
+                onValueChange={handleYnabCategoryChange}
+              >
+                <SelectTrigger id="ynab-category-filter">
+                  <SelectValue placeholder="All YNAB categories" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_YNAB_CATEGORIES}>
+                    All YNAB categories
+                  </SelectItem>
+                  {hasUncategorisedTransactions && (
+                    <SelectItem value={UNCATEGORISED}>Uncategorised</SelectItem>
+                  )}
+                  {ynabCategoryNames.map((categoryName) => (
+                    <SelectItem
+                      key={categoryName}
+                      value={`${YNAB_CATEGORY_PREFIX}${categoryName}`}
+                    >
+                      {categoryName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {filterDescriptions.length > 0 && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={clearFilters}
+              >
+                <X className="mr-2 h-4 w-4" />
+                Clear filters
+              </Button>
+            )}
+          </div>
+
           {!loading && !error && displayedTransactions.length === 0 ? (
             <div className="py-12 text-center text-muted-foreground">
               <Calendar className="mx-auto mb-3 h-8 w-8" />
-              <p>No spending transactions found</p>
+              <p>
+                {filterDescriptions.length > 0
+                  ? "No transactions match these filters"
+                  : "No spending transactions found"}
+              </p>
               <p className="text-sm">
-                {selectedSubcategory
-                  ? `There are no ${selectedSubcategory.name} transactions in this billing period.`
+                {filterDescriptions.length > 0
+                  ? "Try changing or clearing the filters above."
                   : isPeriodScope
                     ? "There are no spending transactions in this billing period."
                     : `There are no spending transactions in the last ${TRANSACTION_LOOKBACK_DAYS} days.`}
@@ -326,11 +527,7 @@ export default function CardTransactionsPage() {
               pat={pat}
               onTransactionUpdated={handleTransactionUpdated}
               showAccountFilter={false}
-              tableLabel={isPeriodScope
-                ? `${card.name} transactions, ${periodLabel}${
-                    selectedSubcategory ? `, ${selectedSubcategory.name}` : ""
-                  }`
-                : `${card.name} transactions, last ${TRANSACTION_LOOKBACK_DAYS} days`}
+              tableLabel={tableLabel}
             />
           )}
         </CardContent>
