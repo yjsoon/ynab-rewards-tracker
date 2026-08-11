@@ -91,6 +91,10 @@ function AppShell() {
             name="card/[id]/edit"
             options={{ headerShown: true, title: 'Edit card', presentation: 'formSheet' }}
           />
+          <Stack.Screen
+            name="card/[id]/transactions"
+            options={{ headerShown: true, title: 'Transactions' }}
+          />
         </Stack>
       </ThemeProvider>
       <StatusBar style={activeScheme === 'dark' ? 'light' : 'dark'} />
