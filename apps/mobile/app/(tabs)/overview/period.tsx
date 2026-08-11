@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -19,6 +19,7 @@ import {
 import {
   formatDateValue,
   parseDateValue,
+  resolveDashboardPeriod,
   shiftDashboardPeriodDays,
   shiftDashboardPeriodMonths,
 } from '@/lib/dashboard-period';
@@ -79,8 +80,13 @@ export default function DashboardPeriodScreen() {
   const router = useRouter();
   const [dateValue, setDateValue] = useState(() => getDashboardPeriodValue() ?? todayDateValue());
   const todayValue = todayDateValue();
+  const today = useMemo(() => parseDateValue(todayValue)!, [todayValue]);
+  const parsedDate = parseDateValue(dateValue);
   const isToday = dateValue === todayValue;
-  const dateLabel = formatDateValue(parseDateValue(dateValue) ?? new Date());
+  const isValidDate = parsedDate !== null;
+  const isFutureDate = Boolean(parsedDate && parsedDate > today);
+  const canCommit = isValidDate && !isFutureDate;
+  const dateLabel = formatDateValue(parsedDate ?? today);
   const snapshotLabel = isToday
     ? { text: 'Live snapshot', color: 'positive' as TextColor }
     : { text: 'Historical snapshot', color: 'attention' as TextColor };
@@ -89,7 +95,11 @@ export default function DashboardPeriodScreen() {
     : `Spend and rewards as they stood on ${dateLabel}.`;
 
   const commit = () => {
-    setDashboardPeriodValue(dateValue);
+    if (!canCommit || !parsedDate) {
+      return;
+    }
+    const resolved = resolveDashboardPeriod(formatDateValue(parsedDate));
+    setDashboardPeriodValue(resolved.isToday ? undefined : resolved.dateValue);
     router.back();
   };
 
@@ -109,11 +119,17 @@ export default function DashboardPeriodScreen() {
   const dayLabel = dateValue === todayValue
     ? 'Today'
     : new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short' })
-      .format(parseDateValue(dateValue) ?? new Date());
+      .format(parsedDate ?? today);
   const monthLabel = new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' })
-    .format(parseDateValue(dateValue) ?? new Date());
-  const canStepForward = !isToday;
-  const canGoEarlier = parseDateValue(dateValue) !== null;
+    .format(parsedDate ?? today);
+  const canStepForward = !isToday && canCommit;
+  const inputError = !dateValue
+    ? 'Enter a date on or before today'
+    : !isValidDate
+      ? 'Use YYYY-MM-DD format'
+      : isFutureDate
+        ? 'Choose a date on or before today'
+        : undefined;
 
   return (
     <>
@@ -182,9 +198,9 @@ export default function DashboardPeriodScreen() {
                   accessibilityLabel="Date in YYYY-MM-DD format"
                   style={styles.input}
                 />
-                {!canGoEarlier ? (
+                {inputError ? (
                   <Footnote color="attention" style={styles.inputError}>
-                    Enter a date on or before today
+                    {inputError}
                   </Footnote>
                 ) : null}
               </View>
@@ -197,7 +213,7 @@ export default function DashboardPeriodScreen() {
             variant="filled"
             size="large"
             onPress={commit}
-            disabled={!canGoEarlier}
+            disabled={!canCommit}
             accessibilityHint="Shows the dashboard as it stood on the selected date"
           >
             View this date

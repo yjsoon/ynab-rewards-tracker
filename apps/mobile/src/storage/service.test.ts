@@ -812,3 +812,44 @@ describe('settings import dirty-marker preconditions', () => {
     }
   });
 });
+
+describe('replaceCards cascade', () => {
+  it('returns pruned hiddenCards so React state can stay in sync', async () => {
+    const initial = createDefaultStorage();
+    initial.cards = [{
+      id: 'keep-card',
+      name: 'Keep',
+      issuer: 'Test',
+      type: 'cashback',
+      featured: true,
+      earningRate: 1,
+      ynabAccountId: 'account-keep',
+    }, {
+      id: 'drop-card',
+      name: 'Drop',
+      issuer: 'Test',
+      type: 'cashback',
+      featured: true,
+      earningRate: 1,
+      ynabAccountId: 'account-drop',
+    }];
+    initial.hiddenCards = [{
+      cardId: 'keep-card',
+      hiddenUntil: '2099-08-01T00:00:00.000Z',
+      reason: 'maximum_spend_reached',
+    }, {
+      cardId: 'drop-card',
+      hiddenUntil: '2099-08-01T00:00:00.000Z',
+      reason: 'maximum_spend_reached',
+    }];
+    mocks.asyncValues.set(STORAGE_VERSION_KEY, STORAGE_VERSION);
+    mocks.asyncValues.set(STORAGE_KEY, JSON.stringify(initial));
+
+    const service = new StorageService();
+    await service.getSettings();
+    const replacement = await service.replaceCards([initial.cards[0]!]);
+
+    expect(replacement.hiddenCards?.map((entry) => entry.cardId)).toEqual(['keep-card']);
+    expect((await service.getHiddenCards()).map((entry) => entry.cardId)).toEqual(['keep-card']);
+  });
+});

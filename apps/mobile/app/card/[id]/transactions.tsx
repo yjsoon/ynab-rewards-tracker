@@ -9,7 +9,6 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 
 import {
   EmptyState,
-  LargeNavigationTitle,
   SyncBadge,
 } from '@/components/native';
 import { Footnote, Headline } from '@/components/ios';
@@ -22,7 +21,7 @@ import {
 } from '@/features/activity';
 import { useRewardsDashboard } from '@/features/cards/dashboard';
 import { semanticColors } from '@/theme';
-import { nativeMetrics, radii, spacing } from '@/theme/tokens';
+import { nativeMetrics, spacing } from '@/theme/tokens';
 import type { TransactionProjection } from '@ynab-counter/app-core/rewards-engine';
 
 function parameterValue(value: string | string[] | undefined): string | undefined {
@@ -43,10 +42,12 @@ export default function CardTransactionsScreen() {
   const accountId = card?.ynabAccountId;
   const activity = useActivityModel('', accountId);
 
-  const cardTransactions = useMemo(
-    () => activity.transactions,
-    [activity.transactions],
-  );
+  const cardTransactions = useMemo(() => {
+    if (!card || !accountId) {
+      return [];
+    }
+    return activity.transactions;
+  }, [accountId, activity.transactions, card]);
 
   const sections = useMemo(
     () => groupActivityByDate(cardTransactions),
@@ -94,11 +95,30 @@ export default function CardTransactionsScreen() {
     ? model.refresh
     : () => router.push('/settings');
 
+  if (!card || !accountId) {
+    return (
+      <>
+        <Stack.Screen options={{ title: 'Transactions' }} />
+        <View style={[styles.screen, styles.missingCard]}>
+          <EmptyState
+            title="Card not found"
+            message="This card is no longer available."
+            action={{
+              label: 'Back to cards',
+              onPress: () => router.replace('/(tabs)/cards'),
+              accessibilityHint: 'Returns to the cards list',
+            }}
+          />
+        </View>
+      </>
+    );
+  }
+
   return (
     <>
       <Stack.Screen
         options={{
-          title: card?.name ?? 'Transactions',
+          title: card.name,
         }}
       />
       <SectionList<TransactionProjection, ActivitySection>
@@ -117,7 +137,6 @@ export default function CardTransactionsScreen() {
         renderSectionFooter={() => <View style={styles.sectionFooter} />}
         ListHeaderComponent={(
           <View style={styles.topMatter}>
-            <LargeNavigationTitle>Transactions</LargeNavigationTitle>
             <View style={styles.orientation}>
               <Footnote color="secondary">
                 {cardTransactions.length} saved {cardTransactions.length === 1 ? 'transaction' : 'transactions'}
@@ -174,6 +193,10 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: semanticColors.systemGroupedBackground,
+  },
+  missingCard: {
+    justifyContent: 'center',
+    paddingHorizontal: nativeMetrics.screenGutter,
   },
   content: {
     paddingBottom: spacing.xxxl,

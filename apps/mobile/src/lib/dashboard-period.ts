@@ -2,10 +2,6 @@ function truncateDate(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
-function endOfMonth(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth() + 1, 0);
-}
-
 function isSameDay(left: Date, right: Date): boolean {
   return (
     left.getFullYear() === right.getFullYear() &&
@@ -16,22 +12,6 @@ function isSameDay(left: Date, right: Date): boolean {
 
 function isSameMonth(left: Date, right: Date): boolean {
   return left.getFullYear() === right.getFullYear() && left.getMonth() === right.getMonth();
-}
-
-function parseMonthValue(value: string | null | undefined): Date | null {
-  if (!value || !/^\d{4}-\d{2}$/.test(value)) {
-    return null;
-  }
-
-  const [yearRaw, monthRaw] = value.split('-');
-  const year = Number(yearRaw);
-  const monthIndex = Number(monthRaw) - 1;
-
-  if (!Number.isInteger(year) || !Number.isInteger(monthIndex) || monthIndex < 0 || monthIndex > 11) {
-    return null;
-  }
-
-  return new Date(year, monthIndex, 1);
 }
 
 export function parseDateValue(value: string | null | undefined): Date | null {
