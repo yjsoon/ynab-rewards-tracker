@@ -117,6 +117,66 @@ function cardUseOperationalLabel(
   return undefined;
 }
 
+function CardUseRow({
+  item,
+  formatting,
+  onPress,
+  showDivider,
+}: {
+  item: RankedCardUse;
+  formatting: CardFormatting;
+  onPress: () => void;
+  showDivider: boolean;
+}) {
+  const rateLabel = cardUseRateLabel(item, formatting);
+  const operationalLabel = cardUseOperationalLabel(item, formatting);
+
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={[
+        item.card.card.name,
+        item.use.label,
+        rateLabel,
+        operationalLabel,
+      ].filter(Boolean).join(', ')}
+      accessibilityHint={item.use.categoryId
+        ? `Opens the ${item.use.label} earning tier on ${item.card.card.name}`
+        : `Opens details for ${item.card.card.name}`}
+      style={({ pressed }) => [
+        styles.cardUseRow,
+        showDivider && styles.rowDivider,
+        pressed && styles.pressed,
+      ]}
+    >
+      <View
+        style={styles.rowCopy}
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+      >
+        <Headline>{compactCardName(item.card.card.name)}</Headline>
+        <View style={styles.useLabelRow}>
+          {item.use.flagColor ? (
+            <SymbolView
+              name="flag.fill"
+              size={14}
+              tintColor={flagColor(item.use.flagColor)}
+              style={styles.flagIcon}
+            />
+          ) : null}
+          <Body style={styles.flexibleText}>{item.use.label} · {rateLabel}</Body>
+        </View>
+        {operationalLabel ? (
+          <Footnote color="secondary" style={styles.tabular}>
+            {operationalLabel}
+          </Footnote>
+        ) : null}
+      </View>
+    </Pressable>
+  );
+}
+
 function SetupCardRow({
   projection,
   onPress,
@@ -563,6 +623,23 @@ export default function OverviewScreen() {
             />
           ) : null}
 
+          {cardUses.length > 0 ? (
+            <View style={styles.section}>
+              <SectionTitle title="Keep using" />
+              <View style={styles.rows}>
+                {cardUses.map((item, index) => (
+                  <CardUseRow
+                    key={item.key}
+                    item={item}
+                    formatting={formatting}
+                    onPress={() => openCardUse(item)}
+                    showDivider={index < cardUses.length - 1}
+                  />
+                ))}
+              </View>
+            </View>
+          ) : null}
+
           <CardGroupSection
             title="Cashback Cards"
             icon="percent"
@@ -705,6 +782,11 @@ const styles = StyleSheet.create({
     backgroundColor: semanticColors.secondarySystemGroupedBackground,
     overflow: 'hidden',
   },
+  cardUseRow: {
+    minHeight: nativeMetrics.minimumTouchTarget,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
   setupRow: {
     minHeight: nativeMetrics.minimumTouchTarget,
     justifyContent: 'center',
@@ -723,6 +805,19 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     gap: spacing.xs,
+  },
+  useLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  flexibleText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  flagIcon: {
+    flexShrink: 0,
+    marginTop: 3,
   },
   categoryFlagIcon: {
     flexShrink: 0,
