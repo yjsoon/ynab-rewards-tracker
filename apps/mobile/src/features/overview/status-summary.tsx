@@ -111,22 +111,22 @@ export function StatusSummary({
 
   return (
     <View style={styles.container}>
-      <View
-        style={styles.strip}
-        accessible
-        accessibilityRole="summary"
-        accessibilityLabel={[
-          STATUS_SLOTS.map((slot) => slot.describe(counts[slot.key])).join(', '),
-          earnedLabel,
-        ].join('. ')}
-      >
-        <View style={styles.dotsRow} accessibilityElementsHidden>
+      <View style={styles.strip}>
+        <View
+          style={styles.dotsRow}
+          accessible
+          accessibilityRole="summary"
+          accessibilityLabel={[
+            STATUS_SLOTS.map((slot) => slot.describe(counts[slot.key])).join(', '),
+            earnedLabel,
+          ].join('. ')}
+        >
           {STATUS_SLOTS.map((slot, index) => {
             const count = counts[slot.key];
             return (
               <React.Fragment key={slot.key}>
-                {index > 0 ? <Footnote color="tertiary">/</Footnote> : null}
-                <View style={styles.dotSlot}>
+                {index > 0 ? <Footnote color="tertiary" accessible={false}>/</Footnote> : null}
+                <View style={styles.dotSlot} accessibilityElementsHidden>
                   <View
                     style={[
                       styles.dot,
@@ -164,7 +164,9 @@ export function StatusSummary({
               tintColor={semanticColors.secondaryLabel}
               accessibilityElementsHidden
             />
-            <Caption1 color="secondary" style={styles.hiddenLabel}>{hiddenCards.length} hidden</Caption1>
+            <Caption1 color="secondary" style={styles.hiddenLabel} accessible={false}>
+              {hiddenCards.length} hidden
+            </Caption1>
             <SymbolView
               name="chevron.down"
               size={9}

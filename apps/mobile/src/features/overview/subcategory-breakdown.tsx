@@ -11,11 +11,10 @@ import { Caption1, Footnote, Headline } from '@/components/ios';
 import type { CardFormatting } from '@/features/cards/presentation';
 import { flagColor } from '@/features/cards/presentation';
 import { semanticColors } from '@/theme';
-import { interaction, nativeMetrics, radii, spacing } from '@/theme/tokens';
+import { interaction, radii, spacing } from '@/theme/tokens';
 import type { TextColor } from '@/components/ios/Typography';
 import type { RewardCategoryProjection } from '@ynab-counter/app-core/rewards-engine';
 
-const NEAR_CAP_RATIO = 0.8;
 const MIN_SEGMENT_RATIO = 0.025;
 
 interface Segment {

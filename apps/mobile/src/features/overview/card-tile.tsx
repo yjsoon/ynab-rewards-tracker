@@ -10,7 +10,6 @@ import { SymbolView } from 'expo-symbols';
 
 import { Caption1, Footnote, Headline, Title3 } from '@/components/ios';
 import type { CardFormatting } from '@/features/cards/presentation';
-import { formatResetDate } from '@/features/cards/presentation';
 import { semanticColors, withAlpha } from '@/theme';
 import { interaction, radii, spacing } from '@/theme/tokens';
 import type { TextColor } from '@/components/ios/Typography';
@@ -69,7 +68,7 @@ export function CardTile({
   onOpen,
   style,
 }: CardTileProps) {
-  const { card, calculation, period } = projection;
+  const { card, period } = projection;
   const hasBlockRounding = cardUsesBlocks(card);
   const displayedSpend = hasBlockRounding ? projection.spend.counted : projection.spend.total;
   const hasMinimum = projection.minimum.target !== null;
@@ -219,7 +218,7 @@ export function CardTile({
       : { borderColor: semanticColors.separator, borderWidth: StyleSheet.hairlineWidth };
 
   return (
-    <View style={[styles.tile, borderTone, style]} accessibilityElementsHidden>
+    <View style={[styles.tile, borderTone, style]}>
       <Pressable
         onPress={onOpen}
         accessible
@@ -228,61 +227,44 @@ export function CardTile({
         accessibilityHint="Opens card details"
         style={({ pressed }) => [styles.pressable, pressed && styles.pressed]}
       >
-        <View style={styles.header}>
+        <View style={styles.header} accessibilityElementsHidden>
           <Headline numberOfLines={1} style={styles.cardName}>{card.name}</Headline>
           <View style={styles.headerTrailing}>
             {card.promotionalPeriod ? (
-              <View style={styles.promoPill} accessible accessibilityLabel={`Promotional period until ${formatResetDate(card.promotionalPeriod.endDate)}`}>
+              <View style={styles.promoPill}>
                 <SymbolView
                   name="sparkles"
                   size={11}
                   tintColor={semanticColors.systemPurple}
-                  accessibilityElementsHidden
                 />
-                <Caption1 color="action" style={styles.promoText} accessible={false}>Promo</Caption1>
+                <Caption1 color="action" style={styles.promoText}>Promo</Caption1>
               </View>
             ) : null}
-            <View
-              accessible
-              accessibilityRole="text"
-              accessibilityLabel={
-                card.type === 'cashback'
-                  ? `Earned ${earnedDisplay} cashback`
-                  : `Earned ${earnedDisplay} miles`
-              }
-              style={styles.rewardChip}
-            >
+            <View style={styles.rewardChip}>
               <SymbolView
                 name={card.type === 'cashback' ? 'dollarsign.circle.fill' : 'airplane'}
                 size={14}
                 tintColor={rewardChipColor}
                 style={styles.rewardIcon}
-                accessibilityElementsHidden
               />
-              <Footnote color={rewardChipTone} style={styles.rewardChipText} accessible={false}>
+              <Footnote color={rewardChipTone} style={styles.rewardChipText}>
                 {earnedDisplay}
               </Footnote>
             </View>
           </View>
         </View>
 
-        <View style={styles.heroRow}>
-          <Caption1 color="secondary" style={styles.heroLabel} accessible={false}>
+        <View style={styles.heroRow} accessibilityElementsHidden>
+          <Caption1 color="secondary" style={styles.heroLabel}>
             {heroLabel}
           </Caption1>
-          <View
-            accessible
-            accessibilityRole="text"
-            accessibilityLabel={hero.label}
-            style={styles.heroValueRow}
-          >
+          <View style={styles.heroValueRow}>
             {hero.variant === 'min-left' ? (
               <SymbolView
                 name="arrow.up.right"
                 size={13}
                 tintColor={semanticColors.attention}
                 style={styles.heroGlyph}
-                accessibilityElementsHidden
               />
             ) : hero.variant === 'cap-left' ? (
               <SymbolView
@@ -290,7 +272,6 @@ export function CardTile({
                 size={13}
                 tintColor={semanticColors.positive}
                 style={styles.heroGlyph}
-                accessibilityElementsHidden
               />
             ) : hero.variant === 'cap-over' ? (
               <SymbolView
@@ -298,20 +279,17 @@ export function CardTile({
                 size={13}
                 tintColor={semanticColors.destructive}
                 style={styles.heroGlyph}
-                accessibilityElementsHidden
               />
             ) : null}
             <Title3
               color={hero.tone}
               style={[styles.heroNumber, hero.weight === 'medium' && styles.heroNumberMedium]}
-              accessible={false}
             >
               {heroNumberText}
             </Title3>
             <Caption1
               color={hero.variant === 'spent' ? 'secondary' : hero.tone}
               style={styles.heroSuffix}
-              accessible={false}
             >
               {hero.suffix}
             </Caption1>
@@ -325,7 +303,7 @@ export function CardTile({
           minimumProgressSpend={projection.progress.minimumProgressSpend}
           maximumProgressSpend={projection.progress.maximumProgressSpend}
           height={8}
-          accessibilityLabel={`${card.name} spending progress`}
+          accessible={false}
         />
 
         <View style={styles.metaRow} accessibilityElementsHidden>
@@ -341,39 +319,41 @@ export function CardTile({
               </Footnote>
             ) : null}
           </View>
-          <Footnote color={daysTone} style={styles.tabular} accessible={false}>
+          <Footnote color={daysTone} style={styles.tabular}>
             {daysLabel}
           </Footnote>
         </View>
 
         {blockCopy ? (
-          <Caption1 color="tertiary" style={styles.tabular} accessible={false}>
+          <Caption1 color="tertiary" style={styles.tabular} accessibilityElementsHidden>
             {blockCopy}
           </Caption1>
         ) : null}
+      </Pressable>
 
-        {card.subcategoriesEnabled && projection.rewardCategories.length > 0 ? (
+      {card.subcategoriesEnabled && projection.rewardCategories.length > 0 ? (
+        <View style={styles.footerSection}>
           <CardSubcategoryBreakdown
             categories={projection.rewardCategories}
             formatting={formatting}
             isExpanded={isSubcategoryExpanded}
             onToggleExpanded={onToggleSubcategories}
           />
-        ) : null}
+        </View>
+      ) : null}
 
-        {allowHideCard && exceeded ? (
-          <Pressable
-            onPress={() => onHideCard(card.id, period.end)}
-            accessibilityRole="button"
-            accessibilityLabel={`Hide ${card.name} until next cycle`}
-            style={({ pressed }) => [styles.hideButton, pressed && styles.pressed]}
-          >
-            <Caption1 color="secondary" style={styles.hideButtonText} accessible={false}>
-              Hide until next cycle
-            </Caption1>
-          </Pressable>
-        ) : null}
-      </Pressable>
+      {allowHideCard && exceeded ? (
+        <Pressable
+          onPress={() => onHideCard(card.id, period.end)}
+          accessibilityRole="button"
+          accessibilityLabel={`Hide ${card.name} until next cycle`}
+          style={({ pressed }) => [styles.hideButton, pressed && styles.pressed]}
+        >
+          <Caption1 color="secondary" style={styles.hideButtonText} accessible={false}>
+            Hide until next cycle
+          </Caption1>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -387,6 +367,11 @@ const styles = StyleSheet.create({
   pressable: {
     padding: spacing.lg,
     gap: spacing.md,
+  },
+  footerSection: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.lg,
+    marginTop: -spacing.sm,
   },
   pressed: {
     opacity: interaction.subtlePressedOpacity,
@@ -487,9 +472,9 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     minHeight: 36,
     justifyContent: 'center',
-    paddingHorizontal: spacing.sm,
-    marginTop: spacing.xs,
-    marginHorizontal: -spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.md,
+    marginTop: -spacing.xs,
   },
   hideButtonText: {
     fontWeight: '600',
