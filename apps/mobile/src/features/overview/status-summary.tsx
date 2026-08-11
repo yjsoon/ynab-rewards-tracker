@@ -16,14 +16,7 @@ export interface HiddenCardEntry {
 
 type SlotColor = 'sky' | 'green' | 'amber' | 'red';
 
-const DOT_COLORS = {
-  sky: semanticColors.systemBlue,
-  green: semanticColors.positive,
-  amber: semanticColors.attention,
-  red: semanticColors.capped,
-} as const;
-
-const ACTIVE_TEXT_COLORS = {
+const SLOT_COLORS = {
   sky: semanticColors.systemBlue,
   green: semanticColors.positive,
   amber: semanticColors.attention,
@@ -34,8 +27,7 @@ type SummarySlot = {
   key: 'below-minimum' | 'earning' | 'near-cap' | 'at-cap';
   statuses: CardPortfolioStatus[];
   describe: (count: number) => string;
-  dotColor: SlotColor;
-  activeTextColor: SlotColor;
+  color: SlotColor;
 };
 
 const STATUS_SLOTS: SummarySlot[] = [
@@ -43,29 +35,25 @@ const STATUS_SLOTS: SummarySlot[] = [
     key: 'below-minimum',
     statuses: ['building'],
     describe: (count) => `${count} below minimum spend`,
-    dotColor: 'sky',
-    activeTextColor: 'sky',
+    color: 'sky',
   },
   {
     key: 'earning',
     statuses: ['earning', 'open'],
     describe: (count) => `${count} earning rewards`,
-    dotColor: 'green',
-    activeTextColor: 'green',
+    color: 'green',
   },
   {
     key: 'near-cap',
     statuses: ['near_cap'],
     describe: (count) => `${count} near cap`,
-    dotColor: 'amber',
-    activeTextColor: 'amber',
+    color: 'amber',
   },
   {
     key: 'at-cap',
     statuses: ['capped'],
     describe: (count) => `${count} at cap`,
-    dotColor: 'red',
-    activeTextColor: 'red',
+    color: 'red',
   },
 ];
 
@@ -130,14 +118,14 @@ export function StatusSummary({
                   <View
                     style={[
                       styles.dot,
-                      { backgroundColor: DOT_COLORS[slot.dotColor] },
+                      { backgroundColor: SLOT_COLORS[slot.color] },
                       count === 0 && styles.dotDimmed,
                     ]}
                   />
                   <Footnote
                     color={count === 0 ? 'tertiary' : 'primary'}
                     style={[
-                      count > 0 && { color: ACTIVE_TEXT_COLORS[slot.activeTextColor] },
+                      count > 0 && { color: SLOT_COLORS[slot.color] },
                       styles.tabular,
                     ]}
                   >

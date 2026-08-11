@@ -92,7 +92,10 @@ describe('formatCurrencyParts', () => {
   });
 
   it('falls back to a single formatted segment when formatToParts is unavailable', () => {
-    const original = Intl.NumberFormat.prototype.formatToParts;
+    const originalDescriptor = Object.getOwnPropertyDescriptor(
+      Intl.NumberFormat.prototype,
+      'formatToParts',
+    );
     Object.defineProperty(Intl.NumberFormat.prototype, 'formatToParts', {
       configurable: true,
       value: undefined,
@@ -100,12 +103,13 @@ describe('formatCurrencyParts', () => {
     try {
       const parts = formatCurrencyParts(123.45, { locale: 'en-US', currency: 'USD' });
       expect(parts).toEqual([{ type: 'literal', value: expect.any(String) }]);
-      expect(formatCurrency(123.45, { locale: 'en-US', currency: 'USD' })).toMatch(/\$?123/);
+      expect(formatCurrency(123.45, { locale: 'en-US', currency: 'USD' })).toBe('$123.45');
     } finally {
-      Object.defineProperty(Intl.NumberFormat.prototype, 'formatToParts', {
-        configurable: true,
-        value: original,
-      });
+      if (originalDescriptor) {
+        Object.defineProperty(Intl.NumberFormat.prototype, 'formatToParts', originalDescriptor);
+      } else {
+        Reflect.deleteProperty(Intl.NumberFormat.prototype, 'formatToParts');
+      }
     }
   });
 

@@ -66,7 +66,6 @@ function capPercentLabel(category: RewardCategoryProjection, formatting: CardFor
   }
   const spent = formatting.currencyCompact(category.spend.total);
   const cap = formatting.currencyCompact(target);
-  const tone = capPercentTone(percent);
   return `${spent} of ${cap} · ${percent}%`;
 }
 
