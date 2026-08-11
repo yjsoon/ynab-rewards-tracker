@@ -203,7 +203,7 @@ function matchesQuery(projection: TransactionProjection, query: string): boolean
     .some((value) => value.toLocaleLowerCase('en-GB').includes(normalized));
 }
 
-export function useActivityModel(query = ''): ActivityModel {
+export function useActivityModel(query = '', accountId?: string): ActivityModel {
   const { state, status, actions } = useStorage();
   const [currentTimestamp, setCurrentTimestamp] = useState(() => Date.now());
   useEffect(() => {
@@ -246,8 +246,12 @@ export function useActivityModel(query = ''): ActivityModel {
     [accountNames, cacheEntry, state.cards, state.settings, trackedAccounts],
   );
   const transactions = useMemo(
-    () => projected.filter((projection) => matchesQuery(projection, query)),
-    [projected, query],
+    () => projected
+      .filter((projection) => (
+        !accountId || projection.transaction.account_id === accountId
+      ))
+      .filter((projection) => matchesQuery(projection, query)),
+    [accountId, projected, query],
   );
   const sections = useMemo(
     () => groupActivityByDate(transactions, new Date(currentTimestamp)),
