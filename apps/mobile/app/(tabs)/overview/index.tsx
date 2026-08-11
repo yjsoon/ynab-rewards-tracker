@@ -653,6 +653,7 @@ export default function OverviewScreen() {
                 key={projection.card.id}
                 projection={projection}
                 formatting={formatting}
+                referenceDate={period.referenceDate}
                 allowHideCard={period.isToday}
                 isSubcategoryExpanded={isSubcategoryExpanded(projection.card.id)}
                 onToggleSubcategories={() => toggleSubcategories(projection.card.id)}
@@ -675,6 +676,7 @@ export default function OverviewScreen() {
                 key={projection.card.id}
                 projection={projection}
                 formatting={formatting}
+                referenceDate={period.referenceDate}
                 allowHideCard={period.isToday}
                 isSubcategoryExpanded={isSubcategoryExpanded(projection.card.id)}
                 onToggleSubcategories={() => toggleSubcategories(projection.card.id)}

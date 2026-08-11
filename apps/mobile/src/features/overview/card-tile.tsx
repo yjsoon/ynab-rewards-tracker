@@ -10,6 +10,7 @@ import { SymbolView } from 'expo-symbols';
 
 import { Caption1, Footnote, Headline, Title3 } from '@/components/ios';
 import type { CardFormatting } from '@/features/cards/presentation';
+import { isPromotionalPeriodActive } from '@/features/cards/presentation';
 import { semanticColors, withAlpha } from '@/theme';
 import { interaction, radii, spacing } from '@/theme/tokens';
 import type { TextColor } from '@/components/ios/Typography';
@@ -45,6 +46,7 @@ function cardUsesBlocks(card: CreditCard): boolean {
 export interface CardTileProps {
   projection: CardDashboardProjection;
   formatting: CardFormatting;
+  referenceDate?: Date;
   allowHideCard: boolean;
   isSubcategoryExpanded: boolean;
   onToggleSubcategories: () => void;
@@ -61,6 +63,7 @@ export interface CardTileProps {
 export function CardTile({
   projection,
   formatting,
+  referenceDate,
   allowHideCard,
   isSubcategoryExpanded,
   onToggleSubcategories,
@@ -68,7 +71,8 @@ export function CardTile({
   onOpen,
   style,
 }: CardTileProps) {
-  const { card, period } = projection;
+  const { card } = projection;
+  const promoActive = isPromotionalPeriodActive(card, referenceDate);
   const hasBlockRounding = cardUsesBlocks(card);
   const displayedSpend = hasBlockRounding ? projection.spend.counted : projection.spend.total;
   const hasMinimum = projection.minimum.target !== null;
@@ -124,12 +128,12 @@ export function CardTile({
             : 'spent';
     const label =
       variant === 'cap-left'
-        ? `${remainingToMaximum.toFixed(2)} left before the cap`
+        ? `${formatting.currencyRounded(remainingToMaximum)} left before the cap`
         : variant === 'cap-over'
-          ? `${exceededAmount.toFixed(2)} over the cap`
+          ? `${formatting.currencyRounded(exceededAmount)} over the cap`
           : variant === 'min-left'
-            ? `${remainingToMinimum.toFixed(2)} more to meet the minimum`
-            : `Spent ${displayedSpend.toFixed(2)} this period`;
+            ? `${formatting.currencyRounded(remainingToMinimum)} more to meet the minimum`
+            : `Spent ${formatting.currencyRounded(displayedSpend)} this period`;
     return {
       variant,
       amount,
@@ -142,6 +146,7 @@ export function CardTile({
     displayedSpend,
     exceeded,
     exceededAmount,
+    formatting,
     hasMaximum,
     hasMinimum,
     minimumMet,
@@ -176,11 +181,9 @@ export function CardTile({
   const daysRemaining = projection.daysRemaining;
   const daysTone: TextColor = daysRemaining <= 1
     ? 'destructive'
-    : daysRemaining <= 3
+    : daysRemaining <= 7
       ? 'attention'
-      : daysRemaining <= 7
-        ? 'attention'
-        : 'tertiary';
+      : 'tertiary';
   const daysLabel = `${daysRemaining}d`;
 
   const blockCount = projection.blockInfo?.blocksEarned ?? null;
@@ -230,7 +233,7 @@ export function CardTile({
         <View style={styles.header} accessibilityElementsHidden>
           <Headline numberOfLines={1} style={styles.cardName}>{card.name}</Headline>
           <View style={styles.headerTrailing}>
-            {card.promotionalPeriod ? (
+            {promoActive ? (
               <View style={styles.promoPill}>
                 <SymbolView
                   name="sparkles"
@@ -303,6 +306,7 @@ export function CardTile({
           minimumProgressSpend={projection.progress.minimumProgressSpend}
           maximumProgressSpend={projection.progress.maximumProgressSpend}
           height={8}
+          formatAmount={formatting.currencyRounded}
           accessible={false}
         />
 
@@ -344,7 +348,7 @@ export function CardTile({
 
       {allowHideCard && exceeded ? (
         <Pressable
-          onPress={() => onHideCard(card.id, period.end)}
+          onPress={() => onHideCard(card.id, projection.resetsOn)}
           accessibilityRole="button"
           accessibilityLabel={`Hide ${card.name} until next cycle`}
           style={({ pressed }) => [styles.hideButton, pressed && styles.pressed]}

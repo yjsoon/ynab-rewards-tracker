@@ -43,11 +43,14 @@ export default function CardTransactionsScreen() {
   const activity = useActivityModel('', accountId);
 
   const cardTransactions = useMemo(() => {
-    if (!card || !accountId) {
+    if (!card || !cardId) {
       return [];
     }
-    return activity.transactions;
-  }, [accountId, activity.transactions, card]);
+    // Prefer card id so shared YNAB accounts cannot leak another card's rows.
+    return activity.transactions.filter(
+      (projection) => projection.card?.id === cardId,
+    );
+  }, [activity.transactions, card, cardId]);
 
   const sections = useMemo(
     () => groupActivityByDate(cardTransactions),

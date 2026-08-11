@@ -55,6 +55,7 @@ export interface ZonesProgressBarProps {
   minimumProgressSpend?: number;
   maximumProgressSpend?: number;
   height?: number;
+  formatAmount?: (value: number) => string;
   accessible?: boolean;
   accessibilityLabel?: string;
   style?: StyleProp<ViewStyle>;
@@ -72,6 +73,7 @@ export function ZonesProgressBar({
   minimumProgressSpend,
   maximumProgressSpend,
   height = nativeMetrics.railHeight,
+  formatAmount,
   accessible = true,
   accessibilityLabel,
   style,
@@ -93,19 +95,21 @@ export function ZonesProgressBar({
       ? Math.min(100, (spendForMinimum / minimumSpend) * 100)
       : 0;
   const roundedPercent = Math.round(progressPercent);
-  const zeroProgress = hasLimits && progressPercent === 0;
   const markerHeight = height + 6;
   const minimumPosition = hasMinimum && hasMaximum
     ? Math.min(100, (minimumSpend / maximumSpend) * 100)
     : hasMinimum
       ? 100
       : undefined;
-  const maximumPosition = hasMaximum ? 100 : undefined;
+  const overflowAmount = hasMaximum ? Math.max(0, spendForMaximum - maximumSpend) : 0;
+  const overflowLabel = formatAmount
+    ? formatAmount(overflowAmount)
+    : String(overflowAmount);
 
   const stateText =
     zone === 'exceeded'
-      ? maximumExceeded && spendForMaximum > maximumSpend
-        ? `Spending cap exceeded by ${spendForMaximum - maximumSpend}`
+      ? maximumExceeded && overflowAmount > 0
+        ? `Spending cap exceeded by ${overflowLabel}`
         : 'Spending cap reached'
       : zone === 'nearing'
         ? `Nearing cap: ${roundedPercent}% of cap used`
@@ -144,7 +148,6 @@ export function ZonesProgressBar({
                 width: `${progressPercent}%`,
                 backgroundColor: zoneFillColor(zone),
               },
-              zeroProgress && styles.zeroFill,
             ]}
           />
         ) : hasLimits ? (
@@ -205,6 +208,7 @@ const styles = StyleSheet.create({
     backgroundColor: semanticColors.capped,
   },
   capReachedMarker: {
-    opacity: 1,
+    width: 3,
+    right: -1.5,
   },
 });

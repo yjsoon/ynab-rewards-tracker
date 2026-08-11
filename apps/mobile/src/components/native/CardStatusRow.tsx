@@ -2,6 +2,7 @@ import React from 'react';
 import {
   Pressable,
   StyleSheet,
+  Text,
   View,
   type StyleProp,
   type ViewStyle,
@@ -175,6 +176,7 @@ export function CardStatusRow({
                 size={10}
                 tintColor={semanticColors.systemPurple}
                 accessibilityElementsHidden
+                fallback={<Text style={styles.promoFallback}>*</Text>}
               />
               <Caption1 style={styles.promoText} accessible={false}>Promo</Caption1>
             </View>
@@ -190,6 +192,7 @@ export function CardStatusRow({
                 size={10}
                 tintColor={semanticColors.secondaryLabel}
                 accessibilityElementsHidden
+                fallback={<Text style={styles.ruleFallback}>#</Text>}
               />
               <Caption1 color="secondary" style={styles.ruleText} accessible={false}>
                 {ruleCount} {ruleCount === 1 ? 'rule' : 'rules'}
@@ -344,6 +347,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 11,
   },
+  promoFallback: {
+    color: semanticColors.systemPurple,
+    fontSize: 10,
+    fontWeight: '700',
+  },
   rulePill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -356,6 +364,11 @@ const styles = StyleSheet.create({
   ruleText: {
     fontWeight: '600',
     fontSize: 11,
+  },
+  ruleFallback: {
+    color: semanticColors.secondaryLabel,
+    fontSize: 10,
+    fontWeight: '700',
   },
   disclosure: {
     fontSize: 25,

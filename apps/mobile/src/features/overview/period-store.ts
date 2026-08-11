@@ -1,5 +1,9 @@
-import { useSyncExternalStore } from 'react';
-import { formatDateValue, resolveDashboardPeriod } from '@/lib/dashboard-period';
+import { useMemo, useSyncExternalStore } from 'react';
+import {
+  formatDateValue,
+  resolveDashboardPeriod,
+  type DashboardPeriodSelection,
+} from '@/lib/dashboard-period';
 
 /**
  * Session-scoped dashboard period. The web app keeps this in the URL; on
@@ -33,9 +37,15 @@ function subscribe(listener: () => void): () => void {
   };
 }
 
-export function useDashboardPeriod(now = new Date()) {
+export function useDashboardPeriod(now?: Date): DashboardPeriodSelection {
   const dateValue = useSyncExternalStore(subscribe, getDashboardPeriodValue, getDashboardPeriodValue);
-  return resolveDashboardPeriod(dateValue, now);
+  // Stabilize on the calendar day so historical Overview does not rebuild the
+  // rewards dashboard on every render from a fresh `new Date()` identity.
+  const todayKey = formatDateValue(now ?? new Date());
+  return useMemo(
+    () => resolveDashboardPeriod(dateValue, now ?? new Date()),
+    [dateValue, now, todayKey],
+  );
 }
 
 export function todayDateValue(now = new Date()): string {

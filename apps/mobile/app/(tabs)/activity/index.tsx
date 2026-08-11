@@ -327,7 +327,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: nativeMetrics.screenGutter,
   },
   filterChip: {
-    minHeight: 32,
+    minHeight: nativeMetrics.minimumTouchTarget,
     justifyContent: 'center',
     paddingHorizontal: spacing.md,
     borderRadius: radii.pill,

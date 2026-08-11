@@ -46,6 +46,39 @@ export function createCardFormatting(settings: AppSettings): CardFormatting {
   };
 }
 
+function formatLocalDay(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Whether a card's promotional window includes the reference day.
+ * `startDate` may be null (open-ended start); only a parseable end date is required.
+ */
+export function isPromotionalPeriodActive(
+  card: Pick<CreditCard, 'promotionalPeriod'>,
+  referenceDate: Date = new Date(),
+): boolean {
+  const promo = card.promotionalPeriod;
+  if (!promo?.endDate || !/^\d{4}-\d{2}-\d{2}$/.test(promo.endDate)) {
+    return false;
+  }
+  const day = formatLocalDay(referenceDate);
+  if (typeof promo.startDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(promo.startDate) && day < promo.startDate) {
+    return false;
+  }
+  return day <= promo.endDate;
+}
+
+export function countActiveFlagRules(card: Pick<CreditCard, 'subcategoriesEnabled' | 'subcategories'>): number {
+  if (!card.subcategoriesEnabled) {
+    return 0;
+  }
+  return (card.subcategories ?? []).filter((subcategory) => subcategory.active !== false).length;
+}
+
 export function formatReward(
   projection: Pick<CardDashboardProjection, 'reward'>,
   formatting: CardFormatting,
