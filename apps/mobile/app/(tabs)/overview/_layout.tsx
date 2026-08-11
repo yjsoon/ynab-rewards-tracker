@@ -27,6 +27,13 @@ export default function OverviewLayout() {
           headerLargeTitle: !usesIOS26LargeTitleFallback,
         }}
       />
+      <Stack.Screen
+        name="period"
+        options={{
+          title: 'Dashboard period',
+          presentation: 'formSheet',
+        }}
+      />
     </Stack>
   );
 }
