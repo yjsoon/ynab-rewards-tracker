@@ -348,7 +348,7 @@ export function CardTile({
 
       {allowHideCard && exceeded ? (
         <Pressable
-          onPress={() => onHideCard(card.id, projection.resetsOn)}
+          onPress={() => onHideCard(card.id, projection.period.end)}
           accessibilityRole="button"
           accessibilityLabel={`Hide ${card.name} until next cycle`}
           style={({ pressed }) => [styles.hideButton, pressed && styles.pressed]}
