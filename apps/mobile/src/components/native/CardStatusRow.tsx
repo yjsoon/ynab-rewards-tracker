@@ -6,10 +6,11 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
-import { Body, Footnote, Headline } from '../ios/Typography';
+import { SymbolView } from 'expo-symbols';
+import { Body, Caption1, Footnote, Headline } from '../ios/Typography';
 import { BrandMark } from '../brand';
 import { useHaptics } from '../../hooks/useHaptics';
-import { semanticColors } from '../../theme/semanticColors';
+import { semanticColors, withAlpha } from '../../theme/semanticColors';
 import { interaction, nativeMetrics, radii, spacing } from '../../theme/tokens';
 import { MetricValue } from './MetricValue';
 import { ProgressRail } from './ProgressRail';
@@ -38,6 +39,8 @@ export interface CardStatusRowProps {
   minimumSpend?: number | null;
   maximumSpend?: number | null;
   status?: CardTrackingStatus | CardStatusDescriptor;
+  promo?: boolean;
+  ruleCount?: number;
   onPress?: () => void;
   disabled?: boolean;
   showBrandMark?: boolean;
@@ -101,6 +104,8 @@ export function CardStatusRow({
   minimumSpend,
   maximumSpend,
   status,
+  promo = false,
+  ruleCount = 0,
   onPress,
   disabled = false,
   showBrandMark = true,
@@ -125,6 +130,11 @@ export function CardStatusRow({
     hasMaximum ? `cap ${formatValue(maximumSpend)}` : undefined,
   ].filter((value): value is string => Boolean(value)).join(', ');
 
+  const badges = [
+    promo ? 'promotional period active' : undefined,
+    ruleCount > 0 ? `${ruleCount} flag ${ruleCount === 1 ? 'rule' : 'rules'}` : undefined,
+  ].filter((value): value is string => Boolean(value));
+
   const resolvedAccessibilityLabel = accessibilityLabel ?? [
     name,
     issuer,
@@ -133,6 +143,7 @@ export function CardStatusRow({
     `spent ${formatValue(spend)}`,
     resolvedStatus.label,
     thresholdLabel || undefined,
+    ...badges,
   ].filter(Boolean).join(', ');
 
   const content = (
@@ -153,6 +164,38 @@ export function CardStatusRow({
         </View>
 
         <View style={styles.trailing}>
+          {promo ? (
+            <View
+              style={styles.promoPill}
+              accessible={!groupsAccessibilityContent}
+              accessibilityLabel="Promotional period active"
+            >
+              <SymbolView
+                name="sparkles"
+                size={10}
+                tintColor={semanticColors.systemPurple}
+                accessibilityElementsHidden
+              />
+              <Caption1 style={styles.promoText} accessible={false}>Promo</Caption1>
+            </View>
+          ) : null}
+          {ruleCount > 0 ? (
+            <View
+              style={styles.rulePill}
+              accessible={!groupsAccessibilityContent}
+              accessibilityLabel={`${ruleCount} flag ${ruleCount === 1 ? 'rule' : 'rules'}`}
+            >
+              <SymbolView
+                name="tag"
+                size={10}
+                tintColor={semanticColors.secondaryLabel}
+                accessibilityElementsHidden
+              />
+              <Caption1 color="secondary" style={styles.ruleText} accessible={false}>
+                {ruleCount} {ruleCount === 1 ? 'rule' : 'rules'}
+              </Caption1>
+            </View>
+          ) : null}
           {showsStatus ? (
             <StatusPill
               label={resolvedStatus.label}
@@ -283,7 +326,36 @@ const styles = StyleSheet.create({
   trailing: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
     gap: spacing.sm,
+  },
+  promoPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xxs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radii.pill,
+    backgroundColor: withAlpha('#AF52DE', '1F'),
+  },
+  promoText: {
+    color: semanticColors.systemPurple,
+    fontWeight: '600',
+    fontSize: 11,
+  },
+  rulePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xxs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radii.pill,
+    backgroundColor: semanticColors.tertiarySystemFill,
+  },
+  ruleText: {
+    fontWeight: '600',
+    fontSize: 11,
   },
   disclosure: {
     fontSize: 25,

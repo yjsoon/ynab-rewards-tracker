@@ -68,6 +68,10 @@ function ManagementRow({
       status={configured
         ? statusPresentation(projection.status)
         : { label: 'Needs setup', tone: 'attention' }}
+      promo={Boolean(projection.card.promotionalPeriod)}
+      ruleCount={projection.card.subcategoriesEnabled
+        ? (projection.card.subcategories?.length ?? 0)
+        : 0}
       onPress={onPress}
       showDivider={showDivider}
     />
