@@ -303,13 +303,18 @@ export function useRewardsDashboard(referenceDate?: Date): RewardsDashboardModel
   );
 
   const visibleCards = useMemo(() => {
+    // Hide-until-next-cycle is a live-period affordance. Historical snapshots
+    // include those cards so tiles, status totals, and recommendations match.
+    if (referenceDate) {
+      return orderedCards.filter(({ card }) => card.featured !== false);
+    }
     const hidden = new Set(
       state.hiddenCards
         .filter((entry) => isHiddenAt(entry.cardId, entry.hiddenUntil, asOf))
         .map((entry) => entry.cardId),
     );
     return orderedCards.filter(({ card }) => card.featured !== false && !hidden.has(card.id));
-  }, [asOf, orderedCards, state.hiddenCards]);
+  }, [asOf, orderedCards, referenceDate, state.hiddenCards]);
 
   const attentionCards = useMemo(
     () => visibleCards.filter((projection) => ATTENTION_STATUSES.has(projection.status)),
