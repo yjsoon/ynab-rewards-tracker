@@ -203,7 +203,7 @@ function matchesQuery(projection: TransactionProjection, query: string): boolean
     .some((value) => value.toLocaleLowerCase('en-GB').includes(normalized));
 }
 
-export function useActivityModel(query = ''): ActivityModel {
+export function useActivityModel(query = '', accountId?: string): ActivityModel {
   const { state, status, actions } = useStorage();
   const [currentTimestamp, setCurrentTimestamp] = useState(() => Date.now());
   useEffect(() => {
@@ -245,10 +245,15 @@ export function useActivityModel(query = ''): ActivityModel {
       .sort((left, right) => right.transaction.date.localeCompare(left.transaction.date)),
     [accountNames, cacheEntry, state.cards, state.settings, trackedAccounts],
   );
-  const transactions = useMemo(
-    () => projected.filter((projection) => matchesQuery(projection, query)),
-    [projected, query],
-  );
+  const transactions = useMemo(() => {
+    // Callers that pass `accountId` intentionally scope to one account. An
+    // explicit empty string (or other falsy sentinels after narrowing) must not
+    // fall through to the full ledger — only `undefined` means "all accounts".
+    const scoped = accountId === undefined
+      ? projected
+      : projected.filter((projection) => projection.transaction.account_id === accountId);
+    return scoped.filter((projection) => matchesQuery(projection, query));
+  }, [accountId, projected, query]);
   const sections = useMemo(
     () => groupActivityByDate(transactions, new Date(currentTimestamp)),
     [currentTimestamp, transactions],

@@ -1,6 +1,8 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
+  Pressable,
   RefreshControl,
+  ScrollView,
   SectionList,
   StyleSheet,
   Text,
@@ -23,14 +25,89 @@ import {
   type ActivitySection,
 } from '@/features/activity';
 import { semanticColors } from '@/theme';
-import { nativeMetrics, radii, spacing } from '@/theme/tokens';
+import { interaction, nativeMetrics, radii, spacing } from '@/theme/tokens';
 import type { TransactionProjection } from '@ynab-counter/app-core/rewards-engine';
+
+function AccountFilterChips({
+  accounts,
+  selectedAccountId,
+  onSelect,
+}: {
+  accounts: { id: string; name: string }[];
+  selectedAccountId?: string;
+  onSelect: (accountId: string | undefined) => void;
+}) {
+  const chips = useMemo(() => {
+    const seen = new Set<string>();
+    const unique = accounts.filter((account) => {
+      if (seen.has(account.id)) {
+        return false;
+      }
+      seen.add(account.id);
+      return true;
+    });
+    return [{ id: undefined, name: 'All accounts' }, ...unique] as {
+      id?: string;
+      name: string;
+    }[];
+  }, [accounts]);
+
+  if (chips.length <= 1) {
+    return null;
+  }
+
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+      contentContainerStyle={styles.filterChips}
+      style={styles.filterScroll}
+      accessibilityRole="none"
+    >
+      {chips.map((chip) => {
+        const selected = chip.id === selectedAccountId;
+        return (
+          <Pressable
+            key={chip.id ?? 'all'}
+            onPress={() => onSelect(chip.id)}
+            accessibilityRole="button"
+            accessibilityLabel={chip.name}
+            accessibilityState={{ selected }}
+            style={({ pressed }) => [
+              styles.filterChip,
+              selected && styles.filterChipSelected,
+              pressed && styles.filterChipPressed,
+            ]}
+          >
+            <Footnote
+              color={selected ? 'primary' : 'secondary'}
+              style={[styles.filterChipLabel, selected && styles.filterChipLabelSelected]}
+              accessible={false}
+            >
+              {chip.name}
+            </Footnote>
+          </Pressable>
+        );
+      })}
+    </ScrollView>
+  );
+}
 
 export default function ActivityScreen() {
   const router = useRouter();
   const { state } = useStorage();
   const [query, setQuery] = useState('');
-  const model = useActivityModel(query);
+  const [selectedAccountId, setSelectedAccountId] = useState<string | undefined>(undefined);
+  const model = useActivityModel(query, selectedAccountId);
+  const accounts = useMemo(
+    () => model.cacheEntry?.accounts ?? [],
+    [model.cacheEntry],
+  );
+  const selectedAccountName = useMemo(
+    () => accounts.find((account) => account.id === selectedAccountId)?.name,
+    [accounts, selectedAccountId],
+  );
 
   const openTransaction = useCallback((id: string) => {
     router.push({
@@ -69,10 +146,31 @@ export default function ActivityScreen() {
   }, [openTransaction, state.settings]);
 
   const isSearching = query.trim().length > 0;
+  const isFilteringAccount = Boolean(selectedAccountId);
   const resultCount = model.transactions.length;
   const resultCopy = isSearching
     ? `${resultCount} ${resultCount === 1 ? 'match' : 'matches'}`
     : `${resultCount} ${resultCount === 1 ? 'transaction' : 'transactions'}`;
+  const emptyTitle = isSearching
+    ? 'No matching activity'
+    : isFilteringAccount
+      ? 'No activity for this account'
+      : !model.isHydrated
+        ? 'Loading activity'
+        : model.hasConnection
+          ? 'No saved activity yet'
+          : 'Connect YNAB to see activity';
+  const emptyMessage = isSearching
+    ? `Nothing matches “${query.trim()}”.`
+    : isFilteringAccount
+      ? selectedAccountName
+        ? `No saved transactions for ${selectedAccountName}.`
+        : 'No saved transactions for this account.'
+      : !model.isHydrated
+        ? 'Your saved transactions will appear in a moment.'
+        : model.hasConnection
+          ? 'Pull down to fetch transactions for your tracked cards.'
+          : 'Tracked card transactions and their estimated rewards will appear here.';
 
   return (
     <SectionList<TransactionProjection, ActivitySection>
@@ -112,6 +210,11 @@ export default function ActivityScreen() {
                 style={styles.searchInput}
               />
             </View>
+            <AccountFilterChips
+              accounts={accounts}
+              selectedAccountId={selectedAccountId}
+              onSelect={setSelectedAccountId}
+            />
             <View style={styles.orientation}>
               <Footnote color="secondary">{resultCopy}</Footnote>
               <SyncBadge
@@ -136,21 +239,9 @@ export default function ActivityScreen() {
                 accessibilityElementsHidden
               />
             )}
-            title={isSearching
-              ? 'No matching activity'
-              : !model.isHydrated
-                ? 'Loading activity'
-                : model.hasConnection
-                  ? 'No saved activity yet'
-                  : 'Connect YNAB to see activity'}
-            message={isSearching
-              ? `Nothing matches “${query.trim()}”.`
-              : !model.isHydrated
-                ? 'Your saved transactions will appear in a moment.'
-                : model.hasConnection
-                  ? 'Pull down to fetch transactions for your tracked cards.'
-                  : 'Tracked card transactions and their estimated rewards will appear here.'}
-            action={isSearching
+            title={emptyTitle}
+            message={emptyMessage}
+            action={isSearching || isFilteringAccount
               ? undefined
               : model.hasConnection
                 ? {
@@ -225,6 +316,34 @@ const styles = StyleSheet.create({
   searchFallback: {
     color: semanticColors.secondaryLabel,
     fontSize: 18,
+  },
+  filterScroll: {
+    flexGrow: 0,
+    marginHorizontal: -nativeMetrics.screenGutter,
+  },
+  filterChips: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingHorizontal: nativeMetrics.screenGutter,
+  },
+  filterChip: {
+    minHeight: nativeMetrics.minimumTouchTarget,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.pill,
+    backgroundColor: semanticColors.secondarySystemGroupedBackground,
+  },
+  filterChipSelected: {
+    backgroundColor: semanticColors.actionTint,
+  },
+  filterChipPressed: {
+    opacity: interaction.pressedOpacity,
+  },
+  filterChipLabel: {
+    fontWeight: '500',
+  },
+  filterChipLabelSelected: {
+    color: semanticColors.action,
   },
   orientation: {
     minHeight: nativeMetrics.minimumTouchTarget,

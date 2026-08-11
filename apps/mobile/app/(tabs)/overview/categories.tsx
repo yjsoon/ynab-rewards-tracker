@@ -23,13 +23,16 @@ import {
   createCardFormatting,
   formatPeriod,
 } from '@/features/cards/presentation';
+import { useDashboardPeriod } from '@/features/overview';
 import { semanticColors } from '@/theme';
 import { nativeMetrics, radii, spacing } from '@/theme/tokens';
 
 export default function RewardCategoriesScreen() {
   const router = useRouter();
   const { state } = useStorage();
-  const model = useRewardsDashboard();
+  const period = useDashboardPeriod();
+  const referenceDate = period.isToday ? undefined : period.referenceDate;
+  const model = useRewardsDashboard(referenceDate);
   const formatting = useMemo(
     () => createCardFormatting(state.settings),
     [state.settings],

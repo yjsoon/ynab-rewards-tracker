@@ -660,6 +660,14 @@ export default function CardDetailScreen() {
             subtitle={cardTransactions.length > 0
               ? `${cardTransactions.length} most recent saved ${cardTransactions.length === 1 ? 'transaction' : 'transactions'}`
               : undefined}
+            action={cardTransactions.length > 0 ? {
+              label: 'View all',
+              onPress: () => router.push({
+                pathname: '/card/[id]/transactions',
+                params: { id: card.id },
+              }),
+              accessibilityHint: 'Opens every saved transaction for this card',
+            } : undefined}
           />
           {cardTransactions.length > 0 ? (
             <View style={styles.group}>

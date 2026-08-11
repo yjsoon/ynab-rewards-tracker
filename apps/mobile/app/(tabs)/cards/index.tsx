@@ -25,10 +25,12 @@ import {
   useRewardsDashboard,
 } from '@/features/cards/dashboard';
 import {
+  countActiveFlagRules,
   createCardFormatting,
   formatReward,
   formatThresholdSummary,
   isCardConfigured,
+  isPromotionalPeriodActive,
   primaryProgress,
   statusPresentation,
 } from '@/features/cards/presentation';
@@ -68,6 +70,8 @@ function ManagementRow({
       status={configured
         ? statusPresentation(projection.status)
         : { label: 'Needs setup', tone: 'attention' }}
+      promo={isPromotionalPeriodActive(projection.card)}
+      ruleCount={countActiveFlagRules(projection.card)}
       onPress={onPress}
       showDivider={showDivider}
     />

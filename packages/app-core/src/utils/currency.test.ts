@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  applyCurrencySymbolOverride,
   createCurrencyFormatter,
   formatCurrency,
   formatCurrencyParts,
@@ -88,6 +89,40 @@ describe('formatCurrencyParts', () => {
     expect(parts.at(-1)).toMatchObject({ type: 'currency', value: '$' });
     // The leading part stays numeric, so substitution did not reorder anything.
     expect(parts[0]?.type).toBe('integer');
+  });
+
+  it('falls back to a single formatted segment when formatToParts is unavailable', () => {
+    const originalDescriptor = Object.getOwnPropertyDescriptor(
+      Intl.NumberFormat.prototype,
+      'formatToParts',
+    );
+    Object.defineProperty(Intl.NumberFormat.prototype, 'formatToParts', {
+      configurable: true,
+      value: undefined,
+    });
+    try {
+      const parts = formatCurrencyParts(123.45, { locale: 'en-US', currency: 'USD' });
+      expect(parts).toEqual([{ type: 'literal', value: expect.any(String) }]);
+      expect(formatCurrency(123.45, { locale: 'en-US', currency: 'USD' })).toBe('$123.45');
+    } finally {
+      if (originalDescriptor) {
+        Object.defineProperty(Intl.NumberFormat.prototype, 'formatToParts', originalDescriptor);
+      } else {
+        Reflect.deleteProperty(Intl.NumberFormat.prototype, 'formatToParts');
+      }
+    }
+  });
+
+});
+
+describe('applyCurrencySymbolOverride', () => {
+  it('normalises US$ and USD tokens to $ for USD', () => {
+    expect(applyCurrencySymbolOverride('US$123.45', 'USD')).toBe('$123.45');
+    expect(applyCurrencySymbolOverride('123,45 USD', 'USD')).toBe('123,45 $');
+  });
+
+  it('leaves non-USD currencies untouched', () => {
+    expect(applyCurrencySymbolOverride('€123.45', 'EUR')).toBe('€123.45');
   });
 });
 

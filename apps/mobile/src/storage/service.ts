@@ -550,7 +550,7 @@ export class StorageService {
   async replaceCards(
     cards: readonly CreditCard[],
     expectedGeneration = this.operationGeneration,
-  ): Promise<Pick<StorageData, 'cards' | 'rules' | 'tagMappings' | 'calculations' | 'themeGroups'>> {
+  ): Promise<Pick<StorageData, 'cards' | 'rules' | 'tagMappings' | 'calculations' | 'themeGroups' | 'hiddenCards'>> {
     return this.updateStorageAtomically(expectedGeneration, (storage) => {
       const flagNames = storage.cachedData?.flagNames;
       const nextCards = cards.map((card) =>
@@ -571,6 +571,7 @@ export class StorageService {
         tagMappings: [...storage.tagMappings],
         calculations: [...storage.calculations],
         themeGroups: [...storage.themeGroups],
+        hiddenCards: [...(storage.hiddenCards ?? [])],
       };
     });
   }
