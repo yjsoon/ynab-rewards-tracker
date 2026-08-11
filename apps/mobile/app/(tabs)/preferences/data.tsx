@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
@@ -16,8 +16,48 @@ type Message = { text: string; tone: 'positive' | 'attention' };
 
 export default function DataPreferencesScreen() {
   const router = useRouter();
-  const { actions } = useStorage();
+  const { state, actions } = useStorage();
   const [message, setMessage] = useState<Message>();
+
+  const trackedIds = useMemo(
+    () => new Set(state.trackedAccountIds),
+    [state.trackedAccountIds],
+  );
+  const orphanedCards = useMemo(
+    () => (state.trackedAccountIds.length > 0
+      ? state.cards.filter((card) => !trackedIds.has(card.ynabAccountId))
+      : []),
+    [state.cards, state.trackedAccountIds.length, trackedIds],
+  );
+
+  const clearOrphans = () => {
+    Alert.alert(
+      'Remove orphaned cards?',
+      `${orphanedCards.length} card${orphanedCards.length === 1 ? '' : 's'} reference${orphanedCards.length === 1 ? 's' : ''} YNAB ${orphanedCards.length === 1 ? 'account' : 'accounts'} that ${orphanedCards.length === 1 ? 'is' : 'are'} no longer tracked. Their reward settings will be removed, and tracking the account again creates a fresh card.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              const kept = state.cards.filter((card) => trackedIds.has(card.ynabAccountId));
+              await actions.setCards(kept);
+              setMessage({
+                text: `${orphanedCards.length} orphaned card${orphanedCards.length === 1 ? '' : 's'} removed`,
+                tone: 'positive',
+              });
+            })().catch((error: unknown) => {
+              setMessage({
+                text: error instanceof Error ? error.message : 'Couldn’t remove orphaned cards',
+                tone: 'attention',
+              });
+            });
+          },
+        },
+      ],
+    );
+  };
 
   const exportData = async () => {
     try {
@@ -129,8 +169,19 @@ export default function DataPreferencesScreen() {
       <View>
         <SectionHeader>ON THIS IPHONE</SectionHeader>
         <Card>
+          {orphanedCards.length > 0 ? (
+            <SettingsRow
+              isFirst={orphanedCards.length > 0}
+              title="Remove orphaned cards"
+              subtitle={`${orphanedCards.length} card${orphanedCards.length === 1 ? '' : 's'} from ${orphanedCards.length === 1 ? 'an account' : 'accounts'} no longer tracked`}
+              symbol="wand.and.stars"
+              symbolColor={semanticColors.attention}
+              destructive
+              onPress={clearOrphans}
+            />
+          ) : null}
           <SettingsRow
-            isFirst
+            isFirst={orphanedCards.length === 0}
             title="Erase all local data"
             subtitle="Return the app to first-run setup"
             symbol="trash.fill"
