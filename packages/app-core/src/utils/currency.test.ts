@@ -89,6 +89,24 @@ describe('formatCurrencyParts', () => {
     // The leading part stays numeric, so substitution did not reorder anything.
     expect(parts[0]?.type).toBe('integer');
   });
+
+  it('falls back to a single formatted segment when formatToParts is unavailable', () => {
+    const original = Intl.NumberFormat.prototype.formatToParts;
+    Object.defineProperty(Intl.NumberFormat.prototype, 'formatToParts', {
+      configurable: true,
+      value: undefined,
+    });
+    try {
+      const parts = formatCurrencyParts(123.45, { locale: 'en-US', currency: 'USD' });
+      expect(parts).toEqual([{ type: 'decimal', value: expect.any(String) }]);
+      expect(formatCurrency(123.45, { locale: 'en-US', currency: 'USD' })).toMatch(/\$?123/);
+    } finally {
+      Object.defineProperty(Intl.NumberFormat.prototype, 'formatToParts', {
+        configurable: true,
+        value: original,
+      });
+    }
+  });
 });
 
 describe('normalizeCurrencyCode', () => {

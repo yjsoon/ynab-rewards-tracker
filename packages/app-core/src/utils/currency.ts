@@ -61,8 +61,16 @@ export function formatCurrencyParts(
   value: number,
   options: CurrencyFormatterOptions,
 ): Intl.NumberFormatPart[] {
-  const parts = createCurrencyFormatter(options).formatToParts(value);
+  const formatter = createCurrencyFormatter(options);
   const replacement = currencySymbolOverrides[options.currency.toUpperCase()];
+
+  // Some Hermes Intl builds omit `formatToParts`; fall back to a single
+  // formatted segment so currency rendering never crashes on-device.
+  if (typeof formatter.formatToParts !== 'function') {
+    return [{ type: 'decimal', value: formatter.format(value) }];
+  }
+
+  const parts = formatter.formatToParts(value);
 
   if (!replacement) {
     return parts;
