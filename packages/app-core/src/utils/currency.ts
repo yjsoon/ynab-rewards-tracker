@@ -22,6 +22,20 @@ const currencySymbolOverrides: Record<string, string> = {
 };
 
 /**
+ * Apply platform symbol overrides to a fully formatted currency string.
+ * Used when `formatToParts` is unavailable (some Hermes Intl builds).
+ */
+export function applyCurrencySymbolOverride(formatted: string, currency: string): string {
+  const replacement = currencySymbolOverrides[currency.toUpperCase()];
+  if (!replacement) {
+    return formatted;
+  }
+  return formatted
+    .replace(/\bUS\$/gu, replacement)
+    .replace(/\bUSD\b/gu, replacement);
+}
+
+/**
  * Create an Intl.NumberFormat instance for currency formatting.
  * Requires explicit locale and currency - use platform-specific
  * resolution for defaults (navigator.language, user settings, etc.).
@@ -64,10 +78,14 @@ export function formatCurrencyParts(
   const formatter = createCurrencyFormatter(options);
   const replacement = currencySymbolOverrides[options.currency.toUpperCase()];
 
-  // Some Hermes Intl builds omit `formatToParts`; fall back to a single
-  // formatted segment so currency rendering never crashes on-device.
+  // Some Hermes Intl builds omit `formatToParts`; fall back to a formatted
+  // segment so currency rendering never crashes on-device. Still apply the
+  // USD symbol override so locales that emit `US$` stay consistent with web.
   if (typeof formatter.formatToParts !== 'function') {
-    return [{ type: 'decimal', value: formatter.format(value) }];
+    return [{
+      type: 'literal',
+      value: applyCurrencySymbolOverride(formatter.format(value), options.currency),
+    }];
   }
 
   const parts = formatter.formatToParts(value);

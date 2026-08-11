@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  applyCurrencySymbolOverride,
   createCurrencyFormatter,
   formatCurrency,
   formatCurrencyParts,
@@ -98,7 +99,7 @@ describe('formatCurrencyParts', () => {
     });
     try {
       const parts = formatCurrencyParts(123.45, { locale: 'en-US', currency: 'USD' });
-      expect(parts).toEqual([{ type: 'decimal', value: expect.any(String) }]);
+      expect(parts).toEqual([{ type: 'literal', value: expect.any(String) }]);
       expect(formatCurrency(123.45, { locale: 'en-US', currency: 'USD' })).toMatch(/\$?123/);
     } finally {
       Object.defineProperty(Intl.NumberFormat.prototype, 'formatToParts', {
@@ -106,6 +107,18 @@ describe('formatCurrencyParts', () => {
         value: original,
       });
     }
+  });
+
+});
+
+describe('applyCurrencySymbolOverride', () => {
+  it('normalises US$ and USD tokens to $ for USD', () => {
+    expect(applyCurrencySymbolOverride('US$123.45', 'USD')).toBe('$123.45');
+    expect(applyCurrencySymbolOverride('123,45 USD', 'USD')).toBe('123,45 $');
+  });
+
+  it('leaves non-USD currencies untouched', () => {
+    expect(applyCurrencySymbolOverride('€123.45', 'EUR')).toBe('€123.45');
   });
 });
 
