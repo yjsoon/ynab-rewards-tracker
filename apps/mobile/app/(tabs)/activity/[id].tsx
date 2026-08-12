@@ -11,7 +11,6 @@ import { SparkIcon } from '@/components/brand';
 import {
   Body,
   Card,
-  Caption1,
   Footnote,
   Headline,
   LargeTitle,
@@ -351,7 +350,6 @@ export default function TransactionDetailScreen() {
         automaticallyAdjustsScrollIndicatorInsets
       >
         <View style={styles.hero}>
-          <Caption1 color="secondary">Transaction</Caption1>
           <Title1 accessibilityRole="header">{payee}</Title1>
           <LargeTitle
             style={projection.status === 'incoming' ? styles.incoming : undefined}

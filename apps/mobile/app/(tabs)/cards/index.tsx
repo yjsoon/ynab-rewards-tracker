@@ -15,7 +15,6 @@ import { useStorage } from '@/contexts/StorageContext';
 import {
   CardStatusRow,
   EmptyState,
-  LargeNavigationTitle,
   SectionTitle,
   SyncBadge,
 } from '@/components/native';
@@ -132,7 +131,6 @@ export default function CardsScreen() {
         />
       )}
     >
-      <LargeNavigationTitle>Cards</LargeNavigationTitle>
       <View style={styles.topMatter}>
         <View style={styles.search}>
           <SymbolView

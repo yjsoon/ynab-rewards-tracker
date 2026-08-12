@@ -12,11 +12,7 @@ import {
 import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 
-import {
-  EmptyState,
-  LargeNavigationTitle,
-  SyncBadge,
-} from '@/components/native';
+import { EmptyState, SyncBadge } from '@/components/native';
 import { Footnote, Headline } from '@/components/ios';
 import { useStorage } from '@/contexts/StorageContext';
 import {
@@ -189,7 +185,6 @@ export default function ActivityScreen() {
         renderSectionFooter={() => <View style={styles.sectionFooter} />}
         ListHeaderComponent={(
           <View style={styles.topMatter}>
-            <LargeNavigationTitle>Activity</LargeNavigationTitle>
             <View style={styles.search}>
               <SymbolView
                 name="magnifyingglass"

@@ -1,10 +1,7 @@
 import { Stack } from 'expo-router';
 import { Platform, useColorScheme } from 'react-native';
 
-import {
-  nativeStackScreenOptions,
-  usesIOS26LargeTitleFallback,
-} from '@/theme';
+import { nativeStackScreenOptions } from '@/theme';
 
 export default function ActivityLayout() {
   const systemScheme = useColorScheme();
@@ -16,8 +13,7 @@ export default function ActivityLayout() {
         name="index"
         options={{
           title: 'Activity',
-          headerLargeTitle: !usesIOS26LargeTitleFallback,
-          headerShown: !usesIOS26LargeTitleFallback,
+          headerShown: false,
         }}
       />
       <Stack.Screen

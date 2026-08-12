@@ -9,7 +9,7 @@
 import React, { useMemo } from 'react';
 import { ScrollView, View, StyleSheet, type ColorValue } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect } from '@react-navigation/native';
 import { RecommendationEngine } from '@ynab-counter/app-core/rewards-engine';
 import { selectCurrentCardCalculations } from '@ynab-counter/app-core/rewards-engine/utils/recommendation-helpers';
 import type { CardRecommendation } from '@ynab-counter/app-core/rewards-engine/types';
@@ -30,7 +30,6 @@ function getActionDetails(action: CardRecommendation['action']): { label: string
 }
 
 export default function RecommendationsScreen() {
-  const navigation = useNavigation();
   const { state, status } = useStorage();
   const calculations = state.calculations;
   const [referenceDate, setReferenceDate] = React.useState(() => new Date());
@@ -59,22 +58,7 @@ export default function RecommendationsScreen() {
   useFocusEffect(
     React.useCallback(() => {
       setReferenceDate(new Date());
-      const parent = navigation.getParent();
-      parent?.setOptions({
-        headerLargeTitle: false,
-        headerTitle: 'Tips',
-        title: 'Tips',
-        headerRight: undefined,
-        headerSearchBarOptions: undefined,
-      });
-
-      return () => {
-        parent?.setOptions({
-          headerRight: undefined,
-          headerSearchBarOptions: undefined,
-        });
-      };
-    }, [navigation])
+    }, [])
   );
 
   return (

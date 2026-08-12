@@ -413,7 +413,6 @@ export default function SettingsScreen() {
               </Card>
             ) : null}
 
-            <SectionHeader>YNAB Connection</SectionHeader>
             <Card>
               <ListItem>
                 <View style={styles.fieldGroup}>

@@ -16,8 +16,7 @@ export default function OverviewLayout() {
         name="index"
         options={{
           title: 'Overview',
-          headerLargeTitle: !usesIOS26LargeTitleFallback,
-          headerShown: !usesIOS26LargeTitleFallback,
+          headerShown: false,
         }}
       />
       <Stack.Screen

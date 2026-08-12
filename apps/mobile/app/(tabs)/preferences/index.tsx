@@ -3,10 +3,7 @@ import { Linking, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
 import { Card, SectionHeader } from '@/components/ios';
-import {
-  LargeNavigationTitle,
-  SyncBadge,
-} from '@/components/native';
+import { SyncBadge } from '@/components/native';
 import { useStorage } from '@/contexts/StorageContext';
 import { SettingsFooter, SettingsRow } from '@/features/preferences/SettingsRow';
 import { semanticColors, spacing } from '@/theme';
@@ -75,8 +72,6 @@ export default function PreferencesScreen() {
       contentInsetAdjustmentBehavior="automatic"
       automaticallyAdjustsScrollIndicatorInsets
     >
-      <LargeNavigationTitle>Settings</LargeNavigationTitle>
-
       <View>
         <SectionHeader>YNAB</SectionHeader>
         <Card>
