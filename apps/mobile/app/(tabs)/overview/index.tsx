@@ -10,8 +10,8 @@ import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 
 import { useStorage } from '@/contexts/StorageContext';
-import { EmptyState, LargeNavigationTitle, SectionTitle } from '@/components/native';
-import { Body, Footnote, Headline } from '@/components/ios';
+import { EmptyState, SectionTitle } from '@/components/native';
+import { Footnote, Headline } from '@/components/ios';
 import {
   createCardFormatting,
   flagColor,
@@ -117,7 +117,28 @@ function cardUseOperationalLabel(
   return undefined;
 }
 
-function CardUseRow({
+function compactCardUseDetail(
+  item: RankedCardUse,
+  formatting: CardFormatting,
+): string {
+  if (item.operational?.kind === 'minimum') {
+    return `${thresholdCurrency(item.operational.remaining, formatting)} to unlock`;
+  }
+
+  const rate = formatting.number(item.rate.value);
+  const rateLabel = item.rate.type === 'cashback'
+    ? `${rate}%`
+    : `${rate} mi/${formatting.currency}1`;
+  const blockLabel = item.rate.blockSize === null
+    ? ''
+    : ` · ${thresholdCurrency(item.rate.blockSize, formatting)} blocks`;
+  const roomLabel = item.operational?.kind === 'cap'
+    ? ` · ${thresholdCurrency(item.operational.remaining, formatting)} left`
+    : '';
+  return `${rateLabel}${blockLabel}${roomLabel}`;
+}
+
+function CardUseColumn({
   item,
   formatting,
   onPress,
@@ -130,6 +151,7 @@ function CardUseRow({
 }) {
   const rateLabel = cardUseRateLabel(item, formatting);
   const operationalLabel = cardUseOperationalLabel(item, formatting);
+  const compactDetail = compactCardUseDetail(item, formatting);
 
   return (
     <Pressable
@@ -145,8 +167,8 @@ function CardUseRow({
         ? `Opens the ${item.use.label} earning tier on ${item.card.card.name}`
         : `Opens details for ${item.card.card.name}`}
       style={({ pressed }) => [
-        styles.cardUseRow,
-        showDivider && styles.rowDivider,
+        styles.cardUseColumn,
+        showDivider && styles.columnDivider,
         pressed && styles.pressed,
       ]}
     >
@@ -155,7 +177,7 @@ function CardUseRow({
         accessibilityElementsHidden
         importantForAccessibility="no-hide-descendants"
       >
-        <Headline>{compactCardName(item.card.card.name)}</Headline>
+        <Headline numberOfLines={1}>{compactCardName(item.card.card.name)}</Headline>
         <View style={styles.useLabelRow}>
           {item.use.flagColor ? (
             <SymbolView
@@ -165,13 +187,11 @@ function CardUseRow({
               style={styles.flagIcon}
             />
           ) : null}
-          <Body style={styles.flexibleText}>{item.use.label} · {rateLabel}</Body>
-        </View>
-        {operationalLabel ? (
-          <Footnote color="secondary" style={styles.tabular}>
-            {operationalLabel}
+          <Footnote color="secondary" numberOfLines={1} style={styles.flexibleText}>
+            {item.use.label}
           </Footnote>
-        ) : null}
+        </View>
+        <Footnote numberOfLines={1} style={styles.tabular}>{compactDetail}</Footnote>
       </View>
     </Pressable>
   );
@@ -410,6 +430,7 @@ export default function OverviewScreen() {
     () => rankCardUses(nonCappedCards, state.settings),
     [nonCappedCards, state.settings],
   );
+  const cardUsePreview = useMemo(() => cardUses.slice(0, 3), [cardUses]);
   const rewardCategories = useMemo(
     () => collectRewardCategories(nonCappedCards),
     [nonCappedCards],
@@ -545,30 +566,25 @@ export default function OverviewScreen() {
         />
       )}
     >
-      <View style={styles.top}>
-        <LargeNavigationTitle style={styles.navigationTitle}>
-          Overview
-        </LargeNavigationTitle>
-        <View style={styles.topRow}>
-          {periodTrigger}
-          {connected && state.cards.length > 0 &&
-          (model.syncState === 'offline' || model.syncState === 'attention') ? (
-            <Pressable
-              onPress={model.canSync ? model.refresh : () => router.push('/settings')}
-              accessibilityRole="button"
-              accessibilityLabel={syncActionLabel}
-              accessibilityHint={model.canSync
-                ? 'Retries syncing rewards from YNAB'
-                : 'Opens YNAB connection settings'}
-              style={({ pressed }) => [
-                styles.syncAction,
-                pressed && styles.pressed,
-              ]}
-            >
-              <Footnote color="action">{syncActionLabel}</Footnote>
-            </Pressable>
-          ) : null}
-        </View>
+      <View style={styles.topRow}>
+        {periodTrigger}
+        {connected && state.cards.length > 0 &&
+        (model.syncState === 'offline' || model.syncState === 'attention') ? (
+          <Pressable
+            onPress={model.canSync ? model.refresh : () => router.push('/settings')}
+            accessibilityRole="button"
+            accessibilityLabel={syncActionLabel}
+            accessibilityHint={model.canSync
+              ? 'Retries syncing rewards from YNAB'
+              : 'Opens YNAB connection settings'}
+            style={({ pressed }) => [
+              styles.syncAction,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Footnote color="action">{syncActionLabel}</Footnote>
+          </Pressable>
+        ) : null}
       </View>
 
       {!connected ? (
@@ -623,17 +639,17 @@ export default function OverviewScreen() {
             />
           ) : null}
 
-          {cardUses.length > 0 ? (
+          {cardUsePreview.length > 0 ? (
             <View style={styles.section}>
               <SectionTitle title="Keep using" />
-              <View style={styles.rows}>
-                {cardUses.map((item, index) => (
-                  <CardUseRow
+              <View style={styles.cardUseColumns}>
+                {cardUsePreview.map((item, index) => (
+                  <CardUseColumn
                     key={item.key}
                     item={item}
                     formatting={formatting}
                     onPress={() => openCardUse(item)}
-                    showDivider={index < cardUses.length - 1}
+                    showDivider={index > 0}
                   />
                 ))}
               </View>
@@ -742,12 +758,6 @@ const styles = StyleSheet.create({
     paddingBottom: 120,
     gap: spacing.xxl,
   },
-  top: {
-    gap: spacing.sm,
-  },
-  navigationTitle: {
-    marginTop: spacing.sm,
-  },
   topRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -784,10 +794,25 @@ const styles = StyleSheet.create({
     backgroundColor: semanticColors.secondarySystemGroupedBackground,
     overflow: 'hidden',
   },
-  cardUseRow: {
+  cardUseColumns: {
+    minHeight: 88,
+    flexDirection: 'row',
+    marginHorizontal: -spacing.md,
+    borderRadius: radii.large,
+    backgroundColor: semanticColors.secondarySystemGroupedBackground,
+    overflow: 'hidden',
+  },
+  cardUseColumn: {
+    flex: 1,
+    minWidth: 0,
     minHeight: nativeMetrics.minimumTouchTarget,
-    paddingHorizontal: spacing.lg,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
     paddingVertical: spacing.md,
+  },
+  columnDivider: {
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderLeftColor: semanticColors.separator,
   },
   setupRow: {
     minHeight: nativeMetrics.minimumTouchTarget,

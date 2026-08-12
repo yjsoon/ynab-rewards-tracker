@@ -1,10 +1,7 @@
 import { Stack } from 'expo-router';
 import { Platform, useColorScheme } from 'react-native';
 
-import {
-  nativeStackScreenOptions,
-  usesIOS26LargeTitleFallback,
-} from '@/theme';
+import { nativeStackScreenOptions } from '@/theme';
 
 export default function PreferencesLayout() {
   const systemScheme = useColorScheme();
@@ -16,8 +13,7 @@ export default function PreferencesLayout() {
         name="index"
         options={{
           title: 'Settings',
-          headerLargeTitle: !usesIOS26LargeTitleFallback,
-          headerShown: !usesIOS26LargeTitleFallback,
+          headerShown: false,
         }}
       />
       <Stack.Screen
