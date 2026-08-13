@@ -12,11 +12,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.yjsoon.ynabcounter",
-      "appleTeamId": "6J79PJXB82"
+      "bundleIdentifier": "sg.tk.ynabrewards"
     },
     "android": {
-      "package": "com.yjsoon.ynabcounter"
+      "package": "sg.tk.ynabrewards"
     },
     "plugins": [
       "expo-router",
