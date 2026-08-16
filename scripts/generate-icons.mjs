@@ -2,7 +2,7 @@
 /**
  * Regenerate every raster app icon from the master vector.
  *
- * Source of truth: design/brand/icon.svg
+ * Sources of truth: design/brand/icon.svg and design/brand/icon-dark.svg
  * Outputs:
  *   apps/web/public/favicon-16.png        16x16
  *   apps/web/public/favicon.png           32x32
@@ -10,6 +10,7 @@
  *   apps/web/public/icon-192.png          192x192
  *   apps/web/public/icon-512.png          512x512
  *   apps/mobile/assets/icon.png           1024x1024
+ *   apps/mobile/assets/icon-dark.png      1024x1024
  *
  * Uses headless Chromium (its SVG rasteriser) via a canvas page and
  * --dump-dom, so no native image dependencies are needed. Chromium is
@@ -24,15 +25,19 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const MASTER_SVG = join(repoRoot, 'design/brand/icon.svg');
+const MASTER_SVGS = {
+  light: join(repoRoot, 'design/brand/icon.svg'),
+  dark: join(repoRoot, 'design/brand/icon-dark.svg'),
+};
 
 const OUTPUTS = [
-  { size: 16, path: 'apps/web/public/favicon-16.png' },
-  { size: 32, path: 'apps/web/public/favicon.png' },
-  { size: 180, path: 'apps/web/public/apple-touch-icon.png' },
-  { size: 192, path: 'apps/web/public/icon-192.png' },
-  { size: 512, path: 'apps/web/public/icon-512.png' },
-  { size: 1024, path: 'apps/mobile/assets/icon.png' },
+  { source: 'light', size: 16, path: 'apps/web/public/favicon-16.png' },
+  { source: 'light', size: 32, path: 'apps/web/public/favicon.png' },
+  { source: 'light', size: 180, path: 'apps/web/public/apple-touch-icon.png' },
+  { source: 'light', size: 192, path: 'apps/web/public/icon-192.png' },
+  { source: 'light', size: 512, path: 'apps/web/public/icon-512.png' },
+  { source: 'light', size: 1024, path: 'apps/mobile/assets/icon.png' },
+  { source: 'dark', size: 1024, path: 'apps/mobile/assets/icon-dark.png' },
 ];
 
 const CHROMIUM_CANDIDATES = [
@@ -52,28 +57,36 @@ if (!chromium) {
   process.exit(1);
 }
 
-const svgB64 = Buffer.from(readFileSync(MASTER_SVG, 'utf8')).toString('base64');
-const sizes = OUTPUTS.map((o) => o.size);
+const svgSources = Object.fromEntries(
+  Object.entries(MASTER_SVGS).map(([name, path]) => [
+    name,
+    Buffer.from(readFileSync(path, 'utf8')).toString('base64'),
+  ])
+);
 
 const page = `<!doctype html><html><body><script>
-const img = new Image();
-img.onerror = () => { document.body.textContent = 'IMG_ERROR'; };
-img.onload = () => {
-  try {
-    const out = {};
-    for (const s of ${JSON.stringify(sizes)}) {
+const sources = ${JSON.stringify(svgSources)};
+const outputs = ${JSON.stringify(OUTPUTS)};
+const out = {};
+let remaining = outputs.length;
+outputs.forEach(({ source, size }, index) => {
+  const img = new Image();
+  img.onerror = () => { document.body.textContent = 'IMG_ERROR:' + source; };
+  img.onload = () => {
+    try {
       const c = document.createElement('canvas');
-      c.width = s; c.height = s;
+      c.width = size; c.height = size;
       const ctx = c.getContext('2d');
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(img, 0, 0, s, s);
-      out[s] = c.toDataURL('image/png');
-    }
-    document.body.textContent = JSON.stringify(out);
-  } catch (e) { document.body.textContent = 'ERR:' + e.message; }
-};
-img.src = 'data:image/svg+xml;base64,${svgB64}';
+      ctx.drawImage(img, 0, 0, size, size);
+      out[index] = c.toDataURL('image/png');
+      remaining -= 1;
+      if (remaining === 0) document.body.textContent = JSON.stringify(out);
+    } catch (e) { document.body.textContent = 'ERR:' + e.message; }
+  };
+  img.src = 'data:image/svg+xml;base64,' + sources[source];
+});
 </script></body></html>`;
 
 const workDir = mkdtempSync(join(tmpdir(), 'gen-icons-'));
@@ -101,15 +114,15 @@ try {
   }
   const rendered = JSON.parse(text);
 
-  for (const { size, path } of OUTPUTS) {
-    const dataUrl = rendered[size];
+  for (const [index, { size, path }] of OUTPUTS.entries()) {
+    const dataUrl = rendered[index];
     if (!dataUrl) throw new Error(`No render produced for ${size}px`);
     const png = Buffer.from(dataUrl.split(',')[1], 'base64');
     const outPath = join(repoRoot, path);
     writeFileSync(outPath, png);
     console.log(`${path}  ${size}x${size}  ${png.length} bytes`);
   }
-  console.log('All icons regenerated from design/brand/icon.svg');
+  console.log('All icons regenerated from the design/brand master vectors');
 } finally {
   rmSync(workDir, { recursive: true, force: true });
 }

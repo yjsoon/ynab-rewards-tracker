@@ -1,6 +1,6 @@
 # Brand assets — "Night Terminal Spark"
 
-The app's visual identity: a charcoal credit card on the brand crimson field,
+The app's visual identity: a charcoal credit card on a white field,
 its magnetic stripe rendered as a progress bar, with a gold four-point spark
 sitting exactly where the fill ends — progress "sparks" where you currently
 are. Chosen July 2026 after three design rounds; all sixteen candidate marks
@@ -10,7 +10,8 @@ and the pitch pages live in `../icon-concepts/`.
 
 | File | What it is |
 | --- | --- |
-| `icon.svg` | **Master vector.** Full-bleed 512×512 app icon; every raster icon is generated from this. Same geometry as `../icon-concepts/v3-h3b.svg` (kept there for history). |
+| `icon.svg` | **Light master vector.** Full-bleed 512×512 app icon with a white field. Same geometry as `../icon-concepts/v3-h3b.svg` (kept there for history). |
+| `icon-dark.svg` | **Dark master vector.** iOS dark-appearance icon with a dark grey field and light grey card. |
 | `brand-card.svg` | The card alone (credit-card aspect, no tile background, hairline edge for dark grounds). For in-app heroes, docs, and anywhere the mark floats on a page. |
 | `spark.svg` | The concave four-point spark alone, brand gold. |
 | `favicon-adaptive.svg` | Copy of `apps/web/public/favicon.svg`: the icon with an embedded `prefers-color-scheme` media query (brighter spark, lighter card on dark browser chrome). Edit both together if you change it. |
@@ -19,7 +20,7 @@ and the pitch pages live in `../icon-concepts/`.
 
 | Colour | Hex | Usage |
 | --- | --- | --- |
-| Brand crimson | `#D92D2D` | Icon field, ember gradient start; `--primary` in the web app (`hsl(0 72% 51%)` light / `60%` dark) |
+| Brand crimson | `#D92D2D` | Ember gradient start; `--primary` in the web app (`hsl(0 72% 51%)` light / `60%` dark) |
 | Ember | `#FF6A45` | Stripe gradient end |
 | Card charcoal | `#1D1B20` | The card body |
 | Spark gold | `#F5B942` | The spark and progress accents; `--spark` token (`hsl(40 90% 61%)` light / `hsl(42 93% 66%)` dark), Tailwind `text-spark` |
@@ -56,7 +57,7 @@ node scripts/generate-icons.mjs
 ```
 
 Outputs: `apps/web/public/{favicon-16,favicon,apple-touch-icon,icon-192,icon-512}.png`
-and `apps/mobile/assets/icon.png` (1024). Requires a Chromium/Chrome binary
+and `apps/mobile/assets/{icon,icon-dark}.png` (1024). Requires a Chromium/Chrome binary
 (`$CHROMIUM_BIN` or a common install path); no other image tooling needed.
 
 ## Known caveats

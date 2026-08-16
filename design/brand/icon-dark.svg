@@ -5,14 +5,14 @@
       <stop offset="1" stop-color="#FF6A45"/>
     </linearGradient>
   </defs>
-  <rect width="512" height="512" fill="#FFFFFF"/>
-  <!-- charcoal card -->
-  <rect x="82" y="146" width="348" height="220" rx="36" fill="#1D1B20"/>
+  <rect width="512" height="512" fill="#2C2C2E"/>
+  <!-- light grey card -->
+  <rect x="82" y="146" width="348" height="220" rx="36" fill="#D1D1D6"/>
   <!-- stripe track + ember progress fill -->
-  <rect x="118" y="204" width="276" height="48" rx="24" fill="#FFFFFF" opacity="0.14"/>
+  <rect x="118" y="204" width="276" height="48" rx="24" fill="#FFFFFF" opacity="0.32"/>
   <rect x="118" y="204" width="168" height="48" rx="24" fill="url(#ember)"/>
   <!-- card-number whisper, one third of the card's width -->
-  <rect x="118" y="298" width="116" height="26" rx="13" fill="#FFFFFF" opacity="0.12"/>
+  <rect x="118" y="298" width="116" height="26" rx="13" fill="#FFFFFF" opacity="0.36"/>
   <!-- gold spark at the progress terminal -->
   <path d="M286 166 C292 206 308 222 348 228 C308 234 292 250 286 290 C280 250 264 234 224 228 C264 222 280 206 286 166 Z" fill="#F5B942"/>
 </svg>

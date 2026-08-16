@@ -122,6 +122,18 @@ describe('derived reward valuation', () => {
 });
 
 describe('credential generation ownership', () => {
+  it('only reads Expo-safe SecureStore keys while hydrating credentials', async () => {
+    const service = new StorageService();
+
+    await service.getPAT();
+
+    expect(mocks.getSecure.mock.calls.map(([key]) => key)).toEqual([
+      SECURE_PAT_KEY,
+      'ynab_counter_pat_legacy',
+      SECURE_PAT_KEY,
+    ]);
+  });
+
   it('retries expected credential cancellation while hydration still owns the generation', async () => {
     const hydrate = vi.fn()
       .mockRejectedValueOnce(new Error('Credential read was cancelled.'))

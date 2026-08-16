@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Pressable,
   RefreshControl,
@@ -250,9 +250,11 @@ function categorySpendOperationalState(
       color: 'attention',
     };
   }
-  // Card minimums are already communicated on the relevant Keep using row.
   if (category.blockedByCardMinimum) {
-    return undefined;
+    return {
+      label: `${thresholdCurrency(item.card.minimum.remaining ?? 0, formatting)} more to meet card minimum`,
+      color: 'attention',
+    };
   }
   if (category.minimum.target !== null && category.minimum.met === false) {
     return {
@@ -366,6 +368,7 @@ function CardGroupSection({
 export default function OverviewScreen() {
   const router = useRouter();
   const { state, actions } = useStorage();
+  const [highlightsOpen, setHighlightsOpen] = useState(false);
   const period = useDashboardPeriod();
   const referenceDate = period.isToday ? undefined : period.referenceDate;
   const model = useRewardsDashboard(referenceDate);
@@ -640,19 +643,46 @@ export default function OverviewScreen() {
           ) : null}
 
           {cardUsePreview.length > 0 ? (
-            <View style={styles.section}>
-              <SectionTitle title="Keep using" />
-              <View style={styles.cardUseColumns}>
-                {cardUsePreview.map((item, index) => (
-                  <CardUseColumn
-                    key={item.key}
-                    item={item}
-                    formatting={formatting}
-                    onPress={() => openCardUse(item)}
-                    showDivider={index > 0}
+            <View style={styles.highlights}>
+              <Pressable
+                onPress={() => setHighlightsOpen((open) => !open)}
+                accessibilityRole="button"
+                accessibilityLabel={`Highlights, ${cardUsePreview.length} ${cardUsePreview.length === 1 ? 'card' : 'cards'}`}
+                accessibilityHint={highlightsOpen ? 'Collapses card highlights' : 'Shows card highlights'}
+                accessibilityState={{ expanded: highlightsOpen }}
+                style={({ pressed }) => [
+                  styles.highlightsDisclosure,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Footnote color="secondary" style={styles.highlightsLabel} accessible={false}>
+                  Highlights
+                </Footnote>
+                <View style={styles.highlightsTrailing} accessibilityElementsHidden>
+                  <Footnote color="tertiary" style={styles.tabular}>
+                    {cardUsePreview.length}
+                  </Footnote>
+                  <SymbolView
+                    name="chevron.down"
+                    size={10}
+                    tintColor={semanticColors.tertiaryLabel}
+                    style={!highlightsOpen && styles.highlightsChevronClosed}
                   />
-                ))}
-              </View>
+                </View>
+              </Pressable>
+              {highlightsOpen ? (
+                <View style={styles.cardUseColumns}>
+                  {cardUsePreview.map((item, index) => (
+                    <CardUseColumn
+                      key={item.key}
+                      item={item}
+                      formatting={formatting}
+                      onPress={() => openCardUse(item)}
+                      showDivider={index > 0}
+                    />
+                  ))}
+                </View>
+              ) : null}
             </View>
           ) : null}
 
@@ -793,6 +823,27 @@ const styles = StyleSheet.create({
     borderRadius: radii.large,
     backgroundColor: semanticColors.secondarySystemGroupedBackground,
     overflow: 'hidden',
+  },
+  highlights: {
+    gap: spacing.sm,
+  },
+  highlightsDisclosure: {
+    minHeight: nativeMetrics.minimumTouchTarget,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  highlightsLabel: {
+    fontWeight: '600',
+  },
+  highlightsTrailing: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  highlightsChevronClosed: {
+    transform: [{ rotate: '-90deg' }],
   },
   cardUseColumns: {
     minHeight: 88,

@@ -12,7 +12,11 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "sg.tk.ynabrewards"
+      "bundleIdentifier": "sg.tk.ynabrewards",
+      "icon": {
+        "light": "./assets/icon.png",
+        "dark": "./assets/icon-dark.png"
+      }
     },
     "android": {
       "package": "sg.tk.ynabrewards"

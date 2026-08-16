@@ -48,7 +48,6 @@ const PAT_SECURE_STORE_KEY = 'ynab_counter_pat';
 const CLOUD_SYNC_CODE_SECURE_STORE_KEY = 'ynab_counter_cloud_sync_code';
 const LEGACY_PAT_SECURE_STORE_KEYS = [
   'ynab_counter_pat_legacy',
-  'ynab-counter:pat',
 ] as const;
 
 class StorageOperationCancelledError extends Error {}

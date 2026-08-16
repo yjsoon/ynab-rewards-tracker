@@ -1,13 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <style>
+    .field { fill: #FFFFFF; }
     .card { fill: #1D1B20; }
     .spark { fill: #F5B942; }
     .track { fill: #FFFFFF; opacity: 0.14; }
+    .number { fill: #FFFFFF; opacity: 0.12; }
     @media (prefers-color-scheme: dark) {
-      /* Brighten against dark browser chrome */
-      .card { fill: #26232B; }
-      .spark { fill: #FFCE58; }
-      .track { opacity: 0.2; }
+      .field { fill: #2C2C2E; }
+      .card { fill: #D1D1D6; }
+      .track { opacity: 0.32; }
+      .number { opacity: 0.36; }
     }
   </style>
   <defs>
@@ -16,10 +18,10 @@
       <stop offset="1" stop-color="#FF6A45"/>
     </linearGradient>
   </defs>
-  <rect width="512" height="512" rx="96" fill="#D92D2D"/>
+  <rect class="field" width="512" height="512" rx="96"/>
   <rect class="card" x="82" y="146" width="348" height="220" rx="36"/>
   <rect class="track" x="118" y="204" width="276" height="48" rx="24"/>
   <rect x="118" y="204" width="168" height="48" rx="24" fill="url(#ember)"/>
-  <rect x="118" y="298" width="116" height="26" rx="13" fill="#FFFFFF" opacity="0.12"/>
+  <rect class="number" x="118" y="298" width="116" height="26" rx="13"/>
   <path class="spark" d="M286 166 C292 206 308 222 348 228 C308 234 292 250 286 290 C280 250 264 234 224 228 C264 222 280 206 286 166 Z"/>
 </svg>
