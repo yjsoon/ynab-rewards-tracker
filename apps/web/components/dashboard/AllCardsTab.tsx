@@ -78,7 +78,7 @@ export function AllCardsTab({ initialCardId }: AllCardsTabProps) {
     const initialState: CardEditState = {};
     cards.forEach(card => {
       initialState[card.id] = {
-        earningRate: card.earningRate || 1,
+        earningRate: card.earningRate ?? null,
         earningBlockSize: card.earningBlockSize,
         minimumSpend: card.minimumSpend,
         maximumSpend: card.maximumSpend,
@@ -87,6 +87,10 @@ export function AllCardsTab({ initialCardId }: AllCardsTabProps) {
         featured: card.featured ?? true,
         subcategoriesEnabled: card.subcategoriesEnabled ?? false,
         subcategories: card.subcategories ? card.subcategories.map(sub => ({ ...sub })) : [],
+        spendingTiers: card.spendingTiers?.map((tier) => ({
+          ...tier,
+          subcategories: tier.subcategories?.map((subcategory) => ({ ...subcategory })),
+        })) ?? [],
       };
     });
     setEditState(initialState);
@@ -198,8 +202,23 @@ export function AllCardsTab({ initialCardId }: AllCardsTabProps) {
   };
 
   const handleSaveAll = async () => {
+    for (const cardId of changedCards) {
+      const card = cards.find((candidate) => candidate.id === cardId);
+      const changes = editState[cardId];
+      if (!card || !changes) continue;
+      const thresholds = [
+        changes.minimumSpend ?? 0,
+        ...(changes.spendingTiers ?? card.spendingTiers ?? []).map(({ spendThreshold }) => spendThreshold),
+      ];
+      if (new Set(thresholds).size !== thresholds.length) {
+        setBatchError(`${card.name} has two spend-based reward tiers with the same threshold.`);
+        return;
+      }
+    }
+
     setSaving(true);
     setSaveSuccess(false);
+    setBatchError('');
     try {
       for (const cardId of changedCards) {
         const card = cards.find(c => c.id === cardId);
@@ -222,13 +241,14 @@ export function AllCardsTab({ initialCardId }: AllCardsTabProps) {
           earningRate: changes.earningRate,
           earningBlockSize: changes.earningBlockSize,
           minimumSpend: changes.minimumSpend,
-          maximumSpend: changes.maximumSpend ?? card.maximumSpend,
+          maximumSpend: changes.maximumSpend,
           billingCycle: changes.billingCycleType === 'billing'
             ? { type: 'billing', dayOfMonth: changes.billingCycleDay }
             : { type: 'calendar' },
           featured: changes.featured !== undefined ? changes.featured : (card.featured ?? true),
           subcategoriesEnabled: nextSubEnabled,
           subcategories: nextSubcategories,
+          spendingTiers: changes.spendingTiers ?? card.spendingTiers ?? [],
         };
         updateCard(updatedCard);
       }

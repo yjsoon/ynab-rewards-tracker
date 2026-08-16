@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowUpRight, Gauge, OctagonAlert } from "lucide-react";
 import type { YnabFlagColor } from "@/lib/ynab-constants";
 import { formatDateValue } from "@/lib/dashboard-period";
-import { SimpleRewardsCalculator } from "@/lib/rewards-engine";
+import { resolveCardSpendingTier, SimpleRewardsCalculator } from "@/lib/rewards-engine";
 import { YnabClient } from "@/lib/ynab-client";
 import {
   NEAR_CAP_RATIO,
@@ -76,23 +76,37 @@ export function CardSummaryCompactContent({
     ? Math.min(1, Math.max(0, totalSpend / minimumTarget))
     : 0;
   const progressPercent = Math.round(clampedProgress * 100);
+  const resolvedSpendingTier = resolveCardSpendingTier(card, totalSpend);
+  const activeSpendingLevel = resolvedSpendingTier.activeLevel;
+  const nextSpendingLevel = resolvedSpendingTier.hasNextSpendingTier
+    ? resolvedSpendingTier.nextLevel
+    : null;
+  const hasUnlockedSpendingTier = (activeSpendingLevel?.spendThreshold ?? 0) > 0;
+  const terminalMaximumSpendExceeded = maximumSpendExceeded && !nextSpendingLevel;
+  const intermediateMaximumSpendExceeded = maximumSpendExceeded && Boolean(nextSpendingLevel);
 
   const hasMaximum = typeof maximumSpend === "number" && maximumSpend > 0;
   const maximumTarget = hasMaximum ? maximumSpend : 0;
   const remainingToMaximum = hasMaximum ? Math.max(0, maximumTarget - displayedSpend) : 0;
   const exceededAmount = hasMaximum ? Math.max(0, displayedSpend - maximumTarget) : 0;
   const remainingToMinimum = hasMinimum ? Math.max(0, minimumTarget - totalSpend) : 0;
+  const remainingToSpendingTier = nextSpendingLevel
+    ? Math.max(0, nextSpendingLevel.spendThreshold - totalSpend)
+    : 0;
   const nearCap =
     hasMaximum &&
-    !maximumSpendExceeded &&
+    !nextSpendingLevel &&
+    !terminalMaximumSpendExceeded &&
     displayedSpend / maximumTarget >= NEAR_CAP_RATIO;
 
   // Hero row leads with an unmet minimum, then room left before or over the cap,
   // falling back to plain spend when neither limit applies.
-  const heroVariant: "cap-left" | "cap-over" | "min-left" | "spent" =
-    hasMinimum && !minimumSpendMet
+  const heroVariant: "cap-left" | "cap-over" | "min-left" | "tier-left" | "spent" =
+    nextSpendingLevel
+      ? "tier-left"
+      : hasMinimum && !minimumSpendMet
       ? "min-left"
-      : hasMaximum && maximumSpendExceeded
+      : hasMaximum && terminalMaximumSpendExceeded
         ? "cap-over"
         : hasMaximum
           ? "cap-left"
@@ -111,6 +125,10 @@ export function CardSummaryCompactContent({
   const heroTone =
     heroVariant === "cap-over"
       ? "text-red-950 dark:text-red-100"
+      : heroVariant === "tier-left"
+        ? hasUnlockedSpendingTier
+          ? "text-emerald-950 dark:text-emerald-100"
+          : "text-orange-950 dark:text-orange-100"
       : heroVariant === "min-left" || capUrgent
         ? "text-orange-950 dark:text-orange-100"
         : heroVariant === "cap-left" || (hasMinimum && minimumSpendMet)
@@ -118,12 +136,15 @@ export function CardSummaryCompactContent({
           : "text-foreground";
   const heroSuffix = {
     "min-left": "to go",
+    "tier-left": "to go",
     "cap-left": "left",
     "cap-over": "over",
     spent: "spent",
   }[heroVariant];
   const heroTitle =
-    heroVariant === "cap-left"
+    heroVariant === "tier-left" && nextSpendingLevel
+      ? `${remainingToSpendingTier.toFixed(2)} to go to the ${nextSpendingLevel.spendThreshold.toFixed(2)} tier`
+      : heroVariant === "cap-left"
       ? `${remainingToMaximum.toFixed(2)} left before the cap`
       : heroVariant === "cap-over"
         ? `${exceededAmount.toFixed(2)} over the cap`
@@ -156,6 +177,11 @@ export function CardSummaryCompactContent({
       <RefreshBadge isRefreshing={isRefreshing} />
       <div className="flex items-baseline justify-between gap-2">
         <span className="min-w-0 truncate text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+          {heroVariant === "tier-left" && nextSpendingLevel && (
+            <>
+              <CurrencyAmount value={nextSpendingLevel.spendThreshold} currency={currency} decimals={0} /> tier
+            </>
+          )}
           {(heroVariant === "cap-left" || heroVariant === "cap-over") && (
             <>
               <CurrencyAmount value={maximumTarget} currency={currency} decimals={0} /> cap
@@ -173,7 +199,7 @@ export function CardSummaryCompactContent({
           title={heroTitle}
           aria-label={heroTitle}
         >
-          {heroVariant === "min-left" && (
+          {(heroVariant === "min-left" || heroVariant === "tier-left") && (
             <ArrowUpRight className="h-4 w-4 self-center" aria-hidden />
           )}
           {heroVariant === "cap-left" && (
@@ -190,6 +216,9 @@ export function CardSummaryCompactContent({
                 : "font-medium"
             )}
           >
+            {heroVariant === "tier-left" && (
+              <CurrencyAmount value={remainingToSpendingTier} currency={currency} decimals={0} />
+            )}
             {heroVariant === "cap-left" && (
               <CurrencyAmount value={remainingToMaximum} currency={currency} decimals={0} />
             )}
@@ -215,14 +244,17 @@ export function CardSummaryCompactContent({
       </div>
 
       <SpendingProgressBar
-        totalSpend={displayedSpend}
-        minimumSpend={minimumSpend}
-        maximumSpend={maximumSpend}
+        totalSpend={nextSpendingLevel ? totalSpend : displayedSpend}
+        minimumSpend={nextSpendingLevel?.spendThreshold ?? minimumSpend}
+        maximumSpend={nextSpendingLevel ? null : maximumSpend}
         minimumProgressSpend={totalSpend}
-        maximumProgressSpend={displayedSpend}
+        maximumProgressSpend={nextSpendingLevel ? undefined : displayedSpend}
         currency={currency}
         showLabels={false}
         showWarnings={false}
+        fillTone={nextSpendingLevel
+          ? hasUnlockedSpendingTier ? "positive" : "attention"
+          : undefined}
         className="h-2"
       />
 
@@ -231,6 +263,11 @@ export function CardSummaryCompactContent({
           {heroVariant !== "spent" && (
             <span>
               Spent <CurrencyAmount value={displayedSpend} currency={currency} decimals={0} />
+            </span>
+          )}
+          {intermediateMaximumSpendExceeded && (
+            <span className="ml-1.5 font-medium text-amber-600 dark:text-amber-300">
+              · Current level capped
             </span>
           )}
           {heroVariant !== "spent" && hasMinimum && heroVariant !== "min-left" && (
@@ -248,7 +285,7 @@ export function CardSummaryCompactContent({
           {heroVariant === "min-left" && (
             <span className={cn("ml-1.5 font-medium", minStatusClass)}>· {progressPercent}% of min</span>
           )}
-          {!hasMinimum && !hasMaximum && (
+          {!hasMinimum && !hasMaximum && !nextSpendingLevel && (
             <span className="italic">No spend limits</span>
           )}
         </span>
@@ -275,7 +312,7 @@ export function CardSummaryCompactContent({
         />
       )}
 
-      {allowHideCard && maximumSpendExceeded && onHideCard && (
+      {allowHideCard && terminalMaximumSpendExceeded && onHideCard && (
         <div className="mt-auto pt-1">
           <Button
             variant="outline"

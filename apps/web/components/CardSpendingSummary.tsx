@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { formatDateValue } from '@/lib/dashboard-period';
 import type { YnabFlagColor } from '@/lib/ynab-constants';
 import { SimpleRewardsCalculator } from '@/lib/rewards-engine';
+import { resolveCardSpendingTier } from '@ynab-counter/app-core/rewards-engine';
 import { YnabClient } from '@/lib/ynab-client';
 import { storage } from '@/lib/storage';
 import { filterTransactionsForCardPeriod } from '@/lib/card-metrics';
@@ -58,6 +59,15 @@ export function CardSpendingSummaryContent({
     maximumSpendExceeded,
     subcategoryBreakdowns = [],
   } = calculation;
+  const resolvedSpendingTier = resolveCardSpendingTier(card, totalSpend);
+  const effectiveCard = resolvedSpendingTier.effectiveCard;
+  const activeSpendingLevel = resolvedSpendingTier.activeLevel;
+  const nextSpendingLevel = resolvedSpendingTier.hasNextSpendingTier
+    ? resolvedSpendingTier.nextLevel
+    : null;
+  const hasUnlockedSpendingTier = (activeSpendingLevel?.spendThreshold ?? 0) > 0;
+  const terminalMaximumSpendExceeded = maximumSpendExceeded && !nextSpendingLevel;
+  const intermediateMaximumSpendExceeded = maximumSpendExceeded && Boolean(nextSpendingLevel);
   const currency = settings?.currency;
   const milesValuation = settings?.milesValuation ?? 0.01;
   const hasMinimum = hasMinimumSpendRequirement(minimumSpend);
@@ -71,8 +81,10 @@ export function CardSpendingSummaryContent({
         ))
   );
   const displayedSpend = hasBlockRounding ? countedSpend : totalSpend;
-  const rewardTileState = maximumSpendExceeded
+  const rewardTileState = terminalMaximumSpendExceeded
     ? 'exceeded'
+    : intermediateMaximumSpendExceeded
+      ? 'warn'
     : (!minimumSpendMet && hasMinimum ? 'warn' : (minimumSpendMet ? 'success' : 'neutral'));
 
   const rewardTileClasses = {
@@ -88,8 +100,10 @@ export function CardSpendingSummaryContent({
       ? <CurrencyAmount value={rewardEarned} currency={currency} />
       : `${Math.round(rewardEarned).toLocaleString()}`;
 
-  const rewardLabel = maximumSpendExceeded
+  const rewardLabel = terminalMaximumSpendExceeded
     ? 'Capped at max'
+    : intermediateMaximumSpendExceeded
+      ? 'Current level capped'
     : !minimumSpendMet && hasMinimum
       ? 'Minimum not met'
       : card.type === 'cashback'
@@ -138,26 +152,55 @@ export function CardSpendingSummaryContent({
         </div>
       </div>
 
-      {(isMinimumSpendConfigured(minimumSpend) || hasMaximum) ? (
+      {(isMinimumSpendConfigured(minimumSpend) || hasMaximum || card.spendingTiers?.length) ? (
         <div className="space-y-3">
-          <SpendingProgressBar
-            totalSpend={totalSpend}
-            minimumSpend={minimumSpend}
-            maximumSpend={maximumSpend}
-            minimumProgressSpend={totalSpend}
-            maximumProgressSpend={displayedSpend}
-            currency={currency}
-            showLabels={true}
-            showWarnings={true}
-            className=""
-          />
-          {maximumSpendExceeded && (
+          {card.spendingTiers?.length ? (
+            <div className="space-y-1.5">
+              <div className={cn(
+                'rounded-md border px-3 py-2 text-center text-xs font-medium',
+                hasUnlockedSpendingTier
+                  ? 'border-emerald-200 bg-emerald-50/60 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-300'
+                  : 'border-amber-200 bg-amber-50/60 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300',
+              )}>
+                {nextSpendingLevel ? (
+                  <>
+                    <CurrencyAmount
+                      value={Math.max(0, nextSpendingLevel.spendThreshold - totalSpend)}
+                      currency={currency}
+                    />{' '}
+                    to go to <CurrencyAmount value={nextSpendingLevel.spendThreshold} currency={currency} />
+                  </>
+                ) : (
+                  'Highest tier active'
+                )}
+              </div>
+              {intermediateMaximumSpendExceeded ? (
+                <p className="text-center text-[11px] text-amber-700 dark:text-amber-300">
+                  Current level capped. Further spend only earns if the next tier unlocks.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+          {!nextSpendingLevel && (isMinimumSpendConfigured(minimumSpend) || hasMaximum) ? (
+            <SpendingProgressBar
+              totalSpend={totalSpend}
+              minimumSpend={minimumSpend}
+              maximumSpend={maximumSpend}
+              minimumProgressSpend={totalSpend}
+              maximumProgressSpend={displayedSpend}
+              currency={currency}
+              showLabels={true}
+              showWarnings={true}
+              className=""
+            />
+          ) : null}
+          {terminalMaximumSpendExceeded && (
             <div className="flex items-center justify-center gap-1.5 rounded-md border border-red-200 bg-red-50/50 py-1.5 text-xs font-medium text-red-600 dark:border-red-900 dark:bg-red-950/30 dark:text-red-400">
               <XCircle className="h-3.5 w-3.5" />
               <span>Stop using - max reached</span>
             </div>
           )}
-          {allowHideCard && maximumSpendExceeded && showHideOption && onHideCard && (
+          {allowHideCard && terminalMaximumSpendExceeded && showHideOption && onHideCard && (
             <Button
               variant="outline"
               size="sm"
@@ -195,18 +238,18 @@ export function CardSpendingSummaryContent({
 
       <div className="mt-auto space-y-2 pt-1 text-center">
         <div className="flex items-center justify-center gap-2">
-          {card.earningRate ? (
+          {effectiveCard.earningRate ? (
             <>
               {card.type === 'cashback' ? (
                 <>
                   <Percent className="h-3 w-3 text-muted-foreground" />
-                  <p className="text-sm font-medium">{card.earningRate}% cashback</p>
+                  <p className="text-sm font-medium">{effectiveCard.earningRate}% cashback</p>
                 </>
               ) : (
                 <>
                   <TrendingUp className="h-3 w-3 text-muted-foreground" />
                   <p className="text-sm font-medium">
-                    {card.earningRate} miles per dollar
+                    {effectiveCard.earningRate} miles per dollar
                   </p>
                 </>
               )}

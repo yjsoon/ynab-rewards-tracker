@@ -24,7 +24,7 @@ import {
   Title3,
 } from '@/components/ios';
 import { useHaptics } from '@/hooks/useHaptics';
-import { flagColor } from '@/features/cards/presentation';
+import { createCardFormatting, flagColor } from '@/features/cards/presentation';
 import { planCardEditRefresh } from '@/features/cards/card-edit-refresh';
 import { createLocalFlagUpdatePublication } from '@/features/activity/flag-update-publication';
 import { semanticColors } from '@/theme';
@@ -35,8 +35,11 @@ import {
 import { getEarliestPeriodStart } from '@ynab-counter/app-core/rewards-engine/utils/periods';
 import {
   createSubcategoryId,
+  createSpendingTierId,
+  type CardSpendingTier,
   type CardSubcategory,
   type CreditCard,
+  type SpendingTierSubcategory,
 } from '@ynab-counter/app-core/storage';
 import {
   UNFLAGGED_FLAG,
@@ -69,6 +72,20 @@ type EditableTier = {
   createdAt: string;
 };
 
+type EditableSpendingTierSubcategory = {
+  subcategoryId: string;
+  rewardValue: string;
+  maximumSpend: string;
+};
+
+type EditableSpendingTier = {
+  id: string;
+  spendThreshold: string;
+  earningRate: string;
+  maximumSpend: string;
+  subcategories: EditableSpendingTierSubcategory[];
+};
+
 type CardForm = {
   name: string;
   issuer: string;
@@ -86,6 +103,7 @@ type CardForm = {
   promotionDescription: string;
   subcategoriesEnabled: boolean;
   tiers: EditableTier[];
+  spendingTiers: EditableSpendingTier[];
 };
 
 type ValidationResult = {
@@ -99,6 +117,11 @@ function parameterValue(value: string | string[] | undefined): string | undefine
 
 function numberInput(value: number | null | undefined): string {
   return typeof value === 'number' && Number.isFinite(value) ? String(value) : '';
+}
+
+function formatEditableSpend(value: string, formatSpend: (amount: number) => string): string {
+  const amount = Number(value);
+  return Number.isFinite(amount) ? formatSpend(amount) : value;
 }
 
 function createForm(card: CreditCard): CardForm {
@@ -132,6 +155,19 @@ function createForm(card: CreditCard): CardForm {
         active: subcategory.active !== false,
         excludeFromRewards: subcategory.excludeFromRewards ?? false,
         createdAt: subcategory.createdAt,
+      })),
+    spendingTiers: [...(card.spendingTiers ?? [])]
+      .sort((left, right) => left.spendThreshold - right.spendThreshold)
+      .map((tier) => ({
+        id: tier.id,
+        spendThreshold: numberInput(tier.spendThreshold),
+        earningRate: numberInput(tier.earningRate),
+        maximumSpend: numberInput(tier.maximumSpend),
+        subcategories: (tier.subcategories ?? []).map((subcategory) => ({
+          subcategoryId: subcategory.subcategoryId,
+          rewardValue: numberInput(subcategory.rewardValue),
+          maximumSpend: numberInput(subcategory.maximumSpend),
+        })),
       })),
   };
 }
@@ -174,6 +210,17 @@ function rewardConfigurationSignature(card: CreditCard): string {
     earningBlockSize: card.earningBlockSize ?? null,
     minimumSpend: card.minimumSpend ?? null,
     maximumSpend: card.maximumSpend ?? null,
+    spendingTiers: (card.spendingTiers ?? []).map((tier) => ({
+      id: tier.id,
+      spendThreshold: tier.spendThreshold,
+      earningRate: tier.earningRate ?? null,
+      maximumSpend: tier.maximumSpend ?? null,
+      subcategories: (tier.subcategories ?? []).map((subcategory) => ({
+        subcategoryId: subcategory.subcategoryId,
+        rewardValue: subcategory.rewardValue,
+        maximumSpend: subcategory.maximumSpend ?? null,
+      })),
+    })),
     billingCycle: card.billingCycle?.type === 'billing'
       ? { type: 'billing', dayOfMonth: card.billingCycle.dayOfMonth ?? 1 }
       : { type: 'calendar' },
@@ -213,9 +260,6 @@ function validateForm(source: CreditCard, form: CardForm): ValidationResult {
   if (minimum.error) return { message: minimum.error };
   const maximum = parseOptionalNumber(form.maximumSpend, 'Spending cap');
   if (maximum.error) return { message: maximum.error };
-  if ((minimum.value ?? 0) > 0 && (maximum.value ?? 0) > 0 && maximum.value! < minimum.value!) {
-    return { message: 'Spending cap cannot be lower than the minimum spend.' };
-  }
 
   const cycleDay = parseOptionalNumber(form.cycleDay, 'Billing day', { integer: true, strictlyPositive: true });
   if (form.cycleType === 'billing' && (cycleDay.error || !cycleDay.value || cycleDay.value > 31)) {
@@ -255,9 +299,6 @@ function validateForm(source: CreditCard, form: CardForm): ValidationResult {
     if (tierMinimum.error) return { message: tierMinimum.error };
     const tierMaximum = parseOptionalNumber(tier.maximumSpend, `${tierName} cap`);
     if (tierMaximum.error) return { message: tierMaximum.error };
-    if ((tierMinimum.value ?? 0) > 0 && (tierMaximum.value ?? 0) > 0 && tierMaximum.value! < tierMinimum.value!) {
-      return { message: `${tierName} cap cannot be lower than its minimum.` };
-    }
 
     tiers.push({
       id: tier.id,
@@ -272,6 +313,60 @@ function validateForm(source: CreditCard, form: CardForm): ValidationResult {
       excludeFromRewards: tier.excludeFromRewards,
       createdAt: tier.createdAt,
       updatedAt: now,
+    });
+  }
+
+  const spendingTiers: CardSpendingTier[] = [];
+  const spendingThresholds = new Set<number>([minimum.value ?? 0]);
+  for (const [index, tier] of form.spendingTiers.entries()) {
+    const threshold = parseOptionalNumber(
+      tier.spendThreshold,
+      `Spend tier ${index + 1} threshold`,
+    );
+    if (threshold.error || threshold.value === undefined) {
+      return { message: threshold.error ?? `Spend tier ${index + 1} needs a threshold.` };
+    }
+    if (spendingThresholds.has(threshold.value)) {
+      return { message: `Only one reward tier can start at the ${threshold.value} threshold.` };
+    }
+    spendingThresholds.add(threshold.value);
+
+    const tierRate = parseOptionalNumber(tier.earningRate, `Spend tier ${index + 1} default rate`);
+    if (tierRate.error) return { message: tierRate.error };
+    const tierMaximum = parseOptionalNumber(tier.maximumSpend, `Spend tier ${index + 1} overall cap`);
+    if (tierMaximum.error) return { message: tierMaximum.error };
+
+    const subcategories: SpendingTierSubcategory[] = [];
+    for (const override of tier.subcategories) {
+      const sourceTier = form.tiers.find(({ id }) => id === override.subcategoryId);
+      if (!sourceTier) continue;
+      const overrideRate = parseOptionalNumber(
+        override.rewardValue,
+        `${sourceTier.name || 'Flag category'} spend-tier rate`,
+      );
+      if (overrideRate.error || overrideRate.value === undefined) {
+        return {
+          message: overrideRate.error ?? `${sourceTier.name || 'Flag category'} needs a spend-tier rate.`,
+        };
+      }
+      const overrideMaximum = parseOptionalNumber(
+        override.maximumSpend,
+        `${sourceTier.name || 'Flag category'} spend-tier cap`,
+      );
+      if (overrideMaximum.error) return { message: overrideMaximum.error };
+      subcategories.push({
+        subcategoryId: override.subcategoryId,
+        rewardValue: overrideRate.value,
+        maximumSpend: overrideMaximum.value ?? null,
+      });
+    }
+
+    spendingTiers.push({
+      id: tier.id,
+      spendThreshold: threshold.value,
+      earningRate: tierRate.value ?? null,
+      maximumSpend: tierMaximum.value ?? null,
+      subcategories,
     });
   }
 
@@ -296,6 +391,9 @@ function validateForm(source: CreditCard, form: CardForm): ValidationResult {
       : undefined,
     subcategoriesEnabled: form.subcategoriesEnabled,
     subcategories: tiers,
+    spendingTiers: spendingTiers.sort(
+      (left, right) => left.spendThreshold - right.spendThreshold,
+    ),
   };
   if (rate.value === undefined) {
     card.earningRate = null;
@@ -578,11 +676,141 @@ function TierEditor({
   );
 }
 
+function getEditableSpendingTierSubcategory(
+  tier: EditableSpendingTier,
+  flagTier: EditableTier,
+): EditableSpendingTierSubcategory {
+  return tier.subcategories.find(({ subcategoryId }) => subcategoryId === flagTier.id) ?? {
+    subcategoryId: flagTier.id,
+    rewardValue: flagTier.rewardValue,
+    maximumSpend: flagTier.maximumSpend,
+  };
+}
+
+function SpendingTierEditor({
+  tier,
+  cardType,
+  formatSpend,
+  flagTiers,
+  update,
+  updateSubcategory,
+  remove,
+}: {
+  tier: EditableSpendingTier;
+  cardType: CreditCard['type'];
+  formatSpend: (value: number) => string;
+  flagTiers: EditableTier[];
+  update: (patch: Partial<EditableSpendingTier>) => void;
+  updateSubcategory: (
+    subcategoryId: string,
+    patch: Partial<EditableSpendingTierSubcategory>,
+  ) => void;
+  remove: () => void;
+}) {
+  const earningFlagTiers = flagTiers.filter(
+    (flagTier) => flagTier.active && !flagTier.excludeFromRewards,
+  );
+
+  return (
+    <View style={styles.spendingTier}>
+      <View style={styles.spendingTierHeading}>
+        <View style={styles.tierCopy}>
+          <Title3>
+            {tier.spendThreshold.trim()
+              ? `At ${formatEditableSpend(tier.spendThreshold, formatSpend)} total spend`
+              : 'New spend tier'}
+          </Title3>
+          <Footnote color="secondary">Applies to the entire reward period</Footnote>
+        </View>
+        <Button
+          variant="plain"
+          size="small"
+          onPress={remove}
+          textStyle={styles.removeTierText}
+          accessibilityLabel={tier.spendThreshold
+            ? `Remove spend tier at ${formatEditableSpend(tier.spendThreshold, formatSpend)}`
+            : 'Remove spend tier with no threshold'}
+        >
+          Remove
+        </Button>
+      </View>
+      <Field
+        label="Total spend threshold"
+        value={tier.spendThreshold}
+        onChangeText={(spendThreshold) => update({ spendThreshold })}
+        keyboardType="decimal-pad"
+        placeholder="Required"
+      />
+      <Field
+        label={cardType === 'cashback' ? 'Default cashback rate (%)' : 'Default miles per dollar'}
+        value={tier.earningRate}
+        onChangeText={(earningRate) => update({ earningRate })}
+        keyboardType="decimal-pad"
+        placeholder="No default rate"
+      />
+      <Field
+        label="Overall eligible-spend cap"
+        value={tier.maximumSpend}
+        onChangeText={(maximumSpend) => update({ maximumSpend })}
+        keyboardType="decimal-pad"
+        placeholder="No cap"
+        showDivider={earningFlagTiers.length > 0}
+      />
+
+      {earningFlagTiers.length > 0 ? (
+        <View style={styles.spendingTierCategories}>
+          <View style={styles.spendingTierCategoryIntro}>
+            <Headline>Flag-category rewards</Headline>
+            <Footnote color="secondary">Set each category’s rate and cap at this spend level.</Footnote>
+          </View>
+          {earningFlagTiers.map((flagTier, index) => {
+            const override = getEditableSpendingTierSubcategory(tier, flagTier);
+            return (
+              <View
+                key={flagTier.id}
+                style={[
+                  styles.spendingTierCategory,
+                  index < earningFlagTiers.length - 1 && styles.rowDivider,
+                ]}
+              >
+                <View style={styles.spendingTierCategoryHeading}>
+                  <View style={[styles.flagDot, { backgroundColor: flagColor(flagTier.flagColor) }]} />
+                  <View style={styles.tierCopy}>
+                    <Headline>{flagTier.name || tierNameForFlag(flagTier.flagColor)}</Headline>
+                    <Footnote color="secondary">
+                      {flagTier.flagColor === UNFLAGGED_FLAG.value ? 'No YNAB flag' : `${flagTier.flagColor} flag`}
+                    </Footnote>
+                  </View>
+                </View>
+                <Field
+                  label={cardType === 'cashback' ? 'Rate (%)' : 'Miles per dollar'}
+                  value={override.rewardValue}
+                  onChangeText={(rewardValue) => updateSubcategory(flagTier.id, { rewardValue })}
+                  keyboardType="decimal-pad"
+                />
+                <Field
+                  label="Eligible-spend cap"
+                  value={override.maximumSpend}
+                  onChangeText={(maximumSpend) => updateSubcategory(flagTier.id, { maximumSpend })}
+                  keyboardType="decimal-pad"
+                  placeholder="No cap"
+                  showDivider={false}
+                />
+              </View>
+            );
+          })}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 export default function EditCardScreen() {
   const params = useLocalSearchParams<{ id?: string | string[] }>();
   const cardId = parameterValue(params.id);
   const router = useRouter();
   const { state, status, actions } = useStorage();
+  const formatting = useMemo(() => createCardFormatting(state.settings), [state.settings]);
   const { notification, selection } = useHaptics();
   const sourceCard = state.cards.find((card) => card.id === cardId);
   const [form, setForm] = useState<CardForm | undefined>(() => sourceCard ? createForm(sourceCard) : undefined);
@@ -649,6 +877,96 @@ export default function EditCardScreen() {
               createdAt: now,
             },
           ],
+        }
+      : previous);
+    selection();
+  };
+
+  const addSpendingTier = () => {
+    setError(undefined);
+    setForm((previous) => {
+      if (!previous) return previous;
+      const thresholds = [
+        Number(previous.minimumSpend) || 0,
+        ...previous.spendingTiers.map(({ spendThreshold }) => Number(spendThreshold) || 0),
+      ];
+      const highestThreshold = Math.max(...thresholds);
+      const spendThreshold = highestThreshold > 0 ? highestThreshold * 2 : 500;
+      return {
+        ...previous,
+        spendingTiers: [
+          ...previous.spendingTiers,
+          {
+            id: createSpendingTierId(),
+            spendThreshold: String(spendThreshold),
+            earningRate: previous.earningRate,
+            maximumSpend: previous.maximumSpend,
+            subcategories: previous.tiers
+              .filter((tier) => tier.active && !tier.excludeFromRewards)
+              .map((tier) => ({
+                subcategoryId: tier.id,
+                rewardValue: tier.rewardValue,
+                maximumSpend: tier.maximumSpend,
+              })),
+          },
+        ],
+      };
+    });
+    selection();
+  };
+
+  const updateSpendingTier = (id: string, patch: Partial<EditableSpendingTier>) => {
+    setError(undefined);
+    setForm((previous) => previous
+      ? {
+          ...previous,
+          spendingTiers: previous.spendingTiers.map(
+            (tier) => tier.id === id ? { ...tier, ...patch } : tier,
+          ),
+        }
+      : previous);
+  };
+
+  const updateSpendingTierSubcategory = (
+    tierId: string,
+    subcategoryId: string,
+    patch: Partial<EditableSpendingTierSubcategory>,
+  ) => {
+    setError(undefined);
+    setForm((previous) => previous
+      ? {
+          ...previous,
+          spendingTiers: previous.spendingTiers.map((tier) => {
+            if (tier.id !== tierId) return tier;
+            const existing = tier.subcategories.find(
+              (subcategory) => subcategory.subcategoryId === subcategoryId,
+            );
+            const source = previous.tiers.find(({ id }) => id === subcategoryId);
+            const nextSubcategory: EditableSpendingTierSubcategory = {
+              subcategoryId,
+              rewardValue: existing?.rewardValue ?? source?.rewardValue ?? '',
+              maximumSpend: existing?.maximumSpend ?? source?.maximumSpend ?? '',
+              ...patch,
+            };
+            return {
+              ...tier,
+              subcategories: existing
+                ? tier.subcategories.map((subcategory) => (
+                    subcategory.subcategoryId === subcategoryId ? nextSubcategory : subcategory
+                  ))
+                : [...tier.subcategories, nextSubcategory],
+            };
+          }),
+        }
+      : previous);
+  };
+
+  const removeSpendingTier = (id: string) => {
+    setError(undefined);
+    setForm((previous) => previous
+      ? {
+          ...previous,
+          spendingTiers: previous.spendingTiers.filter((tier) => tier.id !== id),
         }
       : previous);
     selection();
@@ -978,6 +1296,65 @@ export default function EditCardScreen() {
           </View>
         ) : null}
 
+        <Group
+          title="Spend-based reward tiers"
+          footer="The highest total-spend threshold reached sets rates and eligible-spend caps for the entire reward period."
+        >
+          <View style={[styles.spendingTierBase, styles.rowDivider]}>
+            <Headline>Base level</Headline>
+            <Footnote color="secondary">
+              {form.minimumSpend.trim()
+                ? `Starts at ${formatEditableSpend(form.minimumSpend, formatting.currencyCompact)} total spend`
+                : 'No spend threshold'}
+              {' · '}
+              {form.earningRate.trim()
+                ? form.type === 'cashback'
+                  ? `${form.earningRate}% default cashback`
+                  : `${form.earningRate} default miles per dollar`
+                : 'No default rate'}
+              {' · '}
+              {form.maximumSpend.trim()
+                ? `${formatEditableSpend(form.maximumSpend, formatting.currencyCompact)} overall cap`
+                : 'No overall cap'}
+            </Footnote>
+            <Footnote color="tertiary">
+              Your existing earning and flag-category settings stay as this level.
+            </Footnote>
+          </View>
+          <Button
+            variant="plain"
+            size="medium"
+            onPress={addSpendingTier}
+            style={styles.addSpendingTierButton}
+            accessibilityHint="Adds another reward level based on total card spend"
+          >
+            Add spend tier
+          </Button>
+        </Group>
+
+        {form.spendingTiers.length > 0 ? (
+          <View style={styles.spendingTierComposer}>
+            {[...form.spendingTiers]
+              .sort((left, right) => (
+                (Number(left.spendThreshold) || 0) - (Number(right.spendThreshold) || 0)
+              ))
+              .map((tier) => (
+                <SpendingTierEditor
+                  key={tier.id}
+                  tier={tier}
+                  cardType={form.type}
+                  formatSpend={formatting.currencyCompact}
+                  flagTiers={form.subcategoriesEnabled ? form.tiers : []}
+                  update={(patch) => updateSpendingTier(tier.id, patch)}
+                  updateSubcategory={(subcategoryId, patch) => (
+                    updateSpendingTierSubcategory(tier.id, subcategoryId, patch)
+                  )}
+                  remove={() => removeSpendingTier(tier.id)}
+                />
+              ))}
+          </View>
+        ) : null}
+
         <View style={styles.actions}>
           <Button
             variant="filled"
@@ -1214,6 +1591,61 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     borderRadius: radii.large,
     backgroundColor: semanticColors.secondarySystemGroupedBackground,
+  },
+  spendingTierBase: {
+    minHeight: 76,
+    marginLeft: spacing.lg,
+    paddingRight: spacing.lg,
+    paddingVertical: spacing.lg,
+    gap: spacing.xs,
+  },
+  addSpendingTierButton: {
+    alignSelf: 'stretch',
+    borderRadius: 0,
+  },
+  spendingTierComposer: {
+    gap: spacing.xl,
+  },
+  spendingTier: {
+    borderRadius: radii.large,
+    overflow: 'hidden',
+    backgroundColor: semanticColors.secondarySystemGroupedBackground,
+  },
+  spendingTierHeading: {
+    minHeight: 64,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    paddingLeft: spacing.lg,
+    paddingRight: spacing.sm,
+    paddingVertical: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: semanticColors.separator,
+  },
+  removeTierText: {
+    color: semanticColors.destructive,
+  },
+  spendingTierCategories: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: semanticColors.separator,
+    backgroundColor: semanticColors.systemGroupedBackground,
+  },
+  spendingTierCategoryIntro: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    gap: spacing.xs,
+  },
+  spendingTierCategory: {
+    marginLeft: spacing.md,
+    borderRadius: radii.medium,
+    backgroundColor: semanticColors.secondarySystemGroupedBackground,
+  },
+  spendingTierCategoryHeading: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
   },
   actions: {
     gap: spacing.xs,

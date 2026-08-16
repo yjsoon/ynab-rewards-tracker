@@ -414,20 +414,30 @@ export default function OverviewScreen() {
     [dashboardCards],
   );
   const cashbackCards = useMemo(
-    () => configuredCards.filter(({ card }) => card.type === 'cashback'),
-    [configuredCards],
+    () => configuredCards.filter(
+      ({ card, status }) => card.type === 'cashback' && (
+        !period.isToday || status !== 'capped'
+      ),
+    ),
+    [configuredCards, period.isToday],
   );
   const milesCards = useMemo(
-    () => configuredCards.filter(({ card }) => card.type === 'miles'),
-    [configuredCards],
+    () => configuredCards.filter(
+      ({ card, status }) => card.type === 'miles' && (
+        !period.isToday || status !== 'capped'
+      ),
+    ),
+    [configuredCards, period.isToday],
   );
   const earnedDollars = useMemo(
     () => configuredCards.reduce((sum, projection) => sum + projection.reward.dollars, 0),
     [configuredCards],
   );
   const nonCappedCards = useMemo(
-    () => model.visibleCards.filter((projection) => projection.status !== 'capped'),
-    [model.visibleCards],
+    () => period.isToday
+      ? model.visibleCards.filter((projection) => projection.status !== 'capped')
+      : model.visibleCards,
+    [model.visibleCards, period.isToday],
   );
   const cardUses = useMemo(
     () => rankCardUses(nonCappedCards, state.settings),
@@ -462,7 +472,9 @@ export default function OverviewScreen() {
     ? `${model.syncLabel} — Retry`
     : `${model.syncLabel} — Review settings`;
   const connected = Boolean(state.pat && state.selectedBudget.id);
-  const hasDashboardContent = dashboardCards.length > 0;
+  const hasDashboardContent = cashbackCards.length > 0
+    || milesCards.length > 0
+    || setupCards.length > 0;
 
   const openCard = (id: string) => {
     router.push({ pathname: '/card/[id]', params: { id } });

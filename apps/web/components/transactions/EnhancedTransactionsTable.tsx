@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/select";
 import { FlagColorPicker } from "./FlagColorPicker";
 import { cn, absFromMilli as absFromMilliFn } from "@/lib/utils";
-import { SimpleRewardsCalculator } from "@/lib/rewards-engine";
+import { projectTransactions } from "@/lib/rewards-engine";
 import type { YnabFlagColor } from "@/lib/ynab-constants";
 import { buildRewardCategoryNamesByFlag } from "@/lib/card-metrics";
 import { updateTrackedTransactionFlagCache } from "@/hooks/useTrackedTransactions";
@@ -34,10 +34,12 @@ interface EnhancedTransactionsTableProps {
   loading: boolean;
   error: string;
   transactions: Transaction[];
+  rewardTransactions?: Transaction[];
   accountsMap: Map<string, string>;
   cards: CreditCard[];
   settings: AppSettings;
   lookbackDays: number;
+  periodDataSinceDate?: string;
   refreshing?: boolean;
   lastUpdatedAt?: string | null;
   customFlagNames?: Partial<Record<YnabFlagColor, string>>;
@@ -70,6 +72,8 @@ const MOBILE_SORT_OPTIONS: Array<{
 interface TransactionWithComputedReward extends Transaction {
   blockInfo?: string;
   calculatedReward: number;
+  rewardRate: number;
+  rewardBlockSize: number | null;
   card?: CreditCard;
   isIncoming: boolean;
   sortTimestamp: number;
@@ -124,7 +128,7 @@ function TransactionDetails({
 }: {
   transaction: TransactionWithComputedReward;
 }) {
-  const { blockInfo, card, isIncoming } = transaction;
+  const { blockInfo, card, isIncoming, rewardBlockSize } = transaction;
 
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -160,10 +164,10 @@ function TransactionDetails({
           </Label>
           <p className="text-sm">
             {card.type === "cashback"
-              ? `${card.earningRate}% cashback`
-              : card.earningBlockSize
-                ? `${card.earningRate} miles per $${card.earningBlockSize}`
-                : `${card.earningRate} miles per dollar`}
+              ? `${transaction.rewardRate}% cashback`
+              : rewardBlockSize
+                ? `${transaction.rewardRate} miles per $${rewardBlockSize}`
+                : `${transaction.rewardRate} miles per dollar`}
           </p>
         </div>
       )}
@@ -175,10 +179,12 @@ export function EnhancedTransactionsTable({
   loading,
   error,
   transactions,
+  rewardTransactions,
   accountsMap,
   cards,
   settings,
   lookbackDays,
+  periodDataSinceDate,
   refreshing,
   lastUpdatedAt,
   customFlagNames,
@@ -247,29 +253,39 @@ export function EnhancedTransactionsTable({
     return filtered;
   }, [transactions, searchQuery, selectedAccountFilter]);
 
+  const rewardProjections = useMemo(
+    () => new Map(
+      projectTransactions(
+        rewardTransactions ?? transactions,
+        cards,
+        settings,
+        undefined,
+        { periodDataSinceDate },
+      ).map((projection) => [
+        projection.transaction.id,
+        projection,
+      ] as const),
+    ),
+    [cards, periodDataSinceDate, rewardTransactions, settings, transactions],
+  );
+
   // Calculate rewards and sort transactions
   const sortedTransactions = useMemo(() => {
     const withRewards: TransactionWithComputedReward[] =
       filteredTransactions.map((txn) => {
         const card = cardsByAccountId.get(txn.account_id);
-        const amount = absFromMilliFn(txn.amount);
         const isIncoming = txn.amount > 0;
-        const rewardResult =
-          !isIncoming && card
-            ? SimpleRewardsCalculator.calculateTransactionReward(
-                amount,
-                card,
-                settings,
-                {
-                  flagColor: txn.flag_color,
-                },
-              )
-            : { reward: 0, blockInfo: undefined };
+        const rewardProjection = rewardProjections.get(txn.id);
+        const blockInfo = rewardProjection?.blockInfo
+          ? `${rewardProjection.blockInfo.count} block${rewardProjection.blockInfo.count === 1 ? '' : 's'} × $${rewardProjection.blockInfo.size}`
+          : undefined;
 
         return {
           ...txn,
-          blockInfo: rewardResult.blockInfo,
-          calculatedReward: rewardResult.reward,
+          blockInfo,
+          calculatedReward: rewardProjection?.reward.amount ?? 0,
+          rewardRate: rewardProjection?.reward.rate ?? 0,
+          rewardBlockSize: rewardProjection?.blockInfo?.size ?? null,
           card,
           isIncoming,
           sortTimestamp: new Date(txn.date).getTime(),
@@ -309,7 +325,7 @@ export function EnhancedTransactionsTable({
     sortDirection,
     accountsMap,
     cardsByAccountId,
-    settings,
+    rewardProjections,
   ]);
 
   // Toggle row expansion

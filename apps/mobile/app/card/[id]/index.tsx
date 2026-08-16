@@ -48,6 +48,10 @@ import type {
   CardDashboardProjection,
   TransactionProjection,
 } from '@ynab-counter/app-core/rewards-engine';
+import {
+  getCardSpendingLevels,
+  resolveCardSpendingTier,
+} from '@ynab-counter/app-core/rewards-engine';
 import type { CardSubcategory } from '@ynab-counter/app-core/storage';
 
 function parameterValue(value: string | string[] | undefined): string | undefined {
@@ -170,15 +174,21 @@ function SubcategoryRow({
   const calculation = projection.calculation.subcategoryBreakdowns?.find(
     (entry) => entry.id === subcategory.id,
   );
+  const categoryProjection = projection.rewardCategories.find(
+    (entry) => entry.id === subcategory.id,
+  );
   const totalSpend = calculation?.totalSpend ?? 0;
-  const progressValue = subcategory.maximumSpend
+  const maximumSpend = categoryProjection
+    ? categoryProjection.maximum.target
+    : subcategory.maximumSpend;
+  const progressValue = maximumSpend
     ? calculation?.countedSpend ?? totalSpend
     : totalSpend;
   const rewardAmount = calculation?.rewardEarned ?? 0;
   const rewardDollars = calculation?.rewardEarnedDollars ?? 0;
   const rate = formatRate({
     type: projection.card.type,
-    earningRate: subcategory.rewardValue,
+    earningRate: categoryProjection?.rate ?? subcategory.rewardValue,
   }, formatting);
   const reward = formatRewardForCard(
     projection.card,
@@ -226,7 +236,7 @@ function SubcategoryRow({
       </View>
 
       {!subcategory.excludeFromRewards && subcategory.active !== false &&
-      ((subcategory.minimumSpend ?? 0) > 0 || (subcategory.maximumSpend ?? 0) > 0) ? (
+      ((subcategory.minimumSpend ?? 0) > 0 || (maximumSpend ?? 0) > 0) ? (
         <View style={styles.progressStack} accessibilityElementsHidden>
           {(subcategory.minimumSpend ?? 0) > 0 ? (
             <ProgressRail
@@ -237,10 +247,10 @@ function SubcategoryRow({
               accessible={false}
             />
           ) : null}
-          {(subcategory.maximumSpend ?? 0) > 0 ? (
+          {(maximumSpend ?? 0) > 0 ? (
             <ProgressRail
               value={progressValue}
-              maximum={subcategory.maximumSpend}
+              maximum={maximumSpend}
               formatValue={currency}
               label={`${subcategory.name} spending cap`}
               accessible={false}
@@ -403,6 +413,20 @@ export default function CardDetailScreen() {
     return true;
   }).join(' · ');
   const subcategories = [...(card.subcategories ?? [])].sort((left, right) => left.priority - right.priority);
+  const spendingLevels = getCardSpendingLevels(card);
+  const resolvedSpendingTier = resolveCardSpendingTier(card, projection.spend.total);
+  const activeSpendingLevel = resolvedSpendingTier.activeLevel;
+  const nextSpendingLevel = resolvedSpendingTier.hasNextSpendingTier
+    ? resolvedSpendingTier.nextLevel
+    : null;
+  const hasUnlockedSpendingTier = (activeSpendingLevel?.spendThreshold ?? 0) > 0;
+  const spendingLevelSubtitle = nextSpendingLevel
+    ? `${formatting.currencyCompact(
+        Math.max(0, nextSpendingLevel.spendThreshold - projection.spend.total),
+      )} to go to ${formatting.currencyCompact(nextSpendingLevel.spendThreshold)}`
+    : activeSpendingLevel
+      ? 'Highest spend tier active'
+      : undefined;
   const blockCopy = projection.blockInfo
     ? [
         `${projection.blockInfo.sizes.map((size) => formatting.currencyCompact(size)).join('/')} earning blocks`,
@@ -420,12 +444,21 @@ export default function CardDetailScreen() {
     : `miles earned · ≈ ${formatting.currencyExact(projection.reward.dollars)}`;
   const earningSetupRows = [
     { label: 'Reward type', value: card.type === 'cashback' ? 'Cashback' : 'Miles' },
-    { label: 'Rate', value: formatRate(card, formatting) },
+    { label: card.spendingTiers?.length ? 'Base rate' : 'Rate', value: formatRate(card, formatting) },
+    card.spendingTiers?.length
+      ? { label: 'Spend levels', value: `${card.spendingTiers.length + 1} configured` }
+      : undefined,
     (card.minimumSpend ?? 0) > 0
-      ? { label: 'Minimum', value: formatting.currencyCompact(card.minimumSpend!) }
+      ? {
+          label: card.spendingTiers?.length ? 'Base minimum' : 'Minimum',
+          value: formatting.currencyCompact(card.minimumSpend!),
+        }
       : undefined,
     (card.maximumSpend ?? 0) > 0
-      ? { label: 'Cap', value: formatting.currencyCompact(card.maximumSpend!) }
+      ? {
+          label: card.spendingTiers?.length ? 'Base cap' : 'Cap',
+          value: formatting.currencyCompact(card.maximumSpend!),
+        }
       : undefined,
     (card.earningBlockSize ?? 0) > 0
       ? {
@@ -545,6 +578,11 @@ export default function CardDetailScreen() {
               {formatDaysRemaining(projection.daysRemaining, projection.resetsOn)}
             </Footnote>
             {blockCopy ? <Footnote color="secondary">{blockCopy}</Footnote> : null}
+            {card.spendingTiers?.length && spendingLevelSubtitle ? (
+              <Footnote color={hasUnlockedSpendingTier ? 'positive' : 'attention'}>
+                {spendingLevelSubtitle}
+              </Footnote>
+            ) : null}
           </View>
         </View>
 
@@ -610,6 +648,39 @@ export default function CardDetailScreen() {
             ))}
           </View>
         </View>
+
+        {card.spendingTiers?.length ? (
+          <View style={styles.section}>
+            <SectionTitle
+              title="Spend-based tiers"
+              subtitle={spendingLevelSubtitle}
+            />
+            <View style={styles.group}>
+              {spendingLevels.map((level, index) => {
+                const rate = formatRate({
+                  type: card.type,
+                  earningRate: level.earningRate,
+                }, formatting);
+                const cap = level.maximumSpend && level.maximumSpend > 0
+                  ? `cap ${formatting.currencyCompact(level.maximumSpend)}`
+                  : 'no overall cap';
+                const categoryOverrides = level.subcategories.length > 0
+                  ? ` · ${level.subcategories.length} category ${level.subcategories.length === 1 ? 'rate' : 'rates'}`
+                  : '';
+                return (
+                  <ConfigRow
+                    key={level.id ?? 'base'}
+                    label={level.isBase && level.spendThreshold === 0
+                      ? 'Base · No threshold'
+                      : `${level.isBase ? 'Base · ' : ''}${formatting.currencyCompact(level.spendThreshold)} spend`}
+                    value={`${rate} · ${cap}${categoryOverrides}`}
+                    showDivider={index < spendingLevels.length - 1}
+                  />
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
 
         <View
           style={styles.section}

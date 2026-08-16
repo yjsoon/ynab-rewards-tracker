@@ -83,6 +83,25 @@ export interface CardSubcategory {
   updatedAt: string;
 }
 
+export interface SpendingTierSubcategory {
+  subcategoryId: string;
+  rewardValue: number;
+  maximumSpend?: number | null;
+}
+
+/**
+ * An additional reward level selected by total qualifying card spend.
+ * The card's existing earning fields remain the base level, which keeps
+ * cards without spending tiers fully backward compatible.
+ */
+export interface CardSpendingTier {
+  id: string;
+  spendThreshold: number;
+  earningRate?: number | null;
+  maximumSpend?: number | null;
+  subcategories?: SpendingTierSubcategory[];
+}
+
 export interface CreditCard {
   id: string;
   name: string;
@@ -108,6 +127,7 @@ export interface CreditCard {
   maximumSpend?: number | null;
   subcategoriesEnabled?: boolean;
   subcategories?: CardSubcategory[];
+  spendingTiers?: CardSpendingTier[];
 }
 
 // Legacy alias retained for compatibility with existing imports
@@ -168,7 +188,10 @@ export interface SubcategoryBreakdown {
   eligibleSpendBeforeBlocks?: number;
   rewardEarned: number;
   rewardEarnedDollars?: number;
+  rewardRate?: number;
+  minimumSpend?: number | null;
   minimumSpendMet: boolean;
+  maximumSpend?: number | null;
   maximumSpendExceeded: boolean;
   blockSize?: number | null;
   blocksEarned?: number;
@@ -187,8 +210,11 @@ export interface RewardCalculation {
   rewardType: "cashback" | "miles";
   categoryBreakdowns?: CategoryBreakdown[];
   subcategoryBreakdowns?: SubcategoryBreakdown[];
+  minimumSpend?: number | null;
   minimumProgress?: number;
+  maximumSpend?: number | null;
   maximumProgress?: number;
+  activeSpendingTierId?: string | null;
   minimumMet: boolean;
   maximumExceeded: boolean;
   shouldStopUsing: boolean;

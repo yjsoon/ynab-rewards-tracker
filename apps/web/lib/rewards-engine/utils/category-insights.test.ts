@@ -127,6 +127,39 @@ describe('createWholeCardInsight', () => {
     expect(insight.shouldAvoid).toBe(false);
     expect(insight.cardMaximumCap).toBe(500);
   });
+
+  it('does not avoid an intermediate cap when a higher spend level remains', () => {
+    const card: CreditCard = {
+      ...baseCard,
+      earningRate: 2,
+      minimumSpend: 50,
+      maximumSpend: 20,
+      spendingTiers: [{
+        id: 'higher-level',
+        spendThreshold: 100,
+        earningRate: 3,
+        maximumSpend: 30,
+      }],
+    };
+    const calculation: RewardCalculation = {
+      cardId: card.id,
+      ruleId: `card-${card.id}`,
+      period: '2025-02',
+      totalSpend: 80,
+      eligibleSpend: 20,
+      rewardEarned: 0.4,
+      rewardType: 'cashback',
+      minimumMet: true,
+      maximumExceeded: true,
+      shouldStopUsing: false,
+    };
+
+    expect(createWholeCardInsight(card, calculation, 0.01)).toMatchObject({
+      cardMaximumExceeded: true,
+      shouldAvoid: false,
+      status: 'use',
+    });
+  });
 });
 
 describe('createSubcategoryInsight', () => {

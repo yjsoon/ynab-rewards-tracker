@@ -16,10 +16,11 @@ import {
   Layers
 } from 'lucide-react';
 import { SimpleRewardsCalculator } from '@/lib/rewards-engine';
+import { resolveCardSpendingTier } from '@ynab-counter/app-core/rewards-engine';
 import { YnabClient } from '@/lib/ynab-client';
 import { useSelectedBudget, useSettings } from '@/hooks/useLocalStorage';
 import { CurrencyAmount } from '@/components/CurrencyAmount';
-import { formatDollars } from '@/lib/utils';
+import { cn, formatDollars } from '@/lib/utils';
 import type { CreditCard } from '@/lib/storage';
 import type { Transaction } from '@/types/transaction';
 
@@ -192,6 +193,14 @@ export default function SpendingStatus({
   }
 
   const { totalSpend, countedSpend, eligibleSpend, eligibleSpendBeforeBlocks, rewardEarned, rewardEarnedDollars, minimumSpend, minimumSpendMet, maximumSpend, maximumSpendExceeded, subcategoryBreakdowns } = spendingAnalysis;
+  const resolvedSpendingTier = resolveCardSpendingTier(card, totalSpend);
+  const activeSpendingLevel = resolvedSpendingTier.activeLevel;
+  const nextSpendingLevel = resolvedSpendingTier.hasNextSpendingTier
+    ? resolvedSpendingTier.nextLevel
+    : null;
+  const hasUnlockedSpendingTier = (activeSpendingLevel?.spendThreshold ?? 0) > 0;
+  const terminalMaximumSpendExceeded = maximumSpendExceeded && !nextSpendingLevel;
+  const intermediateMaximumSpendExceeded = maximumSpendExceeded && Boolean(nextSpendingLevel);
 
   const currency = settings?.currency;
   const milesValuation = settings?.milesValuation ?? 0.01;
@@ -234,6 +243,45 @@ export default function SpendingStatus({
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
+          {card.spendingTiers?.length ? (
+            <div className={cn(
+              'flex flex-col gap-1 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between',
+              hasUnlockedSpendingTier
+                ? 'border-emerald-200 bg-emerald-50/60 dark:border-emerald-900/50 dark:bg-emerald-950/20'
+                : 'border-amber-200 bg-amber-50/60 dark:border-amber-900/50 dark:bg-amber-950/20',
+            )}>
+              <div>
+                <p className="text-sm font-medium">
+                  {activeSpendingLevel
+                    ? activeSpendingLevel.isBase && activeSpendingLevel.spendThreshold === 0
+                      ? 'Base spend level active'
+                      : `${formatDollars(activeSpendingLevel.spendThreshold, { currency: settings?.currency })} spend tier active`
+                    : 'Spend threshold not reached'}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  The active level sets this period&apos;s rates and eligible-spend caps.
+                </p>
+              </div>
+              {nextSpendingLevel ? (
+                <p className={cn(
+                  'text-sm font-medium',
+                  hasUnlockedSpendingTier
+                    ? 'text-emerald-700 dark:text-emerald-300'
+                    : 'text-amber-700 dark:text-amber-300',
+                )}>
+                  {formatDollars(
+                    Math.max(0, nextSpendingLevel.spendThreshold - totalSpend),
+                    { currency: settings?.currency },
+                  )} to go to {formatDollars(nextSpendingLevel.spendThreshold, { currency: settings?.currency })}
+                </p>
+              ) : activeSpendingLevel ? (
+                <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+                  Highest tier active
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
           {/* Spending Summary */}
           <div className={`grid grid-cols-1 ${card.type === 'cashback' ? 'md:grid-cols-2' : 'md:grid-cols-3'} gap-4`}>
             <div className="p-4 rounded-lg bg-muted/50">
@@ -263,7 +311,7 @@ export default function SpendingStatus({
                   ? <CurrencyAmount value={rewardEarned} currency={currency} />
                   : `${Math.round(rewardEarned).toLocaleString()} miles`}
               </p>
-              {maximumSpendExceeded ? (
+              {terminalMaximumSpendExceeded ? (
                 <p className="text-xs text-muted-foreground mt-1">Capped at maximum</p>
               ) : !minimumSpendMet && minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0 ? (
                 <p className="text-xs text-muted-foreground mt-1">Minimum not met</p>
@@ -288,7 +336,7 @@ export default function SpendingStatus({
                     <CurrencyAmount value={milesValuation} currency={currency} />/mile
                   </p>
                 )}
-                {maximumSpendExceeded ? (
+                {terminalMaximumSpendExceeded ? (
                   <p className="text-xs text-muted-foreground mt-1">Capped at maximum</p>
                 ) : !minimumSpendMet && minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0 ? (
                   <p className="text-xs text-muted-foreground mt-1">Minimum not met</p>
@@ -300,26 +348,35 @@ export default function SpendingStatus({
           {/* Spending Progress Bar */}
           {(minimumSpend !== null && minimumSpend !== undefined) || hasMaximum ? (
             <div className="space-y-4">
-              <div className="bg-muted/5 rounded-lg p-4">
-                <h3 className="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wide">Spending Progress</h3>
-                <SpendingProgressBar
-                  totalSpend={totalSpend}
-                  minimumSpend={minimumSpend}
-                  maximumSpend={maximumSpend}
-                  minimumProgressSpend={totalSpend}
-                  maximumProgressSpend={displayedSpend}
-                  currency={currency}
-                  showLabels={true}
-                  showWarnings={true}
-                />
-              </div>
+              {!nextSpendingLevel ? (
+                <div className="bg-muted/5 rounded-lg p-4">
+                  <h3 className="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wide">Spending Progress</h3>
+                  <SpendingProgressBar
+                    totalSpend={totalSpend}
+                    minimumSpend={minimumSpend}
+                    maximumSpend={maximumSpend}
+                    minimumProgressSpend={totalSpend}
+                    maximumProgressSpend={displayedSpend}
+                    currency={currency}
+                    showLabels={true}
+                    showWarnings={true}
+                  />
+                </div>
+              ) : null}
 
               {/* Status Alerts */}
-              {maximumSpendExceeded ? (
+              {terminalMaximumSpendExceeded ? (
                 <Alert className="border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/30">
                   <XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
                   <AlertDescription className="text-red-700 dark:text-red-300">
                     <strong>Maximum spend limit exceeded!</strong> You&apos;ve spent <CurrencyAmount value={displayedSpend} currency={currency} /> which is over the <CurrencyAmount value={maximumSpend ?? 0} currency={currency} /> limit. No additional rewards will be earned on this card this period.
+                  </AlertDescription>
+                </Alert>
+              ) : intermediateMaximumSpendExceeded ? (
+                <Alert className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30">
+                  <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                  <AlertDescription className="text-amber-700 dark:text-amber-300">
+                    <strong>Current spend level capped.</strong> Further spend will not earn at this level, but reaching the next tier recalculates this period at its new rates and caps.
                   </AlertDescription>
                 </Alert>
               ) : minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0 && !minimumSpendMet ? (
@@ -389,7 +446,7 @@ export default function SpendingStatus({
           )}
 
           {/* No earning rate warning */}
-          {!card.earningRate && (
+          {!resolvedSpendingTier.effectiveCard.earningRate && (
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>

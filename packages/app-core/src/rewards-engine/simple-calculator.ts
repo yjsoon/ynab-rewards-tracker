@@ -17,6 +17,7 @@ import {
   resolveSubcategory,
 } from './utils/subcategories';
 import { applyBlock, getBlockSize, getRewardRate } from './utils/reward-math';
+import { resolveCardSpendingTier } from './utils/spending-tiers';
 
 export interface SubcategoryCalculation {
   id: string;
@@ -56,6 +57,7 @@ export interface SimplifiedCalculation {
   maximumSpendExceeded: boolean;
   maximumSpendProgress?: number;
   subcategoryBreakdowns?: SubcategoryCalculation[];
+  activeSpendingTierId?: string | null;
   /** Period-aware reward attribution keyed by YNAB transaction ID. */
   transactionRewards: Record<string, TransactionRewardResult>;
 }
@@ -214,7 +216,7 @@ export class SimpleRewardsCalculator {
     settings?: AppSettings
   ): SimplifiedCalculation {
     const milesValuation = settings?.milesValuation ?? 0.01;
-    const context = createSubcategoryContext(card);
+    const configuredContext = createSubcategoryContext(card);
 
     const periodTransactions = transactions
       .filter((txn) => {
@@ -225,27 +227,16 @@ export class SimpleRewardsCalculator {
         left.date.localeCompare(right.date) || left.id.localeCompare(right.id)
       ));
 
-    const transactionRewards = Object.fromEntries(
-      periodTransactions.map((transaction) => [
-        transaction.id,
-        this.calculateTransactionReward(
-          Math.abs(transaction.amount) / 1000,
-          card,
-          settings,
-          { flagColor: transaction.flag_color },
-        ),
-      ]),
-    );
     let totalSpend = 0;
     let spendByFlag: Map<
       YnabFlagColor,
       { total: number; transactions: Array<{ transaction: Transaction; spend: number }> }
     > | undefined;
-    if (context.enabled && context.activeSubcategories.length > 0) {
+    if (configuredContext.enabled && configuredContext.activeSubcategories.length > 0) {
       spendByFlag = new Map();
       for (const txn of periodTransactions) {
         const flagColour = normaliseFlagColor(txn.flag_color);
-        const subcategory = resolveSubcategory(context, flagColour);
+        const subcategory = resolveSubcategory(configuredContext, flagColour);
         const txnSpend = Math.abs(txn.amount) / 1000;
         if (subcategory && !subcategory.excludeFromRewards) {
           totalSpend += txnSpend;
@@ -267,11 +258,27 @@ export class SimpleRewardsCalculator {
       totalSpend = Math.abs(periodTransactions.reduce((sum, txn) => sum + txn.amount, 0)) / 1000;
     }
 
-    const minimumSpend = card.minimumSpend;
-    const minimumSpendMet = isMinimumSpendMet(totalSpend, minimumSpend);
+    const resolvedSpendingTier = resolveCardSpendingTier(card, totalSpend);
+    const calculationCard = resolvedSpendingTier.effectiveCard;
+    const context = createSubcategoryContext(calculationCard);
+    const transactionRewards = Object.fromEntries(
+      periodTransactions.map((transaction) => [
+        transaction.id,
+        this.calculateTransactionReward(
+          Math.abs(transaction.amount) / 1000,
+          calculationCard,
+          settings,
+          { flagColor: transaction.flag_color },
+        ),
+      ]),
+    );
+
+    const minimumSpend = calculationCard.minimumSpend;
+    const minimumSpendMet = resolvedSpendingTier.minimumSpendMet &&
+      isMinimumSpendMet(totalSpend, minimumSpend);
     const minimumSpendProgress = calculateMinimumSpendProgress(totalSpend, minimumSpend);
 
-    const maximumSpend = card.maximumSpend;
+    const maximumSpend = calculationCard.maximumSpend;
 
     let eligibleSpend = 0;
     let eligibleSpendBeforeBlocks = 0;
@@ -312,8 +319,8 @@ export class SimpleRewardsCalculator {
         return [subcategory.id, {
           subcategory,
           total,
-          rewardRate: subcategory.excludeFromRewards ? 0 : getRewardRate(card, subcategory),
-          blockSize: subcategory.excludeFromRewards ? null : getBlockSize(card, subcategory),
+          rewardRate: subcategory.excludeFromRewards ? 0 : getRewardRate(calculationCard, subcategory),
+          blockSize: subcategory.excludeFromRewards ? null : getBlockSize(calculationCard, subcategory),
           minimum,
           maximum,
           minimumMet: !subcategory.excludeFromRewards &&
@@ -374,7 +381,7 @@ export class SimpleRewardsCalculator {
 
         const constrained = this.calculateTransactionReward(
           spendContribution,
-          card,
+          calculationCard,
           settings,
           { flagColor: transaction.flag_color },
         );
@@ -401,7 +408,7 @@ export class SimpleRewardsCalculator {
         let tierReward = 0;
         let tierRewardDollars = 0;
         if (tier.minimumMet && tier.rewardRate > 0 && tierEligible > 0) {
-          if (card.type === 'cashback') {
+          if (calculationCard.type === 'cashback') {
             tierReward = tierEligible * (tier.rewardRate / 100);
             tierRewardDollars = tierReward;
           } else {
@@ -444,11 +451,11 @@ export class SimpleRewardsCalculator {
         };
       });
     } else if (!context.enabled) {
-      if (typeof card.earningRate === 'number') {
+      if (typeof calculationCard.earningRate === 'number') {
         const hasCardCap = typeof maximumSpend === 'number' && maximumSpend !== null && maximumSpend > 0;
         const spendCap = hasCardCap ? maximumSpend! : Number.POSITIVE_INFINITY;
         let remainingCap = spendCap;
-        const blockSize = getBlockSize(card);
+        const blockSize = getBlockSize(calculationCard);
 
         for (const txn of periodTransactions) {
           if (isCapHeadroomExhausted(remainingCap, blockSize)) {
@@ -484,7 +491,7 @@ export class SimpleRewardsCalculator {
 
           const constrained = this.calculateTransactionReward(
             spendContribution,
-            card,
+            calculationCard,
             settings,
             { flagColor: txn.flag_color },
           );
@@ -504,11 +511,11 @@ export class SimpleRewardsCalculator {
         );
 
         if (minimumSpendMet && eligibleSpend > 0) {
-          if (card.type === 'cashback') {
-            rewardEarned = eligibleSpend * (card.earningRate / 100);
+          if (calculationCard.type === 'cashback') {
+            rewardEarned = eligibleSpend * (calculationCard.earningRate / 100);
             rewardEarnedDollars = rewardEarned;
           } else {
-            rewardEarned = eligibleSpend * card.earningRate;
+            rewardEarned = eligibleSpend * calculationCard.earningRate;
             rewardEarnedDollars = rewardEarned * milesValuation;
           }
         }
@@ -530,7 +537,7 @@ export class SimpleRewardsCalculator {
       eligibleSpendBeforeBlocks,
       rewardEarned,
       rewardEarnedDollars,
-      rewardType: card.type,
+      rewardType: calculationCard.type,
       minimumSpend,
       minimumSpendMet,
       minimumSpendProgress,
@@ -538,6 +545,7 @@ export class SimpleRewardsCalculator {
       maximumSpendExceeded,
       maximumSpendProgress,
       subcategoryBreakdowns,
+      activeSpendingTierId: resolvedSpendingTier.activeLevel?.id ?? null,
       transactionRewards,
     };
   }
@@ -559,7 +567,12 @@ export class SimpleRewardsCalculator {
     period: CalculationPeriod,
     settings?: AppSettings
   ): { card: CreditCard; calculation: SimplifiedCalculation } | null {
-    const eligibleCards = cards.filter((c) => c.earningRate);
+    const eligibleCards = cards.filter((card) => (
+      (typeof card.earningRate === 'number' && card.earningRate > 0)
+      || card.spendingTiers?.some((tier) => (
+        typeof tier.earningRate === 'number' && tier.earningRate > 0
+      ))
+    ));
 
     if (eligibleCards.length === 0) return null;
 

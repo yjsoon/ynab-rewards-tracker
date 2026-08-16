@@ -40,6 +40,7 @@ import {
   resolveCardTransactionDateRange,
 } from "@/lib/card-metrics";
 import { storage } from "@/lib/storage";
+import { SimpleRewardsCalculator } from "@/lib/rewards-engine";
 
 const DATE_VALUE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const TRANSACTION_LOOKBACK_DAYS = 90;
@@ -168,6 +169,17 @@ export default function CardTransactionsPage() {
       : null,
     [activeSubcategories, categoryId],
   );
+  const rewardDataSinceDate = useMemo(() => {
+    if (!card || !dateRange) {
+      return undefined;
+    }
+    const rangeStart = parseDateValue(dateRange.start);
+    if (!rangeStart) {
+      return dateRange.start;
+    }
+    const periodStart = SimpleRewardsCalculator.calculatePeriod(card, rangeStart).start;
+    return periodStart < dateRange.start ? periodStart : dateRange.start;
+  }, [card, dateRange]);
 
   useEffect(() => {
     if (!cardsLoading && cards.length > 0 && !card) {
@@ -183,7 +195,7 @@ export default function CardTransactionsPage() {
     refresh,
   } = useCardTransactions(card, {
     lookbackDays: TRANSACTION_LOOKBACK_DAYS,
-    sinceDate: dateRange?.start,
+    sinceDate: rewardDataSinceDate,
   });
 
   const periodTransactions = useMemo(
@@ -735,10 +747,12 @@ export default function CardTransactionsPage() {
               loading={loading && !hasLoadedCurrentRequest}
               error={isShowingStaleTransactions ? "" : error}
               transactions={displayedTransactions}
+              rewardTransactions={transactions}
               accountsMap={accountsMap}
               cards={[card]}
               settings={settings}
               lookbackDays={displayedDayCount}
+              periodDataSinceDate={rewardDataSinceDate}
               refreshing={loading && hasLoadedCurrentRequest}
               customFlagNames={customFlagNames}
               selectedBudgetId={selectedBudget.id}

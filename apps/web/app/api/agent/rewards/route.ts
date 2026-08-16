@@ -2,11 +2,27 @@ import { NextResponse } from 'next/server';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 
 import { computeKeyId, decryptJson } from '@/lib/cloud-sync/encryption';
-import type { StorageData, RewardCalculation, CreditCard } from '@ynab-counter/app-core/storage/types';
+import type {
+  StorageData,
+  RewardCalculation,
+  CreditCard,
+  ThemeGroup,
+} from '@ynab-counter/app-core/storage/types';
 import type { TransactionWithRewards } from '@ynab-counter/app-core/storage/types';
-import { computeCurrentPeriod, RecommendationEngine, SimpleRewardsCalculator } from '@ynab-counter/app-core/rewards-engine';
+import {
+  computeCurrentPeriod,
+  RecommendationEngine,
+  resolveCardSpendingTier,
+  SimpleRewardsCalculator,
+} from '@ynab-counter/app-core/rewards-engine';
 import { getAlertRecommendations, getCardRecommendations } from '@ynab-counter/app-core/rewards-engine/utils/card-recommendations';
+import { buildCardEntries } from '@ynab-counter/app-core/rewards-engine/utils/category-insights';
 import { resolveLatestPeriod } from '@ynab-counter/app-core/rewards-engine/utils/recommendation-helpers';
+import {
+  createSubcategoryContext,
+  normaliseFlagColor,
+  resolveSubcategory,
+} from '@ynab-counter/app-core/rewards-engine/utils/subcategories';
 import { YnabClient, isYnabApiError } from '@ynab-counter/ynab-client';
 
 export const dynamic = 'force-dynamic';
@@ -39,6 +55,15 @@ interface AgentTransactionRequest {
 
 type AdviceStatus = 'use' | 'consider' | 'avoid';
 
+type CardAdviceLimits = {
+  totalSpend: number;
+  eligibleSpendBeforeBlocks: number;
+  maximumExceeded: boolean;
+  shouldStopUsing: boolean;
+  currentLevelCapReached: boolean;
+  subcategorySpendById: Map<string, number>;
+};
+
 const ADVICE_PRIORITY: Record<AdviceStatus, number> = {
   use: 3,
   consider: 2,
@@ -56,8 +81,10 @@ type SummaryAvailable = {
   rewardEarned: number;
   rewardEarnedDollars: number;
   rewardType: 'cashback' | 'miles';
+  minimumSpend: number | null | undefined;
   minimumMet: boolean;
   minimumProgress: number | null;
+  maximumSpend: number | null | undefined;
   maximumExceeded: boolean;
   maximumProgress: number | null;
   shouldStopUsing: boolean;
@@ -87,6 +114,10 @@ type CardStatusAvailable = {
       progress: number | null;
       exceeded: boolean | null;
     };
+    nextSpendingTier: {
+      threshold: number;
+      remaining: number;
+    } | null;
     shouldStopUsing: boolean;
   };
   spend?: {
@@ -395,6 +426,7 @@ function summariseCalculations(calculations: RewardCalculation[]): SummaryResult
   const eligibleSpend = resolveMax(calculations.map((calc) => calc.eligibleSpend));
   const rewardEarned = calculations.reduce((sum, calc) => sum + calc.rewardEarned, 0);
   const rewardEarnedDollars = calculations.reduce((sum, calc) => sum + resolveRewardDollars(calc), 0);
+  const cardDefaultCalculation = calculations.find(({ ruleId }) => ruleId.startsWith('card-'));
 
   return {
     available: true,
@@ -405,8 +437,10 @@ function summariseCalculations(calculations: RewardCalculation[]): SummaryResult
     rewardEarned,
     rewardEarnedDollars,
     rewardType: calculations[0].rewardType,
+    minimumSpend: cardDefaultCalculation?.minimumSpend,
     minimumMet: calculations.every((calc) => calc.minimumMet),
     minimumProgress: minProgressValues.length > 0 ? Math.min(...minProgressValues) : null,
+    maximumSpend: cardDefaultCalculation?.maximumSpend,
     maximumExceeded: calculations.some((calc) => calc.maximumExceeded),
     maximumProgress: maxProgressValues.length > 0 ? Math.max(...maxProgressValues) : null,
     shouldStopUsing: calculations.some((calc) => calc.shouldStopUsing),
@@ -422,8 +456,14 @@ function buildRulePayload(
   return calculations.map((calc) => {
     const rule = ruleLookup.get(calc.ruleId);
     const isCardDefault = calc.ruleId.startsWith('card-');
-    const minimumTarget = typeof rule?.minimumSpend === 'number' && rule.minimumSpend > 0 ? rule.minimumSpend : null;
-    const maximumCap = typeof rule?.maximumSpend === 'number' && rule.maximumSpend > 0 ? rule.maximumSpend : null;
+    const configuredMinimum = isCardDefault ? calc.minimumSpend : rule?.minimumSpend;
+    const configuredMaximum = isCardDefault ? calc.maximumSpend : rule?.maximumSpend;
+    const minimumTarget = typeof configuredMinimum === 'number' && configuredMinimum > 0
+      ? configuredMinimum
+      : null;
+    const maximumCap = typeof configuredMaximum === 'number' && configuredMaximum > 0
+      ? configuredMaximum
+      : null;
     const minimumRemaining = minimumTarget ? Math.max(0, minimumTarget - calc.totalSpend) : null;
     const maximumRemaining = maximumCap ? Math.max(0, maximumCap - calc.eligibleSpend) : null;
 
@@ -486,17 +526,27 @@ function buildCardStatus(
   const eligibleSpend = summary.eligibleSpend;
   const eligibleSpendBeforeBlocks = summary.eligibleSpendBeforeBlocks;
 
-  const minimumTarget = getPositiveNumber(card.minimumSpend);
+  const minimumTarget = summary.minimumSpend === undefined
+    ? getPositiveNumber(card.minimumSpend)
+    : getPositiveNumber(summary.minimumSpend);
   const minimumRemaining = minimumTarget ? Math.max(0, minimumTarget - totalSpend) : null;
   const minimumProgress = minimumTarget ? Math.min(100, (totalSpend / minimumTarget) * 100) : null;
   const minimumMet = minimumTarget === null ? null : totalSpend >= minimumTarget;
 
-  const maximumCap = getPositiveNumber(card.maximumSpend);
+  const maximumCap = summary.maximumSpend === undefined
+    ? getPositiveNumber(card.maximumSpend)
+    : getPositiveNumber(summary.maximumSpend);
   const maximumRemaining = maximumCap ? Math.max(0, maximumCap - eligibleSpendBeforeBlocks) : null;
   const maximumProgress = maximumCap ? Math.min(100, (eligibleSpendBeforeBlocks / maximumCap) * 100) : null;
   const maximumExceeded = maximumCap ? eligibleSpendBeforeBlocks >= maximumCap : null;
-
-  const shouldStopUsing = Boolean(summary.shouldStopUsing || (maximumExceeded ?? false));
+  const spendingTier = resolveCardSpendingTier(card, totalSpend);
+  const hasHigherSpendingLevel = spendingTier.hasNextSpendingTier;
+  const terminalMaximumExceeded = maximumExceeded === null
+    ? null
+    : maximumExceeded && !hasHigherSpendingLevel;
+  const shouldStopUsing = Boolean(
+    (summary.shouldStopUsing || (maximumExceeded ?? false)) && !hasHigherSpendingLevel,
+  );
 
   const base: CardStatusAvailable = {
     available: true,
@@ -512,8 +562,14 @@ function buildCardStatus(
         cap: maximumCap,
         remaining: maximumRemaining,
         progress: maximumProgress,
-        exceeded: maximumExceeded,
+        exceeded: terminalMaximumExceeded,
       },
+      nextSpendingTier: spendingTier.hasNextSpendingTier && spendingTier.nextLevel
+        ? {
+            threshold: spendingTier.nextLevel.spendThreshold,
+            remaining: Math.max(0, spendingTier.nextLevel.spendThreshold - totalSpend),
+          }
+        : null,
       shouldStopUsing,
     },
   };
@@ -543,11 +599,167 @@ function normaliseTransactionAmount(amount: number): number {
   return Math.abs(amount);
 }
 
+function spendingLevelChanged(
+  current: ReturnType<typeof resolveCardSpendingTier>,
+  projected: ReturnType<typeof resolveCardSpendingTier>,
+): boolean {
+  if ((current.activeLevel === null) !== (projected.activeLevel === null)) {
+    return true;
+  }
+  return current.activeLevel?.id !== projected.activeLevel?.id
+    || current.activeLevel?.spendThreshold !== projected.activeLevel?.spendThreshold;
+}
+
+function minimumHeadroom(...values: Array<number | null>): number | null {
+  const configured = values.filter((value): value is number => value !== null);
+  return configured.length > 0 ? Math.min(...configured) : null;
+}
+
+function maximumRequirement(...values: Array<number | null>): number | null {
+  const configured = values.filter((value): value is number => value !== null);
+  return configured.length > 0 ? Math.max(...configured) : null;
+}
+
+function projectedCardHeadroom(
+  projectedCard: CreditCard,
+  limits: CardAdviceLimits | undefined,
+  unlockedLevel: boolean,
+): number | null {
+  const cap = getPositiveNumber(projectedCard.maximumSpend);
+  if (cap === null) {
+    return null;
+  }
+  let used = limits?.eligibleSpendBeforeBlocks ?? 0;
+  if (unlockedLevel) {
+    const context = createSubcategoryContext(projectedCard);
+    used = context.enabled
+      ? context.activeSubcategories.reduce((total, subcategory) => {
+          if (subcategory.excludeFromRewards || subcategory.rewardValue <= 0) {
+            return total;
+          }
+          const spend = limits?.subcategorySpendById.get(subcategory.id) ?? 0;
+          const categoryCap = getPositiveNumber(subcategory.maximumSpend);
+          return total + (categoryCap === null ? spend : Math.min(spend, categoryCap));
+        }, 0)
+      : limits?.totalSpend ?? 0;
+  }
+  return Math.max(0, cap - used);
+}
+
+function projectedSubcategoryHeadroom(
+  projectedCard: CreditCard,
+  limits: CardAdviceLimits | undefined,
+  flagColor: string,
+): number | null {
+  const subcategory = resolveSubcategory(
+    createSubcategoryContext(projectedCard),
+    normaliseFlagColor(flagColor),
+  );
+  const cap = getPositiveNumber(subcategory?.maximumSpend);
+  if (!subcategory || cap === null) {
+    return null;
+  }
+  return Math.max(0, cap - (limits?.subcategorySpendById.get(subcategory.id) ?? 0));
+}
+
+function projectedSubcategoryMinimumRemaining(
+  projectedCard: CreditCard,
+  limits: CardAdviceLimits | undefined,
+  flagColor: string,
+  amount: number,
+): number | null {
+  const subcategory = resolveSubcategory(
+    createSubcategoryContext(projectedCard),
+    normaliseFlagColor(flagColor),
+  );
+  const target = getPositiveNumber(subcategory?.minimumSpend);
+  if (!subcategory || target === null) {
+    return null;
+  }
+  return Math.max(
+    0,
+    target - (limits?.subcategorySpendById.get(subcategory.id) ?? 0) - amount,
+  );
+}
+
+function projectedThemeHeadroom(
+  group: ThemeGroup | undefined,
+  projectedCard: CreditCard,
+  limits: CardAdviceLimits | undefined,
+): number | null {
+  if (!group) {
+    return null;
+  }
+  const entry = buildCardEntries(group).get(projectedCard.id);
+  if (!entry || entry.refs.length === 0) {
+    return null;
+  }
+  const subcategories = new Map(
+    projectedCard.subcategories?.map((subcategory) => [subcategory.id, subcategory] as const) ?? [],
+  );
+  const headrooms = entry.refs.flatMap(({ subcategoryId }) => {
+    const subcategory = subcategories.get(subcategoryId);
+    const cap = getPositiveNumber(subcategory?.maximumSpend);
+    return subcategory && subcategory.active !== false && !subcategory.excludeFromRewards && cap !== null
+      ? [Math.max(0, cap - (limits?.subcategorySpendById.get(subcategoryId) ?? 0))]
+      : [];
+  });
+  return headrooms.length > 0 ? Math.min(...headrooms) : null;
+}
+
+function normalizedRewardRate(
+  card: CreditCard,
+  nativeRate: number,
+  settings?: StorageData['settings'],
+): number {
+  if (card.type === 'cashback') {
+    return nativeRate / 100;
+  }
+  const milesValuation = typeof settings?.milesValuation === 'number'
+    ? settings.milesValuation
+    : 0.01;
+  return nativeRate * milesValuation;
+}
+
+function projectedThemeRewardRate(
+  group: ThemeGroup | undefined,
+  projectedCard: CreditCard,
+  fallbackRate: number,
+  settings?: StorageData['settings'],
+): number {
+  if (!group) {
+    return fallbackRate;
+  }
+  const entry = buildCardEntries(group).get(projectedCard.id);
+  if (!entry) {
+    return fallbackRate;
+  }
+  if (entry.refs.length === 0) {
+    return typeof projectedCard.earningRate === 'number'
+      ? normalizedRewardRate(projectedCard, projectedCard.earningRate, settings)
+      : fallbackRate;
+  }
+  const subcategories = new Map(
+    projectedCard.subcategories?.map((subcategory) => [subcategory.id, subcategory] as const) ?? [],
+  );
+  const rates = entry.refs.flatMap(({ subcategoryId }) => {
+    const subcategory = subcategories.get(subcategoryId);
+    return subcategory && subcategory.active !== false && !subcategory.excludeFromRewards
+      ? [normalizedRewardRate(projectedCard, subcategory.rewardValue, settings)]
+      : [];
+  });
+  return rates.length > 0
+    ? rates.reduce((sum, rate) => sum + rate, 0) / rates.length
+    : fallbackRate;
+}
+
 function buildTransactionReasons(params: {
   rewardRate?: number | null;
   rewardRateLabel?: string | null;
   minimumRemaining?: number | null;
   maximumRemaining?: number | null;
+  currentLevelCapReached?: boolean;
+  nextSpendingTierRemaining?: number | null;
   capped: boolean;
 }): string[] {
   const reasons: string[] = [];
@@ -566,14 +778,23 @@ function buildTransactionReasons(params: {
       reasons.push(`${params.maximumRemaining.toFixed(2)} dollars headroom to max`);
     }
   }
+  if (
+    params.currentLevelCapReached
+    && typeof params.nextSpendingTierRemaining === 'number'
+  ) {
+    reasons.push(
+      `Current level capped; ${params.nextSpendingTierRemaining.toFixed(2)} dollars to next spend tier`,
+    );
+  }
   return reasons;
 }
 
 function buildTransactionAdvice(params: {
   transactions: AgentTransactionRequest[];
   cards: CreditCard[];
-  cardLimitLookup: Map<string, { minimumRemaining: number | null; maximumRemaining: number | null; maximumExceeded: boolean; shouldStopUsing: boolean }>;
+  cardLimitLookup: Map<string, CardAdviceLimits>;
   categoryRecommendations: Array<{ groupId: string; groupName: string; insights: Array<{ cardId: string; cardName: string; rewardRate: number; minimumRemaining?: number | null; headroomToMaximum?: number | null; shouldAvoid: boolean; status: AdviceStatus }> }>;
+  themeGroups: ThemeGroup[];
   settings?: StorageData['settings'];
 }) {
   const groupById = new Map(params.categoryRecommendations.map((rec) => [rec.groupId, rec]));
@@ -581,6 +802,7 @@ function buildTransactionAdvice(params: {
     params.categoryRecommendations.map((rec) => [rec.groupName.toLowerCase(), rec])
   );
   const cardById = new Map(params.cards.map((card) => [card.id, card]));
+  const themeGroupById = new Map(params.themeGroups.map((group) => [group.id, group]));
 
   return params.transactions.map((txn) => {
     const amount = normaliseTransactionAmount(txn.amount);
@@ -607,25 +829,82 @@ function buildTransactionAdvice(params: {
         };
       }
 
+      const themeGroup = themeGroupById.get(group.groupId);
       const ranked = group.insights.map((insight) => {
         const card = cardById.get(insight.cardId);
         const limits = params.cardLimitLookup.get(insight.cardId);
-        const maximumRemaining = limits?.maximumRemaining ?? insight.headroomToMaximum ?? null;
-        const minimumRemaining = limits?.minimumRemaining ?? insight.minimumRemaining ?? null;
+        if (!card) {
+          return {
+            cardId: insight.cardId,
+            cardName: insight.cardName,
+            status: 'avoid' as const,
+            rewardRate: insight.rewardRate,
+            minimumRemaining: insight.minimumRemaining ?? null,
+            maximumRemaining: insight.headroomToMaximum ?? null,
+            reasons: ['Missing YNAB account mapping'],
+          };
+        }
 
-        let status: AdviceStatus = insight.status;
+        const currentSpendingTier = resolveCardSpendingTier(
+          card,
+          limits?.totalSpend ?? 0,
+        );
+        const projectedSpendingTier = resolveCardSpendingTier(
+          card,
+          (limits?.totalSpend ?? 0) + amount,
+        );
+        const unlockedLevel = spendingLevelChanged(
+          currentSpendingTier,
+          projectedSpendingTier,
+        );
+        const effectiveCard = projectedSpendingTier.effectiveCard;
+        const maximumRemaining = minimumHeadroom(
+          projectedCardHeadroom(effectiveCard, limits, unlockedLevel),
+          projectedThemeHeadroom(themeGroup, effectiveCard, limits),
+        );
+        const projectedMinimum = getPositiveNumber(effectiveCard.minimumSpend);
+        const cardMinimumRemaining = projectedMinimum === null
+          ? null
+          : Math.max(0, projectedMinimum - (limits?.totalSpend ?? 0) - amount);
+        const themeMinimumRemaining = typeof insight.minimumRemaining === 'number'
+          ? Math.max(0, insight.minimumRemaining - amount)
+          : null;
+        const minimumRemaining = maximumRequirement(
+          cardMinimumRemaining,
+          themeMinimumRemaining,
+        );
+        const rewardRate = projectedThemeRewardRate(
+          themeGroup,
+          effectiveCard,
+          insight.rewardRate,
+          params.settings,
+        );
+        const earnableAmount = maximumRemaining === null
+          ? amount
+          : Math.min(amount, maximumRemaining);
+        const effectiveRewardRate = amount > 0
+          ? rewardRate * (earnableAmount / amount)
+          : 0;
+
+        let status: AdviceStatus = typeof minimumRemaining === 'number' && minimumRemaining > 0
+          ? 'consider'
+          : 'use';
         let capped = false;
 
-        if (!card?.ynabAccountId) {
+        if (!card.ynabAccountId) {
           status = 'avoid';
-        } else if (insight.shouldAvoid || limits?.shouldStopUsing || limits?.maximumExceeded) {
+        } else if (
+          !unlockedLevel
+          && (insight.shouldAvoid || limits?.shouldStopUsing || limits?.maximumExceeded)
+        ) {
           status = 'avoid';
           capped = true;
         }
 
         if (typeof maximumRemaining === 'number' && amount > maximumRemaining) {
-          status = 'avoid';
-          capped = true;
+          const canProgress = projectedSpendingTier.hasNextSpendingTier;
+          status = canProgress ? 'consider' : 'avoid';
+          capped = !canProgress;
         }
 
         if (typeof minimumRemaining === 'number' && minimumRemaining > 0 && status === 'use') {
@@ -633,19 +912,29 @@ function buildTransactionAdvice(params: {
         }
 
         const baseReasons = buildTransactionReasons({
-          rewardRate: insight.rewardRate,
+          rewardRate: effectiveRewardRate,
           minimumRemaining,
           maximumRemaining,
+          currentLevelCapReached: limits?.currentLevelCapReached,
+          nextSpendingTierRemaining: projectedSpendingTier.hasNextSpendingTier
+            && projectedSpendingTier.nextLevel
+            ? Math.max(
+                0,
+                projectedSpendingTier.nextLevel.spendThreshold
+                  - (limits?.totalSpend ?? 0)
+                  - amount,
+              )
+            : null,
           capped,
         });
 
-        const reasons = card?.ynabAccountId ? baseReasons : ['Missing YNAB account mapping'];
+        const reasons = card.ynabAccountId ? baseReasons : ['Missing YNAB account mapping'];
 
         return {
           cardId: insight.cardId,
           cardName: insight.cardName,
           status,
-          rewardRate: insight.rewardRate,
+          rewardRate: effectiveRewardRate,
           minimumRemaining,
           maximumRemaining,
           reasons,
@@ -672,40 +961,87 @@ function buildTransactionAdvice(params: {
     }
 
     if (txn.flagColor) {
+      const flagColor = txn.flagColor;
       const ranked = params.cards.map((card) => {
-        const reward = SimpleRewardsCalculator.calculateTransactionReward(amount, card, params.settings, {
-          flagColor: txn.flagColor,
-        });
-
-        const effectiveRate = amount > 0 ? reward.rewardDollars / amount : 0;
         const limits = params.cardLimitLookup.get(card.id);
-        const maximumRemaining = limits?.maximumRemaining ?? null;
-        const minimumRemaining = limits?.minimumRemaining ?? null;
+        const currentSpendingTier = resolveCardSpendingTier(
+          card,
+          limits?.totalSpend ?? 0,
+        );
+        const projectedSpendingTier = resolveCardSpendingTier(
+          card,
+          (limits?.totalSpend ?? 0) + amount,
+        );
+        const unlockedLevel = spendingLevelChanged(
+          currentSpendingTier,
+          projectedSpendingTier,
+        );
+        const effectiveCard = projectedSpendingTier.effectiveCard;
+        const maximumRemaining = minimumHeadroom(
+          projectedCardHeadroom(effectiveCard, limits, unlockedLevel),
+          projectedSubcategoryHeadroom(effectiveCard, limits, flagColor),
+        );
+        const earnableAmount = maximumRemaining === null
+          ? amount
+          : Math.min(amount, maximumRemaining);
+        const reward = SimpleRewardsCalculator.calculateTransactionReward(
+          earnableAmount,
+          effectiveCard,
+          params.settings,
+          { flagColor },
+        );
+        const effectiveRate = amount > 0 ? reward.rewardDollars / amount : 0;
+        const projectedMinimum = getPositiveNumber(effectiveCard.minimumSpend);
+        const cardMinimumRemaining = projectedMinimum === null
+          ? null
+          : Math.max(0, projectedMinimum - (limits?.totalSpend ?? 0) - amount);
+        const categoryMinimumRemaining = projectedSubcategoryMinimumRemaining(
+          effectiveCard,
+          limits,
+          flagColor,
+          amount,
+        );
+        const minimumRemaining = maximumRequirement(
+          cardMinimumRemaining,
+          categoryMinimumRemaining,
+        );
 
         let status: AdviceStatus = 'use';
         let capped = false;
 
         if (!card.ynabAccountId) {
           status = 'avoid';
-        } else if (limits?.shouldStopUsing || limits?.maximumExceeded) {
+        } else if (!unlockedLevel && (limits?.shouldStopUsing || limits?.maximumExceeded)) {
           status = 'avoid';
           capped = true;
         } else if (typeof maximumRemaining === 'number' && amount > maximumRemaining) {
-          status = 'avoid';
-          capped = true;
+          const canProgress = projectedSpendingTier.hasNextSpendingTier;
+          status = canProgress ? 'consider' : 'avoid';
+          capped = !canProgress;
         } else if (typeof minimumRemaining === 'number' && minimumRemaining > 0) {
           status = 'consider';
         }
 
+        const effectiveNativeRate = reward.rewardRate * (earnableAmount / amount);
         const rewardRateLabel = card.type === 'cashback'
-          ? `${reward.rewardRate.toFixed(2)}% cashback`
-          : `${reward.rewardRate.toFixed(2)} miles/$`;
+          ? `${effectiveNativeRate.toFixed(2)}% cashback`
+          : `${effectiveNativeRate.toFixed(2)} miles/$`;
 
         const baseReasons = buildTransactionReasons({
           rewardRate: effectiveRate,
           rewardRateLabel,
           minimumRemaining,
           maximumRemaining,
+          currentLevelCapReached: limits?.currentLevelCapReached,
+          nextSpendingTierRemaining: projectedSpendingTier.hasNextSpendingTier
+            && projectedSpendingTier.nextLevel
+            ? Math.max(
+                0,
+                projectedSpendingTier.nextLevel.spendThreshold
+                  - (limits?.totalSpend ?? 0)
+                  - amount,
+              )
+            : null,
           capped,
         });
 
@@ -738,7 +1074,7 @@ function buildTransactionAdvice(params: {
         description: txn.description ?? null,
         amount,
         method: 'flag_color',
-        flagColor: txn.flagColor,
+        flagColor,
         recommended,
         ranked,
       };
@@ -864,15 +1200,7 @@ export async function POST(request: Request) {
       cap: number | null;
     }> = [];
 
-    const cardLimitLookup = new Map<
-      string,
-      {
-        minimumRemaining: number | null;
-        maximumRemaining: number | null;
-        maximumExceeded: boolean;
-        shouldStopUsing: boolean;
-      }
-    >();
+    const cardLimitLookup = new Map<string, CardAdviceLimits>();
 
     const cardsPayload = cards.map((card) => {
       const cardCalculations = calculationsByCard.get(card.id) ?? [];
@@ -895,6 +1223,11 @@ export async function POST(request: Request) {
           };
 
       if (isStatusAvailable(status)) {
+        const totalSpend = isSummaryAvailable(summary) ? summary.totalSpend : 0;
+        const spendingTier = resolveCardSpendingTier(card, totalSpend);
+        const cardCalculation = cardCalculations.find(
+          ({ ruleId }) => ruleId.startsWith('card-'),
+        );
         const minimumRemaining = status.limits.minimum.remaining;
         if (typeof minimumRemaining === 'number' && minimumRemaining > 0) {
           minimumSpendNeeded.push({
@@ -905,7 +1238,11 @@ export async function POST(request: Request) {
           });
         }
 
-        if (status.limits.maximum.cap && typeof status.limits.maximum.remaining === 'number') {
+        if (
+          !spendingTier.hasNextSpendingTier
+          && status.limits.maximum.cap
+          && typeof status.limits.maximum.remaining === 'number'
+        ) {
           maximumSpendHeadroom.push({
             cardId: card.id,
             cardName: card.name,
@@ -924,10 +1261,22 @@ export async function POST(request: Request) {
         }
 
         cardLimitLookup.set(card.id, {
-          minimumRemaining: status.limits.minimum.remaining ?? null,
-          maximumRemaining: status.limits.maximum.remaining ?? null,
+          totalSpend,
+          eligibleSpendBeforeBlocks: isSummaryAvailable(summary)
+            ? summary.eligibleSpendBeforeBlocks
+            : 0,
           maximumExceeded: Boolean(status.limits.maximum.exceeded),
           shouldStopUsing: status.limits.shouldStopUsing,
+          currentLevelCapReached: Boolean(
+            status.limits.maximum.cap
+            && status.limits.maximum.remaining === 0,
+          ),
+          subcategorySpendById: new Map(
+            cardCalculation?.subcategoryBreakdowns?.map((breakdown) => [
+              breakdown.subcategoryId,
+              breakdown.totalSpend,
+            ] as const) ?? [],
+          ),
         });
       }
 
@@ -981,6 +1330,7 @@ export async function POST(request: Request) {
           cards,
           cardLimitLookup,
           categoryRecommendations,
+          themeGroups: storage.themeGroups ?? [],
           settings: storage.settings ?? undefined,
         })
       : null;

@@ -105,4 +105,42 @@ describe('createRewardCalculationFromSimple', () => {
     const rewardCalc = createRewardCalculationFromSimple(baseCard, simpleCalc, 'custom-rule');
     expect(rewardCalc.ruleId).toBe('custom-rule');
   });
+
+  it('only emits stop-using guidance when the final spend-level cap is reached', () => {
+    const card: CreditCard = {
+      ...baseCard,
+      earningRate: 2,
+      minimumSpend: 50,
+      maximumSpend: 20,
+      spendingTiers: [{
+        id: 'higher-level',
+        spendThreshold: 100,
+        earningRate: 3,
+        maximumSpend: 30,
+      }],
+    };
+    const calculation = (totalSpend: number, activeSpendingTierId: string | null): SimplifiedCalculation => ({
+      cardId: card.id,
+      period: '2025-03',
+      totalSpend,
+      countedSpend: activeSpendingTierId ? 30 : 20,
+      eligibleSpend: activeSpendingTierId ? 30 : 20,
+      rewardEarned: activeSpendingTierId ? 0.9 : 0.4,
+      rewardEarnedDollars: activeSpendingTierId ? 0.9 : 0.4,
+      rewardType: 'cashback',
+      minimumSpendMet: true,
+      maximumSpendExceeded: true,
+      activeSpendingTierId,
+      transactionRewards: {},
+    });
+
+    expect(createRewardCalculationFromSimple(card, calculation(80, null))).toMatchObject({
+      maximumExceeded: true,
+      shouldStopUsing: false,
+    });
+    expect(createRewardCalculationFromSimple(card, calculation(120, 'higher-level'))).toMatchObject({
+      maximumExceeded: true,
+      shouldStopUsing: true,
+    });
+  });
 });

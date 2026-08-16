@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Save, AlertCircle } from 'lucide-react';
-import { useCreditCards } from '@/hooks/useLocalStorage';
+import { useCreditCards, useSettings } from '@/hooks/useLocalStorage';
 import { useAutoBackup } from '@/hooks/useAutoBackup';
 import { storage, type CardSubcategory, type CreditCard } from '@/lib/storage';
 import { validateIssuer, sanitizeInput } from '@/lib/validation';
@@ -25,6 +25,7 @@ const FLAG_COLOR_MAP: Record<string, string> = {
 };
 import { prepareSubcategoriesForSave } from '@/lib/subcategory-utils';
 import { YnabClient } from '@/lib/ynab-client';
+import { formatDollars } from '@/lib/utils';
 
 interface CardSettingsProps {
   card: CreditCard;
@@ -44,16 +45,21 @@ const createFormState = (nextCard: CreditCard): CardEditState => ({
   promotionalPeriodStart: nextCard.promotionalPeriod?.startDate || '',
   promotionalPeriodEnd: nextCard.promotionalPeriod?.endDate || '',
   promotionalPeriodDescription: nextCard.promotionalPeriod?.description || '',
-  earningRate: nextCard.earningRate || (nextCard.type === 'cashback' ? 1 : 1),
+  earningRate: nextCard.earningRate ?? null,
   earningBlockSize: nextCard.earningBlockSize,
   minimumSpend: nextCard.minimumSpend,
   maximumSpend: nextCard.maximumSpend,
   subcategoriesEnabled: nextCard.subcategoriesEnabled ?? false,
   subcategories: nextCard.subcategories || [],
+  spendingTiers: nextCard.spendingTiers?.map((tier) => ({
+    ...tier,
+    subcategories: tier.subcategories?.map((subcategory) => ({ ...subcategory })),
+  })) ?? [],
 });
 
 export default function CardSettings({ card, onUpdate, initialEditing = false }: CardSettingsProps) {
   const { updateCard } = useCreditCards();
+  const { settings } = useSettings();
   const { autoBackup } = useAutoBackup();
   const [editing, setEditing] = useState(initialEditing);
   const [saving, setSaving] = useState(false);
@@ -147,6 +153,16 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
       }
     }
 
+    const spendingThresholds = [
+      formData.minimumSpend ?? 0,
+      ...(formData.spendingTiers ?? card.spendingTiers ?? []).map(({ spendThreshold }) => spendThreshold),
+    ];
+    if (new Set(spendingThresholds).size !== spendingThresholds.length) {
+      setError('Each spend-based reward tier must use a unique threshold');
+      setSaving(false);
+      return;
+    }
+
     try {
       const toggledOn = Boolean(formData.subcategoriesEnabled);
       const preparedSubcategories = toggledOn
@@ -178,6 +194,7 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
         maximumSpend: formData.maximumSpend,
         subcategoriesEnabled: toggledOn,
         subcategories: preparedSubcategories,
+        spendingTiers: formData.spendingTiers ?? card.spendingTiers ?? [],
       };
 
       updateCard(updatedCard);
@@ -297,6 +314,38 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
                   : `$${card.maximumSpend.toLocaleString()} limit`}
               </p>
             </div>
+          </div>
+          <div className="mt-6">
+            <h3 className="text-sm font-medium text-muted-foreground">Spend-based reward tiers</h3>
+            {card.spendingTiers && card.spendingTiers.length > 0 ? (
+              <div className="mt-2 space-y-2">
+                {[...card.spendingTiers]
+                  .sort((left, right) => left.spendThreshold - right.spendThreshold)
+                  .map((tier) => (
+                    <div key={tier.id} className="rounded-lg border border-border/40 bg-muted/10 p-3">
+                      <p className="font-medium">
+                        At {formatDollars(tier.spendThreshold, { currency: settings.currency })} total spend
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {card.type === 'cashback'
+                          ? `${tier.earningRate ?? 0}% default cashback`
+                          : `${tier.earningRate ?? 0} default miles per dollar`}
+                        {' • '}
+                        {tier.maximumSpend && tier.maximumSpend > 0
+                          ? `${formatDollars(tier.maximumSpend, { currency: settings.currency })} overall cap`
+                          : 'No overall cap'}
+                        {tier.subcategories?.length
+                          ? ` • ${tier.subcategories.length} category ${tier.subcategories.length === 1 ? 'override' : 'overrides'}`
+                          : ''}
+                      </p>
+                    </div>
+                  ))}
+              </div>
+            ) : (
+              <p className="mt-2 text-sm text-muted-foreground">
+                No additional spend tiers. The current settings are the base level.
+              </p>
+            )}
           </div>
           <div className="mt-6">
             <h3 className="text-sm font-medium text-muted-foreground">Subcategory rewards</h3>

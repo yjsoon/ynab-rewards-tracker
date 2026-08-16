@@ -22,7 +22,7 @@ import type {
 import type { YnabFlagColor } from "@/lib/ynab-constants";
 import type { Transaction } from "@/types/transaction";
 import { cn } from "@/lib/utils";
-import { SimpleRewardsCalculator } from "@/lib/rewards-engine";
+import { resolveCardSpendingTier, SimpleRewardsCalculator } from "@/lib/rewards-engine";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -101,13 +101,20 @@ export function DashboardCardTile({
   const calc = metrics?.calculation;
   const minimumMet = calc ? calc.minimumSpendMet : true;
   const hasMin = calc ? hasMinimumSpendRequirement(calc.minimumSpend) : false;
-  const exceeded = calc?.maximumSpendExceeded ?? false;
+  const resolvedSpendingTier = calc
+    ? resolveCardSpendingTier(card, calc.totalSpend)
+    : null;
+  const canUnlockHigherLevel = resolvedSpendingTier?.hasNextSpendingTier ?? false;
+  const exceeded = Boolean(calc?.maximumSpendExceeded && !canUnlockHigherLevel);
+  const intermediateCapReached = Boolean(
+    calc?.maximumSpendExceeded && canUnlockHigherLevel,
+  );
   const nearCap = calc ? getCardAttentionStatus(card, calc) === "near-cap" : false;
   const earnedNumber = calc?.rewardEarned ?? 0;
   const earnedDisplay = Math.round(earnedNumber).toLocaleString();
   const rewardChipState: "exceeded" | "warn" | "muted" = exceeded
     ? "exceeded"
-    : hasMin && !minimumMet
+    : intermediateCapReached || (hasMin && !minimumMet)
       ? "warn"
       : "muted";
   const rewardChipClass = {
@@ -125,7 +132,9 @@ export function DashboardCardTile({
         "bg-card",
         accentClasses,
         exceeded ? "ring-2 ring-red-300/70 dark:ring-red-900/60" : undefined,
-        nearCap ? "ring-2 ring-amber-300/70 dark:ring-amber-800/60" : undefined,
+        nearCap || intermediateCapReached
+          ? "ring-2 ring-amber-300/70 dark:ring-amber-800/60"
+          : undefined,
         isDragging ? "ring-2 ring-primary/60 shadow-lg" : undefined,
       )}
     >

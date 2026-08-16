@@ -28,26 +28,35 @@ export function CardSettingsCompact({
   const cardType = state.type ?? card.type;
   const cardName = state.name ?? card.name;
   const issuerName = state.issuer ?? card.issuer ?? 'Unknown issuer';
-  const earningRate = state.earningRate ?? card.earningRate ?? 1;
-  const minimumSpend = state.minimumSpend ?? card.minimumSpend ?? null;
-  const maximumSpend = state.maximumSpend ?? card.maximumSpend ?? null;
+  const earningRate = state.earningRate !== undefined
+    ? state.earningRate
+    : card.earningRate ?? null;
+  const minimumSpend = state.minimumSpend !== undefined
+    ? state.minimumSpend
+    : card.minimumSpend ?? null;
+  const maximumSpend = state.maximumSpend !== undefined
+    ? state.maximumSpend
+    : card.maximumSpend ?? null;
   const isFeatured = state.featured ?? card.featured ?? true;
   const subcategoriesEnabled = state.subcategoriesEnabled ?? card.subcategoriesEnabled ?? false;
   const subcategoryCount = subcategoriesEnabled
     ? (state.subcategories ?? card.subcategories ?? []).length
     : 0;
   const hasPromo = state.promotionalPeriodEnabled ?? Boolean(card.promotionalPeriod);
+  const spendingTierCount = (state.spendingTiers ?? card.spendingTiers ?? []).length;
 
-  const rateDisplay = cardType === 'cashback'
-    ? `${earningRate.toFixed(earningRate % 1 === 0 ? 0 : 2)}% cashback`
-    : `${Number.isInteger(earningRate) ? earningRate : earningRate.toFixed(2)} miles/$1`;
+  const rateDisplay = earningRate === null
+    ? 'Not configured'
+    : cardType === 'cashback'
+      ? `${earningRate.toFixed(earningRate % 1 === 0 ? 0 : 2)}% cashback`
+      : `${Number.isInteger(earningRate) ? earningRate : earningRate.toFixed(2)} miles/$1`;
 
   const spendLimits: string[] = [];
   if (minimumSpend !== null && minimumSpend > 0) {
-    spendLimits.push(`Min $${minimumSpend.toLocaleString()}`);
+    spendLimits.push(`${spendingTierCount > 0 ? 'Base min' : 'Min'} $${minimumSpend.toLocaleString()}`);
   }
   if (maximumSpend !== null && maximumSpend > 0) {
-    spendLimits.push(`Cap $${maximumSpend.toLocaleString()}`);
+    spendLimits.push(`${spendingTierCount > 0 ? 'Base cap' : 'Cap'} $${maximumSpend.toLocaleString()}`);
   }
 
   return (
@@ -59,6 +68,14 @@ export function CardSettingsCompact({
         !isChanged && !isSelected && 'border-border/60 hover:border-border'
       )}
       onClick={onClick}
+      onKeyDown={(event) => {
+        if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) {
+          event.preventDefault();
+          onClick();
+        }
+      }}
+      role="button"
+      tabIndex={0}
     >
       {/* Header row: checkbox, name, featured star */}
       <div className="flex items-start justify-between gap-2">
@@ -105,7 +122,7 @@ export function CardSettingsCompact({
         {/* Type + rate */}
         <div className="flex items-center gap-1.5">
           <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-            {cardType === 'cashback' ? '💵' : '✈️'} {rateDisplay}
+            {cardType === 'cashback' ? '💵' : '✈️'} {spendingTierCount > 0 ? 'Base · ' : ''}{rateDisplay}
           </Badge>
         </div>
 
@@ -126,6 +143,12 @@ export function CardSettingsCompact({
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-1 border-purple-300 text-purple-700 dark:border-purple-700 dark:text-purple-300">
               <Sparkles className="h-3 w-3" />
               Promo
+            </Badge>
+          )}
+          {spendingTierCount > 0 && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-1">
+              <Sparkles className="h-3 w-3" />
+              {spendingTierCount + 1} spend levels
             </Badge>
           )}
         </div>

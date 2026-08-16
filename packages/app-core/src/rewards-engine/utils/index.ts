@@ -4,4 +4,5 @@ export * from './periods';
 export * from './recommendation-helpers';
 export * from './reward-calculation';
 export * from './reward-math';
+export * from './spending-tiers';
 export * from './subcategories';

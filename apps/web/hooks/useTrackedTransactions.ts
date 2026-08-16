@@ -4,8 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { YnabClient } from "@/lib/ynab-client";
 import { storage } from "@/lib/storage";
-import { SimpleRewardsCalculator } from "@/lib/rewards-engine";
-import { toIsoDateString } from "@/lib/date";
+import { resolveRewardDataSinceDate } from "@/lib/card-metrics";
 import type { CreditCard, CachedTransaction } from "@/lib/storage";
 import type { Transaction } from "@/types/transaction";
 import type { YnabFlagColor } from "@/lib/ynab-constants";
@@ -216,6 +215,7 @@ interface UseTrackedTransactionsArgs {
 interface UseTrackedTransactionsResult {
   recentTransactions: Transaction[];
   allTransactions: Transaction[];
+  dataSinceDate: string;
   accountsMap: Map<string, string>;
   loading: boolean;
   error: string;
@@ -264,23 +264,11 @@ export function useTrackedTransactions({
   );
 
   const earliestTrackedWindow = useMemo(() => {
-    const anchorDate = referenceDate ?? new Date();
-
-    if (featuredCards.length === 0) {
-      const fallback = new Date(anchorDate);
-      fallback.setDate(fallback.getDate() - lookbackDays);
-      return toIsoDateString(fallback);
-    }
-
-    const earliestMillis = featuredCards
-      .map((card) => SimpleRewardsCalculator.calculatePeriod(card, anchorDate))
-      .map((period) => new Date(period.start).getTime())
-      .reduce(
-        (min, current) => Math.min(min, current),
-        Number.POSITIVE_INFINITY,
-      );
-
-    return toIsoDateString(new Date(earliestMillis));
+    return resolveRewardDataSinceDate(
+      featuredCards,
+      lookbackDays,
+      referenceDate ?? new Date(),
+    );
   }, [featuredCards, lookbackDays, referenceDate]);
 
   const applySnapshot = useCallback((snapshot: TrackedTransactionsSnapshot) => {
@@ -470,6 +458,7 @@ export function useTrackedTransactions({
   return {
     recentTransactions,
     allTransactions,
+    dataSinceDate: earliestTrackedWindow,
     accountsMap,
     loading,
     error,

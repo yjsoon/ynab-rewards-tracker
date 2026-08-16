@@ -8,6 +8,7 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { CardSubcategoriesEditor, type CardSubcategoryDraft } from '@/components/CardSubcategoriesEditor';
+import { CardSpendingTiersEditor } from '@/components/CardSpendingTiersEditor';
 import {
   Percent,
   DollarSign,
@@ -19,7 +20,7 @@ import {
   Sparkles,
   Settings2
 } from 'lucide-react';
-import type { CreditCard } from '@/lib/storage';
+import type { CardSpendingTier, CreditCard } from '@/lib/storage';
 import { toIsoDateString } from '@/lib/date';
 import {
   formatMinimumSpendText,
@@ -30,7 +31,7 @@ import {
 import { UNFLAGGED_FLAG, YNAB_FLAG_COLORS, type YnabFlagColor } from '@/lib/ynab-constants';
 
 export interface CardEditState {
-  earningRate?: number;
+  earningRate?: number | null;
   earningBlockSize?: number | null;
   minimumSpend?: number | null;
   maximumSpend?: number | null;
@@ -46,6 +47,7 @@ export interface CardEditState {
   type?: 'cashback' | 'miles';
   subcategoriesEnabled?: boolean;
   subcategories?: CardSubcategoryDraft[];
+  spendingTiers?: CardSpendingTier[];
 }
 
 function cloneSubcategories(subcategories?: CardSubcategoryDraft[] | CreditCard['subcategories']): CardSubcategoryDraft[] {
@@ -72,6 +74,31 @@ function serialiseSubcategories(subcategories: CardSubcategoryDraft[] | CreditCa
       name: sub.name?.trim() ?? '',
       priority: sub.priority,
     }))
+  );
+}
+
+function cloneSpendingTiers(tiers?: CardSpendingTier[]): CardSpendingTier[] {
+  return (tiers ?? []).map((tier) => ({
+    ...tier,
+    subcategories: tier.subcategories?.map((subcategory) => ({ ...subcategory })),
+  }));
+}
+
+function serialiseSpendingTiers(tiers?: CardSpendingTier[]): string {
+  return JSON.stringify(
+    cloneSpendingTiers(tiers)
+      .sort((left, right) => left.spendThreshold - right.spendThreshold)
+      .map((tier) => ({
+        ...tier,
+        earningRate: tier.earningRate ?? null,
+        maximumSpend: tier.maximumSpend ?? null,
+        subcategories: [...(tier.subcategories ?? [])]
+          .sort((left, right) => left.subcategoryId.localeCompare(right.subcategoryId))
+          .map((subcategory) => ({
+            ...subcategory,
+            maximumSpend: subcategory.maximumSpend ?? null,
+          })),
+      })),
   );
 }
 
@@ -129,16 +156,24 @@ export function computeCardFieldDiff(
   const issuerName = state.issuer ?? card.issuer ?? '';
   const cardType = state.type ?? card.type;
   const isFeatured = state.featured ?? card.featured ?? true;
-  const earningRate = state.earningRate ?? card.earningRate ?? (card.type === 'cashback' ? 1 : 1);
+  const earningRate = state.earningRate !== undefined
+    ? state.earningRate
+    : card.earningRate ?? null;
   const earningBlockSize = state.earningBlockSize ?? card.earningBlockSize ?? null;
-  const minimumSpend = state.minimumSpend ?? card.minimumSpend ?? null;
-  const maximumSpend = state.maximumSpend ?? card.maximumSpend ?? null;
+  const minimumSpend = state.minimumSpend !== undefined
+    ? state.minimumSpend
+    : card.minimumSpend ?? null;
+  const maximumSpend = state.maximumSpend !== undefined
+    ? state.maximumSpend
+    : card.maximumSpend ?? null;
   const billingCycleType = state.billingCycleType ?? card.billingCycle?.type ?? 'calendar';
   const billingCycleDay = state.billingCycleDay ?? card.billingCycle?.dayOfMonth ?? 1;
   const subcategoriesEnabled = state.subcategoriesEnabled ?? card.subcategoriesEnabled ?? false;
   const baselineSubcategories = cloneSubcategories(card.subcategories);
   const stateSubcategories = cloneSubcategories(state.subcategories ?? card.subcategories);
   const subcategoriesChanged = serialiseSubcategories(baselineSubcategories) !== serialiseSubcategories(stateSubcategories);
+  const spendingTiersChanged = serialiseSpendingTiers(card.spendingTiers)
+    !== serialiseSpendingTiers(state.spendingTiers ?? card.spendingTiers);
 
   const promotionalPeriodEnabled = state.promotionalPeriodEnabled ?? Boolean(card.promotionalPeriod);
   const promotionalPeriodStart = state.promotionalPeriodStart ?? card.promotionalPeriod?.startDate ?? '';
@@ -150,7 +185,7 @@ export function computeCardFieldDiff(
     issuer: issuerName !== (card.issuer ?? ''),
     type: cardType !== card.type,
     featured: isFeatured !== (card.featured ?? true),
-    earningRate: earningRate !== (card.earningRate ?? (card.type === 'cashback' ? 1 : 1)),
+    earningRate: earningRate !== (card.earningRate ?? null),
     earningBlockSize:
       earningBlockSize !== (card.earningBlockSize ?? null),
     minimumSpend: minimumSpend !== (card.minimumSpend ?? null),
@@ -165,6 +200,7 @@ export function computeCardFieldDiff(
       promotionalPeriodDescription !== (card.promotionalPeriod?.description ?? ''),
     subcategoriesEnabled: subcategoriesEnabled !== Boolean(card.subcategoriesEnabled),
     subcategories: subcategoriesChanged,
+    spendingTiers: spendingTiersChanged,
   } as const;
 }
 
@@ -294,10 +330,21 @@ export function CardSettingsEditor({
   const cardType = state.type ?? card.type;
   const cardName = state.name ?? card.name;
   const issuerName = state.issuer ?? card.issuer ?? 'Unknown issuer';
-  const earningRate = state.earningRate ?? card.earningRate ?? 1;
+  const earningRate = state.earningRate !== undefined
+    ? state.earningRate
+    : card.earningRate ?? null;
+  const earningRateLabel = earningRate === null
+    ? 'Not configured'
+    : cardType === 'cashback'
+      ? `${earningRate.toFixed(2)}%`
+      : `${Number.isInteger(earningRate) ? earningRate : earningRate.toFixed(2)} miles/$1`;
   const earningBlockSize = state.earningBlockSize ?? card.earningBlockSize ?? null;
-  const minimumSpend = state.minimumSpend ?? card.minimumSpend ?? null;
-  const maximumSpend = state.maximumSpend ?? card.maximumSpend ?? null;
+  const minimumSpend = state.minimumSpend !== undefined
+    ? state.minimumSpend
+    : card.minimumSpend ?? null;
+  const maximumSpend = state.maximumSpend !== undefined
+    ? state.maximumSpend
+    : card.maximumSpend ?? null;
   const billingCycleType = state.billingCycleType ?? card.billingCycle?.type ?? 'calendar';
   const billingCycleDay = state.billingCycleDay ?? card.billingCycle?.dayOfMonth ?? 1;
   const promotionalPeriodEnabled = state.promotionalPeriodEnabled ?? Boolean(card.promotionalPeriod);
@@ -309,6 +356,10 @@ export function CardSettingsEditor({
   const subcategoryDrafts = useMemo(
     () => cloneSubcategories(state.subcategories ?? card.subcategories),
     [state.subcategories, card.subcategories]
+  );
+  const spendingTierDrafts = useMemo(
+    () => cloneSpendingTiers(state.spendingTiers ?? card.spendingTiers),
+    [state.spendingTiers, card.spendingTiers],
   );
 
   const [blockSizeSnapshot, setBlockSizeSnapshot] = useState(() =>
@@ -346,7 +397,11 @@ export function CardSettingsEditor({
   const handleSubcategoryToggle = (enabled: boolean) => {
     onFieldChange('subcategoriesEnabled', enabled);
     if (enabled) {
-      const ensured = ensureUnflaggedSubcategory(cloneSubcategories(subcategoryDrafts), earningRate, resolvedFlagNames);
+      const ensured = ensureUnflaggedSubcategory(
+        cloneSubcategories(subcategoryDrafts),
+        earningRate ?? 0,
+        resolvedFlagNames,
+      );
       onFieldChange('subcategories', ensured);
     }
   };
@@ -388,9 +443,7 @@ export function CardSettingsEditor({
           <div className="text-right text-xs text-muted-foreground">
             Effective rate
             <span className="block text-xl font-semibold text-primary">
-              {cardType === 'cashback'
-                ? `${earningRate.toFixed(2)}%`
-                : `${Number.isInteger(earningRate) ? earningRate : earningRate.toFixed(2)} miles/$1`}
+              {earningRateLabel}
             </span>
           </div>
           <div
@@ -490,9 +543,7 @@ export function CardSettingsEditor({
           <SettingCapsule
             label={cardType === 'cashback' ? 'Cashback rate' : 'Miles rate'}
             description={cardType === 'cashback' ? 'Percentage earned on spend' : 'Miles earned per dollar'}
-            value={cardType === 'cashback'
-              ? `${earningRate.toFixed(2)}%`
-              : `${Number.isInteger(earningRate) ? earningRate : earningRate.toFixed(2)} miles/$1`}
+            value={earningRateLabel}
             icon={<Percent className="h-4 w-4 text-muted-foreground" />}
             isDirty={fieldDirty.earningRate}
           >
@@ -502,8 +553,12 @@ export function CardSettingsEditor({
               </Label>
               <Input
                 type="number"
-                value={earningRate}
-                onChange={(e) => onFieldChange('earningRate', parseFloat(e.target.value) || 0)}
+                value={earningRate ?? ''}
+                placeholder="Not configured"
+                onChange={(e) => onFieldChange(
+                  'earningRate',
+                  e.target.value === '' ? null : Math.max(0, Number(e.target.value) || 0),
+                )}
                 step="0.1"
                 min="0"
                 max="100"
@@ -858,8 +913,34 @@ export function CardSettingsEditor({
           value={subcategoryDrafts}
           onToggleEnabled={handleSubcategoryToggle}
           onChange={handleSubcategoriesChange}
-          baseRewardRate={earningRate}
+          baseRewardRate={earningRate ?? 0}
           flagNames={resolvedFlagNames}
+        />
+      </div>
+
+      <div className={`mt-6 space-y-3 ${
+        fieldDirty.spendingTiers
+          ? 'rounded-xl border border-amber-300/80 bg-amber-50/40 p-4 dark:border-amber-700/60 dark:bg-amber-900/15'
+          : ''
+      }`}>
+        <div>
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Spend-based reward tiers
+          </h4>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Increase rates and eligible-spend caps when total card spend reaches a threshold.
+          </p>
+        </div>
+        <CardSpendingTiersEditor
+          card={card}
+          cardType={cardType}
+          value={spendingTierDrafts}
+          baseEarningRate={typeof earningRate === 'number' ? earningRate : null}
+          baseMinimumSpend={minimumSpend ?? null}
+          baseMaximumSpend={maximumSpend ?? null}
+          subcategoriesEnabled={subcategoriesEnabled}
+          subcategories={subcategoryDrafts}
+          onChange={(tiers) => onFieldChange('spendingTiers', tiers)}
         />
       </div>
     </div>

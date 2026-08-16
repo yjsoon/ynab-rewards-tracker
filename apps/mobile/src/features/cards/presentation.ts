@@ -213,6 +213,9 @@ export function formatThresholdSummary(
   if (typeof card.maximumSpend === 'number' && card.maximumSpend > 0) {
     values.push(`Cap ${formatting.currencyCompact(card.maximumSpend)}`);
   }
+  if (card.spendingTiers?.length) {
+    values.push(`${card.spendingTiers.length + 1} spend levels`);
+  }
   if (typeof card.earningBlockSize === 'number' && card.earningBlockSize > 0) {
     values.push(`${formatting.currencyCompact(card.earningBlockSize)} blocks`);
   }
@@ -220,7 +223,12 @@ export function formatThresholdSummary(
 }
 
 export function isCardConfigured(card: CreditCard): boolean {
-  if (typeof card.earningRate === 'number' && Number.isFinite(card.earningRate)) {
+  if (
+    (typeof card.earningRate === 'number' && Number.isFinite(card.earningRate))
+    || card.spendingTiers?.some(
+      (tier) => typeof tier.earningRate === 'number' && Number.isFinite(tier.earningRate),
+    )
+  ) {
     return true;
   }
   return Boolean(

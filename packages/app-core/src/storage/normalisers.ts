@@ -1,12 +1,14 @@
 import { UNFLAGGED_FLAG, YNAB_FLAG_COLORS, type YnabFlagColor } from '../ynab/constants';
 
 import type {
+  CardSpendingTier,
   CardReference,
   CardSubcategory,
   CreditCard,
   HiddenCard,
   HiddenCardReason,
   StorageData,
+  SpendingTierSubcategory,
   SubcategoryReference,
   ThemeGroup,
 } from './types';
@@ -36,6 +38,10 @@ function createRandomId(prefix: string): string {
 
 export function createSubcategoryId(): string {
   return createRandomId('subcat');
+}
+
+export function createSpendingTierId(): string {
+  return createRandomId('spend-tier');
 }
 
 export function createGroupId(): string {
@@ -198,6 +204,81 @@ export function normaliseCard(
 
   mutableCard.subcategoriesEnabled = subcategoriesEnabled;
   mutableCard.subcategories = normalisedSubcategories;
+
+  const subcategoryIds = new Set(normalisedSubcategories.map(({ id }) => id));
+  const seenSpendingTierIds = new Set<string>();
+  const rawSpendingTiers = Array.isArray(mutableCard.spendingTiers)
+    ? mutableCard.spendingTiers
+    : [];
+  mutableCard.spendingTiers = rawSpendingTiers.flatMap((rawTier) => {
+    if (!rawTier || typeof rawTier !== 'object' || Array.isArray(rawTier)) {
+      return [];
+    }
+    const tier = rawTier as CardSpendingTier & Record<string, unknown>;
+    if (
+      typeof tier.spendThreshold !== 'number'
+      || !Number.isFinite(tier.spendThreshold)
+      || tier.spendThreshold < 0
+    ) {
+      return [];
+    }
+    const id = typeof tier.id === 'string' && tier.id.length > 0
+      ? tier.id
+      : createSpendingTierId();
+    if (seenSpendingTierIds.has(id)) {
+      return [];
+    }
+    seenSpendingTierIds.add(id);
+
+    const seenSubcategoryIds = new Set<string>();
+    const subcategories = Array.isArray(tier.subcategories)
+      ? tier.subcategories.flatMap((rawOverride) => {
+          if (!rawOverride || typeof rawOverride !== 'object' || Array.isArray(rawOverride)) {
+            return [];
+          }
+          const override = rawOverride as SpendingTierSubcategory & Record<string, unknown>;
+          if (
+            typeof override.subcategoryId !== 'string'
+            || !subcategoryIds.has(override.subcategoryId)
+            || seenSubcategoryIds.has(override.subcategoryId)
+            || typeof override.rewardValue !== 'number'
+            || !Number.isFinite(override.rewardValue)
+            || override.rewardValue < 0
+          ) {
+            return [];
+          }
+          seenSubcategoryIds.add(override.subcategoryId);
+          return [{
+            subcategoryId: override.subcategoryId,
+            rewardValue: override.rewardValue,
+            maximumSpend:
+              typeof override.maximumSpend === 'number'
+                && Number.isFinite(override.maximumSpend)
+                && override.maximumSpend >= 0
+                ? override.maximumSpend
+                : null,
+          }];
+        })
+      : [];
+
+    return [{
+      id,
+      spendThreshold: tier.spendThreshold,
+      earningRate:
+        typeof tier.earningRate === 'number'
+          && Number.isFinite(tier.earningRate)
+          && tier.earningRate >= 0
+          ? tier.earningRate
+          : null,
+      maximumSpend:
+        typeof tier.maximumSpend === 'number'
+          && Number.isFinite(tier.maximumSpend)
+          && tier.maximumSpend >= 0
+          ? tier.maximumSpend
+          : null,
+      subcategories,
+    }];
+  }).sort((left, right) => left.spendThreshold - right.spendThreshold);
 
   if (typeof mutableCard.issuer !== 'string') {
     mutableCard.issuer = 'Unknown';

@@ -55,6 +55,76 @@ describe('normaliseCard', () => {
     expect(second.flagColor).toBe(UNFLAGGED_FLAG.value);
     expect(second.rewardValue).toBe(rawCard.earningRate);
   });
+
+  it('normalises spend tiers while preserving valid category overrides', () => {
+    const now = new Date().toISOString();
+    const rawCard: CreditCard = {
+      id: 'card-1',
+      name: 'Tiered Card',
+      issuer: 'Issuer',
+      type: 'cashback',
+      ynabAccountId: 'acct-1',
+      featured: true,
+      earningRate: 6,
+      minimumSpend: 800,
+      subcategoriesEnabled: true,
+      subcategories: [{
+        id: 'dining',
+        name: 'Dining',
+        flagColor: 'blue',
+        rewardValue: 6,
+        maximumSpend: 325,
+        priority: 0,
+        active: true,
+        createdAt: now,
+        updatedAt: now,
+      }],
+      spendingTiers: [{
+        id: 'high',
+        spendThreshold: 1_600,
+        earningRate: 8,
+        maximumSpend: 375,
+        subcategories: [
+          { subcategoryId: 'dining', rewardValue: 8, maximumSpend: 375 },
+          { subcategoryId: 'missing', rewardValue: 10, maximumSpend: 500 },
+        ],
+      }, {
+        id: 'middle',
+        spendThreshold: 1_200,
+        earningRate: 7,
+        maximumSpend: 350,
+      }],
+    };
+
+    const card = normaliseCard(rawCard as MutableCard, {});
+
+    expect(card.spendingTiers?.map(({ id }) => id)).toEqual(['middle', 'high']);
+    expect(card.spendingTiers?.[1]).toMatchObject({
+      spendThreshold: 1_600,
+      earningRate: 8,
+      maximumSpend: 375,
+      subcategories: [{
+        subcategoryId: 'dining',
+        rewardValue: 8,
+        maximumSpend: 375,
+      }],
+    });
+  });
+
+  it('ignores malformed spend-tier entries from persisted data', () => {
+    const rawCard = {
+      id: 'card-1',
+      name: 'Tiered Card',
+      issuer: 'Issuer',
+      type: 'cashback',
+      ynabAccountId: 'acct-1',
+      featured: true,
+      earningRate: 1,
+      spendingTiers: [null, 'invalid', { spendThreshold: 'high' }],
+    } as unknown as MutableCard;
+
+    expect(normaliseCard(rawCard, {}).spendingTiers).toEqual([]);
+  });
 });
 
 describe('normaliseHiddenCards', () => {

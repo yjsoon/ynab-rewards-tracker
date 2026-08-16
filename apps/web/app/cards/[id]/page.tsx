@@ -113,6 +113,7 @@ export default function CardDetailPage() {
           <TransactionsPreview
             card={card}
             lookbackDays={TRANSACTION_LOOKBACK_DAYS}
+            periodDataSinceDate={sharedSinceDate}
             prefetchedTransactions={cardTransactions.transactions}
             transactionsLoading={cardTransactions.loading}
             transactionsError={cardTransactions.error}

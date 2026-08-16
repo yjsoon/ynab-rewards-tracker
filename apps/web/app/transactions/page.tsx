@@ -63,13 +63,10 @@ export default function TransactionsPage() {
     [setupProgress],
   );
 
-  const featuredCards = useMemo(
-    () => cards.filter((card) => card.featured ?? true),
-    [cards],
-  );
-
   const {
     recentTransactions,
+    allTransactions,
+    dataSinceDate,
     accountsMap,
     loading,
     error,
@@ -81,7 +78,7 @@ export default function TransactionsPage() {
     pat,
     selectedBudgetId: selectedBudget.id,
     trackedAccountIds,
-    featuredCards,
+    featuredCards: cards,
     lookbackDays: TRANSACTION_LOOKBACK_DAYS,
     recentLimit: EXTENDED_TRANSACTIONS_LIMIT,
   });
@@ -163,10 +160,12 @@ export default function TransactionsPage() {
             loading={tableLoading}
             error={error}
             transactions={recentTransactions}
+            rewardTransactions={allTransactions}
             accountsMap={accountsMap}
             cards={cards}
             settings={settings}
             lookbackDays={TRANSACTION_LOOKBACK_DAYS}
+            periodDataSinceDate={dataSinceDate}
             refreshing={refreshing}
             lastUpdatedAt={lastUpdatedAt}
             customFlagNames={customFlagNames}

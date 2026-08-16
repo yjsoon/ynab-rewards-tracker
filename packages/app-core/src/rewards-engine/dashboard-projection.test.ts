@@ -283,6 +283,129 @@ describe('buildRewardsDashboard', () => {
     expect(card.subcategories?.map(({ id }) => id)).toEqual(originalOrder);
   });
 
+  it('projects an active spend-tier category rate and an intentionally removed cap', () => {
+    const category = {
+      id: 'groceries',
+      name: 'Groceries',
+      flagColor: 'orange' as const,
+      rewardValue: 6,
+      maximumSpend: 50,
+      priority: 0,
+      active: true,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const card = createCard({
+      earningRate: 1,
+      minimumSpend: 50,
+      subcategoriesEnabled: true,
+      subcategories: [category],
+      spendingTiers: [{
+        id: 'high-spend',
+        spendThreshold: 100,
+        earningRate: 1,
+        maximumSpend: null,
+        subcategories: [{
+          subcategoryId: category.id,
+          rewardValue: 8,
+          maximumSpend: null,
+        }],
+      }],
+    });
+
+    const result = buildRewardsDashboard(
+      [card],
+      [createTransaction({ amount: -120_000, flag_color: 'orange' })],
+      {},
+      referenceDate,
+    );
+
+    expect(result.cards[0]).toMatchObject({
+      reward: { amount: 9.6, dollars: 9.6 },
+      maximum: { target: null, reached: false },
+      status: 'earning',
+    });
+    expect(result.cards[0].rewardCategories[0]).toMatchObject({
+      rate: 8,
+      reward: { amount: 9.6, dollars: 9.6 },
+      maximum: { target: null, reached: false },
+    });
+  });
+
+  it('keeps a capped current level active while a higher spend level can still be unlocked', () => {
+    const card = createCard({
+      minimumSpend: 50,
+      maximumSpend: 20,
+      spendingTiers: [{
+        id: 'higher-level',
+        spendThreshold: 100,
+        earningRate: 3,
+        maximumSpend: 30,
+      }],
+    });
+
+    const betweenLevels = buildRewardsDashboard(
+      [card],
+      [createTransaction({ amount: -80_000 })],
+      {},
+      referenceDate,
+    );
+    const highestLevel = buildRewardsDashboard(
+      [card],
+      [createTransaction({ amount: -120_000 })],
+      {},
+      referenceDate,
+    );
+
+    expect(betweenLevels.cards[0]).toMatchObject({
+      spend: { total: 80, eligible: 20 },
+      maximum: { target: 20, reached: true },
+      status: 'earning',
+    });
+    expect(highestLevel.cards[0]).toMatchObject({
+      spend: { total: 120, eligible: 30 },
+      maximum: { target: 30, reached: true },
+      status: 'capped',
+    });
+  });
+
+  it('does not mix a pre-tier persisted reward with fresh spend-tier metadata', () => {
+    const card = createCard({
+      earningRate: 1,
+      spendingTiers: [{
+        id: 'high-spend',
+        spendThreshold: 100,
+        earningRate: 5,
+        maximumSpend: 150,
+      }],
+    });
+    const result = buildRewardsDashboard(
+      [card],
+      [createTransaction({ amount: -120_000 })],
+      {},
+      referenceDate,
+      [{
+        cardId: card.id,
+        ruleId: `card-${card.id}`,
+        period: '2026-02-01 → 2026-02-28',
+        totalSpend: 120,
+        eligibleSpend: 120,
+        rewardEarned: 1.2,
+        rewardEarnedDollars: 1.2,
+        rewardType: 'cashback',
+        minimumMet: true,
+        maximumExceeded: false,
+        shouldStopUsing: false,
+      }],
+    );
+
+    expect(result.cards[0]).toMatchObject({
+      reward: { amount: 6, dollars: 6 },
+      calculation: { activeSpendingTierId: 'high-spend' },
+      maximum: { target: 150 },
+    });
+  });
+
   it('inherits card block size for category cap progress while retaining native miles at zero value', () => {
     const card = createCard({
       type: 'miles',

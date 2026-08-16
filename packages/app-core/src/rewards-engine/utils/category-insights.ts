@@ -8,6 +8,7 @@ import type {
 } from '../../storage/types';
 
 import type { CategoryCardInsight } from '../types';
+import { resolveCardSpendingTier } from './spending-tiers';
 
 export interface GroupCardEntry {
   refs: SubcategoryReference[];
@@ -57,25 +58,29 @@ export function createWholeCardInsight(
   const eligibleSpend = calculation?.eligibleSpend ?? 0;
   const eligibleBeforeBlocks = calculation?.eligibleSpend ?? eligibleSpend;
   const rewardEarnedDollars = resolveRewardDollars(calculation, card.type, milesValuation);
+  const spendingTier = resolveCardSpendingTier(card, totalSpend);
+  const effectiveCard = spendingTier.effectiveCard;
 
-  const fallbackRate = computeFallbackRate(card, milesValuation);
+  const fallbackRate = computeFallbackRate(effectiveCard, milesValuation);
   const rewardRate = totalSpend > 0 ? rewardEarnedDollars / totalSpend : fallbackRate;
 
-  const minimumTarget = getPositiveNumber(card.minimumSpend);
+  const minimumTarget = getPositiveNumber(calculation?.minimumSpend ?? effectiveCard.minimumSpend);
   const minimumProgress = calculation?.minimumProgress ?? (minimumTarget
     ? Math.min(100, (totalSpend / minimumTarget) * 100)
     : null);
   const minimumRemaining = minimumTarget ? Math.max(0, minimumTarget - totalSpend) : null;
   const minimumMet = calculation?.minimumMet ?? (minimumTarget ? totalSpend >= minimumTarget : true);
 
-  const maximumCap = getPositiveNumber(card.maximumSpend);
+  const maximumCap = getPositiveNumber(calculation?.maximumSpend ?? effectiveCard.maximumSpend);
   const maximumProgress = calculation?.maximumProgress ?? (maximumCap
     ? Math.min(100, (eligibleBeforeBlocks / maximumCap) * 100)
     : null);
   const headroomToMaximum = maximumCap ? Math.max(0, maximumCap - eligibleBeforeBlocks) : null;
   const maximumExceeded = calculation?.maximumExceeded ?? Boolean(maximumCap && headroomToMaximum !== null && headroomToMaximum <= 0);
 
-  const shouldAvoid = Boolean(calculation?.shouldStopUsing) || maximumExceeded;
+  const shouldAvoid = Boolean(calculation?.shouldStopUsing) || (
+    maximumExceeded && !spendingTier.hasNextSpendingTier
+  );
   const status: CategoryCardInsight['status'] = shouldAvoid
     ? 'avoid'
     : (minimumMet ? 'use' : 'consider');
@@ -121,7 +126,12 @@ export function createSubcategoryInsight(
     return null;
   }
 
-  const cardSubcategories = Array.isArray(card.subcategories) ? card.subcategories : [];
+  const totalCardSpend = calculation?.totalSpend ?? 0;
+  const spendingTier = resolveCardSpendingTier(card, totalCardSpend);
+  const effectiveCard = spendingTier.effectiveCard;
+  const cardSubcategories = Array.isArray(effectiveCard.subcategories)
+    ? effectiveCard.subcategories
+    : [];
   if (cardSubcategories.length === 0) {
     return null;
   }
@@ -192,7 +202,7 @@ export function createSubcategoryInsight(
       }
     }
 
-    const maxConstraint = getPositiveNumber(subDefinition.maximumSpend);
+    const maxConstraint = getPositiveNumber(breakdown?.maximumSpend ?? subDefinition.maximumSpend);
     if (maxConstraint) {
       hasMaximumConstraint = true;
       maximumCapSum += maxConstraint;
@@ -235,15 +245,18 @@ export function createSubcategoryInsight(
 
   const cardMinimumMet = calculation
     ? calculation.minimumMet
-    : (typeof card.minimumSpend !== 'number' || card.minimumSpend <= 0);
+    : (typeof effectiveCard.minimumSpend !== 'number' || effectiveCard.minimumSpend <= 0);
   const cardMinimumProgress = calculation?.minimumProgress ?? null;
 
-  const cardMaximumCap = getPositiveNumber(card.maximumSpend);
+  const cardMaximumCap = getPositiveNumber(calculation?.maximumSpend ?? effectiveCard.maximumSpend);
   const cardMaximumProgress = calculation?.maximumProgress ?? null;
   const cardMaximumExceeded = calculation?.maximumExceeded ?? false;
 
-  const shouldAvoid = Boolean(calculation?.shouldStopUsing) || maxExceeded || cardMaximumExceeded;
-  const fallbackRate = computeFallbackRate(card, milesValuation);
+  const currentLevelCapReached = maxExceeded || cardMaximumExceeded;
+  const shouldAvoid = Boolean(calculation?.shouldStopUsing) || (
+    currentLevelCapReached && !spendingTier.hasNextSpendingTier
+  );
+  const fallbackRate = computeFallbackRate(effectiveCard, milesValuation);
   const rewardRate = totalSpend > 0 ? rewardEarnedDollars / totalSpend : fallbackRate;
 
   const status: CategoryCardInsight['status'] = shouldAvoid

@@ -14,14 +14,17 @@ import { isPromotionalPeriodActive } from '@/features/cards/presentation';
 import { semanticColors, withAlpha } from '@/theme';
 import { interaction, radii, spacing } from '@/theme/tokens';
 import type { TextColor } from '@/components/ios/Typography';
-import type { CardDashboardProjection } from '@ynab-counter/app-core/rewards-engine';
+import {
+  resolveCardSpendingTier,
+  type CardDashboardProjection,
+} from '@ynab-counter/app-core/rewards-engine';
 import type { CreditCard } from '@ynab-counter/app-core/storage';
 import { CardSubcategoryBreakdown } from './subcategory-breakdown';
 import { ZonesProgressBar } from './zones-progress-bar';
 
 const NEAR_CAP_RATIO = 0.8;
 
-type HeroVariant = 'cap-left' | 'cap-over' | 'min-left' | 'spent';
+type HeroVariant = 'cap-left' | 'cap-over' | 'min-left' | 'tier-left' | 'spent';
 
 interface HeroModel {
   variant: HeroVariant;
@@ -80,9 +83,20 @@ export function CardTile({
   const hasMaximum = projection.maximum.target !== null;
   const maximumTarget = projection.maximum.target ?? 0;
   const minimumMet = projection.minimum.met !== false;
-  const exceeded = projection.maximum.reached;
+  const resolvedSpendingTier = resolveCardSpendingTier(card, projection.spend.total);
+  const activeSpendingLevel = resolvedSpendingTier.activeLevel;
+  const nextSpendingLevel = resolvedSpendingTier.hasNextSpendingTier
+    ? resolvedSpendingTier.nextLevel
+    : null;
+  const hasUnlockedSpendingTier = (activeSpendingLevel?.spendThreshold ?? 0) > 0;
+  const remainingToSpendingTier = nextSpendingLevel
+    ? Math.max(0, nextSpendingLevel.spendThreshold - projection.spend.total)
+    : 0;
+  const exceeded = projection.maximum.reached && !nextSpendingLevel;
+  const intermediateCapReached = projection.maximum.reached && Boolean(nextSpendingLevel);
   const nearCap =
     hasMaximum &&
+    !nextSpendingLevel &&
     !exceeded &&
     maximumTarget > 0 &&
     displayedSpend / maximumTarget >= NEAR_CAP_RATIO;
@@ -97,24 +111,30 @@ export function CardTile({
   const progressPercent = Math.round(clampedProgress * 100);
 
   const hero: HeroModel = useMemo(() => {
-    const variant: HeroVariant = hasMinimum && !minimumMet
-      ? 'min-left'
-      : hasMaximum && exceeded
-        ? 'cap-over'
-        : hasMaximum
-          ? 'cap-left'
-          : 'spent';
+    const variant: HeroVariant = nextSpendingLevel
+      ? 'tier-left'
+      : hasMinimum && !minimumMet
+        ? 'min-left'
+        : hasMaximum && exceeded
+          ? 'cap-over'
+          : hasMaximum
+            ? 'cap-left'
+            : 'spent';
     const capUrgent = variant === 'cap-left' && nearCap;
     const tone: TextColor =
       variant === 'cap-over'
         ? 'destructive'
+        : variant === 'tier-left'
+          ? hasUnlockedSpendingTier ? 'positive' : 'attention'
         : variant === 'min-left' || capUrgent
           ? 'attention'
           : variant === 'cap-left' || (hasMinimum && minimumMet)
             ? 'positive'
             : 'primary';
     const amount =
-      variant === 'cap-left'
+      variant === 'tier-left'
+        ? remainingToSpendingTier
+        : variant === 'cap-left'
         ? remainingToMaximum
         : variant === 'cap-over'
           ? exceededAmount
@@ -122,12 +142,14 @@ export function CardTile({
             ? remainingToMinimum
             : displayedSpend;
     const suffix =
-      variant === 'min-left' ? 'to go'
+      variant === 'tier-left' || variant === 'min-left' ? 'to go'
         : variant === 'cap-left' ? 'left'
           : variant === 'cap-over' ? 'over'
             : 'spent';
     const label =
-      variant === 'cap-left'
+      variant === 'tier-left' && nextSpendingLevel
+        ? `${formatting.currencyRounded(remainingToSpendingTier)} to go to the ${formatting.currencyRounded(nextSpendingLevel.spendThreshold)} tier`
+        : variant === 'cap-left'
         ? `${formatting.currencyRounded(remainingToMaximum)} left before the cap`
         : variant === 'cap-over'
           ? `${formatting.currencyRounded(exceededAmount)} over the cap`
@@ -149,16 +171,21 @@ export function CardTile({
     formatting,
     hasMaximum,
     hasMinimum,
+    hasUnlockedSpendingTier,
     minimumMet,
     nearCap,
+    nextSpendingLevel,
     remainingToMaximum,
     remainingToMinimum,
+    remainingToSpendingTier,
   ]);
 
   const earnedNumber = projection.reward.amount;
   const earnedDisplay = Math.round(earnedNumber).toLocaleString();
   const rewardChipTone: TextColor = exceeded
     ? 'destructive'
+    : intermediateCapReached
+      ? 'attention'
     : hasMinimum && !minimumMet
       ? 'attention'
       : card.type === 'cashback'
@@ -172,7 +199,9 @@ export function CardTile({
   }[rewardChipTone];
 
   const heroLabel: string =
-    hero.variant === 'cap-left' || hero.variant === 'cap-over'
+    hero.variant === 'tier-left' && nextSpendingLevel
+      ? `${formatting.currencyRounded(nextSpendingLevel.spendThreshold)} tier`
+      : hero.variant === 'cap-left' || hero.variant === 'cap-over'
       ? `${formatting.currencyRounded(maximumTarget)} cap`
       : hero.variant === 'min-left'
         ? `${formatting.currencyRounded(minimumTarget)} min`
@@ -200,21 +229,29 @@ export function CardTile({
     : undefined;
 
   const heroNumberText =
-    hero.variant === 'cap-left' || hero.variant === 'cap-over' || hero.variant === 'min-left'
+    hero.variant === 'cap-left' || hero.variant === 'cap-over' ||
+    hero.variant === 'min-left' || hero.variant === 'tier-left'
       ? formatting.currencyRounded(hero.amount)
       : formatting.currencyCompact(hero.amount);
 
-  const spendMeta = hero.variant === 'spent'
-    ? undefined
-    : `Spent ${formatting.currencyRounded(displayedSpend)}`;
+  const spendMeta = intermediateCapReached
+    ? 'Current level capped · Next tier can unlock more rewards'
+    : hero.variant === 'spent'
+      ? undefined
+      : `Spent ${formatting.currencyRounded(displayedSpend)}`;
   const minimumMeta = hasMinimum && hero.variant !== 'min-left'
     ? minimumMet
       ? `Met ${formatting.currencyRounded(minimumTarget)} min`
       : `${progressPercent}% of ${formatting.currencyRounded(minimumTarget)} min`
     : undefined;
-  const noLimitsMeta = !hasMinimum && !hasMaximum;
+  const noLimitsMeta = !hasMinimum && !hasMaximum && !nextSpendingLevel;
 
-  const borderTone = exceeded
+  const borderTone = nextSpendingLevel
+    ? {
+        borderColor: hasUnlockedSpendingTier ? semanticColors.positive : semanticColors.attention,
+        borderWidth: 1.5,
+      }
+    : exceeded
     ? { borderColor: semanticColors.capped, borderWidth: 1.5 }
     : nearCap
       ? { borderColor: semanticColors.attention, borderWidth: 1.5 }
@@ -226,7 +263,7 @@ export function CardTile({
         onPress={onOpen}
         accessible
         accessibilityRole="button"
-        accessibilityLabel={`${card.name}, ${earnedDisplay} ${card.type === 'cashback' ? 'cashback' : 'miles'} earned, ${hero.label}${blockCopy ? `, ${blockCopy}` : ''}`}
+        accessibilityLabel={`${card.name}, ${earnedDisplay} ${card.type === 'cashback' ? 'cashback' : 'miles'} earned, ${hero.label}${intermediateCapReached ? ', current level capped; next tier can unlock more rewards' : ''}${blockCopy ? `, ${blockCopy}` : ''}`}
         accessibilityHint="Opens card details"
         style={({ pressed }) => [styles.pressable, pressed && styles.pressed]}
       >
@@ -262,11 +299,13 @@ export function CardTile({
             {heroLabel}
           </Caption1>
           <View style={styles.heroValueRow}>
-            {hero.variant === 'min-left' ? (
+            {hero.variant === 'min-left' || hero.variant === 'tier-left' ? (
               <SymbolView
                 name="arrow.up.right"
                 size={13}
-                tintColor={semanticColors.attention}
+                tintColor={hero.variant === 'tier-left' && hasUnlockedSpendingTier
+                  ? semanticColors.positive
+                  : semanticColors.attention}
                 style={styles.heroGlyph}
               />
             ) : hero.variant === 'cap-left' ? (
@@ -301,10 +340,17 @@ export function CardTile({
 
         <ZonesProgressBar
           totalSpend={projection.spend.total}
-          minimumSpend={hasMinimum ? projection.minimum.target : null}
-          maximumSpend={hasMaximum ? projection.maximum.target : null}
-          minimumProgressSpend={projection.progress.minimumProgressSpend}
-          maximumProgressSpend={projection.progress.maximumProgressSpend}
+          minimumSpend={nextSpendingLevel?.spendThreshold ?? (hasMinimum ? projection.minimum.target : null)}
+          maximumSpend={nextSpendingLevel ? null : (hasMaximum ? projection.maximum.target : null)}
+          minimumProgressSpend={nextSpendingLevel
+            ? projection.spend.total
+            : projection.progress.minimumProgressSpend}
+          maximumProgressSpend={nextSpendingLevel
+            ? undefined
+            : projection.progress.maximumProgressSpend}
+          fillTone={nextSpendingLevel
+            ? hasUnlockedSpendingTier ? 'positive' : 'attention'
+            : undefined}
           height={8}
           formatAmount={formatting.currencyRounded}
           accessible={false}

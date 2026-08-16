@@ -2,6 +2,7 @@ import type {
   CardDashboardProjection,
   RewardCategoryProjection,
 } from '@ynab-counter/app-core/rewards-engine';
+import { resolveCardSpendingTier } from '@ynab-counter/app-core/rewards-engine';
 import type { AppSettings, CreditCard } from '@ynab-counter/app-core/storage';
 
 export type CardUseRankGroup = 'current' | 'building' | 'cap_limited';
@@ -88,13 +89,23 @@ function remainingRoom(
 function selectStrongestTier(
   projection: CardDashboardProjection,
   settings: AppSettings,
+  allowReachedMaximum = false,
+  rateCard: CreditCard = projection.card,
+  filterRateCardMaximum = false,
 ): RewardCategoryProjection | undefined {
   return projection.rewardCategories.reduce<RewardCategoryProjection | undefined>(
     (strongest, category) => {
-      const rate = positiveFinite(category.rate);
+      const rateSubcategory = rateCard.subcategories?.find(({ id }) => id === category.id);
+      const rate = positiveFinite(rateSubcategory?.rewardValue ?? category.rate);
+      const rateCardMaximum = positiveFinite(rateSubcategory?.maximumSpend);
       const tierUnavailable = category.excluded ||
-        category.maximum.reached ||
-        remainingRoom(category.maximum) === 0;
+        (!allowReachedMaximum && (
+          category.maximum.reached || remainingRoom(category.maximum) === 0
+        )) || (
+          filterRateCardMaximum
+          && rateCardMaximum !== null
+          && category.spend.total >= rateCardMaximum
+        );
       if (rate === null || tierUnavailable) {
         return strongest;
       }
@@ -110,8 +121,17 @@ function selectStrongestTier(
         return categoryMinimumUnmet ? strongest : category;
       }
 
-      const categoryRate = normalizedRate(projection.card.type, rate, settings);
-      const strongestRate = normalizedRate(projection.card.type, strongest.rate, settings);
+      const categoryRate = normalizedRate(
+        projection.card.type,
+        rate,
+        settings,
+      );
+      const strongestRate = normalizedRate(
+        projection.card.type,
+        rateCard.subcategories?.find(({ id }) => id === strongest.id)?.rewardValue
+          ?? strongest.rate,
+        settings,
+      );
       return categoryRate > strongestRate ? category : strongest;
     },
     undefined,
@@ -139,18 +159,54 @@ export function rankCardUses(
       return [];
     }
 
-    const selectedTier = projection.card.subcategoriesEnabled
-      ? selectStrongestTier(projection, settings)
+    const spendingTier = resolveCardSpendingTier(
+      projection.card,
+      projection.spend.total,
+    );
+    const effectiveCard = spendingTier.effectiveCard;
+    const canUnlockHigherLevel = spendingTier.hasNextSpendingTier;
+    let selectedTier = effectiveCard.subcategoriesEnabled
+      ? selectStrongestTier(projection, settings, canUnlockHigherLevel)
       : undefined;
-    const nativeRate = projection.card.subcategoriesEnabled
-      ? positiveFinite(selectedTier?.rate)
-      : positiveFinite(projection.card.earningRate);
-    if (nativeRate === null || (projection.card.subcategoriesEnabled && !selectedTier)) {
+
+    const currentLevelCapReached = projection.maximum.reached || Boolean(
+      selectedTier?.maximum.reached,
+    );
+    const buildingNextLevel = currentLevelCapReached && canUnlockHigherLevel;
+    const earningCard = buildingNextLevel && spendingTier.nextLevel
+      ? resolveCardSpendingTier(
+          projection.card,
+          spendingTier.nextLevel.spendThreshold,
+        ).effectiveCard
+      : effectiveCard;
+    if (buildingNextLevel && earningCard.subcategoriesEnabled) {
+      selectedTier = selectStrongestTier(projection, settings, true, earningCard, true);
+    }
+    const selectedCategoryRate = selectedTier
+      ? earningCard.subcategories?.find(({ id }) => id === selectedTier.id)?.rewardValue
+      : null;
+    const nativeRate = earningCard.subcategoriesEnabled
+      ? positiveFinite(selectedCategoryRate ?? selectedTier?.rate)
+      : positiveFinite(earningCard.earningRate);
+    if (nativeRate === null || (earningCard.subcategoriesEnabled && !selectedTier)) {
       return [];
     }
-
-    const cardRoom = remainingRoom(projection.maximum);
-    const tierRoom = selectedTier ? remainingRoom(selectedTier.maximum) : null;
+    const nextCardCap = positiveFinite(earningCard.maximumSpend);
+    const cardRoom = buildingNextLevel
+      ? nextCardCap === null
+        ? null
+        : Math.max(0, nextCardCap - projection.spend.total)
+      : remainingRoom(projection.maximum);
+    const nextCategoryCap = positiveFinite(
+      selectedTier
+        ? earningCard.subcategories?.find(({ id }) => id === selectedTier.id)?.maximumSpend
+        : null,
+    );
+    const tierRoom = buildingNextLevel
+      ? nextCategoryCap === null
+        ? null
+        : Math.max(0, nextCategoryCap - (selectedTier?.spend.total ?? 0))
+      : selectedTier ? remainingRoom(selectedTier.maximum) : null;
     if (cardRoom === 0 || tierRoom === 0) {
       return [];
     }
@@ -175,7 +231,7 @@ export function rankCardUses(
       projection.minimum.met === false;
     const tierMinimumUnmet = selectedTier?.minimum.target !== null &&
       selectedTier?.minimum.met === false;
-    const minimumUnmet = cardMinimumUnmet || tierMinimumUnmet;
+    const minimumUnmet = cardMinimumUnmet || tierMinimumUnmet || buildingNextLevel;
     const capLimited = projection.status === 'near_cap' ||
       (selectedTier?.maximum.progress ?? 0) >= 0.8;
     const rankGroup: CardUseRankGroup = minimumUnmet
@@ -207,6 +263,12 @@ export function rankCardUses(
             remaining: Math.max(
               cardMinimumUnmet ? (projection.minimum.remaining ?? 0) : 0,
               tierMinimumUnmet ? (selectedTier?.minimum.remaining ?? 0) : 0,
+              buildingNextLevel
+                ? Math.max(
+                    0,
+                    (spendingTier.nextLevel?.spendThreshold ?? 0) - projection.spend.total,
+                  )
+                : 0,
             ),
             resetsOn: projection.resetsOn,
             category: tierMinimumUnmet ? (selectedTier?.name ?? null) : null,

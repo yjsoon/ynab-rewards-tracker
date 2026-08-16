@@ -216,6 +216,79 @@ describe('RealTimeRecommendations', () => {
     expect(recommendation.bestCard?.currentSpend).toBe(100);
   });
 
+  it('uses the active spend tier rate and cap in recommendations', () => {
+    const card = createCard({
+      subcategoriesEnabled: false,
+      earningRate: 6,
+      minimumSpend: 50,
+      maximumSpend: 100,
+      spendingTiers: [{
+        id: 'high-spend',
+        spendThreshold: 100,
+        earningRate: 8,
+        maximumSpend: 150,
+      }],
+    });
+    const period = SimpleRewardsCalculator.calculatePeriod(card);
+    const theme = createTheme({ cards: [{ cardId: card.id }] });
+    const transactions = [createTransaction({
+      account_id: card.ynabAccountId,
+      amount: -120_000,
+      date: period.start,
+    })];
+
+    const [recommendation] = new RealTimeRecommendations().generateRecommendations(
+      [theme],
+      [card],
+      transactions,
+    );
+
+    expect(recommendation.bestCard).toMatchObject({
+      cardId: card.id,
+      currentSpend: 120,
+      earningRate: 8,
+      effectiveRate: 0.08,
+      minimumSpend: 100,
+      maximumSpend: 150,
+    });
+  });
+
+  it('keeps an intermediate-capped card eligible to unlock its next spend tier', () => {
+    const card = createCard({
+      subcategoriesEnabled: false,
+      earningRate: 6,
+      minimumSpend: 50,
+      maximumSpend: 20,
+      spendingTiers: [{
+        id: 'high-spend',
+        spendThreshold: 100,
+        earningRate: 8,
+        maximumSpend: 30,
+      }],
+    });
+    const period = SimpleRewardsCalculator.calculatePeriod(card);
+    const theme = createTheme({ cards: [{ cardId: card.id }] });
+
+    const [recommendation] = new RealTimeRecommendations().generateRecommendations(
+      [theme],
+      [card],
+      [createTransaction({
+        account_id: card.ynabAccountId,
+        amount: -80_000,
+        date: period.start,
+      })],
+    );
+
+    expect(recommendation.bestCard).toMatchObject({
+      cardId: card.id,
+      recommendation: 'use',
+      minimumSpend: 100,
+      minimumProgress: 80,
+      headroom: null,
+    });
+    expect(recommendation.bestCard?.reasons).toContain('20% to next spend tier');
+  });
+
   it('keeps a card eligible when only one linked subcategory is maxed', () => {
     const maxedSubcategory = createSubcategory({
       id: 'red',

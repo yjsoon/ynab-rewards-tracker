@@ -372,4 +372,148 @@ describe('SimpleRewardsCalculator.calculateCardRewards', () => {
       reason: 'cap_reached',
     });
   });
+
+  it('keeps existing card settings as the base level and applies the highest spend tier reached', () => {
+    const card: CreditCard = {
+      ...createMilesCardWithSubcategories(),
+      type: 'cashback',
+      subcategoriesEnabled: false,
+      subcategories: [],
+      earningRate: 6,
+      earningBlockSize: null,
+      minimumSpend: 800,
+      maximumSpend: 325,
+      spendingTiers: [{
+        id: 'level-1600',
+        spendThreshold: 1_600,
+        earningRate: 8,
+        maximumSpend: 375,
+      }],
+    };
+
+    const baseLevel = SimpleRewardsCalculator.calculateCardRewards(
+      card,
+      [createTransaction('base-level', -900_000)],
+      period,
+    );
+    const higherLevel = SimpleRewardsCalculator.calculateCardRewards(
+      card,
+      [createTransaction('higher-level', -1_700_000)],
+      period,
+    );
+
+    expect(baseLevel).toMatchObject({
+      minimumSpend: 800,
+      maximumSpend: 325,
+      rewardEarned: 19.5,
+      activeSpendingTierId: null,
+    });
+    expect(baseLevel.transactionRewards['base-level']).toMatchObject({ rewardRate: 6 });
+    expect(higherLevel).toMatchObject({
+      minimumSpend: 1_600,
+      maximumSpend: 375,
+      rewardEarned: 30,
+      activeSpendingTierId: 'level-1600',
+    });
+    expect(higherLevel.transactionRewards['higher-level']).toMatchObject({ rewardRate: 8 });
+  });
+
+  it('applies spend-tier category rates and caps while preserving categories without overrides', () => {
+    const baseSubcategory = createMilesCardWithSubcategories().subcategories![0];
+    const card: CreditCard = {
+      ...createMilesCardWithSubcategories(),
+      type: 'cashback',
+      earningRate: 1,
+      earningBlockSize: null,
+      minimumSpend: 800,
+      subcategories: [
+        {
+          ...baseSubcategory,
+          rewardValue: 6,
+          milesBlockSize: null,
+          maximumSpend: 325,
+        },
+        {
+          ...baseSubcategory,
+          id: 'sub-2',
+          name: 'Everywhere else',
+          flagColor: 'orange',
+          rewardValue: 1,
+          milesBlockSize: null,
+          maximumSpend: null,
+          priority: 1,
+        },
+      ],
+      spendingTiers: [{
+        id: 'level-1600',
+        spendThreshold: 1_600,
+        earningRate: 1,
+        maximumSpend: null,
+        subcategories: [{
+          subcategoryId: baseSubcategory.id,
+          rewardValue: 8,
+          maximumSpend: 375,
+        }],
+      }],
+    };
+    const transactions: Transaction[] = [
+      createTransaction('preferred', -400_000),
+      {
+        ...createTransaction('other', -1_200_000),
+        flag_color: 'orange',
+      },
+    ];
+
+    const calculation = SimpleRewardsCalculator.calculateCardRewards(
+      card,
+      transactions,
+      period,
+    );
+
+    expect(calculation.rewardEarned).toBe(42);
+    expect(calculation.subcategoryBreakdowns?.[0]).toMatchObject({
+      rewardRate: 8,
+      maximumSpend: 375,
+      eligibleSpend: 375,
+      rewardEarned: 30,
+    });
+    expect(calculation.subcategoryBreakdowns?.[1]).toMatchObject({
+      rewardRate: 1,
+      maximumSpend: null,
+      eligibleSpend: 1_200,
+      rewardEarned: 12,
+    });
+  });
+
+  it('allows an additional spend tier below the existing base threshold', () => {
+    const card: CreditCard = {
+      ...createMilesCardWithSubcategories(),
+      type: 'cashback',
+      subcategoriesEnabled: false,
+      subcategories: [],
+      earningRate: 6,
+      earningBlockSize: null,
+      minimumSpend: 800,
+      maximumSpend: 325,
+      spendingTiers: [{
+        id: 'level-400',
+        spendThreshold: 400,
+        earningRate: 4,
+        maximumSpend: 200,
+      }],
+    };
+
+    const calculation = SimpleRewardsCalculator.calculateCardRewards(
+      card,
+      [createTransaction('lower-level', -500_000)],
+      period,
+    );
+
+    expect(calculation).toMatchObject({
+      minimumSpend: 400,
+      maximumSpend: 200,
+      rewardEarned: 8,
+      activeSpendingTierId: 'level-400',
+    });
+  });
 });

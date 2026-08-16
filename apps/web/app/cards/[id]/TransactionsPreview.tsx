@@ -9,7 +9,7 @@ import { Calendar } from "lucide-react";
 import type { CreditCard } from "@/lib/storage";
 import { useCardTransactions } from "@/hooks/useCardTransactions";
 import { useSettings } from "@/hooks/useLocalStorage";
-import { SimpleRewardsCalculator } from "@/lib/rewards-engine";
+import { projectTransactions } from "@/lib/rewards-engine";
 import { absFromMilli } from "@/lib/utils";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
 import type { ConnectionState } from "@/hooks/useCardTransactions";
@@ -18,6 +18,7 @@ import type { Transaction } from "@/types/transaction";
 interface Props {
   card: CreditCard;
   lookbackDays?: number;
+  periodDataSinceDate?: string;
   prefetchedTransactions?: Transaction[];
   transactionsLoading?: boolean;
   transactionsError?: string;
@@ -30,6 +31,7 @@ const LOOKBACK_DAYS = 90;
 export default function TransactionsPreview({
   card,
   lookbackDays = LOOKBACK_DAYS,
+  periodDataSinceDate,
   prefetchedTransactions,
   transactionsLoading,
   transactionsError,
@@ -61,6 +63,21 @@ export default function TransactionsPreview({
 
   const totalSpendingCount = spendingTransactions.length;
   const { settings } = useSettings();
+  const rewardProjections = useMemo(
+    () => new Map(
+      projectTransactions(
+        transactions,
+        [card],
+        settings,
+        undefined,
+        { periodDataSinceDate },
+      ).map((projection) => [
+        projection.transaction.id,
+        projection,
+      ] as const),
+    ),
+    [card, periodDataSinceDate, settings, transactions],
+  );
 
   return (
     <Card>
@@ -99,12 +116,11 @@ export default function TransactionsPreview({
             <div className="space-y-2">
               {displayedTransactions.map((txn) => {
                 const amount = absFromMilli(txn.amount);
-                const { reward, blockInfo } = SimpleRewardsCalculator.calculateTransactionReward(
-                  amount,
-                  card,
-                  settings,
-                  { flagColor: txn.flag_color }
-                );
+                const projection = rewardProjections.get(txn.id);
+                const reward = projection?.reward.amount ?? 0;
+                const blockInfo = projection?.blockInfo
+                  ? `${projection.blockInfo.count} block${projection.blockInfo.count === 1 ? '' : 's'} × $${projection.blockInfo.size}`
+                  : undefined;
 
                 return (
                   <div
@@ -130,7 +146,7 @@ export default function TransactionsPreview({
                       <div className="font-mono">
                         <CurrencyAmount value={amount} currency={settings.currency} />
                       </div>
-                      {card.earningRate && (
+                      {reward > 0 && (
                         <div className="mt-1">
                           <Badge variant="secondary">
                             {card.type === "cashback" ? (
@@ -139,7 +155,7 @@ export default function TransactionsPreview({
                               `+${Math.round(reward)} miles`
                             )}
                           </Badge>
-                          {blockInfo && card.earningBlockSize && (
+                          {blockInfo && (
                             <p className="text-xs text-muted-foreground mt-1">
                               {blockInfo}
                             </p>

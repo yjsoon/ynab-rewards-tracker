@@ -16,6 +16,11 @@ export type { Transaction, TransactionWithRewards } from '../storage/types';
 export { TransactionMatcher } from './matcher';
 export { RecommendationEngine } from './recommendations';
 export { computeCurrentPeriod } from './compute';
+export {
+  createSpendingTier,
+  getCardSpendingLevels,
+  resolveCardSpendingTier,
+} from './utils/spending-tiers';
 
 export type { CalculationPeriod } from './calculator';
 export type {
@@ -50,3 +55,7 @@ export type {
   CategoryCardInsight,
   CategoryRecommendation,
 } from './types';
+export type {
+  CardSpendingLevel,
+  ResolvedCardSpendingTier,
+} from './utils/spending-tiers';

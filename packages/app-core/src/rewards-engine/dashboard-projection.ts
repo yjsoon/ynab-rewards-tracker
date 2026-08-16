@@ -14,6 +14,7 @@ import {
   type TransactionRewardReason,
   type TransactionRewardResult,
 } from './simple-calculator';
+import { resolveCardSpendingTier } from './utils/spending-tiers';
 
 const MILLIUNITS_PER_UNIT = 1000;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -220,8 +221,11 @@ export function projectRewardCategories(
     const minimumTarget = hasPositiveThreshold(category.minimumSpend)
       ? category.minimumSpend
       : null;
-    const maximumTarget = hasPositiveThreshold(category.maximumSpend)
-      ? category.maximumSpend
+    const configuredMaximum = categoryCalculation?.maximumSpend !== undefined
+      ? categoryCalculation.maximumSpend
+      : category.maximumSpend;
+    const maximumTarget = hasPositiveThreshold(configuredMaximum)
+      ? configuredMaximum
       : null;
     const minimumMet = minimumTarget === null ? null : totalSpend >= minimumTarget;
     const configuredBlockSize = categoryCalculation !== undefined
@@ -321,7 +325,10 @@ function hasPositiveThreshold(value: number | null | undefined): value is number
 }
 
 function hasEarningConfiguration(card: CreditCard): boolean {
-  if (typeof card.earningRate === 'number') {
+  if (
+    typeof card.earningRate === 'number'
+    || card.spendingTiers?.some((tier) => typeof tier.earningRate === 'number')
+  ) {
     return true;
   }
 
@@ -403,11 +410,29 @@ function applyPersistedCalculation(
   if (!persisted) {
     return calculation;
   }
+  if (card.spendingTiers?.length) {
+    const hasSpendingTierMetadata = Object.prototype.hasOwnProperty.call(
+      persisted,
+      'activeSpendingTierId',
+    );
+    const expectedSpendingTierId = resolveCardSpendingTier(
+      card,
+      persisted.totalSpend,
+    ).activeLevel?.id ?? null;
+    if (!hasSpendingTierMetadata || persisted.activeSpendingTierId !== expectedSpendingTierId) {
+      return calculation;
+    }
+  }
 
   const persistedSubcategories = new Map(
     persisted.subcategoryBreakdowns?.map((entry) => [entry.subcategoryId, entry] as const) ?? [],
   );
-  const maximumSpend = hasPositiveThreshold(card.maximumSpend) ? card.maximumSpend : null;
+  const configuredMaximumSpend = persisted.maximumSpend !== undefined
+    ? persisted.maximumSpend
+    : calculation.maximumSpend;
+  const maximumSpend = hasPositiveThreshold(configuredMaximumSpend)
+    ? configuredMaximumSpend
+    : null;
   const maximumProgress = typeof persisted.maximumProgress === 'number'
     ? persisted.maximumProgress
     : undefined;
@@ -430,10 +455,19 @@ function applyPersistedCalculation(
     eligibleSpendBeforeBlocks: persisted.eligibleSpendBeforeBlocks ?? persisted.eligibleSpend,
     rewardEarned: persisted.rewardEarned,
     rewardEarnedDollars,
+    minimumSpend: persisted.minimumSpend !== undefined
+      ? persisted.minimumSpend
+      : calculation.minimumSpend,
     minimumSpendMet: persisted.minimumMet,
     minimumSpendProgress: persisted.minimumProgress,
+    maximumSpend: persisted.maximumSpend !== undefined
+      ? persisted.maximumSpend
+      : calculation.maximumSpend,
     maximumSpendExceeded: persisted.maximumExceeded,
     maximumSpendProgress: persisted.maximumProgress,
+    activeSpendingTierId: persisted.activeSpendingTierId !== undefined
+      ? persisted.activeSpendingTierId
+      : calculation.activeSpendingTierId,
     subcategoryBreakdowns: calculation.subcategoryBreakdowns?.map((subcategory) => {
       const complete = persistedSubcategories.get(subcategory.id);
       if (!complete) {
@@ -449,7 +483,14 @@ function applyPersistedCalculation(
         rewardEarnedDollars: card.type === 'cashback'
           ? complete.rewardEarned
           : complete.rewardEarned * (settings.milesValuation ?? 0.01),
+        rewardRate: complete.rewardRate ?? subcategory.rewardRate,
+        minimumSpend: complete.minimumSpend !== undefined
+          ? complete.minimumSpend
+          : subcategory.minimumSpend,
         minimumSpendMet: complete.minimumSpendMet,
+        maximumSpend: complete.maximumSpend !== undefined
+          ? complete.maximumSpend
+          : subcategory.maximumSpend,
         maximumSpendExceeded: complete.maximumSpendExceeded,
         blockSize: complete.blockSize ?? subcategory.blockSize,
         blocksEarned: complete.blocksEarned ?? subcategory.blocksEarned,
@@ -580,6 +621,10 @@ export function buildRewardsDashboard(
         : Math.min(1, maximumProgressSpend / maximumTarget)
       : null;
     const maximumReached = maximumTarget !== null && calculation.maximumSpendExceeded;
+    const canUnlockHigherSpendingLevel = resolveCardSpendingTier(
+      card,
+      calculation.totalSpend,
+    ).hasNextSpendingTier;
     const minimumMet = minimumTarget !== null
       ? persistedCalculation?.minimumMet ?? calculation.totalSpend >= minimumTarget
       : null;
@@ -590,8 +635,8 @@ export function buildRewardsDashboard(
       hasMinimum,
       minimumMet: minimumMet ?? true,
       hasMaximum,
-      maximumReached,
-      maximumProgress,
+      maximumReached: maximumReached && !canUnlockHigherSpendingLevel,
+      maximumProgress: canUnlockHigherSpendingLevel ? null : maximumProgress,
     });
     const resetsOn = addOneDay(period.end);
     const resetDate = parseYnabDate(resetsOn);
@@ -701,8 +746,8 @@ export function buildRewardsDashboard(
 export const projectRewardsPortfolio = buildRewardsDashboard;
 
 /**
- * Annotate transactions without mutating or filtering them. Reward values always
- * come from `SimpleRewardsCalculator.calculateTransactionReward`.
+ * Annotate transactions without mutating or filtering them. Complete periods use
+ * the period-aware card calculation so retroactive spend tiers stay consistent.
  */
 export function projectTransactions(
   transactions: Transaction[],

@@ -15,6 +15,7 @@ interface SpendingProgressBarProps {
   className?: string;
   showLabels?: boolean;
   showWarnings?: boolean;
+  fillTone?: 'positive' | 'attention';
 }
 
 export function SpendingProgressBar({
@@ -26,7 +27,8 @@ export function SpendingProgressBar({
   currency,
   className,
   showLabels = true,
-  showWarnings = true
+  showWarnings = true,
+  fillTone,
 }: SpendingProgressBarProps) {
   // Determine configuration
   const hasMinimum = typeof minimumSpend === 'number' && minimumSpend > 0;
@@ -81,6 +83,12 @@ export function SpendingProgressBar({
 
   // Determine bar colors based on zone
   const getBarColor = () => {
+    if (fillTone === 'positive') {
+      return 'bg-gradient-to-r from-emerald-500 to-emerald-600 dark:from-emerald-600 dark:to-emerald-700';
+    }
+    if (fillTone === 'attention') {
+      return 'bg-gradient-to-r from-amber-500 to-amber-600 dark:from-amber-600 dark:to-amber-700';
+    }
     switch (spendingZone) {
       case 'exceeded':
         return 'bg-gradient-to-r from-red-500 to-red-600 dark:from-red-600 dark:to-red-700';
@@ -109,7 +117,9 @@ export function SpendingProgressBar({
   const exceededAmount = hasMaximum && spendForMaximum >= maximumSpend ? spendForMaximum - maximumSpend : 0;
   const roundedProgressPercent = Math.round(progressPercent);
   const progressAriaLabel =
-    spendingZone === 'exceeded'
+    fillTone
+      ? `Progress to next reward tier: ${roundedProgressPercent}%`
+      : spendingZone === 'exceeded'
       ? exceededAmount > 0
         ? `Spending cap exceeded by ${formatDollars(exceededAmount, { currency })}`
         : 'Spending cap reached'

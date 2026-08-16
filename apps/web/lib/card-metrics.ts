@@ -1,4 +1,9 @@
-import { SimpleRewardsCalculator, type SimplifiedCalculation, type SimplePeriod } from "@/lib/rewards-engine";
+import {
+  resolveCardSpendingTier,
+  SimpleRewardsCalculator,
+  type SimplifiedCalculation,
+  type SimplePeriod,
+} from "@/lib/rewards-engine";
 import {
   createSubcategoryContext,
   normaliseFlagColor,
@@ -28,6 +33,19 @@ export interface CardTransactionDateRange {
   start: string;
   end: string;
   isValid: boolean;
+}
+
+export function resolveRewardDataSinceDate(
+  cards: CreditCard[],
+  lookbackDays: number,
+  referenceDate: Date = new Date(),
+): string {
+  const lookbackStart = new Date(referenceDate);
+  lookbackStart.setDate(lookbackStart.getDate() - lookbackDays);
+  const periodStarts = cards.map((card) => (
+    SimpleRewardsCalculator.calculatePeriod(card, lookbackStart).start
+  ));
+  return [formatDateValue(lookbackStart), ...periodStarts].sort()[0];
 }
 
 function parseDateValue(value: string | null | undefined): Date | null {
@@ -170,11 +188,15 @@ export function getCardAttentionStatus(
   const hasMaximum =
     typeof calculation.maximumSpend === "number" && calculation.maximumSpend > 0;
   const hasMinimum = hasMinimumSpendRequirement(calculation.minimumSpend);
+  const canUnlockHigherLevel = resolveCardSpendingTier(
+    card,
+    calculation.totalSpend,
+  ).hasNextSpendingTier;
 
-  if (hasMaximum && calculation.maximumSpendExceeded) {
+  if (hasMaximum && calculation.maximumSpendExceeded && !canUnlockHigherLevel) {
     return "at-cap";
   }
-  if (hasMaximum) {
+  if (hasMaximum && !canUnlockHigherLevel) {
     const spend = getDisplayedSpend(card, calculation);
     if (spend / (calculation.maximumSpend as number) >= NEAR_CAP_RATIO) {
       return "near-cap";

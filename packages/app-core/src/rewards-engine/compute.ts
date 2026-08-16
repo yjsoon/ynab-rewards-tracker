@@ -78,14 +78,23 @@ export async function computeCurrentPeriod(
       label: period.name,
     };
 
-    if (card.subcategoriesEnabled) {
+    // Spend-based levels are a card-wide replacement for the legacy rule
+    // path. Existing cards without levels keep their legacy rules unchanged,
+    // while adding a level makes the card's current earning fields the base.
+    if (card.subcategoriesEnabled || card.spendingTiers?.length) {
       const simpleCalc = SimpleRewardsCalculator.calculateCardRewards(card, forCard, simplePeriod, settings);
       results.push(createRewardCalculationFromSimple(card, simpleCalc));
       continue;
     }
 
     const rules = activeRulesByCardId.get(card.id) ?? [];
-    if (rules.length === 0 && card.earningRate && card.earningRate > 0) {
+    const hasSimpleRate = Boolean(
+      (typeof card.earningRate === 'number' && card.earningRate > 0)
+      || card.spendingTiers?.some((tier) => (
+        typeof tier.earningRate === 'number' && tier.earningRate > 0
+      )),
+    );
+    if (rules.length === 0 && hasSimpleRate) {
       const simpleCalc = SimpleRewardsCalculator.calculateCardRewards(card, forCard, simplePeriod, settings);
       results.push(createRewardCalculationFromSimple(card, simpleCalc));
       continue;

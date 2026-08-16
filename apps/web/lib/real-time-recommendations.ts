@@ -15,6 +15,7 @@ import {
   normaliseFlagColor,
   resolveSubcategory,
 } from '@/lib/rewards-engine/utils/subcategories';
+import { resolveCardSpendingTier } from '@ynab-counter/app-core/rewards-engine';
 
 export interface SubcategoryProgress {
   subcategoryId: string;
@@ -247,6 +248,11 @@ export class RealTimeRecommendations {
     spending?: CardSpendingSummary
   ): CardOption | null {
     const currentSpend = spending?.totalSpend || 0;
+    const spendingTier = resolveCardSpendingTier(card, currentSpend);
+    const effectiveCard = spendingTier.effectiveCard;
+    const nextSpendingLevel = spendingTier.hasNextSpendingTier
+      ? spendingTier.nextLevel
+      : null;
     const reasons: string[] = [];
     const subcategoryProgress: SubcategoryProgress[] = [];
 
@@ -256,9 +262,9 @@ export class RealTimeRecommendations {
     let eligibleLinkedSubcategoryCount = 0;
 
     // If linked via subcategory, check if those specific subcategories are maxed
-    if (linkedSubs.length > 0 && card.subcategoriesEnabled && card.subcategories) {
+    if (linkedSubs.length > 0 && effectiveCard.subcategoriesEnabled && effectiveCard.subcategories) {
       for (const ref of linkedSubs) {
-        const sub = card.subcategories.find(s => s.id === ref.subcategoryId);
+        const sub = effectiveCard.subcategories.find(s => s.id === ref.subcategoryId);
         if (sub && sub.active && !sub.excludeFromRewards) {
           eligibleLinkedSubcategoryCount++;
           const subSpend = spending?.subcategorySpends.get(sub.id) || 0;
@@ -291,21 +297,25 @@ export class RealTimeRecommendations {
 
     if (wholeCardLinked) {
       // For whole card, just use base rate - we'll check subcategory limits later
-      if (card.type === 'cashback') {
-        effectiveRate = (card.earningRate ?? 0) / 100;
+      if (effectiveCard.type === 'cashback') {
+        effectiveRate = (effectiveCard.earningRate ?? 0) / 100;
       } else {
-        const milesPerDollar = card.earningRate ?? 0;
+        const milesPerDollar = effectiveCard.earningRate ?? 0;
         effectiveRate = milesPerDollar * this.milesValuation;
       }
-    } else if (linkedSubs.length > 0 && card.subcategoriesEnabled && card.subcategories) {
+    } else if (
+      linkedSubs.length > 0
+      && effectiveCard.subcategoriesEnabled
+      && effectiveCard.subcategories
+    ) {
       // Calculate weighted average rate for linked subcategories (already checked if maxed above)
       let totalRate = 0;
       let count = 0;
 
       linkedSubs.forEach(ref => {
-        const sub = card.subcategories?.find(s => s.id === ref.subcategoryId);
+        const sub = effectiveCard.subcategories?.find(s => s.id === ref.subcategoryId);
         if (sub && sub.active && !sub.excludeFromRewards && !maxedSubcategoryIds.has(sub.id)) {
-          const subRate = card.type === 'cashback'
+          const subRate = effectiveCard.type === 'cashback'
             ? sub.rewardValue / 100
             : sub.rewardValue * this.milesValuation;
           totalRate += subRate;
@@ -321,27 +331,31 @@ export class RealTimeRecommendations {
     // If no subcategories but the card is linked, use base rate as fallback
     // BUT not if every linked subcategory is maxed!
     const subcategoryMaxed = eligibleLinkedSubcategoryCount > 0
-      && maxedSubcategoryIds.size >= eligibleLinkedSubcategoryCount;
+      && maxedSubcategoryIds.size >= eligibleLinkedSubcategoryCount
+      && nextSpendingLevel === null;
     if (!subcategoryMaxed && effectiveRate === 0 && (wholeCardLinked || theme.subcategories.some(ref => ref?.cardId === card.id))) {
-      if (card.type === 'cashback') {
-        effectiveRate = (card.earningRate ?? 0) / 100;
+      if (effectiveCard.type === 'cashback') {
+        effectiveRate = (effectiveCard.earningRate ?? 0) / 100;
       } else {
-        const milesPerDollar = card.earningRate ?? 0;
+        const milesPerDollar = effectiveCard.earningRate ?? 0;
         effectiveRate = milesPerDollar * this.milesValuation;
       }
     }
 
     // Calculate progress towards limits
-    const minimumProgress = card.minimumSpend
-      ? Math.min(100, (currentSpend / card.minimumSpend) * 100)
+    const spendingTarget = nextSpendingLevel?.spendThreshold ?? effectiveCard.minimumSpend;
+    const minimumProgress = spendingTarget
+      ? Math.min(100, (currentSpend / spendingTarget) * 100)
       : 100;
 
-    const maximumProgress = card.maximumSpend
-      ? Math.min(100, (currentSpend / card.maximumSpend) * 100)
+    const maximumProgress = effectiveCard.maximumSpend
+      ? Math.min(100, (currentSpend / effectiveCard.maximumSpend) * 100)
       : 0;
 
-    const headroom = card.maximumSpend
-      ? Math.max(0, card.maximumSpend - currentSpend)
+    const headroom = nextSpendingLevel
+      ? null
+      : effectiveCard.maximumSpend
+      ? Math.max(0, effectiveCard.maximumSpend - currentSpend)
       : null;
 
     // Calculate score with heavy emphasis on minimum spend
@@ -349,18 +363,20 @@ export class RealTimeRecommendations {
     let score = baseScore;
 
     // PRIORITY 1: Cards that haven't met minimum spend get massive boost
-    const needsMinimum = card.minimumSpend && minimumProgress < 100;
+    const needsMinimum = spendingTarget && minimumProgress < 100;
     if (needsMinimum) {
       // Add up to 300 points based on how far from minimum (more urgent = higher score)
       score += (100 - minimumProgress) * 3;
-      reasons.push(`${(100 - minimumProgress).toFixed(0)}% to minimum spend`);
-    } else if (card.minimumSpend && minimumProgress >= 100) {
+      reasons.push(nextSpendingLevel
+        ? `${(100 - minimumProgress).toFixed(0)}% to next spend tier`
+        : `${(100 - minimumProgress).toFixed(0)}% to minimum spend`);
+    } else if (spendingTarget && minimumProgress >= 100) {
       // Minimum met - just note it
       reasons.push('Minimum spend met');
     }
 
     // PRIORITY 2: Penalize for approaching maximum (but less if minimum not met)
-    if (card.maximumSpend) {
+    if (effectiveCard.maximumSpend && !nextSpendingLevel) {
       if (maximumProgress >= 100) {
         score = 0; // Avoid completely
         reasons.push('Maximum spend reached');
@@ -381,9 +397,17 @@ export class RealTimeRecommendations {
 
     // Determine recommendation
     let recommendation: 'use' | 'consider' | 'avoid';
-    if (score === 0 || (card.maximumSpend && currentSpend >= card.maximumSpend) || subcategoryMaxed) {
+    if (
+      score === 0
+      || (
+        !nextSpendingLevel
+        && effectiveCard.maximumSpend
+        && currentSpend >= effectiveCard.maximumSpend
+      )
+      || subcategoryMaxed
+    ) {
       recommendation = 'avoid';
-    } else if (card.minimumSpend && minimumProgress < 100) {
+    } else if (spendingTarget && minimumProgress < 100) {
       // Always recommend cards that need minimum spend
       recommendation = 'use';
     } else if (score > 30) {
@@ -395,12 +419,12 @@ export class RealTimeRecommendations {
     return {
       cardId: card.id,
       cardName: card.name,
-      cardType: card.type,
+      cardType: effectiveCard.type,
       effectiveRate,
-      earningRate: card.earningRate ?? undefined,
+      earningRate: effectiveCard.earningRate ?? undefined,
       currentSpend,
-      minimumSpend: card.minimumSpend,
-      maximumSpend: card.maximumSpend,
+      minimumSpend: spendingTarget,
+      maximumSpend: effectiveCard.maximumSpend,
       minimumProgress,
       maximumProgress,
       headroom,

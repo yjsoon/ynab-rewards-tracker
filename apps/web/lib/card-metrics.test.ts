@@ -1,13 +1,60 @@
 import { describe, expect, it } from "vitest";
 
 import type { CreditCard } from "./storage";
+import { SimpleRewardsCalculator } from "./rewards-engine";
 import {
   buildRewardCategoryNamesByFlag,
   filterCardSpendingTransactions,
   filterTransactionsForCardPeriod,
   filterTransactionsForSubcategory,
+  getCardAttentionStatus,
   resolveCardTransactionDateRange,
+  resolveRewardDataSinceDate,
 } from "./card-metrics";
+
+describe("getCardAttentionStatus", () => {
+  const card: CreditCard = {
+    id: "tiered-card",
+    name: "Tiered card",
+    issuer: "Bank",
+    type: "cashback",
+    ynabAccountId: "account-1",
+    featured: true,
+    earningRate: 6,
+    minimumSpend: 50,
+    maximumSpend: 20,
+    spendingTiers: [{
+      id: "higher-tier",
+      spendThreshold: 100,
+      earningRate: 8,
+      maximumSpend: 30,
+    }],
+  };
+  const period = { start: "2026-08-01", end: "2026-08-31", label: "August" };
+
+  it("does not present an intermediate cap as the final card cap", () => {
+    const calculation = SimpleRewardsCalculator.calculateCardRewards(card, [{
+      id: "between-tiers",
+      account_id: card.ynabAccountId,
+      amount: -80_000,
+      date: "2026-08-10",
+    }], period);
+
+    expect(calculation.maximumSpendExceeded).toBe(true);
+    expect(getCardAttentionStatus(card, calculation)).toBe("earning");
+  });
+
+  it("keeps the highest tier cap terminal", () => {
+    const calculation = SimpleRewardsCalculator.calculateCardRewards(card, [{
+      id: "highest-tier",
+      account_id: card.ynabAccountId,
+      amount: -120_000,
+      date: "2026-08-10",
+    }], period);
+
+    expect(getCardAttentionStatus(card, calculation)).toBe("at-cap");
+  });
+});
 
 describe("resolveCardTransactionDateRange", () => {
   const card: CreditCard = {
@@ -125,6 +172,34 @@ describe("resolveCardTransactionDateRange", () => {
       end: "2024-02-28",
       isValid: true,
     });
+  });
+});
+
+describe("resolveRewardDataSinceDate", () => {
+  it("fetches the complete reward period containing the oldest visible date", () => {
+    const cards: CreditCard[] = [{
+      id: "calendar-card",
+      name: "Calendar card",
+      issuer: "Bank",
+      type: "cashback",
+      ynabAccountId: "account-1",
+      featured: true,
+      billingCycle: { type: "calendar" },
+    }, {
+      id: "billing-card",
+      name: "Billing card",
+      issuer: "Bank",
+      type: "cashback",
+      ynabAccountId: "account-2",
+      featured: true,
+      billingCycle: { type: "billing", dayOfMonth: 15 },
+    }];
+
+    expect(resolveRewardDataSinceDate(
+      cards,
+      60,
+      new Date(2026, 7, 16, 12),
+    )).toBe("2026-06-01");
   });
 });
 

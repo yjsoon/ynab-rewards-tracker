@@ -1,6 +1,7 @@
 import type { RewardCalculation, CreditCard, SubcategoryBreakdown } from '../../storage/types';
 
 import type { SimplifiedCalculation, SubcategoryCalculation } from '../simple-calculator';
+import { resolveCardSpendingTier } from './spending-tiers';
 
 /**
  * Recomputes the dollar-denominated fields that depend only on the user's
@@ -41,7 +42,10 @@ function mapSubcategoryBreakdown(subcategory: SubcategoryCalculation): Subcatego
     eligibleSpendBeforeBlocks: subcategory.eligibleSpendBeforeBlocks,
     rewardEarned: subcategory.rewardEarned,
     rewardEarnedDollars: subcategory.rewardEarnedDollars,
+    rewardRate: subcategory.rewardRate,
+    minimumSpend: subcategory.minimumSpend,
     minimumSpendMet: subcategory.minimumSpendMet,
+    maximumSpend: subcategory.maximumSpend,
     maximumSpendExceeded: subcategory.maximumSpendExceeded,
     blockSize: subcategory.blockSize,
     blocksEarned: subcategory.blocksEarned,
@@ -53,6 +57,11 @@ export function createRewardCalculationFromSimple(
   calculation: SimplifiedCalculation,
   overrideRuleId?: string
 ): RewardCalculation {
+  const hasHigherSpendingLevel = resolveCardSpendingTier(
+    card,
+    calculation.totalSpend,
+  ).hasNextSpendingTier;
+
   return {
     cardId: card.id,
     ruleId: overrideRuleId ?? `card-${card.id}`,
@@ -64,11 +73,14 @@ export function createRewardCalculationFromSimple(
     rewardEarned: calculation.rewardEarned,
     rewardEarnedDollars: calculation.rewardEarnedDollars,
     rewardType: calculation.rewardType,
+    minimumSpend: calculation.minimumSpend,
     minimumProgress: calculation.minimumSpendProgress,
+    maximumSpend: calculation.maximumSpend,
     maximumProgress: calculation.maximumSpendProgress,
+    activeSpendingTierId: calculation.activeSpendingTierId,
     minimumMet: calculation.minimumSpendMet,
     maximumExceeded: calculation.maximumSpendExceeded,
-    shouldStopUsing: calculation.maximumSpendExceeded,
+    shouldStopUsing: calculation.maximumSpendExceeded && !hasHigherSpendingLevel,
     subcategoryBreakdowns: calculation.subcategoryBreakdowns?.map(mapSubcategoryBreakdown),
   };
 }

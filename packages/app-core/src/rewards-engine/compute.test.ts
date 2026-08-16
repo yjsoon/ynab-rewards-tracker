@@ -66,6 +66,80 @@ describe('computeCurrentPeriod', () => {
     );
   });
 
+  it('calculates a card configured only with a spend-tier earning rate', async () => {
+    const card = createCard({
+      earningRate: null,
+      spendingTiers: [{
+        id: 'spend-tier',
+        spendThreshold: 100,
+        earningRate: 8,
+        maximumSpend: 150,
+      }],
+    });
+    const period = RewardsCalculator.calculatePeriod(card);
+    const transactions = [createTransaction({
+      date: formatLocalDate(period.startDate),
+      amount: -120_000,
+    })];
+
+    const [calculation] = await computeCurrentPeriod(
+      createClient(transactions),
+      'budget-1',
+      [card],
+      [],
+    );
+
+    expect(calculation).toMatchObject({
+      cardId: card.id,
+      totalSpend: 120,
+      eligibleSpend: 120,
+      rewardEarned: 9.6,
+      activeSpendingTierId: 'spend-tier',
+    });
+  });
+
+  it('uses spend tiers instead of retained legacy rules after a card is upgraded', async () => {
+    const card = createCard({
+      earningRate: 1,
+      spendingTiers: [{
+        id: 'spend-tier',
+        spendThreshold: 100,
+        earningRate: 5,
+        maximumSpend: 150,
+      }],
+    });
+    const period = RewardsCalculator.calculatePeriod(card);
+    const rule: RewardRule = {
+      id: 'legacy-rule',
+      cardId: card.id,
+      name: 'Legacy rewards',
+      rewardType: 'cashback',
+      rewardValue: 1,
+      startDate: formatLocalDate(period.startDate),
+      endDate: formatLocalDate(period.endDate),
+      active: true,
+      priority: 0,
+    };
+
+    const calculations = await computeCurrentPeriod(
+      createClient([createTransaction({
+        date: formatLocalDate(period.startDate),
+        amount: -120_000,
+      })]),
+      'budget-1',
+      [card],
+      [rule],
+    );
+
+    expect(calculations).toHaveLength(1);
+    expect(calculations[0]).toMatchObject({
+      ruleId: `card-${card.id}`,
+      rewardEarned: 6,
+      activeSpendingTierId: 'spend-tier',
+      maximumSpend: 150,
+    });
+  });
+
   it('clamps legacy rule calculations to the overlapping rule window', async () => {
     const card = createCard({ earningRate: undefined });
     const period = RewardsCalculator.calculatePeriod(card);

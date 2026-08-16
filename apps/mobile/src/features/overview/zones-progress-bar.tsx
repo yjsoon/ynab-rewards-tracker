@@ -54,6 +54,8 @@ export interface ZonesProgressBarProps {
   maximumSpend?: number | null;
   minimumProgressSpend?: number;
   maximumProgressSpend?: number;
+  /** Override the automatic zone colour for a positive or attention target. */
+  fillTone?: 'positive' | 'attention';
   height?: number;
   formatAmount?: (value: number) => string;
   accessible?: boolean;
@@ -72,6 +74,7 @@ export function ZonesProgressBar({
   maximumSpend,
   minimumProgressSpend,
   maximumProgressSpend,
+  fillTone,
   height = nativeMetrics.railHeight,
   formatAmount,
   accessible = true,
@@ -88,6 +91,11 @@ export function ZonesProgressBar({
   const maximumExceeded = hasMaximum && spendForMaximum >= maximumSpend;
   const nearingMaximum = hasMaximum && spendForMaximum >= maximumSpend * NEAR_CAP_RATIO;
   const zone = spendingZone({ hasMinimum, hasMaximum, minimumMet, maximumExceeded, nearingMaximum });
+  const fillColor = fillTone === 'positive'
+    ? semanticColors.positive
+    : fillTone === 'attention'
+      ? semanticColors.attention
+      : zoneFillColor(zone);
 
   const progressPercent = hasMaximum
     ? Math.min(100, (spendForMaximum / maximumSpend) * 100)
@@ -146,12 +154,12 @@ export function ZonesProgressBar({
               {
                 height,
                 width: `${progressPercent}%`,
-                backgroundColor: zoneFillColor(zone),
+                backgroundColor: fillColor,
               },
             ]}
           />
         ) : hasLimits ? (
-          <View style={[styles.zeroFill, { height: 3 }]} />
+          <View style={[styles.zeroFill, { height: 3, backgroundColor: fillColor }]} />
         ) : null}
 
         {hasMinimum && minimumPosition !== undefined && minimumPosition > 0 && minimumPosition < 100 ? (

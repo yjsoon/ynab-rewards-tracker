@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { buildRewardsDashboard } from '@ynab-counter/app-core/rewards-engine';
+import type { CreditCard, Transaction } from '@ynab-counter/app-core/storage';
 import { createDemoStorageFixture } from '@/lib/demo-data';
 
 import { rankCardUses } from './reward-categories';
@@ -48,6 +49,196 @@ describe('rankCardUses', () => {
     }], fixture.settings);
 
     expect(uses).toEqual([]);
+  });
+
+  it('ranks a card using its active spend-tier rate', () => {
+    const card: CreditCard = {
+      id: 'tiered-card',
+      name: 'Tiered Card',
+      issuer: 'Issuer',
+      type: 'cashback',
+      ynabAccountId: 'tiered-account',
+      featured: true,
+      earningRate: 6,
+      minimumSpend: 50,
+      maximumSpend: 100,
+      spendingTiers: [{
+        id: 'high-spend',
+        spendThreshold: 100,
+        earningRate: 8,
+        maximumSpend: 150,
+      }],
+    };
+    const transaction: Transaction = {
+      id: 'tiered-spend',
+      account_id: card.ynabAccountId,
+      amount: -120_000,
+      date: '2026-08-01',
+    };
+    const dashboard = buildRewardsDashboard(
+      [card],
+      [transaction],
+      {},
+      new Date('2026-08-02T12:00:00'),
+    );
+
+    const uses = rankCardUses(dashboard.cards, {});
+
+    expect(uses).toHaveLength(1);
+    expect(uses[0]).toMatchObject({
+      card: { card: { id: card.id } },
+      rate: { value: 8, normalized: 0.08 },
+      effectiveEarningRoom: 30,
+    });
+  });
+
+  it('keeps an intermediate-capped card as a next-tier building option', () => {
+    const card: CreditCard = {
+      id: 'tiered-card',
+      name: 'Tiered Card',
+      issuer: 'Issuer',
+      type: 'cashback',
+      ynabAccountId: 'tiered-account',
+      featured: true,
+      earningRate: 6,
+      minimumSpend: 50,
+      maximumSpend: 20,
+      spendingTiers: [{
+        id: 'high-spend',
+        spendThreshold: 100,
+        earningRate: 8,
+        maximumSpend: 100,
+      }],
+    };
+    const dashboard = buildRewardsDashboard(
+      [card],
+      [{
+        id: 'tiered-spend',
+        account_id: card.ynabAccountId,
+        amount: -80_000,
+        date: '2026-08-01',
+      }],
+      {},
+      new Date('2026-08-02T12:00:00'),
+    );
+
+    expect(rankCardUses(dashboard.cards, {})).toMatchObject([{
+      card: { card: { id: card.id } },
+      rankGroup: 'building',
+      rate: { value: 8, prospective: true },
+      effectiveEarningRoom: 20,
+      operational: { kind: 'minimum', remaining: 20 },
+    }]);
+  });
+
+  it('omits a next-tier option when current spend has already consumed its cap', () => {
+    const card: CreditCard = {
+      id: 'tiered-card',
+      name: 'Tiered Card',
+      issuer: 'Issuer',
+      type: 'cashback',
+      ynabAccountId: 'tiered-account',
+      featured: true,
+      earningRate: 6,
+      minimumSpend: 50,
+      maximumSpend: 20,
+      spendingTiers: [{
+        id: 'high-spend',
+        spendThreshold: 100,
+        earningRate: 8,
+        maximumSpend: 30,
+      }],
+    };
+    const dashboard = buildRewardsDashboard(
+      [card],
+      [{
+        id: 'tiered-spend',
+        account_id: card.ynabAccountId,
+        amount: -80_000,
+        date: '2026-08-01',
+      }],
+      {},
+      new Date('2026-08-02T12:00:00'),
+    );
+
+    expect(rankCardUses(dashboard.cards, {})).toEqual([]);
+  });
+
+  it('falls back to a prospective category that still has cap room', () => {
+    const timestamp = '2026-08-01T00:00:00.000Z';
+    const card: CreditCard = {
+      id: 'category-tiered-card',
+      name: 'Category Tiered Card',
+      issuer: 'Issuer',
+      type: 'cashback',
+      ynabAccountId: 'category-tiered-account',
+      featured: true,
+      earningRate: 1,
+      maximumSpend: 20,
+      subcategoriesEnabled: true,
+      subcategories: [{
+        id: 'category-a',
+        name: 'Category A',
+        flagColor: 'orange',
+        rewardValue: 6,
+        maximumSpend: 20,
+        priority: 0,
+        active: true,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }, {
+        id: 'category-b',
+        name: 'Category B',
+        flagColor: 'blue',
+        rewardValue: 5,
+        maximumSpend: 20,
+        priority: 1,
+        active: true,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }],
+      spendingTiers: [{
+        id: 'high-spend',
+        spendThreshold: 100,
+        earningRate: 1,
+        maximumSpend: 100,
+        subcategories: [{
+          subcategoryId: 'category-a',
+          rewardValue: 8,
+          maximumSpend: 30,
+        }, {
+          subcategoryId: 'category-b',
+          rewardValue: 5,
+          maximumSpend: 100,
+        }],
+      }],
+    };
+    const dashboard = buildRewardsDashboard(
+      [card],
+      [{
+        id: 'category-a-spend',
+        account_id: card.ynabAccountId,
+        amount: -40_000,
+        date: '2026-08-01',
+        flag_color: 'orange',
+      }, {
+        id: 'category-b-spend',
+        account_id: card.ynabAccountId,
+        amount: -40_000,
+        date: '2026-08-01',
+        flag_color: 'blue',
+      }],
+      {},
+      new Date('2026-08-02T12:00:00'),
+    );
+
+    expect(rankCardUses(dashboard.cards, {})).toMatchObject([{
+      use: { label: 'Category B', flagColor: 'blue' },
+      rankGroup: 'building',
+      rate: { value: 5, prospective: true },
+      effectiveEarningRoom: 20,
+      operational: { kind: 'minimum', remaining: 20 },
+    }]);
   });
 
   it.each([
