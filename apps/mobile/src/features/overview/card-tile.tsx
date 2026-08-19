@@ -88,6 +88,15 @@ export function CardTile({
   const nextSpendingLevel = resolvedSpendingTier.hasNextSpendingTier
     ? resolvedSpendingTier.nextLevel
     : null;
+  const nextTierCategoryMaximums = nextSpendingLevel
+    ? new Map(
+        resolveCardSpendingTier(card, nextSpendingLevel.spendThreshold)
+          .effectiveCard.subcategories?.map((subcategory) => [
+            subcategory.id,
+            subcategory.maximumSpend ?? null,
+          ] as const) ?? [],
+      )
+    : null;
   const hasUnlockedSpendingTier = (activeSpendingLevel?.spendThreshold ?? 0) > 0;
   const remainingToSpendingTier = nextSpendingLevel
     ? Math.max(0, nextSpendingLevel.spendThreshold - projection.spend.total)
@@ -200,7 +209,7 @@ export function CardTile({
 
   const heroLabel: string =
     hero.variant === 'tier-left' && nextSpendingLevel
-      ? `${formatting.currencyRounded(nextSpendingLevel.spendThreshold)} tier`
+      ? `Next · ${formatting.currencyRounded(nextSpendingLevel.spendThreshold)} tier`
       : hero.variant === 'cap-left' || hero.variant === 'cap-over'
       ? `${formatting.currencyRounded(maximumTarget)} cap`
       : hero.variant === 'min-left'
@@ -385,8 +394,11 @@ export function CardTile({
         <View style={styles.footerSection}>
           <CardSubcategoryBreakdown
             categories={projection.rewardCategories}
+            currentTierThreshold={activeSpendingLevel?.spendThreshold ?? null}
             formatting={formatting}
             isExpanded={isSubcategoryExpanded}
+            nextTierCategoryMaximums={nextTierCategoryMaximums}
+            nextTierThreshold={nextSpendingLevel?.spendThreshold ?? null}
             onToggleExpanded={onToggleSubcategories}
           />
         </View>

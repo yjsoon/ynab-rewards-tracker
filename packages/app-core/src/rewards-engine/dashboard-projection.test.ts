@@ -5,6 +5,7 @@ import {
   buildRewardsDashboard,
   projectTransactions,
 } from './dashboard-projection';
+import { resolveCardSpendingTier } from './utils/spending-tiers';
 
 const referenceDate = new Date(2026, 1, 15, 12);
 
@@ -329,6 +330,65 @@ describe('buildRewardsDashboard', () => {
       rate: 8,
       reward: { amount: 9.6, dollars: 9.6 },
       maximum: { target: null, reached: false },
+    });
+  });
+
+  it('keeps current category caps until the next spend threshold is reached', () => {
+    const timestamp = '2026-01-01T00:00:00.000Z';
+    const card = createCard({
+      earningRate: 6,
+      minimumSpend: 800,
+      subcategoriesEnabled: true,
+      subcategories: [{
+        id: 'groceries',
+        name: 'Groceries',
+        flagColor: 'orange',
+        rewardValue: 6,
+        maximumSpend: 333,
+        priority: 0,
+        active: true,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }],
+      spendingTiers: [{
+        id: 'level-1600',
+        spendThreshold: 1_600,
+        earningRate: 8,
+        subcategories: [{
+          subcategoryId: 'groceries',
+          rewardValue: 8,
+          maximumSpend: 375,
+        }],
+      }],
+    });
+
+    const currentLevel = buildRewardsDashboard(
+      [card],
+      [createTransaction({ amount: -826_000, flag_color: 'orange' })],
+      {},
+      referenceDate,
+    ).cards[0];
+    const nextLevel = buildRewardsDashboard(
+      [card],
+      [createTransaction({ amount: -1_600_000, flag_color: 'orange' })],
+      {},
+      referenceDate,
+    ).cards[0];
+
+    expect(currentLevel.calculation.activeSpendingTierId).toBeNull();
+    expect(resolveCardSpendingTier(card, currentLevel.spend.total).activeLevel).toMatchObject({
+      id: null,
+      isBase: true,
+      spendThreshold: 800,
+    });
+    expect(currentLevel.rewardCategories[0]).toMatchObject({
+      rate: 6,
+      maximum: { target: 333 },
+    });
+    expect(nextLevel.calculation.activeSpendingTierId).toBe('level-1600');
+    expect(nextLevel.rewardCategories[0]).toMatchObject({
+      rate: 8,
+      maximum: { target: 375 },
     });
   });
 
