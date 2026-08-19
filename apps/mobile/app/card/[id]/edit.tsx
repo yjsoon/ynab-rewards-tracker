@@ -720,7 +720,7 @@ function SpendingTierEditor({
               ? `At ${formatEditableSpend(tier.spendThreshold, formatSpend)} total spend`
               : 'New spend tier'}
           </Title3>
-          <Footnote color="secondary">Applies to the entire reward period</Footnote>
+          <Footnote color="secondary">Rate unlocks here; caps advance at each target, then remain at the highest level</Footnote>
         </View>
         <Button
           variant="plain"
@@ -761,7 +761,7 @@ function SpendingTierEditor({
         <View style={styles.spendingTierCategories}>
           <View style={styles.spendingTierCategoryIntro}>
             <Headline>Flag-category rewards</Headline>
-            <Footnote color="secondary">Set each category’s rate and cap at this spend level.</Footnote>
+            <Footnote color="secondary">Set the rate unlocked here and cap used while approaching it.</Footnote>
           </View>
           {earningFlagTiers.map((flagTier, index) => {
             const override = getEditableSpendingTierSubcategory(tier, flagTier);
@@ -1298,7 +1298,7 @@ export default function EditCardScreen() {
 
         <Group
           title="Spend-based reward tiers"
-          footer="The highest total-spend threshold reached sets rates and eligible-spend caps for the entire reward period."
+          footer="Rates use the highest threshold reached. Caps use the next target, then remain at the highest level."
         >
           <View style={[styles.spendingTierBase, styles.rowDivider]}>
             <Headline>Base level</Headline>

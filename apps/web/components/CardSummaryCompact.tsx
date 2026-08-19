@@ -154,18 +154,6 @@ export function CardSummaryCompactContent({
   const displayedSubcategoryBreakdowns = hasBlockRounding
     ? subcategoryBreakdowns.map((entry) => ({ ...entry, totalSpend: entry.countedSpend }))
     : subcategoryBreakdowns;
-  const nextTierSubcategories = nextSpendingLevel
-    ? new Map(
-        resolveCardSpendingTier(card, nextSpendingLevel.spendThreshold)
-          .effectiveCard.subcategories?.map((subcategory) => [subcategory.id, subcategory] as const) ?? [],
-      )
-    : null;
-  const displayedSubcategoryBreakdownsWithNextTier = displayedSubcategoryBreakdowns.map((entry) => {
-    const nextTierSubcategory = nextTierSubcategories?.get(entry.id);
-    return nextTierSubcategory
-      ? { ...entry, nextTierMaximumSpend: nextTierSubcategory.maximumSpend ?? null }
-      : entry;
-  });
 
   const minStatusClass = minimumSpendMet
     ? "text-emerald-600 dark:text-emerald-300"
@@ -191,7 +179,7 @@ export function CardSummaryCompactContent({
         <span className="min-w-0 truncate text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
           {heroVariant === "tier-left" && nextSpendingLevel && (
             <>
-              Next · <CurrencyAmount value={nextSpendingLevel.spendThreshold} currency={currency} decimals={0} /> tier
+              <CurrencyAmount value={nextSpendingLevel.spendThreshold} currency={currency} decimals={0} /> tier
             </>
           )}
           {(heroVariant === "cap-left" || heroVariant === "cap-over") && (
@@ -313,13 +301,11 @@ export function CardSummaryCompactContent({
 
       {card.subcategoriesEnabled && subcategoryBreakdowns.length > 0 && (
         <SubcategoryBreakdownCompact
-          breakdowns={displayedSubcategoryBreakdownsWithNextTier}
+          breakdowns={displayedSubcategoryBreakdowns}
           cardType={card.type}
           currency={currency || "$"}
-          currentTierThreshold={activeSpendingLevel?.spendThreshold ?? null}
           flagNames={flagNames}
           isExpanded={isSubcategoryExpanded}
-          nextTierThreshold={nextSpendingLevel?.spendThreshold ?? null}
           onToggleExpanded={onToggleSubcategories}
           compactSubtitles
           transactionsHref={transactionsHref}

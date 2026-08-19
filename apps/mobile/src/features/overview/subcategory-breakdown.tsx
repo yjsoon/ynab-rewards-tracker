@@ -71,11 +71,8 @@ function capPercentLabel(category: RewardCategoryProjection, formatting: CardFor
 
 export interface CardSubcategoryBreakdownProps {
   categories: RewardCategoryProjection[];
-  currentTierThreshold?: number | null;
   formatting: CardFormatting;
   isExpanded: boolean;
-  nextTierCategoryMaximums?: ReadonlyMap<string, number | null> | null;
-  nextTierThreshold?: number | null;
   onToggleExpanded: () => void;
 }
 
@@ -85,11 +82,8 @@ export interface CardSubcategoryBreakdownProps {
  */
 export function CardSubcategoryBreakdown({
   categories,
-  currentTierThreshold,
   formatting,
   isExpanded,
-  nextTierCategoryMaximums,
-  nextTierThreshold,
   onToggleExpanded,
 }: CardSubcategoryBreakdownProps) {
   const segments = useMemo(() => segmentsFor(categories), [categories]);
@@ -101,18 +95,13 @@ export function CardSubcategoryBreakdown({
     () => [...categories].sort((left, right) => right.spend.total - left.spend.total),
     [categories],
   );
-  const accessibilityHeading = nextTierThreshold
-    ? `Current ${currentTierThreshold
-      ? `${formatting.currencyRounded(currentTierThreshold)} tier `
-      : ''}caps, next tier at ${formatting.currencyRounded(nextTierThreshold)}`
-    : 'Reward categories';
 
   return (
     <View style={styles.container}>
       <Pressable
         onPress={onToggleExpanded}
         accessibilityRole="button"
-        accessibilityLabel={`${accessibilityHeading}, ${totalSpend > 0 ? `${rows
+        accessibilityLabel={`Reward categories, ${totalSpend > 0 ? `${rows
           .filter((category) => category.spend.total > 0)
           .map((category) => `${category.name}, ${formatting.currencyCompact(category.spend.total)}`)
           .join(', ')}` : 'no spend this period'}`}
@@ -121,11 +110,7 @@ export function CardSubcategoryBreakdown({
         style={({ pressed }) => [styles.header, pressed && styles.pressed]}
       >
         <Caption1 color="secondary" style={styles.eyebrow} accessible={false}>
-          {nextTierThreshold
-            ? `Current ${currentTierThreshold
-              ? `${formatting.currencyRounded(currentTierThreshold)} tier `
-              : ''}caps`
-            : 'Categories'}
+          Categories
         </Caption1>
         <SymbolView
           name="chevron.down"
@@ -159,24 +144,12 @@ export function CardSubcategoryBreakdown({
           {rows.map((category, index) => {
             const percent = capPercentage(category);
             const percentLabel = capPercentLabel(category, formatting);
-            const hasNextTierCategory = Boolean(nextTierCategoryMaximums?.has(category.id));
-            const nextTierMaximum = nextTierCategoryMaximums?.get(category.id) ?? null;
-            const showNextTierMaximum = Boolean(
-              nextTierThreshold &&
-              hasNextTierCategory &&
-              nextTierMaximum !== category.maximum.target,
-            );
-            const nextTierLabel = showNextTierMaximum && nextTierThreshold
-              ? `At ${formatting.currencyRounded(nextTierThreshold)}: ${nextTierMaximum === null
-                ? 'no cap'
-                : `${formatting.currencyRounded(nextTierMaximum)} cap`}`
-              : null;
             return (
               <View
                 key={category.id}
                 style={[styles.row, index < rows.length - 1 && styles.rowDivider]}
                 accessible
-                accessibilityLabel={`${category.name}, ${formatting.currencyCompact(category.spend.total)} spent${percentLabel ? `, ${percentLabel}` : ''}${nextTierLabel ? `, ${nextTierLabel}` : ''}`}
+                accessibilityLabel={`${category.name}, ${formatting.currencyCompact(category.spend.total)} spent${percentLabel ? `, ${percentLabel}` : ''}`}
               >
                 <View style={styles.rowIdentity} accessibilityElementsHidden>
                   <View style={[styles.flagDot, { backgroundColor: flagColor(category.flagColor) }]} />
@@ -192,11 +165,6 @@ export function CardSubcategoryBreakdown({
                       {formatting.currencyCompact(category.spend.total)}
                     </Footnote>
                   )}
-                  {nextTierLabel ? (
-                    <Caption1 color="tertiary" style={styles.tabular}>
-                      {nextTierLabel}
-                    </Caption1>
-                  ) : null}
                 </View>
               </View>
             );
@@ -278,7 +246,6 @@ const styles = StyleSheet.create({
   },
   rowTrailing: {
     flexShrink: 0,
-    alignItems: 'flex-end',
   },
   tabular: {
     fontVariant: ['tabular-nums'],

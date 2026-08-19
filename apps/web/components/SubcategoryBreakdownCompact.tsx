@@ -19,17 +19,14 @@ interface SubcategoryBreakdown {
   minimumSpendMet?: boolean;
   maximumSpendExceeded?: boolean;
   maximumSpend?: number | null;
-  nextTierMaximumSpend?: number | null;
 }
 
 interface SubcategoryBreakdownCompactProps {
   breakdowns: SubcategoryBreakdown[];
   cardType: 'cashback' | 'miles';
   currency: string;
-  currentTierThreshold?: number | null;
   flagNames: Record<string, string>;
   isExpanded?: boolean;
-  nextTierThreshold?: number | null;
   onToggleExpanded?: () => void;
   /** Controls decimal precision on the inline spent amount: true → 0dp, false → 2dp. */
   compactSubtitles?: boolean;
@@ -41,9 +38,7 @@ const ROW_STAGGER_MS = 45;
 export function SubcategoryBreakdownCompact({
   breakdowns,
   currency,
-  currentTierThreshold,
   isExpanded: controlledIsExpanded,
-  nextTierThreshold,
   onToggleExpanded,
   compactSubtitles = false,
   transactionsHref,
@@ -103,13 +98,7 @@ export function SubcategoryBreakdownCompact({
         className="group flex w-full items-center justify-between rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
       >
         <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground transition-colors group-hover:text-foreground">
-          {nextTierThreshold ? (
-            <>
-              Current {currentTierThreshold ? (
-                <><CurrencyAmount value={currentTierThreshold} currency={currency} decimals={0} /> tier </>
-              ) : null}caps
-            </>
-          ) : 'Subcategories'}
+          Subcategories
         </span>
         <ChevronDown
           className={cn(
@@ -191,11 +180,6 @@ export function SubcategoryBreakdownCompact({
               // Background fill width: with a cap, show cap progress. Without one, fall back to
               // this row's share of total subcategory spend so the bar still conveys weight.
               const hasCap = !!(entry.maximumSpend && entry.maximumSpend > 0);
-              const nextTierMaximumSpend = entry.nextTierMaximumSpend;
-              const hasNextTierCapPreview = nextTierThreshold !== null &&
-                nextTierThreshold !== undefined &&
-                nextTierMaximumSpend !== undefined &&
-                nextTierMaximumSpend !== entry.maximumSpend;
               const progress = hasCap
                 ? Math.min(100, (entry.totalSpend / (entry.maximumSpend as number)) * 100)
                 : totalSpend > 0
@@ -248,30 +232,18 @@ export function SubcategoryBreakdownCompact({
                       style={{ backgroundColor: flagColor }}
                     />
                     <span className="truncate text-[13px] font-medium">{entry.name}</span>
-                    <span className="ml-auto flex flex-col items-end whitespace-nowrap text-[13px]">
-                      <span>
-                        <span className="font-semibold">
-                          <CurrencyAmount value={entry.totalSpend} currency={currency} decimals={compactSubtitles ? 0 : 2} />
-                        </span>
-                        {hasCap && (
-                          <>
-                            <span className="text-[11px] text-muted-foreground/70">
-                              {'/'}
-                              <CurrencyAmount value={entry.maximumSpend as number} currency={currency} decimals={0} />
-                            </span>
-                            <span className={`ml-1 ${pctClass}`}>{Math.round(progress)}%</span>
-                          </>
-                        )}
+                    <span className="ml-auto whitespace-nowrap text-[13px]">
+                      <span className="font-semibold">
+                        <CurrencyAmount value={entry.totalSpend} currency={currency} decimals={compactSubtitles ? 0 : 2} />
                       </span>
-                      {hasNextTierCapPreview && (
-                        <span className="text-[10px] leading-tight text-muted-foreground">
-                          At <CurrencyAmount value={nextTierThreshold} currency={currency} decimals={0} />:{' '}
-                          {typeof nextTierMaximumSpend === 'number' ? (
-                            <><CurrencyAmount value={nextTierMaximumSpend} currency={currency} decimals={0} /> cap</>
-                          ) : (
-                            'no cap'
-                          )}
-                        </span>
+                      {hasCap && (
+                        <>
+                          <span className="text-[11px] text-muted-foreground/70">
+                            {'/'}
+                            <CurrencyAmount value={entry.maximumSpend as number} currency={currency} decimals={0} />
+                          </span>
+                          <span className={`ml-1 ${pctClass}`}>{Math.round(progress)}%</span>
+                        </>
                       )}
                     </span>
                   </div>

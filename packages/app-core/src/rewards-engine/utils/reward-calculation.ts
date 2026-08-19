@@ -1,7 +1,10 @@
 import type { RewardCalculation, CreditCard, SubcategoryBreakdown } from '../../storage/types';
 
 import type { SimplifiedCalculation, SubcategoryCalculation } from '../simple-calculator';
-import { resolveCardSpendingTier } from './spending-tiers';
+import {
+  resolveCardSpendingTier,
+  SPENDING_TIER_CALCULATION_VERSION,
+} from './spending-tiers';
 
 /**
  * Recomputes the dollar-denominated fields that depend only on the user's
@@ -78,6 +81,9 @@ export function createRewardCalculationFromSimple(
     maximumSpend: calculation.maximumSpend,
     maximumProgress: calculation.maximumSpendProgress,
     activeSpendingTierId: calculation.activeSpendingTierId,
+    spendingTierCalculationVersion: card.spendingTiers?.length
+      ? SPENDING_TIER_CALCULATION_VERSION
+      : undefined,
     minimumMet: calculation.minimumSpendMet,
     maximumExceeded: calculation.maximumSpendExceeded,
     shouldStopUsing: calculation.maximumSpendExceeded && !hasHigherSpendingLevel,

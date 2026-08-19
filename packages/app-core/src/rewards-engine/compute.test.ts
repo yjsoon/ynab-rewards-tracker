@@ -95,6 +95,7 @@ describe('computeCurrentPeriod', () => {
       eligibleSpend: 120,
       rewardEarned: 9.6,
       activeSpendingTierId: 'spend-tier',
+      spendingTierCalculationVersion: 1,
     });
   });
 

@@ -153,7 +153,7 @@ export function CardSpendingTiersEditor({
                 At {formatSpend(tier.spendThreshold)} total spend
               </CardTitle>
               <p className="mt-1 text-xs text-muted-foreground">
-                Applies retroactively to eligible spend for this reward period.
+                The rate unlocks here; caps apply while approaching it and remain at the highest level.
               </p>
             </div>
             <Button
@@ -222,7 +222,7 @@ export function CardSpendingTiersEditor({
                 <div>
                   <p className="text-sm font-medium">Flag-category rewards</p>
                   <p className="text-xs text-muted-foreground">
-                    Set the rate and eligible-spend cap for each category at this level.
+                    Set the rate unlocked here and the cap used while approaching this threshold.
                   </p>
                 </div>
                 <div className="space-y-2">
@@ -285,7 +285,7 @@ export function CardSpendingTiersEditor({
         Add spend tier
       </Button>
       <p className="text-xs text-muted-foreground">
-        The highest threshold reached sets the rates and caps for the entire reward period.
+        Rates use the highest threshold reached. Caps use the next target, then remain at the highest level.
       </p>
     </div>
   );

@@ -77,4 +77,39 @@ describe('selectCurrentCardCalculations', () => {
       '2026-07-15 → 2026-08-14',
     ]);
   });
+
+  it('rejects persisted tier calculations from an older calculation policy', () => {
+    const tieredCard = card({
+      spendingTiers: [{
+        id: 'high-spend',
+        spendThreshold: 100,
+        earningRate: 5,
+      }],
+    });
+    const staleCalculation = calculation(
+      tieredCard.id,
+      '2026-08-01 → 2026-08-31',
+      { activeSpendingTierId: 'high-spend' },
+    );
+    const currentCalculation = calculation(
+      tieredCard.id,
+      '2026-08-01 → 2026-08-31',
+      {
+        activeSpendingTierId: 'high-spend',
+        spendingTierCalculationVersion: 1,
+      },
+    );
+    const referenceDate = new Date(2026, 7, 1, 12);
+
+    expect(selectCurrentCardCalculations(
+      [tieredCard],
+      [staleCalculation],
+      referenceDate,
+    )).toEqual([]);
+    expect(selectCurrentCardCalculations(
+      [tieredCard],
+      [currentCalculation],
+      referenceDate,
+    )).toEqual([currentCalculation]);
+  });
 });

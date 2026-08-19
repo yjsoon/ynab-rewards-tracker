@@ -3,6 +3,7 @@ import type { CreditCard, RewardCalculation } from '../../storage/types';
 
 import type { CategoryCardInsight } from '../types';
 import { SimpleRewardsCalculator } from '../simple-calculator';
+import { isSpendingTierCalculationCompatible } from './spending-tiers';
 
 export const STATUS_PRIORITY: Record<CategoryCardInsight['status'], number> = {
   use: 3,
@@ -21,7 +22,10 @@ export function selectCurrentCardCalculations(
   for (const card of cards) {
     const period = SimpleRewardsCalculator.calculatePeriod(card, referenceDate);
     const matches = calculations.filter((calculation) => {
-      if (calculation.cardId !== card.id) {
+      if (
+        calculation.cardId !== card.id ||
+        !isSpendingTierCalculationCompatible(card, calculation)
+      ) {
         return false;
       }
       const normalized = normalizePeriod(calculation.period);

@@ -373,7 +373,7 @@ describe('SimpleRewardsCalculator.calculateCardRewards', () => {
     });
   });
 
-  it('keeps existing card settings as the base level and applies the highest spend tier reached', () => {
+  it('uses the reached level rate and advances caps to the next spend target', () => {
     const card: CreditCard = {
       ...createMilesCardWithSubcategories(),
       type: 'cashback',
@@ -404,8 +404,8 @@ describe('SimpleRewardsCalculator.calculateCardRewards', () => {
 
     expect(baseLevel).toMatchObject({
       minimumSpend: 800,
-      maximumSpend: 325,
-      rewardEarned: 19.5,
+      maximumSpend: 375,
+      rewardEarned: 22.5,
       activeSpendingTierId: null,
     });
     expect(baseLevel.transactionRewards['base-level']).toMatchObject({ rewardRate: 6 });
@@ -511,8 +511,8 @@ describe('SimpleRewardsCalculator.calculateCardRewards', () => {
 
     expect(calculation).toMatchObject({
       minimumSpend: 400,
-      maximumSpend: 200,
-      rewardEarned: 8,
+      maximumSpend: 325,
+      rewardEarned: 13,
       activeSpendingTierId: 'level-400',
     });
   });

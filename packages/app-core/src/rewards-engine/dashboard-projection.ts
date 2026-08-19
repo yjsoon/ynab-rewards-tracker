@@ -14,7 +14,10 @@ import {
   type TransactionRewardReason,
   type TransactionRewardResult,
 } from './simple-calculator';
-import { resolveCardSpendingTier } from './utils/spending-tiers';
+import {
+  isSpendingTierCalculationCompatible,
+  resolveCardSpendingTier,
+} from './utils/spending-tiers';
 
 const MILLIUNITS_PER_UNIT = 1000;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -410,18 +413,8 @@ function applyPersistedCalculation(
   if (!persisted) {
     return calculation;
   }
-  if (card.spendingTiers?.length) {
-    const hasSpendingTierMetadata = Object.prototype.hasOwnProperty.call(
-      persisted,
-      'activeSpendingTierId',
-    );
-    const expectedSpendingTierId = resolveCardSpendingTier(
-      card,
-      persisted.totalSpend,
-    ).activeLevel?.id ?? null;
-    if (!hasSpendingTierMetadata || persisted.activeSpendingTierId !== expectedSpendingTierId) {
-      return calculation;
-    }
+  if (!isSpendingTierCalculationCompatible(card, persisted)) {
+    return calculation;
   }
 
   const persistedSubcategories = new Map(
@@ -625,9 +618,7 @@ export function buildRewardsDashboard(
       card,
       calculation.totalSpend,
     ).hasNextSpendingTier;
-    const minimumMet = minimumTarget !== null
-      ? persistedCalculation?.minimumMet ?? calculation.totalSpend >= minimumTarget
-      : null;
+    const minimumMet = minimumTarget !== null ? calculation.minimumSpendMet : null;
     const eligibleSpendBeforeBlocks = calculation.eligibleSpendBeforeBlocks
       ?? calculation.eligibleSpend;
     const status = getStatus({

@@ -333,66 +333,231 @@ describe('buildRewardsDashboard', () => {
     });
   });
 
-  it('keeps current category caps until the next spend threshold is reached', () => {
+  it('advances category caps at each threshold while retaining the reached level rate', () => {
     const timestamp = '2026-01-01T00:00:00.000Z';
     const card = createCard({
-      earningRate: 6,
-      minimumSpend: 800,
+      earningRate: 8,
+      minimumSpend: 1_600,
       subcategoriesEnabled: true,
       subcategories: [{
         id: 'groceries',
         name: 'Groceries',
         flagColor: 'orange',
-        rewardValue: 6,
-        maximumSpend: 333,
+        rewardValue: 8,
+        maximumSpend: 375,
         priority: 0,
         active: true,
         createdAt: timestamp,
         updatedAt: timestamp,
       }],
       spendingTiers: [{
-        id: 'level-1600',
-        spendThreshold: 1_600,
-        earningRate: 8,
+        id: 'level-800',
+        spendThreshold: 800,
+        earningRate: 6,
         subcategories: [{
           subcategoryId: 'groceries',
-          rewardValue: 8,
-          maximumSpend: 375,
+          rewardValue: 6,
+          maximumSpend: 333,
         }],
       }],
     });
 
-    const currentLevel = buildRewardsDashboard(
+    const beforeFirstThreshold = buildRewardsDashboard(
       [card],
-      [createTransaction({ amount: -826_000, flag_color: 'orange' })],
+      [createTransaction({ amount: -500_000, flag_color: 'orange' })],
       {},
       referenceDate,
     ).cards[0];
-    const nextLevel = buildRewardsDashboard(
+    const atFirstThreshold = buildRewardsDashboard(
       [card],
-      [createTransaction({ amount: -1_600_000, flag_color: 'orange' })],
+      [createTransaction({ amount: -800_000, flag_color: 'orange' })],
+      {},
+      referenceDate,
+    ).cards[0];
+    const betweenThresholds = buildRewardsDashboard(
+      [card],
+      [createTransaction({ amount: -900_000, flag_color: 'orange' })],
+      {},
+      referenceDate,
+    ).cards[0];
+    const aboveHighestThreshold = buildRewardsDashboard(
+      [card],
+      [createTransaction({ amount: -1_610_000, flag_color: 'orange' })],
       {},
       referenceDate,
     ).cards[0];
 
-    expect(currentLevel.calculation.activeSpendingTierId).toBeNull();
-    expect(resolveCardSpendingTier(card, currentLevel.spend.total).activeLevel).toMatchObject({
-      id: null,
-      isBase: true,
+    const beforeResolution = resolveCardSpendingTier(card, beforeFirstThreshold.spend.total);
+    expect(beforeResolution.activeLevel).toBeNull();
+    expect(beforeResolution.nextLevel).toMatchObject({
+      id: 'level-800',
       spendThreshold: 800,
     });
-    expect(currentLevel.rewardCategories[0]).toMatchObject({
+    expect(beforeResolution.nextLevel!.spendThreshold - beforeFirstThreshold.spend.total).toBe(300);
+    expect(beforeFirstThreshold).toMatchObject({
+      minimum: { target: 800, met: false },
+      reward: { amount: 0 },
+    });
+    expect(beforeFirstThreshold.rewardCategories[0]).toMatchObject({
       rate: 6,
       maximum: { target: 333 },
     });
-    expect(nextLevel.calculation.activeSpendingTierId).toBe('level-1600');
-    expect(nextLevel.rewardCategories[0]).toMatchObject({
+
+    expect(atFirstThreshold.calculation.activeSpendingTierId).toBe('level-800');
+    expect(atFirstThreshold).toMatchObject({
+      minimum: { target: 800, met: true },
+      reward: { amount: 22.5 },
+    });
+    expect(atFirstThreshold.rewardCategories[0]).toMatchObject({
+      rate: 6,
+      maximum: { target: 375 },
+    });
+
+    const betweenResolution = resolveCardSpendingTier(card, betweenThresholds.spend.total);
+    expect(betweenResolution.activeLevel).toMatchObject({ id: 'level-800' });
+    expect(betweenResolution.nextLevel).toMatchObject({
+      id: null,
+      isBase: true,
+      spendThreshold: 1_600,
+    });
+    expect(betweenResolution.nextLevel!.spendThreshold - betweenThresholds.spend.total).toBe(700);
+    expect(betweenThresholds.rewardCategories[0]).toMatchObject({
+      rate: 6,
+      maximum: { target: 375 },
+    });
+
+    const highestResolution = resolveCardSpendingTier(card, aboveHighestThreshold.spend.total);
+    expect(highestResolution.activeLevel).toMatchObject({
+      id: null,
+      isBase: true,
+      spendThreshold: 1_600,
+    });
+    expect(highestResolution.nextLevel).toBeNull();
+    expect(aboveHighestThreshold).toMatchObject({
+      minimum: { target: 1_600, met: true },
+      reward: { amount: 30 },
+    });
+    expect(aboveHighestThreshold.rewardCategories[0]).toMatchObject({
       rate: 8,
       maximum: { target: 375 },
     });
   });
 
-  it('keeps a capped current level active while a higher spend level can still be unlocked', () => {
+  it('ignores persisted tier calculations from the previous cap policy', () => {
+    const timestamp = '2026-01-01T00:00:00.000Z';
+    const card = createCard({
+      earningRate: 8,
+      minimumSpend: 1_600,
+      subcategoriesEnabled: true,
+      subcategories: [{
+        id: 'groceries',
+        name: 'Groceries',
+        flagColor: 'orange',
+        rewardValue: 8,
+        maximumSpend: 375,
+        priority: 0,
+        active: true,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }],
+      spendingTiers: [{
+        id: 'level-800',
+        spendThreshold: 800,
+        earningRate: 6,
+        subcategories: [{
+          subcategoryId: 'groceries',
+          rewardValue: 6,
+          maximumSpend: 333,
+        }],
+      }],
+    });
+
+    const result = buildRewardsDashboard(
+      [card],
+      [createTransaction({ amount: -900_000, flag_color: 'orange' })],
+      {},
+      referenceDate,
+      [{
+        cardId: card.id,
+        ruleId: `card-${card.id}`,
+        period: '2026-02-01 → 2026-02-28',
+        totalSpend: 900,
+        countedSpend: 333,
+        eligibleSpend: 333,
+        rewardEarned: 19.98,
+        rewardType: 'cashback',
+        minimumSpend: 800,
+        activeSpendingTierId: 'level-800',
+        minimumMet: true,
+        maximumExceeded: false,
+        shouldStopUsing: false,
+        subcategoryBreakdowns: [{
+          subcategoryId: 'groceries',
+          name: 'Groceries',
+          flagColor: 'orange',
+          totalSpend: 900,
+          countedSpend: 333,
+          eligibleSpend: 333,
+          rewardEarned: 19.98,
+          rewardRate: 6,
+          minimumSpendMet: true,
+          maximumSpend: 333,
+          maximumSpendExceeded: true,
+        }],
+      }],
+    ).cards[0];
+
+    expect(result).toMatchObject({
+      spend: { total: 900, counted: 375, eligible: 375 },
+      reward: { amount: 22.5, dollars: 22.5 },
+      calculation: { activeSpendingTierId: 'level-800' },
+    });
+    expect(result.rewardCategories[0]).toMatchObject({
+      rate: 6,
+      maximum: { target: 375 },
+    });
+  });
+
+  it('does not read minimum status from a rejected persisted tier calculation', () => {
+    const card = createCard({
+      earningRate: 8,
+      minimumSpend: 1_600,
+      spendingTiers: [{
+        id: 'level-800',
+        spendThreshold: 800,
+        earningRate: 6,
+      }],
+    });
+
+    const result = buildRewardsDashboard(
+      [card],
+      [createTransaction({ amount: -400_000 })],
+      {},
+      referenceDate,
+      [{
+        cardId: card.id,
+        ruleId: `card-${card.id}`,
+        period: '2026-02-01 → 2026-02-28',
+        totalSpend: 900,
+        eligibleSpend: 900,
+        rewardEarned: 54,
+        rewardType: 'cashback',
+        minimumSpend: 800,
+        activeSpendingTierId: 'level-800',
+        minimumMet: true,
+        maximumExceeded: false,
+        shouldStopUsing: false,
+      }],
+    ).cards[0];
+
+    expect(result).toMatchObject({
+      spend: { total: 400, eligible: 0 },
+      minimum: { target: 800, remaining: 400, met: false },
+      status: 'building',
+    });
+  });
+
+  it('uses the next target cap while a higher spend level can still be unlocked', () => {
     const card = createCard({
       minimumSpend: 50,
       maximumSpend: 20,
@@ -418,8 +583,8 @@ describe('buildRewardsDashboard', () => {
     );
 
     expect(betweenLevels.cards[0]).toMatchObject({
-      spend: { total: 80, eligible: 20 },
-      maximum: { target: 20, reached: true },
+      spend: { total: 80, eligible: 30 },
+      maximum: { target: 30, reached: true },
       status: 'earning',
     });
     expect(highestLevel.cards[0]).toMatchObject({

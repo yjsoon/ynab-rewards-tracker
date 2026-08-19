@@ -92,7 +92,7 @@ describe('rankCardUses', () => {
     });
   });
 
-  it('keeps an intermediate-capped card as a next-tier building option', () => {
+  it('uses the reached rate and next-target cap room between thresholds', () => {
     const card: CreditCard = {
       id: 'tiered-card',
       name: 'Tiered Card',
@@ -124,10 +124,10 @@ describe('rankCardUses', () => {
 
     expect(rankCardUses(dashboard.cards, {})).toMatchObject([{
       card: { card: { id: card.id } },
-      rankGroup: 'building',
-      rate: { value: 8, prospective: true },
+      rankGroup: 'current',
+      rate: { value: 6, prospective: false },
       effectiveEarningRoom: 20,
-      operational: { kind: 'minimum', remaining: 20 },
+      operational: { kind: 'cap', remaining: 20 },
     }]);
   });
 

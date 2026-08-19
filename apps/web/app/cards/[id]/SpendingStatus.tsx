@@ -259,7 +259,7 @@ export default function SpendingStatus({
                     : 'Spend threshold not reached'}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  The active level sets this period&apos;s rates and eligible-spend caps.
+                  Rates follow the highest threshold reached. Caps follow the next target, then remain at the highest level.
                 </p>
               </div>
               {nextSpendingLevel ? (
@@ -376,7 +376,7 @@ export default function SpendingStatus({
                 <Alert className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30">
                   <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                   <AlertDescription className="text-amber-700 dark:text-amber-300">
-                    <strong>Current spend level capped.</strong> Further spend will not earn at this level, but reaching the next tier recalculates this period at its new rates and caps.
+                    <strong>Current spend level capped.</strong> Further spend will not earn at this level, but reaching the next tier recalculates this period at its new rates.
                   </AlertDescription>
                 </Alert>
               ) : minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0 && !minimumSpendMet ? (

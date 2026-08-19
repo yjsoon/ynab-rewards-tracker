@@ -90,7 +90,9 @@ export interface SpendingTierSubcategory {
 }
 
 /**
- * An additional reward level selected by total qualifying card spend.
+ * An additional reward level selected by total qualifying card spend. Rates
+ * unlock at the configured threshold; caps apply while approaching that
+ * threshold, then advance to the next target when it is reached.
  * The card's existing earning fields remain the base level, which keeps
  * cards without spending tiers fully backward compatible.
  */
@@ -215,6 +217,7 @@ export interface RewardCalculation {
   maximumSpend?: number | null;
   maximumProgress?: number;
   activeSpendingTierId?: string | null;
+  spendingTierCalculationVersion?: number;
   minimumMet: boolean;
   maximumExceeded: boolean;
   shouldStopUsing: boolean;

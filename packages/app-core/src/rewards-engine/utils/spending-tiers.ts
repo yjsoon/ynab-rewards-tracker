@@ -1,6 +1,7 @@
 import type {
   CardSpendingTier,
   CreditCard,
+  RewardCalculation,
   SpendingTierSubcategory,
 } from '../../storage/types';
 import { createSpendingTierId } from '../../storage/normalisers';
@@ -20,6 +21,30 @@ export interface ResolvedCardSpendingTier {
   hasNextSpendingTier: boolean;
   effectiveCard: CreditCard;
   minimumSpendMet: boolean;
+}
+
+export const SPENDING_TIER_CALCULATION_VERSION = 1;
+
+export function isSpendingTierCalculationCompatible(
+  card: CreditCard,
+  calculation: RewardCalculation,
+): boolean {
+  if (!card.spendingTiers?.length) {
+    return true;
+  }
+
+  const hasActiveLevel = Object.prototype.hasOwnProperty.call(
+    calculation,
+    'activeSpendingTierId',
+  );
+  const expectedActiveLevelId = resolveCardSpendingTier(
+    card,
+    calculation.totalSpend,
+  ).activeLevel?.id ?? null;
+
+  return hasActiveLevel &&
+    calculation.activeSpendingTierId === expectedActiveLevelId &&
+    calculation.spendingTierCalculationVersion === SPENDING_TIER_CALCULATION_VERSION;
 }
 
 function configuredThreshold(value: number | null | undefined): number {
@@ -88,6 +113,21 @@ function applyLevel(card: CreditCard, level: CardSpendingLevel): CreditCard {
   };
 }
 
+function applyCaps(card: CreditCard, capCard: CreditCard): CreditCard {
+  const caps = new Map(
+    capCard.subcategories?.map((subcategory) => [subcategory.id, subcategory.maximumSpend ?? null] as const),
+  );
+
+  return {
+    ...card,
+    maximumSpend: capCard.maximumSpend,
+    subcategories: card.subcategories?.map((subcategory) => ({
+      ...subcategory,
+      maximumSpend: caps.get(subcategory.id) ?? null,
+    })),
+  };
+}
+
 /**
  * Resolve the highest reward level reached by total qualifying period spend.
  * If no level has been reached, the lowest configured level is used only to
@@ -104,12 +144,17 @@ export function resolveCardSpendingTier(
   );
   const targetLevel = activeLevel ?? levels[0];
   const nextLevel = levels.find((level) => level.spendThreshold > totalSpend) ?? null;
+  const earningCard = applyLevel(card, targetLevel);
+  const capCard = applyLevel(card, nextLevel ?? targetLevel);
 
   return {
     activeLevel,
     nextLevel,
     hasNextSpendingTier: Boolean(card.spendingTiers?.length && nextLevel),
-    effectiveCard: applyLevel(card, targetLevel),
+    // Rates unlock at their configured threshold. Caps describe the target
+    // currently being approached, so they advance as soon as the previous
+    // threshold is reached and remain at the highest configured level.
+    effectiveCard: applyCaps(earningCard, capCard),
     minimumSpendMet: activeLevel !== null,
   };
 }
