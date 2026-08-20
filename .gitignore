@@ -54,3 +54,6 @@ apps/mobile/android/
 # OpenNext/Cloudflare build output
 .open-next/
 .wrangler/
+
+# Amp orb portal metadata
+.amp/portals/
