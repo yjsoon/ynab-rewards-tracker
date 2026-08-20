@@ -7,6 +7,7 @@ import {
 } from './dashboard-projection';
 import { formatLocalDate } from './date-utils';
 import { SimpleRewardsCalculator } from './simple-calculator';
+import { REWARD_PERIOD_CALCULATION_VERSION } from './utils/reward-calculation';
 import { resolveCardSpendingTier } from './utils/spending-tiers';
 
 const referenceDate = new Date(2026, 1, 15, 12);
@@ -1141,6 +1142,52 @@ describe('buildRewardsDashboard', () => {
     expect(result.cards[0].calculation.qualificationStatus).toBe('met');
   });
 
+  it('recomputes persisted pending rewards created before future months became non-blocking', () => {
+    const card = createCard({
+      minimumSpend: 500,
+      rewardPeriod: {
+        monthCount: 3,
+        anchorDate: '2026-01-01',
+        monthlyMinimumSpend: 500,
+      },
+    });
+    const stale: RewardCalculation = {
+      cardId: card.id,
+      ruleId: `card-${card.id}`,
+      period: '2026-01-01 → 2026-03-31',
+      totalSpend: 500,
+      countedSpend: 500,
+      eligibleSpend: 0,
+      rewardEarned: 0,
+      rewardType: 'cashback',
+      minimumSpend: 500,
+      monthlyMinimumSpend: 500,
+      qualificationStatus: 'pending',
+      monthlyQualifications: [
+        { start: '2026-01-01', end: '2026-01-31', spend: 500, minimumSpend: 500, status: 'met' },
+        { start: '2026-02-01', end: '2026-02-28', spend: 0, minimumSpend: 500, status: 'pending' },
+        { start: '2026-03-01', end: '2026-03-31', spend: 0, minimumSpend: 500, status: 'pending' },
+      ],
+      minimumMet: false,
+      maximumExceeded: false,
+      shouldStopUsing: false,
+    };
+    const result = buildRewardsDashboard(
+      [card],
+      [createTransaction({ date: '2026-01-10', amount: -500_000 })],
+      {},
+      new Date(2026, 0, 20, 12),
+      [stale],
+    );
+
+    expect(result.cards[0].calculation).toMatchObject({
+      qualificationStatus: 'met',
+      minimumSpend: 500,
+      minimumSpendMet: true,
+      rewardEarned: 10,
+    });
+  });
+
   it('re-derives persisted qualification when an anchored month rolls over', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 1, 1, 12));
@@ -1168,6 +1215,7 @@ describe('buildRewardsDashboard', () => {
           { start: '2026-02-01', end: '2026-02-28', spend: 0, minimumSpend: 800, status: 'pending' },
           { start: '2026-03-01', end: '2026-03-31', spend: 0, minimumSpend: 800, status: 'pending' },
         ],
+        rewardPeriodCalculationVersion: REWARD_PERIOD_CALCULATION_VERSION,
         minimumMet: false,
         maximumExceeded: false,
         shouldStopUsing: false,

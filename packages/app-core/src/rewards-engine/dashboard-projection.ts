@@ -18,6 +18,7 @@ import {
   isSpendingTierCalculationCompatible,
   resolveCardSpendingTier,
 } from './utils/spending-tiers';
+import { REWARD_PERIOD_CALCULATION_VERSION } from './utils/reward-calculation';
 
 const MILLIUNITS_PER_UNIT = 1000;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -421,6 +422,7 @@ function applyPersistedCalculation(
     card.rewardPeriod &&
     card.rewardPeriod.monthlyMinimumSpend > 0 &&
     (
+      persisted.rewardPeriodCalculationVersion !== REWARD_PERIOD_CALCULATION_VERSION ||
       persisted.qualificationStatus === undefined ||
       !persisted.monthlyQualifications?.length
     )
@@ -437,11 +439,14 @@ function applyPersistedCalculation(
         ? 'failed' as const
         : 'pending' as const,
   }));
-  const persistedQualificationStatus = persistedMonthlyQualifications?.some(
+  const persistedStartedMonths = persistedMonthlyQualifications?.filter(
+    (month) => month.start <= asOf,
+  );
+  const persistedQualificationStatus = persistedStartedMonths?.some(
     (month) => month.status === 'failed',
   )
     ? 'failed' as const
-    : persistedMonthlyQualifications?.every((month) => month.status === 'met')
+    : persistedStartedMonths?.length && persistedStartedMonths.every((month) => month.status === 'met')
       ? 'met' as const
       : persistedMonthlyQualifications?.length
         ? 'pending' as const

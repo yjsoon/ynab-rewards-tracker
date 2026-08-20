@@ -659,7 +659,9 @@ export function CardSettingsEditor({
         <div className="flex flex-wrap gap-3">
           <SettingCapsule
             label="Minimum spend"
-            description="Set the spend required before rewards unlock"
+            description={rewardPeriodEnabled
+              ? 'Optional period-wide minimum in addition to the monthly target'
+              : 'Set the spend required before rewards unlock'}
             value={formatMinimumSpendText(minimumSpend)}
             icon={<Target className="h-4 w-4 text-muted-foreground" />}
             isDirty={fieldDirty.minimumSpend}

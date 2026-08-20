@@ -183,9 +183,10 @@ function calculateMonthlyQualification(
         : 'pending';
     return { start, end, spend, minimumSpend, status } as MonthlyQualificationBreakdown;
   });
-  const status: RewardQualificationStatus = breakdowns.some((month) => month.status === 'failed')
+  const startedMonths = breakdowns.filter((month) => month.start <= asOf);
+  const status: RewardQualificationStatus = startedMonths.some((month) => month.status === 'failed')
     ? 'failed'
-    : breakdowns.every((month) => month.status === 'met')
+    : startedMonths.length > 0 && startedMonths.every((month) => month.status === 'met')
       ? 'met'
       : 'pending';
   const activeMonth = breakdowns.find((month) => month.start <= asOf && month.end >= asOf)

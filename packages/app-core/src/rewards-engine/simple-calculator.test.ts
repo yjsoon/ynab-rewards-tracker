@@ -88,6 +88,37 @@ describe('SimpleRewardsCalculator.calculateCardRewards', () => {
     expect(calculation.transactionRewards['jan-earning'].reason).toBe('period_incomplete');
   });
 
+  it('qualifies an on-track period without waiting for future months', () => {
+    const card: CreditCard = {
+      ...createMilesCardWithSubcategories(),
+      minimumSpend: 500,
+      rewardPeriod: {
+        monthCount: 3,
+        anchorDate: '2026-07-01',
+        monthlyMinimumSpend: 500,
+      },
+    };
+    const calculation = SimpleRewardsCalculator.calculateCardRewards(card, [
+      { ...createTransaction('july', -505_000), date: '2026-07-10' },
+      { ...createTransaction('august', -530_000), date: '2026-08-10' },
+    ], {
+      start: '2026-07-01',
+      end: '2026-09-30',
+      label: '2026-07-01 to 2026-09-30',
+      asOf: '2026-08-20',
+    });
+
+    expect(calculation.monthlyQualifications).toMatchObject([
+      { spend: 505, status: 'met' },
+      { spend: 530, status: 'met' },
+      { spend: 0, status: 'pending' },
+    ]);
+    expect(calculation.qualificationStatus).toBe('met');
+    expect(calculation.minimumSpend).toBe(500);
+    expect(calculation.minimumSpendMet).toBe(true);
+    expect(calculation.rewardEarned).toBeGreaterThan(0);
+  });
+
   it('fails qualification after a completed anchored month misses its minimum', () => {
     const card: CreditCard = {
       ...createMilesCardWithSubcategories(),

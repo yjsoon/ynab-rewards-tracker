@@ -351,6 +351,9 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
                   ? 'No minimum required'
                   : `${formatDollars(card.minimumSpend, { currency: settings.currency })} required`}
               </p>
+              {card.rewardPeriod && card.minimumSpend !== null && card.minimumSpend !== undefined && card.minimumSpend > 0 && (
+                <p className="text-xs text-muted-foreground">Additional to the monthly minimum</p>
+              )}
             </div>
             <div>
               <p className="text-sm font-medium text-muted-foreground">Maximum Spend</p>

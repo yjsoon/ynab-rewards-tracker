@@ -245,6 +245,7 @@ export interface RewardCalculation {
   monthlyMinimumSpend?: number;
   qualificationStatus?: RewardQualificationStatus;
   monthlyQualifications?: MonthlyQualificationBreakdown[];
+  rewardPeriodCalculationVersion?: number;
   maximumSpend?: number | null;
   maximumProgress?: number;
   activeSpendingTierId?: string | null;

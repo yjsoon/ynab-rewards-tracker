@@ -6,6 +6,8 @@ import {
   SPENDING_TIER_CALCULATION_VERSION,
 } from './spending-tiers';
 
+export const REWARD_PERIOD_CALCULATION_VERSION = 2;
+
 /**
  * Recomputes the dollar-denominated fields that depend only on the user's
  * current miles valuation. Raw miles and cashback calculations stay intact.
@@ -81,6 +83,9 @@ export function createRewardCalculationFromSimple(
     monthlyMinimumSpend: calculation.monthlyMinimumSpend,
     qualificationStatus: calculation.qualificationStatus,
     monthlyQualifications: calculation.monthlyQualifications,
+    rewardPeriodCalculationVersion: card.rewardPeriod
+      ? REWARD_PERIOD_CALCULATION_VERSION
+      : undefined,
     maximumSpend: calculation.maximumSpend,
     maximumProgress: calculation.maximumSpendProgress,
     activeSpendingTierId: calculation.activeSpendingTierId,

@@ -95,7 +95,6 @@ export default function SpendingStatus({
         const accountTransactions = allTransactions.filter(
           (t: Transaction) =>
             t.account_id === card.ynabAccountId &&
-            t.amount < 0 &&
             t.date >= period.start &&
             t.date <= period.end
         );
@@ -125,7 +124,6 @@ export default function SpendingStatus({
         prefetchedTransactions.filter(
           (t) =>
             t.account_id === card.ynabAccountId &&
-            t.amount < 0 &&
             t.date >= period.start &&
             t.date <= period.end
         )
@@ -383,7 +381,7 @@ export default function SpendingStatus({
                 </span>
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
-                At least <CurrencyAmount value={monthlyMinimumSpend ?? 0} currency={currency} /> across the whole card in each anchored month. Rewards stay locked while a month is pending.
+                At least <CurrencyAmount value={monthlyMinimumSpend ?? 0} currency={currency} /> across the whole card in each anchored month. Future months do not block rewards; a started month must meet its target.
               </p>
               <div className="mt-3 grid gap-2 sm:grid-cols-3">
                 {conciseQualifications.map((month) => (
@@ -450,11 +448,11 @@ export default function SpendingStatus({
                     <strong>Current spend level capped.</strong> Further spend will not earn at this level, but reaching the next tier recalculates this period at its new rates.
                   </AlertDescription>
                 </Alert>
-              ) : minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0 && !minimumSpendMet ? (
+              ) : minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0 && totalSpend < minimumSpend ? (
                 <Alert className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30">
                   <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                   <AlertDescription className="text-amber-700 dark:text-amber-300">
-                    <strong>Minimum spend requirement not met.</strong> You need to spend <CurrencyAmount value={(minimumSpend || 0) - totalSpend} currency={currency} /> more to start earning rewards this period.
+                    <strong>Minimum spend requirement not met.</strong> You need to spend <CurrencyAmount value={Math.max(0, (minimumSpend || 0) - totalSpend)} currency={currency} /> more to start earning rewards this period.
                   </AlertDescription>
                 </Alert>
               ) : minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0 && minimumSpendMet ? (
@@ -466,14 +464,14 @@ export default function SpendingStatus({
                 </Alert>
               ) : null}
             </div>
-          ) : (
+          ) : !hasMonthlyMinimum ? (
             <Alert className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30">
               <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
               <AlertDescription className="text-amber-700 dark:text-amber-300">
                 <strong>No spending limits configured.</strong> Set minimum and maximum spend amounts in card settings to track your progress and optimize rewards.
               </AlertDescription>
             </Alert>
-          )}
+          ) : null}
 
           {/* Subcategory Breakdown - Show if enabled and has data */}
           {card.subcategoriesEnabled && subcategoryBreakdowns.length > 0 && (
