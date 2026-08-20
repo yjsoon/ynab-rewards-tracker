@@ -78,7 +78,8 @@ export function createWholeCardInsight(
   const headroomToMaximum = maximumCap ? Math.max(0, maximumCap - eligibleBeforeBlocks) : null;
   const maximumExceeded = calculation?.maximumExceeded ?? Boolean(maximumCap && headroomToMaximum !== null && headroomToMaximum <= 0);
 
-  const shouldAvoid = Boolean(calculation?.shouldStopUsing) || (
+  const shouldAvoid = calculation?.qualificationStatus === 'failed' ||
+    Boolean(calculation?.shouldStopUsing) || (
     maximumExceeded && !spendingTier.hasNextSpendingTier
   );
   const status: CategoryCardInsight['status'] = shouldAvoid
@@ -253,7 +254,8 @@ export function createSubcategoryInsight(
   const cardMaximumExceeded = calculation?.maximumExceeded ?? false;
 
   const currentLevelCapReached = maxExceeded || cardMaximumExceeded;
-  const shouldAvoid = Boolean(calculation?.shouldStopUsing) || (
+  const shouldAvoid = calculation?.qualificationStatus === 'failed' ||
+    Boolean(calculation?.shouldStopUsing) || (
     currentLevelCapReached && !spendingTier.hasNextSpendingTier
   );
   const fallbackRate = computeFallbackRate(effectiveCard, milesValuation);

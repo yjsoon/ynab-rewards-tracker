@@ -62,7 +62,7 @@ describe('resolveLatestPeriod', () => {
 });
 
 describe('mapLatestSubcategoryCalculations', () => {
-  it('captures only latest period calculations with subcategory breakdowns', () => {
+  it('captures the latest calculation independently for each card', () => {
     const calculations = [
       createCalculation({
         cardId: 'card-1',
@@ -94,8 +94,17 @@ describe('mapLatestSubcategoryCalculations', () => {
       }),
       createCalculation({
         cardId: 'card-2',
-        period: '2025-03',
-        subcategoryBreakdowns: [],
+        period: '2025-02-15 to 2025-05-14',
+        subcategoryBreakdowns: [{
+          subcategoryId: 'sub-2',
+          name: 'Groceries',
+          flagColor: 'green',
+          totalSpend: 50,
+          eligibleSpend: 50,
+          rewardEarned: 1,
+          minimumSpendMet: true,
+          maximumSpendExceeded: false,
+        }],
       }),
       createCalculation({
         cardId: 'card-3',
@@ -105,9 +114,10 @@ describe('mapLatestSubcategoryCalculations', () => {
 
     const { latestPeriod, byCard } = mapLatestSubcategoryCalculations(calculations);
 
-    expect(latestPeriod).toBe('2025-03');
-    expect(byCard.size).toBe(1);
+    expect(latestPeriod).toBeUndefined();
+    expect(byCard.size).toBe(2);
     expect(byCard.get('card-1')?.period).toBe('2025-03');
+    expect(byCard.get('card-2')?.period).toBe('2025-02-15 to 2025-05-14');
   });
 });
 

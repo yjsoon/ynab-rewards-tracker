@@ -1,10 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import type { CreditCard, Transaction } from '../storage/types';
+import type { CreditCard, RewardCalculation, Transaction } from '../storage/types';
 import {
   buildRewardsDashboard,
   projectTransactions,
 } from './dashboard-projection';
+import { formatLocalDate } from './date-utils';
+import { SimpleRewardsCalculator } from './simple-calculator';
 import { resolveCardSpendingTier } from './utils/spending-tiers';
 
 const referenceDate = new Date(2026, 1, 15, 12);
@@ -97,7 +99,7 @@ describe('buildRewardsDashboard', () => {
     });
   });
 
-  it('uses a complete persisted calculation when the transaction preview is truncated', () => {
+  it('does not use a complete persisted calculation for a historical partial view', () => {
     const card = createCard({
       minimumSpend: 500,
       maximumSpend: 1_000,
@@ -127,17 +129,52 @@ describe('buildRewardsDashboard', () => {
     );
 
     expect(result.cards[0]).toMatchObject({
-      spend: { total: 750, counted: 750, eligible: 750 },
-      reward: { amount: 15, dollars: 15 },
-      minimum: { met: true, remaining: 0, progress: 1 },
-      maximum: { reached: false, remaining: 250, progress: 0.75 },
-      status: 'earning',
+      spend: { total: 10, counted: 10, eligible: 0 },
+      reward: { amount: 0, dollars: 0 },
+      minimum: { met: false, remaining: 490, progress: 0.02 },
+      maximum: { reached: false, remaining: 990, progress: 0.01 },
+      status: 'building',
     });
     expect(result.totals).toMatchObject({
-      spend: 750,
-      countedSpend: 750,
-      eligibleSpend: 750,
-      normalizedRewardDollars: 15,
+      spend: 10,
+      countedSpend: 10,
+      eligibleSpend: 0,
+      normalizedRewardDollars: 0,
+    });
+  });
+
+  it('uses a matching persisted calculation for the live partial view', () => {
+    const now = new Date();
+    const card = createCard({ minimumSpend: 500, maximumSpend: 1_000 });
+    const period = SimpleRewardsCalculator.calculatePeriod(card, now);
+    const result = buildRewardsDashboard(
+      [card],
+      [createTransaction({ date: formatLocalDate(now), amount: -10_000 })],
+      {},
+      now,
+      [{
+        cardId: card.id,
+        ruleId: `card-${card.id}`,
+        period: `${period.start} → ${period.end}`,
+        totalSpend: 750,
+        countedSpend: 750,
+        eligibleSpend: 750,
+        eligibleSpendBeforeBlocks: 750,
+        rewardEarned: 15,
+        rewardEarnedDollars: 15,
+        rewardType: 'cashback',
+        minimumProgress: 100,
+        maximumProgress: 75,
+        minimumMet: true,
+        maximumExceeded: false,
+        shouldStopUsing: false,
+      }],
+    );
+
+    expect(result.cards[0]).toMatchObject({
+      spend: { total: 750, counted: 750, eligible: 750 },
+      reward: { amount: 15, dollars: 15 },
+      status: 'earning',
     });
   });
 
@@ -999,6 +1036,156 @@ describe('buildRewardsDashboard', () => {
       resetsOn: '2026-02-10',
       daysRemaining: 5,
     });
+  });
+
+  it('projects the active monthly minimum and does not classify failed qualification as open', () => {
+    const card = createCard({
+      rewardPeriod: {
+        monthCount: 3,
+        anchorDate: '2026-01-01',
+        monthlyMinimumSpend: 800,
+      },
+    });
+    const result = buildRewardsDashboard(
+      [card],
+      [
+        createTransaction({ id: 'jan', date: '2026-01-10', amount: -799_000 }),
+        createTransaction({ id: 'feb', date: '2026-02-10', amount: -500_000 }),
+      ],
+      {},
+      referenceDate,
+    );
+
+    expect(result.cards[0]).toMatchObject({
+      status: 'building',
+      minimum: { target: 800, remaining: 300, progress: 0.625, met: false },
+      progress: { minimumProgressSpend: 500 },
+      calculation: { qualificationStatus: 'failed' },
+      reward: { amount: 0, dollars: 0 },
+    });
+  });
+
+  it('does not overlay a full-period persisted result onto a historical partial view', () => {
+    const card = createCard({
+      rewardPeriod: {
+        monthCount: 3,
+        anchorDate: '2026-01-01',
+        monthlyMinimumSpend: 800,
+      },
+    });
+    const persisted: RewardCalculation = {
+      cardId: card.id,
+      ruleId: `card-${card.id}`,
+      period: '2026-01-01 → 2026-03-31',
+      totalSpend: 2_400,
+      countedSpend: 2_400,
+      eligibleSpend: 2_400,
+      rewardEarned: 48,
+      rewardEarnedDollars: 48,
+      rewardType: 'cashback',
+      monthlyMinimumSpend: 800,
+      qualificationStatus: 'met',
+      monthlyQualifications: [],
+      minimumMet: true,
+      maximumExceeded: false,
+      shouldStopUsing: false,
+    };
+    const result = buildRewardsDashboard(
+      [card],
+      [createTransaction({ date: '2026-01-10', amount: -500_000 })],
+      {},
+      new Date(2026, 0, 15, 12),
+      [persisted],
+    );
+
+    expect(result.cards[0].spend.total).toBe(500);
+    expect(result.cards[0].reward.amount).toBe(0);
+    expect(result.cards[0].calculation.qualificationStatus).toBe('pending');
+  });
+
+  it('ignores legacy persisted reward-period calculations without qualification metadata', () => {
+    const card = createCard({
+      rewardPeriod: {
+        monthCount: 3,
+        anchorDate: '2026-01-01',
+        monthlyMinimumSpend: 800,
+      },
+    });
+    const legacy: RewardCalculation = {
+      cardId: card.id,
+      ruleId: `card-${card.id}`,
+      period: '2026-01-01 → 2026-03-31',
+      totalSpend: 99_999,
+      eligibleSpend: 99_999,
+      rewardEarned: 1_999.98,
+      rewardType: 'cashback',
+      minimumMet: true,
+      maximumExceeded: false,
+      shouldStopUsing: false,
+    };
+    const transactions = ['01', '02', '03'].map((month) => createTransaction({
+      id: month,
+      date: `2026-${month}-10`,
+      amount: -800_000,
+    }));
+    const result = buildRewardsDashboard(
+      [card],
+      transactions,
+      {},
+      new Date(2026, 2, 31, 12),
+      [legacy],
+    );
+
+    expect(result.cards[0].spend.total).toBe(2_400);
+    expect(result.cards[0].reward.amount).toBe(48);
+    expect(result.cards[0].calculation.qualificationStatus).toBe('met');
+  });
+
+  it('re-derives persisted qualification when an anchored month rolls over', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 1, 1, 12));
+    try {
+      const card = createCard({
+        rewardPeriod: {
+          monthCount: 3,
+          anchorDate: '2026-01-01',
+          monthlyMinimumSpend: 800,
+        },
+      });
+      const persisted: RewardCalculation = {
+        cardId: card.id,
+        ruleId: `card-${card.id}`,
+        period: '2026-01-01 → 2026-03-31',
+        totalSpend: 700,
+        countedSpend: 700,
+        eligibleSpend: 0,
+        rewardEarned: 0,
+        rewardType: 'cashback',
+        monthlyMinimumSpend: 800,
+        qualificationStatus: 'pending',
+        monthlyQualifications: [
+          { start: '2026-01-01', end: '2026-01-31', spend: 700, minimumSpend: 800, status: 'pending' },
+          { start: '2026-02-01', end: '2026-02-28', spend: 0, minimumSpend: 800, status: 'pending' },
+          { start: '2026-03-01', end: '2026-03-31', spend: 0, minimumSpend: 800, status: 'pending' },
+        ],
+        minimumMet: false,
+        maximumExceeded: false,
+        shouldStopUsing: false,
+      };
+      const result = buildRewardsDashboard(
+        [card],
+        [createTransaction({ date: '2026-01-10', amount: -700_000 })],
+        {},
+        new Date(2026, 1, 1, 12),
+        [persisted],
+      );
+
+      expect(result.cards[0].calculation.qualificationStatus).toBe('failed');
+      expect(result.cards[0].calculation.monthlyQualifications?.[0].status).toBe('failed');
+      expect(result.cards[0].status).toBe('building');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

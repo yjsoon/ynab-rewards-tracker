@@ -9,7 +9,11 @@ import {
   normaliseFlagColor,
   resolveSubcategory,
 } from "@/lib/rewards-engine/utils/subcategories";
-import type { AppSettings, CreditCard } from "@/lib/storage";
+import type {
+  AppSettings,
+  CreditCard,
+  MonthlyQualificationBreakdown,
+} from "@/lib/storage";
 import type { Transaction } from "@/types/transaction";
 import { formatDateValue } from "@/lib/dashboard-period";
 import { hasMinimumSpendRequirement } from "@/lib/minimum-spend-helpers";
@@ -162,6 +166,7 @@ export type CardAttentionStatus =
   | "at-cap"
   | "near-cap"
   | "below-minimum"
+  | "qualification-failed"
   | "earning"
   | "no-limits";
 
@@ -193,6 +198,10 @@ export function getCardAttentionStatus(
     calculation.totalSpend,
   ).hasNextSpendingTier;
 
+  if (calculation.qualificationStatus === "failed") {
+    return "qualification-failed";
+  }
+
   if (hasMaximum && calculation.maximumSpendExceeded && !canUnlockHigherLevel) {
     return "at-cap";
   }
@@ -202,10 +211,20 @@ export function getCardAttentionStatus(
       return "near-cap";
     }
   }
-  if (hasMinimum && !calculation.minimumSpendMet) {
+  if (
+    calculation.qualificationStatus === "pending" ||
+    (hasMinimum && !calculation.minimumSpendMet)
+  ) {
     return "below-minimum";
   }
   return hasMaximum || hasMinimum ? "earning" : "no-limits";
+}
+
+export function getActiveMonthlyQualification(
+  months: readonly MonthlyQualificationBreakdown[],
+  asOf: string,
+): MonthlyQualificationBreakdown | undefined {
+  return months.find((month) => month.start <= asOf && month.end >= asOf);
 }
 
 export interface PrefetchedCardMetrics {
@@ -309,6 +328,7 @@ export function buildCardMetricsById(
       const calculationPeriod = {
         ...period,
         end: period.end < asOfDate ? period.end : asOfDate,
+        asOf: asOfDate,
       };
       const accountTransactions = transactionsByAccountId.get(card.ynabAccountId) ?? [];
       const periodTransactions = filterTransactionsForCardPeriod(

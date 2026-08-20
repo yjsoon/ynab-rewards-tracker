@@ -140,11 +140,16 @@ export default function RecommendationsPage() {
     if (isPrimary) {
       badgeLabel = 'Best choice';
       badgeClass = 'bg-green-500 text-white hover:bg-green-500';
+    } else if (option.qualificationStatus === 'failed') {
+      badgeLabel = 'Qualification failed';
+      badgeClass = 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30';
     } else if (isMaxed) {
       badgeLabel = 'At limit';
       badgeClass = 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800';
-    } else if (option.minimumProgress < 100) {
-      badgeLabel = 'Needs minimum';
+    } else if (option.qualificationStatus === 'pending' || option.minimumProgress < 100) {
+      badgeLabel = option.qualificationStatus === 'pending'
+        ? 'Needs monthly minimum'
+        : 'Needs minimum';
       badgeClass = 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30';
     }
 
@@ -159,7 +164,11 @@ export default function RecommendationsPage() {
               {card.name}
             </h3>
             <p className="text-sm text-muted-foreground">
-              {option.cardType === 'cashback'
+              {option.qualificationStatus === 'failed'
+                ? `${option.cardType === 'cashback' ? 'Cashback' : 'Miles'} • rewards locked after failed qualification`
+                : option.qualificationStatus === 'pending'
+                  ? `${option.cardType === 'cashback' ? 'Cashback' : 'Miles'} • rewards locked pending qualification`
+                  : option.cardType === 'cashback'
                 ? `Cashback • ${formatPercent(option.effectiveRate)} reward rate`
                 : `Miles • ${option.earningRate || 1} miles per dollar`}
             </p>

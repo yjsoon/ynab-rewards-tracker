@@ -43,6 +43,17 @@ export function getCardRecommendations(
       return;
     }
 
+    if (cardCalculations.some((calc) => calc.qualificationStatus === 'failed')) {
+      recommendations.push({
+        cardId: card.id,
+        cardName: card.name,
+        reason: 'Monthly qualification already failed for this reward period',
+        priority: 'high',
+        action: 'avoid',
+      });
+      return;
+    }
+
     const needsMoreSpend = cardCalculations.some((calc) => {
       if (typeof calc.minimumProgress !== 'number') {
         return false;
@@ -88,17 +99,23 @@ export function getAlertRecommendations(
       return;
     }
 
-    if (calc.shouldStopUsing) {
+    if (calc.shouldStopUsing || calc.qualificationStatus === 'failed') {
       alerts.push({
         cardId: card.id,
         cardName: card.name,
-        reason: 'Stop using - maximum spend reached',
+        reason: calc.qualificationStatus === 'failed'
+          ? 'Avoid - monthly qualification failed for this reward period'
+          : 'Stop using - maximum spend reached',
         priority: 'high',
         action: 'avoid',
       });
     }
 
-    if (typeof calc.minimumProgress === 'number' && calc.minimumProgress < MINIMUM_PROGRESS_ALERT_THRESHOLD) {
+    if (
+      calc.qualificationStatus !== 'failed' &&
+      typeof calc.minimumProgress === 'number' &&
+      calc.minimumProgress < MINIMUM_PROGRESS_ALERT_THRESHOLD
+    ) {
       alerts.push({
         cardId: card.id,
         cardName: card.name,

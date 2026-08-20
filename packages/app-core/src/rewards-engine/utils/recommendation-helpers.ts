@@ -57,24 +57,29 @@ export function mapLatestSubcategoryCalculations(calculations: RewardCalculation
   latestPeriod?: string;
   byCard: Map<string, RewardCalculation>;
 } {
-  const latestPeriod = resolveLatestPeriod(calculations);
-  const relevant = latestPeriod
-    ? calculations.filter((calc) => calc.period === latestPeriod)
-    : calculations;
-
   const byCard = new Map<string, RewardCalculation>();
 
-  relevant.forEach((calc) => {
+  calculations.forEach((calc) => {
     if (!calc.subcategoryBreakdowns || calc.subcategoryBreakdowns.length === 0) {
       return;
     }
 
     const existing = byCard.get(calc.cardId);
-    if (!existing || calc.period >= existing.period) {
+    const normalized = normalizePeriod(calc.period);
+    const existingPeriod = existing ? normalizePeriod(existing.period) : null;
+    if (
+      !existingPeriod ||
+      normalized.end > existingPeriod.end ||
+      (normalized.end === existingPeriod.end && normalized.start >= existingPeriod.start)
+    ) {
       byCard.set(calc.cardId, calc);
     }
   });
 
+  const selectedPeriods = new Set([...byCard.values()].map(({ period }) => period));
+  const latestPeriod = selectedPeriods.size === 1
+    ? selectedPeriods.values().next().value
+    : undefined;
   return { latestPeriod, byCard };
 }
 

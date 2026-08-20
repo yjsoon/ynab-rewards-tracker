@@ -173,6 +173,9 @@ export default function SpendingStatus({
       minimumSpend: calculation.minimumSpend,
       minimumSpendMet: calculation.minimumSpendMet,
       minimumSpendProgress: calculation.minimumSpendProgress,
+      monthlyMinimumSpend: calculation.monthlyMinimumSpend,
+      qualificationStatus: calculation.qualificationStatus,
+      monthlyQualifications: calculation.monthlyQualifications ?? [],
       maximumSpend: calculation.maximumSpend,
       maximumSpendExceeded: calculation.maximumSpendExceeded,
       maximumSpendProgress: calculation.maximumSpendProgress,
@@ -192,7 +195,7 @@ export default function SpendingStatus({
     );
   }
 
-  const { totalSpend, countedSpend, eligibleSpend, eligibleSpendBeforeBlocks, rewardEarned, rewardEarnedDollars, minimumSpend, minimumSpendMet, maximumSpend, maximumSpendExceeded, subcategoryBreakdowns } = spendingAnalysis;
+  const { totalSpend, countedSpend, eligibleSpend, eligibleSpendBeforeBlocks, rewardEarned, rewardEarnedDollars, minimumSpend, minimumSpendMet, monthlyMinimumSpend, qualificationStatus, monthlyQualifications, maximumSpend, maximumSpendExceeded, subcategoryBreakdowns } = spendingAnalysis;
   const resolvedSpendingTier = resolveCardSpendingTier(card, totalSpend);
   const activeSpendingLevel = resolvedSpendingTier.activeLevel;
   const nextSpendingLevel = resolvedSpendingTier.hasNextSpendingTier
@@ -205,6 +208,19 @@ export default function SpendingStatus({
   const currency = settings?.currency;
   const milesValuation = settings?.milesValuation ?? 0.01;
   const hasMaximum = typeof maximumSpend === 'number' && maximumSpend > 0;
+  const hasMonthlyMinimum = Boolean(card.rewardPeriod && card.rewardPeriod.monthlyMinimumSpend > 0);
+  const qualificationBlocked = Boolean(hasMonthlyMinimum && qualificationStatus !== 'met');
+  const today = new Date();
+  const asOf = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const currentQualification = monthlyQualifications.find(
+    (month) => asOf >= month.start && asOf <= month.end
+  );
+  const conciseQualifications = monthlyQualifications.filter(
+    (month) => month === currentQualification || month.status === 'failed'
+  );
+  const historicalQualifications = monthlyQualifications.filter(
+    (month) => !conciseQualifications.includes(month)
+  );
   const hasBlockRounding = Boolean(
     (typeof card.earningBlockSize === 'number' && card.earningBlockSize > 0) ||
       (card.subcategoriesEnabled &&
@@ -231,7 +247,7 @@ export default function SpendingStatus({
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-2xl">This Period</CardTitle>
+              <CardTitle className="text-2xl">{card.rewardPeriod ? 'This Reward Period' : 'This Period'}</CardTitle>
               <div className="flex items-center gap-2 mt-2 text-sm text-muted-foreground">
                 <Calendar className="h-4 w-4" />
                 {new Date(period.start).toLocaleDateString()} - {new Date(period.end).toLocaleDateString()}
@@ -305,7 +321,7 @@ export default function SpendingStatus({
                 {card.type === 'cashback' ? 'Cashback Earned' : 'Miles Earned'}
               </div>
               <p className="text-2xl font-bold">
-                {(!minimumSpendMet && minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0)
+                {(qualificationBlocked || (!minimumSpendMet && minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0))
                   ? 'No reward'
                   : card.type === 'cashback'
                   ? <CurrencyAmount value={rewardEarned} currency={currency} />
@@ -313,6 +329,8 @@ export default function SpendingStatus({
               </p>
               {terminalMaximumSpendExceeded ? (
                 <p className="text-xs text-muted-foreground mt-1">Capped at maximum</p>
+              ) : qualificationBlocked ? (
+                <p className="text-xs text-muted-foreground mt-1">Qualification {qualificationStatus}</p>
               ) : !minimumSpendMet && minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0 ? (
                 <p className="text-xs text-muted-foreground mt-1">Minimum not met</p>
               ) : null}
@@ -326,7 +344,7 @@ export default function SpendingStatus({
                   Dollar Value
                 </div>
                 <p className="text-2xl font-bold">
-                  {(!minimumSpendMet && minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0)
+                  {(qualificationBlocked || (!minimumSpendMet && minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0))
                     ? <CurrencyAmount value={0} currency={currency} />
                     : <CurrencyAmount value={rewardEarnedDollars} currency={currency} />}
                 </p>
@@ -344,6 +362,59 @@ export default function SpendingStatus({
               </div>
             )}
           </div>
+
+          {hasMonthlyMinimum && (
+            <div className="rounded-lg border bg-muted/10 p-4">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h3 className="text-sm font-semibold">Monthly qualification</h3>
+                <span className={cn(
+                  'text-sm font-medium',
+                  qualificationStatus === 'failed'
+                    ? 'text-red-600 dark:text-red-300'
+                    : qualificationStatus === 'met'
+                      ? 'text-emerald-600 dark:text-emerald-300'
+                      : 'text-amber-600 dark:text-amber-300',
+                )}>
+                  {qualificationStatus === 'failed'
+                    ? 'Failed'
+                    : qualificationStatus === 'met'
+                      ? 'Qualified'
+                      : 'Pending'}
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                At least <CurrencyAmount value={monthlyMinimumSpend ?? 0} currency={currency} /> across the whole card in each anchored month. Rewards stay locked while a month is pending.
+              </p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                {conciseQualifications.map((month) => (
+                  <div key={month.start} className="rounded-md border border-border/50 bg-background/50 p-2 text-xs">
+                    <p className="font-medium">
+                      {month === currentQualification ? 'Current month' : 'Failed month'}
+                    </p>
+                    <p className="text-muted-foreground">{month.start} – {month.end}</p>
+                    <p className="mt-1">
+                      <CurrencyAmount value={month.spend} currency={currency} /> · {month.status}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              {historicalQualifications.length > 0 && (
+                <details className="mt-3 text-xs">
+                  <summary className="cursor-pointer font-medium text-muted-foreground">
+                    Show full monthly history ({historicalQualifications.length})
+                  </summary>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                    {historicalQualifications.map((month) => (
+                      <div key={month.start} className="rounded-md border border-border/50 bg-background/50 p-2">
+                        <p className="text-muted-foreground">{month.start} – {month.end}</p>
+                        <p className="mt-1"><CurrencyAmount value={month.spend} currency={currency} /> · {month.status}</p>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
+            </div>
+          )}
 
           {/* Spending Progress Bar */}
           {(minimumSpend !== null && minimumSpend !== undefined) || hasMaximum ? (

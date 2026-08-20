@@ -155,7 +155,11 @@ export function rankCardUses(
   settings: AppSettings,
 ): RankedCardUse[] {
   const uses = cards.flatMap<RankedCardUse>((projection, cardOrder) => {
-    if (projection.status === 'capped' || projection.status === 'unconfigured') {
+    if (
+      projection.status === 'capped' ||
+      projection.status === 'unconfigured' ||
+      projection.calculation.qualificationStatus === 'failed'
+    ) {
       return [];
     }
 

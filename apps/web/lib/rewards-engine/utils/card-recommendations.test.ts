@@ -65,6 +65,25 @@ describe('getCardRecommendations', () => {
     expect(recs[0]).toMatchObject({ action: 'use', priority: 'medium' });
   });
 
+  it('never recommends spending after reward-period qualification has failed', () => {
+    const recs = getCardRecommendations(
+      [createCard({ id: 'card-1' })],
+      [createCalculation({
+        cardId: 'card-1',
+        qualificationStatus: 'failed',
+        minimumProgress: 75,
+        eligibleSpend: 200,
+        rewardEarnedDollars: 10,
+      })],
+    );
+
+    expect(recs[0]).toMatchObject({
+      action: 'avoid',
+      priority: 'high',
+    });
+    expect(recs[0].reason).toContain('qualification already failed');
+  });
+
   it('recommends cards exceeding effective reward threshold', () => {
     const rate = EFFECTIVE_RATE_GOOD_THRESHOLD + 0.01;
     const rewardEarnedDollars = rate * 200;
@@ -130,5 +149,19 @@ describe('getAlertRecommendations', () => {
     );
 
     expect(alerts).toHaveLength(0);
+  });
+
+  it('emits only an avoid alert when reward-period qualification failed', () => {
+    const alerts = getAlertRecommendations(
+      [createCard({ id: 'card-1' })],
+      [createCalculation({
+        cardId: 'card-1',
+        qualificationStatus: 'failed',
+        minimumProgress: 60,
+      })],
+    );
+
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]).toMatchObject({ action: 'avoid', priority: 'high' });
   });
 });

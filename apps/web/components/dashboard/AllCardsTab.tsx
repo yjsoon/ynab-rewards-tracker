@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useThemeGroups, useCreditCards, useSettings } from '@/hooks/useLocalStorage';
 import { useAutoBackup } from '@/hooks/useAutoBackup';
 import { Card, CardContent } from '@/components/ui/card';
@@ -49,6 +49,39 @@ interface AllCardsTabProps {
   initialCardId?: string | null;
 }
 
+export const createCardEditState = (card: CreditCard): SingleCardEditState => ({
+  earningRate: card.earningRate ?? null,
+  earningBlockSize: card.earningBlockSize,
+  minimumSpend: card.minimumSpend,
+  maximumSpend: card.maximumSpend,
+  billingCycleType: card.billingCycle?.type || 'calendar',
+  billingCycleDay: card.billingCycle?.dayOfMonth || 1,
+  rewardPeriodEnabled: Boolean(card.rewardPeriod),
+  rewardPeriodMonthCount: card.rewardPeriod?.monthCount ?? 3,
+  rewardPeriodAnchorDate: card.rewardPeriod?.anchorDate ?? '',
+  rewardPeriodMonthlyMinimum: card.rewardPeriod?.monthlyMinimumSpend ?? 0,
+  promotionalPeriodEnabled: Boolean(card.promotionalPeriod),
+  promotionalPeriodStart: card.promotionalPeriod?.startDate ?? '',
+  promotionalPeriodEnd: card.promotionalPeriod?.endDate ?? '',
+  promotionalPeriodDescription: card.promotionalPeriod?.description ?? '',
+  featured: card.featured ?? true,
+  subcategoriesEnabled: card.subcategoriesEnabled ?? false,
+  subcategories: card.subcategories?.map(sub => ({ ...sub })) ?? [],
+  spendingTiers: card.spendingTiers?.map((tier) => ({
+    ...tier,
+    subcategories: tier.subcategories?.map((subcategory) => ({ ...subcategory })),
+  })) ?? [],
+});
+
+export const isValidDateValue = (value: string | undefined): value is string => {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  return date.getFullYear() === year
+    && date.getMonth() === month - 1
+    && date.getDate() === day;
+};
+
 export function AllCardsTab({ initialCardId }: AllCardsTabProps) {
   const { cards, updateCard } = useCreditCards();
   const { autoBackup } = useAutoBackup();
@@ -66,6 +99,8 @@ export function AllCardsTab({ initialCardId }: AllCardsTabProps) {
   const [batchError, setBatchError] = useState('');
 
   const [dialogCardId, setDialogCardId] = useState<string | null>(null);
+  const dialogInitialState = useRef<SingleCardEditState | null>(null);
+  const dialogWasChanged = useRef(false);
   const [groupByType, setGroupByType] = useState(true);
   const [cashbackExpanded, setCashbackExpanded] = useState(true);
   const [milesExpanded, setMilesExpanded] = useState(true);
@@ -77,21 +112,7 @@ export function AllCardsTab({ initialCardId }: AllCardsTabProps) {
   useEffect(() => {
     const initialState: CardEditState = {};
     cards.forEach(card => {
-      initialState[card.id] = {
-        earningRate: card.earningRate ?? null,
-        earningBlockSize: card.earningBlockSize,
-        minimumSpend: card.minimumSpend,
-        maximumSpend: card.maximumSpend,
-        billingCycleType: card.billingCycle?.type || 'calendar',
-        billingCycleDay: card.billingCycle?.dayOfMonth || 1,
-        featured: card.featured ?? true,
-        subcategoriesEnabled: card.subcategoriesEnabled ?? false,
-        subcategories: card.subcategories ? card.subcategories.map(sub => ({ ...sub })) : [],
-        spendingTiers: card.spendingTiers?.map((tier) => ({
-          ...tier,
-          subcategories: tier.subcategories?.map((subcategory) => ({ ...subcategory })),
-        })) ?? [],
-      };
+      initialState[card.id] = createCardEditState(card);
     });
     setEditState(initialState);
     setChangedCards(new Set());
@@ -101,6 +122,9 @@ export function AllCardsTab({ initialCardId }: AllCardsTabProps) {
   // Handle initial card ID from URL
   useEffect(() => {
     if (initialCardId && cards.some(c => c.id === initialCardId)) {
+      const card = cards.find(c => c.id === initialCardId)!;
+      dialogInitialState.current = createCardEditState(card);
+      dialogWasChanged.current = false;
       setDialogCardId(initialCardId);
     }
   }, [initialCardId, cards]);
@@ -206,6 +230,13 @@ export function AllCardsTab({ initialCardId }: AllCardsTabProps) {
       const card = cards.find((candidate) => candidate.id === cardId);
       const changes = editState[cardId];
       if (!card || !changes) continue;
+      if (
+        changes.rewardPeriodEnabled &&
+        !isValidDateValue(changes.rewardPeriodAnchorDate)
+      ) {
+        setBatchError(`${card.name} requires a valid start date for its multi-month reward period.`);
+        return;
+      }
       const thresholds = [
         changes.minimumSpend ?? 0,
         ...(changes.spendingTiers ?? card.spendingTiers ?? []).map(({ spendThreshold }) => spendThreshold),
@@ -214,6 +245,20 @@ export function AllCardsTab({ initialCardId }: AllCardsTabProps) {
         setBatchError(`${card.name} has two spend-based reward tiers with the same threshold.`);
         return;
       }
+    }
+
+    const promotionsToRemove = [...changedCards].flatMap((cardId) => {
+      const card = cards.find((candidate) => candidate.id === cardId);
+      const changes = editState[cardId];
+      return card?.promotionalPeriod && changes?.rewardPeriodEnabled ? [card.name] : [];
+    });
+    if (
+      promotionsToRemove.length > 0 &&
+      !window.confirm(
+        `Saving will remove the promotional period from ${promotionsToRemove.join(', ')} because a multi-month reward period overrides it. Continue?`,
+      )
+    ) {
+      return;
     }
 
     setSaving(true);
@@ -245,6 +290,22 @@ export function AllCardsTab({ initialCardId }: AllCardsTabProps) {
           billingCycle: changes.billingCycleType === 'billing'
             ? { type: 'billing', dayOfMonth: changes.billingCycleDay }
             : { type: 'calendar' },
+          rewardPeriod: changes.rewardPeriodEnabled && changes.rewardPeriodAnchorDate
+            ? {
+                monthCount: changes.rewardPeriodMonthCount ?? 3,
+                anchorDate: changes.rewardPeriodAnchorDate,
+                monthlyMinimumSpend: changes.rewardPeriodMonthlyMinimum ?? 0,
+              }
+            : undefined,
+          promotionalPeriod: changes.rewardPeriodEnabled
+            ? undefined
+            : changes.promotionalPeriodEnabled && changes.promotionalPeriodEnd
+              ? {
+                  startDate: changes.promotionalPeriodStart || null,
+                  endDate: changes.promotionalPeriodEnd,
+                  description: changes.promotionalPeriodDescription || undefined,
+                }
+              : undefined,
           featured: changes.featured !== undefined ? changes.featured : (card.featured ?? true),
           subcategoriesEnabled: nextSubEnabled,
           subcategories: nextSubcategories,
@@ -288,6 +349,35 @@ export function AllCardsTab({ initialCardId }: AllCardsTabProps) {
   const showStickyBar = selectedCount > 0 || changedCount > 0;
   const dialogCard = dialogCardId ? cards.find(c => c.id === dialogCardId) : null;
 
+  const openDialog = (cardId: string) => {
+    const card = cards.find((candidate) => candidate.id === cardId);
+    if (!card) return;
+    dialogInitialState.current = editState[cardId] ?? createCardEditState(card);
+    dialogWasChanged.current = changedCards.has(cardId);
+    setDialogCardId(cardId);
+  };
+
+  const closeDialog = () => {
+    if (dialogCardId && dialogInitialState.current && dialogCard) {
+      const cardWasSavedWhileOpen = !changedCards.has(dialogCardId);
+      setEditState((previous) => ({
+        ...previous,
+        [dialogCardId]: cardWasSavedWhileOpen
+          ? createCardEditState(dialogCard)
+          : dialogInitialState.current!,
+      }));
+      setChangedCards((previous) => {
+        const next = new Set(previous);
+        if (!cardWasSavedWhileOpen && dialogWasChanged.current) next.add(dialogCardId);
+        else next.delete(dialogCardId);
+        return next;
+      });
+    }
+    dialogInitialState.current = null;
+    dialogWasChanged.current = false;
+    setDialogCardId(null);
+  };
+
   const renderCardGrid = (cardList: CreditCard[]) => (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
       {cardList.map(card => (
@@ -298,7 +388,7 @@ export function AllCardsTab({ initialCardId }: AllCardsTabProps) {
             isChanged={changedCards.has(card.id)}
             isSelected={selectedCards.has(card.id)}
             onSelect={() => toggleCardSelection(card.id)}
-            onClick={() => setDialogCardId(card.id)}
+            onClick={() => openDialog(card.id)}
             onToggleFeatured={(featured) => handleFieldChange(card.id, 'featured', featured)}
           />
         </div>
@@ -472,7 +562,7 @@ export function AllCardsTab({ initialCardId }: AllCardsTabProps) {
         state={dialogCardId ? editState[dialogCardId] || {} : {}}
         open={dialogCardId !== null}
         onOpenChange={(open) => {
-          if (!open) setDialogCardId(null);
+          if (!open) closeDialog();
         }}
         onFieldChange={(field, value) => {
           if (dialogCardId) handleFieldChange(dialogCardId, field, value);

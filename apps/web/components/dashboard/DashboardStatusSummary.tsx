@@ -37,6 +37,12 @@ interface StatusSlot {
 // Lifecycle order: working towards the minimum, earning, approaching the cap, done.
 const STATUS_SLOTS: StatusSlot[] = [
   {
+    key: "qualification-failed",
+    describe: (count) => `${count} failed qualification`,
+    dotClass: "bg-red-500",
+    textClass: "text-red-700 dark:text-red-300",
+  },
+  {
     key: "below-minimum",
     describe: (count) => `${count} below minimum spend`,
     dotClass: "bg-sky-500",
@@ -76,6 +82,7 @@ export function DashboardStatusSummary({
     "at-cap": 0,
     "near-cap": 0,
     "below-minimum": 0,
+    "qualification-failed": 0,
     earning: 0,
     "no-limits": 0,
   };

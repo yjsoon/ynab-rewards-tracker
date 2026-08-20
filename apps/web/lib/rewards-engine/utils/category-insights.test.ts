@@ -97,6 +97,25 @@ describe('buildCardEntries', () => {
 });
 
 describe('createWholeCardInsight', () => {
+  it('marks a card with failed monthly qualification as avoid', () => {
+    const calculation: RewardCalculation = {
+      cardId: baseCard.id,
+      ruleId: `card-${baseCard.id}`,
+      period: '2026-01-01 → 2026-03-31',
+      totalSpend: 799,
+      eligibleSpend: 0,
+      rewardEarned: 0,
+      rewardType: 'cashback',
+      qualificationStatus: 'failed',
+      minimumMet: false,
+      maximumExceeded: false,
+      shouldStopUsing: false,
+    };
+    const insight = createWholeCardInsight(baseCard, calculation, 0.01);
+
+    expect(insight).toMatchObject({ status: 'avoid', shouldAvoid: true });
+  });
+
   it('derives insight metrics from calculation data', () => {
     const calculation: RewardCalculation = {
       cardId: baseCard.id,

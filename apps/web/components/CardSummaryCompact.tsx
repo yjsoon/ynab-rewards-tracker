@@ -10,6 +10,7 @@ import {
   NEAR_CAP_RATIO,
   cardUsesBlockRounding,
   filterTransactionsForCardPeriod,
+  getActiveMonthlyQualification,
 } from "@/lib/card-metrics";
 import { useSelectedBudget, useSettings } from "@/hooks/useLocalStorage";
 import { hasMinimumSpendRequirement } from "@/lib/minimum-spend-helpers";
@@ -56,18 +57,28 @@ export function CardSummaryCompactContent({
   allowHideCard = true,
   transactionsHref,
 }: CardSummaryCompactContentProps) {
-  const { calculation, daysRemaining, period } = metrics;
+  const { calculation, calculationPeriod, daysRemaining, period } = metrics;
   const {
     totalSpend,
     countedSpend,
     eligibleSpend,
     minimumSpend,
     minimumSpendMet,
+    monthlyMinimumSpend,
+    qualificationStatus,
+    monthlyQualifications = [],
     maximumSpend,
     maximumSpendExceeded,
     subcategoryBreakdowns = [],
   } = calculation;
   const currency = settings?.currency;
+  const calculationAsOf = calculationPeriod.asOf ?? calculationPeriod.end;
+  const activeQualificationMonth = getActiveMonthlyQualification(
+    monthlyQualifications,
+    calculationAsOf,
+  )
+    ?? monthlyQualifications.find((month) => month.status === "pending");
+  const hasMonthlyMinimum = (monthlyMinimumSpend ?? 0) > 0;
   const hasBlockRounding = cardUsesBlockRounding(card);
   const displayedSpend = hasBlockRounding ? countedSpend : totalSpend;
   const hasMinimum = hasMinimumSpendRequirement(minimumSpend);
@@ -292,6 +303,26 @@ export function CardSummaryCompactContent({
         <span className={cn("shrink-0 font-medium", daysSeverityClass)}>{daysRemaining}d</span>
       </div>
 
+      {card.rewardPeriod && hasMonthlyMinimum && activeQualificationMonth && (
+        <div className={cn(
+          "text-[11px] font-medium",
+          qualificationStatus === "failed"
+            ? "text-red-600 dark:text-red-300"
+            : qualificationStatus === "met"
+              ? "text-emerald-600 dark:text-emerald-300"
+              : "text-amber-600 dark:text-amber-300",
+        )}>
+          {qualificationStatus === "failed"
+            ? "Period qualification failed"
+            : qualificationStatus === "met"
+              ? `All ${card.rewardPeriod.monthCount} monthly minimums met`
+              : <>
+                  This month: <CurrencyAmount value={activeQualificationMonth.spend} currency={currency} decimals={0} /> of{' '}
+                  <CurrencyAmount value={monthlyMinimumSpend ?? 0} currency={currency} decimals={0} />
+                </>}
+        </div>
+      )}
+
       {showBlocks && blockSize && eligibleSpend !== undefined && (
         <div className="text-[11px] text-muted-foreground">
           {Math.floor(eligibleSpend / blockSize)} ×{" "}
@@ -321,7 +352,8 @@ export function CardSummaryCompactContent({
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
-              onHideCard(card.id, period.end);
+              const [year, month, day] = period.end.split('-').map(Number);
+              onHideCard(card.id, formatDateValue(new Date(year, month - 1, day + 1)));
             }}
           >
             Hide until next cycle
@@ -372,6 +404,7 @@ export function CardSummaryCompact({
     () => ({
       ...period,
       end: period.end < asOfDate ? period.end : asOfDate,
+      asOf: asOfDate,
     }),
     [asOfDate, period]
   );

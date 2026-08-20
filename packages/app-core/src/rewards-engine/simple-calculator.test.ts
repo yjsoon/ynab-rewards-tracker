@@ -55,6 +55,186 @@ function createTransaction(id: string, amount: number): Transaction {
 }
 
 describe('SimpleRewardsCalculator.calculateCardRewards', () => {
+  it('keeps an incomplete anchored period pending and counts all card spend toward monthly qualification', () => {
+    const card: CreditCard = {
+      ...createMilesCardWithSubcategories(),
+      rewardPeriod: {
+        monthCount: 3,
+        anchorDate: '2026-01-01',
+        monthlyMinimumSpend: 800,
+      },
+    };
+    const transactions: Transaction[] = [
+      { ...createTransaction('jan-earning', -700_000), date: '2026-01-10' },
+      { ...createTransaction('jan-other', -100_000), date: '2026-01-20', flag_color: 'orange' },
+      { ...createTransaction('feb', -800_000), date: '2026-02-10' },
+      { ...createTransaction('mar', -500_000), date: '2026-03-10' },
+    ];
+    const calculation = SimpleRewardsCalculator.calculateCardRewards(card, transactions, {
+      start: '2026-01-01',
+      end: '2026-03-31',
+      label: '2026-01-01 to 2026-03-31',
+      asOf: '2026-03-10',
+    });
+
+    expect(calculation.qualificationStatus).toBe('pending');
+    expect(calculation.monthlyQualifications).toMatchObject([
+      { spend: 800, status: 'met' },
+      { spend: 800, status: 'met' },
+      { spend: 500, status: 'pending' },
+    ]);
+    expect(calculation.minimumSpendMet).toBe(false);
+    expect(calculation.rewardEarned).toBe(0);
+    expect(calculation.transactionRewards['jan-earning'].reason).toBe('period_incomplete');
+  });
+
+  it('fails qualification after a completed anchored month misses its minimum', () => {
+    const card: CreditCard = {
+      ...createMilesCardWithSubcategories(),
+      rewardPeriod: {
+        monthCount: 3,
+        anchorDate: '2026-01-01',
+        monthlyMinimumSpend: 800,
+      },
+    };
+    const calculation = SimpleRewardsCalculator.calculateCardRewards(card, [
+      { ...createTransaction('jan', -799_000), date: '2026-01-10' },
+      { ...createTransaction('feb', -800_000), date: '2026-02-10' },
+    ], {
+      start: '2026-01-01',
+      end: '2026-03-31',
+      label: '2026-01-01 to 2026-03-31',
+      asOf: '2026-02-15',
+    });
+
+    expect(calculation.qualificationStatus).toBe('failed');
+    expect(calculation.monthlyQualifications?.[0]).toMatchObject({ spend: 799, status: 'failed' });
+    expect(calculation.rewardEarned).toBe(0);
+  });
+
+  it('pools a configured subcategory cap across the full multi-month period', () => {
+    const card: CreditCard = {
+      ...createMilesCardWithSubcategories(),
+      rewardPeriod: {
+        monthCount: 3,
+        anchorDate: '2026-01-01',
+        monthlyMinimumSpend: 0,
+      },
+      subcategories: createMilesCardWithSubcategories().subcategories?.map((subcategory) => ({
+        ...subcategory,
+        milesBlockSize: null,
+        maximumSpend: 300,
+      })),
+    };
+    const calculation = SimpleRewardsCalculator.calculateCardRewards(card, [
+      { ...createTransaction('month-1', -10_000), date: '2026-01-10' },
+      { ...createTransaction('month-2', -50_000), date: '2026-02-10' },
+      { ...createTransaction('month-3', -300_000), date: '2026-03-10' },
+    ], {
+      start: '2026-01-01',
+      end: '2026-03-31',
+      label: '2026-01-01 to 2026-03-31',
+      asOf: '2026-03-31',
+    });
+
+    expect(calculation.qualificationStatus).toBe('not_required');
+    expect(calculation.subcategoryBreakdowns?.[0]).toMatchObject({
+      totalSpend: 360,
+      countedSpend: 300,
+      eligibleSpend: 300,
+      maximumSpendExceeded: true,
+    });
+    expect(calculation.transactionRewards['month-3']).toMatchObject({
+      reward: 960,
+      rewardRate: 4,
+    });
+  });
+
+  it('nets refunds against whole-card monthly qualification spend', () => {
+    const card: CreditCard = {
+      ...createMilesCardWithSubcategories(),
+      rewardPeriod: {
+        monthCount: 3,
+        anchorDate: '2026-01-01',
+        monthlyMinimumSpend: 800,
+      },
+    };
+    const calculation = SimpleRewardsCalculator.calculateCardRewards(card, [
+      { ...createTransaction('purchase', -900_000), date: '2026-01-10' },
+      { ...createTransaction('refund', 200_000), date: '2026-01-20' },
+    ], {
+      start: '2026-01-01',
+      end: '2026-03-31',
+      label: '2026-01-01 to 2026-03-31',
+      asOf: '2026-02-01',
+    });
+
+    expect(calculation.monthlyQualifications?.[0]).toMatchObject({
+      spend: 700,
+      status: 'failed',
+    });
+    expect(calculation.qualificationStatus).toBe('failed');
+    expect(calculation.totalSpend).toBe(900);
+    expect(calculation.transactionRewards.refund).toBeUndefined();
+  });
+
+  it('bounds reward and pooled-cap allocation at asOf', () => {
+    const card: CreditCard = {
+      ...createMilesCardWithSubcategories(),
+      rewardPeriod: {
+        monthCount: 3,
+        anchorDate: '2026-01-01',
+        monthlyMinimumSpend: 0,
+      },
+      earningBlockSize: null,
+      subcategories: createMilesCardWithSubcategories().subcategories?.map((subcategory) => ({
+        ...subcategory,
+        milesBlockSize: null,
+        maximumSpend: 100,
+      })),
+    };
+    const calculation = SimpleRewardsCalculator.calculateCardRewards(card, [
+      { ...createTransaction('january', -60_000), date: '2026-01-10' },
+      { ...createTransaction('february', -60_000), date: '2026-02-10' },
+    ], {
+      start: '2026-01-01',
+      end: '2026-03-31',
+      label: '2026-01-01 to 2026-03-31',
+      asOf: '2026-01-31',
+    });
+
+    expect(calculation.totalSpend).toBe(60);
+    expect(calculation.subcategoryBreakdowns?.[0]).toMatchObject({
+      totalSpend: 60,
+      countedSpend: 60,
+      eligibleSpend: 60,
+    });
+    expect(calculation.transactionRewards.february).toBeUndefined();
+  });
+
+  it('does not apply monthly qualification before the configured anchor', () => {
+    const card: CreditCard = {
+      ...createMilesCardWithSubcategories(),
+      rewardPeriod: {
+        monthCount: 3,
+        anchorDate: '2026-02-01',
+        monthlyMinimumSpend: 800,
+      },
+    };
+    const calculation = SimpleRewardsCalculator.calculateCardRewards(card, [
+      { ...createTransaction('january', -100_000), date: '2026-01-20' },
+    ], {
+      start: '2026-01-10',
+      end: '2026-02-09',
+      label: '2026-01-10',
+      asOf: '2026-01-20',
+    });
+
+    expect(calculation.qualificationStatus).toBe('not_required');
+    expect(calculation.monthlyQualifications).toBeUndefined();
+    expect(calculation.rewardEarned).toBeGreaterThan(0);
+  });
+
   it('applies earning blocks per transaction in subcategory mode', () => {
     const card = createMilesCardWithSubcategories();
     const transactions: Transaction[] = [

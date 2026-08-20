@@ -8,6 +8,7 @@ import {
   filterTransactionsForCardPeriod,
   filterTransactionsForSubcategory,
   getCardAttentionStatus,
+  getActiveMonthlyQualification,
   resolveCardTransactionDateRange,
   resolveRewardDataSinceDate,
 } from "./card-metrics";
@@ -53,6 +54,30 @@ describe("getCardAttentionStatus", () => {
     }], period);
 
     expect(getCardAttentionStatus(card, calculation)).toBe("at-cap");
+  });
+
+  it("does not count pending or failed reward-period cards as earning", () => {
+    const calculation = SimpleRewardsCalculator.calculateCardRewards(card, [], period);
+
+    expect(getCardAttentionStatus(card, {
+      ...calculation,
+      qualificationStatus: "pending",
+    })).toBe("below-minimum");
+    expect(getCardAttentionStatus(card, {
+      ...calculation,
+      qualificationStatus: "failed",
+    })).toBe("qualification-failed");
+  });
+});
+
+describe("getActiveMonthlyQualification", () => {
+  it("selects the month containing asOf even when that month is already met", () => {
+    const months = [
+      { start: "2026-01-01", end: "2026-01-31", spend: 800, minimumSpend: 800, status: "met" as const },
+      { start: "2026-02-01", end: "2026-02-28", spend: 0, minimumSpend: 800, status: "pending" as const },
+    ];
+
+    expect(getActiveMonthlyQualification(months, "2026-01-15")).toBe(months[0]);
   });
 });
 

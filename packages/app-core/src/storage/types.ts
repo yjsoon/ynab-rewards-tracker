@@ -104,6 +104,17 @@ export interface CardSpendingTier {
   subcategories?: SpendingTierSubcategory[];
 }
 
+/**
+ * A repeating reward period made up of anchored month-long windows. The
+ * monthly minimum is card-wide; configured subcategory maximums are pooled
+ * across the complete reward period.
+ */
+export interface CardRewardPeriod {
+  monthCount: number;
+  anchorDate: string;
+  monthlyMinimumSpend: number;
+}
+
 export interface CreditCard {
   id: string;
   name: string;
@@ -114,6 +125,7 @@ export interface CreditCard {
     type: "calendar" | "billing";
     dayOfMonth?: number;
   };
+  rewardPeriod?: CardRewardPeriod;
   promotionalPeriod?: {
     // Null is the persisted sentinel for an intentionally omitted start date.
     // Missing is reserved for legacy records that still require migration.
@@ -199,6 +211,22 @@ export interface SubcategoryBreakdown {
   blocksEarned?: number;
 }
 
+export type MonthlyQualificationStatus = "met" | "pending" | "failed";
+
+export interface MonthlyQualificationBreakdown {
+  start: string;
+  end: string;
+  spend: number;
+  minimumSpend: number;
+  status: MonthlyQualificationStatus;
+}
+
+export type RewardQualificationStatus =
+  | "not_required"
+  | "met"
+  | "pending"
+  | "failed";
+
 export interface RewardCalculation {
   cardId: string;
   ruleId: string;
@@ -214,6 +242,9 @@ export interface RewardCalculation {
   subcategoryBreakdowns?: SubcategoryBreakdown[];
   minimumSpend?: number | null;
   minimumProgress?: number;
+  monthlyMinimumSpend?: number;
+  qualificationStatus?: RewardQualificationStatus;
+  monthlyQualifications?: MonthlyQualificationBreakdown[];
   maximumSpend?: number | null;
   maximumProgress?: number;
   activeSpendingTierId?: string | null;

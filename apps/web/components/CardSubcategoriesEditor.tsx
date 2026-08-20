@@ -34,6 +34,7 @@ interface CardSubcategoriesEditorProps {
   onToggleEnabled: (enabled: boolean) => void;
   onChange: (next: CardSubcategoryDraft[]) => void;
   baseRewardRate: number;
+  pooledCaps?: boolean;
   flagNames?: Partial<Record<YnabFlagColor, string>>;
 }
 
@@ -127,6 +128,7 @@ const SubcategoryItem = memo(function SubcategoryItem({
   cardType,
   flagNames,
   usedFlagColours,
+  pooledCaps,
   onUpdate,
   onDelete,
   onReorder,
@@ -137,6 +139,7 @@ const SubcategoryItem = memo(function SubcategoryItem({
   cardType: CreditCard['type'];
   flagNames?: Partial<Record<YnabFlagColor, string>>;
   usedFlagColours: Set<YnabFlagColor>;
+  pooledCaps?: boolean;
   onUpdate: (id: string, updates: Partial<CardSubcategoryDraft>) => void;
   onDelete: (id: string) => void;
   onReorder: (id: string, direction: 'up' | 'down') => void;
@@ -274,6 +277,7 @@ const SubcategoryItem = memo(function SubcategoryItem({
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1">
               <Input
+                aria-label={`${flagDisplayName} reward rate`}
                 type="number"
                 value={localExcluded ? 0 : (localReward ?? 0)}
                 onChange={(e) => {
@@ -303,6 +307,7 @@ const SubcategoryItem = memo(function SubcategoryItem({
               <div className="relative">
                 <span className="absolute left-2 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
                 <Input
+                  aria-label={`${flagDisplayName} minimum spend`}
                   type="number"
                   value={localMin ?? ''}
                   onChange={(e) => {
@@ -319,10 +324,13 @@ const SubcategoryItem = memo(function SubcategoryItem({
             </div>
 
             <div className="flex items-center gap-1">
-              <span className="text-xs font-medium text-muted-foreground uppercase">Max</span>
+              <span className="text-xs font-medium text-muted-foreground uppercase">
+                {pooledCaps ? 'Period cap' : 'Max'}
+              </span>
               <div className="relative">
                 <span className="absolute left-2 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
                 <Input
+                  aria-label={`${flagDisplayName} period cap`}
                   type="number"
                   value={localMax ?? ''}
                   onChange={(e) => {
@@ -342,6 +350,7 @@ const SubcategoryItem = memo(function SubcategoryItem({
               <div className="flex items-center gap-1">
                 <span className="text-xs font-medium text-muted-foreground uppercase">Block</span>
                 <Input
+                  aria-label={`${flagDisplayName} miles block size`}
                   type="number"
                   value={localMilesBlock ?? ''}
                   onChange={(e) => {
@@ -503,6 +512,7 @@ const SubcategoryItem = memo(function SubcategoryItem({
               </span>
               <div className="flex items-center">
                 <Input
+                  aria-label={`${flagDisplayName} reward rate`}
                   type="number"
                   value={localExcluded ? 0 : (localReward ?? 0)}
                   onChange={(e) => {
@@ -533,6 +543,7 @@ const SubcategoryItem = memo(function SubcategoryItem({
               <div className="relative">
                 <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
                 <Input
+                  aria-label={`${flagDisplayName} minimum spend`}
                   type="number"
                   value={localMin ?? ''}
                   onChange={(e) => {
@@ -550,10 +561,13 @@ const SubcategoryItem = memo(function SubcategoryItem({
 
             {/* Max */}
             <div className="space-y-1">
-              <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Max</span>
+              <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                {pooledCaps ? 'Period cap' : 'Max'}
+              </span>
               <div className="relative">
                 <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
                 <Input
+                  aria-label={`${flagDisplayName} period cap`}
                   type="number"
                   value={localMax ?? ''}
                   onChange={(e) => {
@@ -575,6 +589,7 @@ const SubcategoryItem = memo(function SubcategoryItem({
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Block size</span>
               <Input
+                aria-label={`${flagDisplayName} miles block size`}
                 type="number"
                 value={localMilesBlock ?? ''}
                 onChange={(e) => {
@@ -625,6 +640,7 @@ function CardSubcategoriesEditorComponent({
   onToggleEnabled,
   onChange,
   baseRewardRate,
+  pooledCaps,
   flagNames,
 }: CardSubcategoriesEditorProps) {
   // Sort by priority to maintain consistent order
@@ -713,6 +729,7 @@ function CardSubcategoriesEditorComponent({
               cardType={cardType}
               flagNames={flagNames}
               usedFlagColours={usedFlagColours}
+              pooledCaps={pooledCaps}
               onUpdate={handleUpdate}
               onDelete={handleDelete}
               onReorder={handleReorder}

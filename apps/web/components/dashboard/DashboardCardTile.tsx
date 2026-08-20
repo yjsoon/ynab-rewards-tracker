@@ -110,11 +110,14 @@ export function DashboardCardTile({
     calc?.maximumSpendExceeded && canUnlockHigherLevel,
   );
   const nearCap = calc ? getCardAttentionStatus(card, calc) === "near-cap" : false;
+  const qualificationFailed = calc?.qualificationStatus === "failed";
   const earnedNumber = calc?.rewardEarned ?? 0;
   const earnedDisplay = Math.round(earnedNumber).toLocaleString();
-  const rewardChipState: "exceeded" | "warn" | "muted" = exceeded
+  const rewardChipState: "exceeded" | "warn" | "muted" = exceeded || qualificationFailed
     ? "exceeded"
-    : intermediateCapReached || (hasMin && !minimumMet)
+    : intermediateCapReached
+      || calc?.qualificationStatus === "pending"
+      || (hasMin && !minimumMet)
       ? "warn"
       : "muted";
   const rewardChipClass = {
@@ -131,7 +134,9 @@ export function DashboardCardTile({
         "group relative overflow-hidden flex flex-col h-full",
         "bg-card",
         accentClasses,
-        exceeded ? "ring-2 ring-red-300/70 dark:ring-red-900/60" : undefined,
+        exceeded || qualificationFailed
+          ? "ring-2 ring-red-300/70 dark:ring-red-900/60"
+          : undefined,
         nearCap || intermediateCapReached
           ? "ring-2 ring-amber-300/70 dark:ring-amber-800/60"
           : undefined,
@@ -173,7 +178,8 @@ export function DashboardCardTile({
                     card,
                     referenceDate,
                   );
-                  onHideCard(card.id, period.end);
+                  const [year, month, day] = period.end.split('-').map(Number);
+                  onHideCard(card.id, formatDateValue(new Date(year, month - 1, day + 1)));
                 }}
               >
                 <EyeOff className="h-4 w-4 mr-2" />
