@@ -41,6 +41,10 @@ const createFormState = (nextCard: CreditCard): CardEditState => ({
   featured: nextCard.featured ?? true,
   billingCycleType: nextCard.billingCycle?.type || 'calendar',
   billingCycleDay: nextCard.billingCycle?.dayOfMonth || 1,
+  rewardPeriodEnabled: Boolean(nextCard.rewardPeriod),
+  rewardPeriodMonthCount: nextCard.rewardPeriod?.monthCount ?? 3,
+  rewardPeriodAnchorDate: nextCard.rewardPeriod?.anchorDate ?? '',
+  rewardPeriodMonthlyMinimum: nextCard.rewardPeriod?.monthlyMinimumSpend ?? 0,
   promotionalPeriodEnabled: Boolean(nextCard.promotionalPeriod),
   promotionalPeriodStart: nextCard.promotionalPeriod?.startDate || '',
   promotionalPeriodEnd: nextCard.promotionalPeriod?.endDate || '',
@@ -153,6 +157,12 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
       }
     }
 
+    if (formData.rewardPeriodEnabled && !formData.rewardPeriodAnchorDate) {
+      setError('Multi-month reward periods require a start date');
+      setSaving(false);
+      return;
+    }
+
     const spendingThresholds = [
       formData.minimumSpend ?? 0,
       ...(formData.spendingTiers ?? card.spendingTiers ?? []).map(({ spendThreshold }) => spendThreshold),
@@ -181,6 +191,13 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
         billingCycle: formData.billingCycleType === 'billing'
           ? { type: 'billing', dayOfMonth: formData.billingCycleDay || 1 }
           : { type: 'calendar' },
+        rewardPeriod: formData.rewardPeriodEnabled && formData.rewardPeriodAnchorDate
+          ? {
+              monthCount: formData.rewardPeriodMonthCount ?? 3,
+              anchorDate: formData.rewardPeriodAnchorDate,
+              monthlyMinimumSpend: formData.rewardPeriodMonthlyMinimum ?? 0,
+            }
+          : undefined,
         promotionalPeriod: formData.promotionalPeriodEnabled && formData.promotionalPeriodEnd
           ? {
               startDate: formData.promotionalPeriodStart || null,
@@ -273,6 +290,19 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
                   ? `Day ${card.billingCycle.dayOfMonth} of month`
                   : 'Calendar month'}
               </p>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Reward Period</p>
+              <p className="mt-1 font-medium">
+                {card.rewardPeriod
+                  ? `${card.rewardPeriod.monthCount} months from ${card.rewardPeriod.anchorDate}`
+                  : 'Follows billing cycle'}
+              </p>
+              {card.rewardPeriod && (
+                <p className="text-xs text-muted-foreground">
+                  ${card.rewardPeriod.monthlyMinimumSpend.toLocaleString()} card-wide minimum each month
+                </p>
+              )}
             </div>
             <div>
               <p className="text-sm font-medium text-muted-foreground">YNAB Account</p>
@@ -405,7 +435,7 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
                                 <span className="text-orange-600 dark:text-orange-400">Not counted toward rewards</span>
                               ) : (
                                 <>
-                                  {rateLabel} • Min {minLabel} • Max {maxLabel}
+                                  {rateLabel} • Min {minLabel} • {card.rewardPeriod ? 'Period cap' : 'Max'} {maxLabel}
                                   {card.type === 'miles' && subcategory.milesBlockSize
                                     ? ` • ${subcategory.milesBlockSize} mile block`
                                     : ''}

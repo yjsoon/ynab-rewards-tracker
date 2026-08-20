@@ -81,7 +81,7 @@ export async function computeCurrentPeriod(
     // Spend-based levels are a card-wide replacement for the legacy rule
     // path. Existing cards without levels keep their legacy rules unchanged,
     // while adding a level makes the card's current earning fields the base.
-    if (card.subcategoriesEnabled || card.spendingTiers?.length) {
+    if (card.rewardPeriod || card.subcategoriesEnabled || card.spendingTiers?.length) {
       const simpleCalc = SimpleRewardsCalculator.calculateCardRewards(card, forCard, simplePeriod, settings);
       results.push(createRewardCalculationFromSimple(card, simpleCalc));
       continue;

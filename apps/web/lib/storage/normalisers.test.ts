@@ -125,6 +125,33 @@ describe('normaliseCard', () => {
 
     expect(normaliseCard(rawCard, {}).spendingTiers).toEqual([]);
   });
+
+  it('preserves valid additive reward periods and drops malformed persisted values', () => {
+    const rawCard = {
+      id: 'card-1',
+      name: 'Period Card',
+      issuer: 'Issuer',
+      type: 'cashback',
+      ynabAccountId: 'acct-1',
+      featured: true,
+      earningRate: 2,
+      rewardPeriod: {
+        monthCount: 3,
+        anchorDate: '2026-01-15',
+        monthlyMinimumSpend: 800,
+      },
+    } as MutableCard;
+
+    expect(normaliseCard(rawCard, {}).rewardPeriod).toEqual({
+      monthCount: 3,
+      anchorDate: '2026-01-15',
+      monthlyMinimumSpend: 800,
+    });
+    expect(normaliseCard({
+      ...rawCard,
+      rewardPeriod: { monthCount: 0, anchorDate: 'invalid', monthlyMinimumSpend: -1 },
+    } as MutableCard, {}).rewardPeriod).toBeUndefined();
+  });
 });
 
 describe('normaliseHiddenCards', () => {

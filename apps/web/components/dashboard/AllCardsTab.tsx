@@ -84,6 +84,10 @@ export function AllCardsTab({ initialCardId }: AllCardsTabProps) {
         maximumSpend: card.maximumSpend,
         billingCycleType: card.billingCycle?.type || 'calendar',
         billingCycleDay: card.billingCycle?.dayOfMonth || 1,
+        rewardPeriodEnabled: Boolean(card.rewardPeriod),
+        rewardPeriodMonthCount: card.rewardPeriod?.monthCount ?? 3,
+        rewardPeriodAnchorDate: card.rewardPeriod?.anchorDate ?? '',
+        rewardPeriodMonthlyMinimum: card.rewardPeriod?.monthlyMinimumSpend ?? 0,
         featured: card.featured ?? true,
         subcategoriesEnabled: card.subcategoriesEnabled ?? false,
         subcategories: card.subcategories ? card.subcategories.map(sub => ({ ...sub })) : [],
@@ -245,6 +249,16 @@ export function AllCardsTab({ initialCardId }: AllCardsTabProps) {
           billingCycle: changes.billingCycleType === 'billing'
             ? { type: 'billing', dayOfMonth: changes.billingCycleDay }
             : { type: 'calendar' },
+          rewardPeriod: changes.rewardPeriodEnabled && changes.rewardPeriodAnchorDate
+            ? {
+                monthCount: changes.rewardPeriodMonthCount ?? 3,
+                anchorDate: changes.rewardPeriodAnchorDate,
+                monthlyMinimumSpend: changes.rewardPeriodMonthlyMinimum ?? 0,
+              }
+            : undefined,
+          promotionalPeriod: changes.rewardPeriodEnabled
+            ? undefined
+            : card.promotionalPeriod,
           featured: changes.featured !== undefined ? changes.featured : (card.featured ?? true),
           subcategoriesEnabled: nextSubEnabled,
           subcategories: nextSubcategories,

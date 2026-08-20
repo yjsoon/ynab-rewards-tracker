@@ -453,6 +453,9 @@ function applyPersistedCalculation(
       : calculation.minimumSpend,
     minimumSpendMet: persisted.minimumMet,
     minimumSpendProgress: persisted.minimumProgress,
+    monthlyMinimumSpend: persisted.monthlyMinimumSpend,
+    qualificationStatus: persisted.qualificationStatus,
+    monthlyQualifications: persisted.monthlyQualifications,
     maximumSpend: persisted.maximumSpend !== undefined
       ? persisted.maximumSpend
       : calculation.maximumSpend,

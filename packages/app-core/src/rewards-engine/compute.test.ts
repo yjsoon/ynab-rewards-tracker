@@ -141,6 +141,47 @@ describe('computeCurrentPeriod', () => {
     });
   });
 
+  it('uses the multi-month card engine instead of retained legacy rules', async () => {
+    const now = new Date();
+    const anchorDate = formatLocalDate(new Date(now.getFullYear(), now.getMonth(), 1));
+    const card = createCard({
+      earningRate: 2,
+      rewardPeriod: {
+        monthCount: 3,
+        anchorDate,
+        monthlyMinimumSpend: 0,
+      },
+    });
+    const period = RewardsCalculator.calculatePeriod(card);
+    const rule: RewardRule = {
+      id: 'legacy-rule',
+      cardId: card.id,
+      name: 'Legacy rewards',
+      rewardType: 'cashback',
+      rewardValue: 10,
+      startDate: formatLocalDate(period.startDate),
+      endDate: formatLocalDate(period.endDate),
+      active: true,
+      priority: 0,
+    };
+
+    const [calculation] = await computeCurrentPeriod(
+      createClient([createTransaction({
+        date: formatLocalDate(period.startDate),
+        amount: -100_000,
+      })]),
+      'budget-1',
+      [card],
+      [rule],
+    );
+
+    expect(calculation).toMatchObject({
+      ruleId: `card-${card.id}`,
+      rewardEarned: 2,
+      qualificationStatus: 'met',
+    });
+  });
+
   it('clamps legacy rule calculations to the overlapping rule window', async () => {
     const card = createCard({ earningRate: undefined });
     const period = RewardsCalculator.calculatePeriod(card);

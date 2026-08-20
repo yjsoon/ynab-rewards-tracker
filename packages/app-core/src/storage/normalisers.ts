@@ -142,6 +142,42 @@ export function normaliseCard(
 
   const mutableCard = { ...card } as MutableCard;
 
+  const rawRewardPeriod = mutableCard.rewardPeriod;
+  if (rawRewardPeriod && typeof rawRewardPeriod === 'object') {
+    const monthCount = Number(rawRewardPeriod.monthCount);
+    const monthlyMinimumSpend = Number(rawRewardPeriod.monthlyMinimumSpend);
+    const anchorDate = rawRewardPeriod.anchorDate;
+    const anchorParts = typeof anchorDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(anchorDate)
+      ? anchorDate.split('-').map(Number)
+      : [];
+    const parsedAnchor = anchorParts.length === 3
+      ? new Date(anchorParts[0], anchorParts[1] - 1, anchorParts[2])
+      : null;
+    const validAnchor = Boolean(parsedAnchor
+      && parsedAnchor.getFullYear() === anchorParts[0]
+      && parsedAnchor.getMonth() === anchorParts[1] - 1
+      && parsedAnchor.getDate() === anchorParts[2]);
+
+    if (
+      Number.isInteger(monthCount)
+      && monthCount >= 2
+      && monthCount <= 24
+      && Number.isFinite(monthlyMinimumSpend)
+      && monthlyMinimumSpend >= 0
+      && validAnchor
+    ) {
+      mutableCard.rewardPeriod = {
+        monthCount,
+        anchorDate,
+        monthlyMinimumSpend,
+      };
+    } else {
+      Reflect.deleteProperty(mutableCard, 'rewardPeriod');
+    }
+  } else if (rawRewardPeriod !== undefined) {
+    Reflect.deleteProperty(mutableCard, 'rewardPeriod');
+  }
+
   // Preserve the editor's intentional blank rate across JSON persistence.
   // A truly absent property is handled by the legacy migration before this.
   if (

@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest';
 
 import type { CreditCard } from '@/lib/storage';
 
-import { calculateCardPeriod, getRecentCardPeriods, periodOverlapsWindow, toSimplePeriod } from './periods';
+import {
+  calculateCardPeriod,
+  getRecentCardPeriods,
+  getRewardPeriodMonths,
+  periodOverlapsWindow,
+  toSimplePeriod,
+} from './periods';
 
 const baseCard: CreditCard = {
   id: 'card-1',
@@ -62,6 +68,48 @@ describe('calculateCardPeriod', () => {
     expect(period.endDate.getTime()).toBe(expectedEnd.getTime());
     expect(period.label).toBe('2025-04');
   });
+
+  it('uses repeating anchored multi-month boundaries', () => {
+    const card: CreditCard = {
+      ...baseCard,
+      rewardPeriod: {
+        monthCount: 3,
+        anchorDate: '2026-01-15',
+        monthlyMinimumSpend: 800,
+      },
+    };
+
+    const first = calculateCardPeriod(card, new Date(2026, 3, 14));
+    expect(toSimplePeriod(first)).toEqual({
+      start: '2026-01-15',
+      end: '2026-04-14',
+      label: '2026-01-15 to 2026-04-14',
+    });
+    const next = calculateCardPeriod(card, new Date(2026, 3, 15));
+    expect(toSimplePeriod(next)).toEqual({
+      start: '2026-04-15',
+      end: '2026-07-14',
+      label: '2026-04-15 to 2026-07-14',
+    });
+  });
+
+  it('splits an anchored period into contiguous qualification months', () => {
+    const card: CreditCard = {
+      ...baseCard,
+      rewardPeriod: {
+        monthCount: 3,
+        anchorDate: '2026-01-31',
+        monthlyMinimumSpend: 800,
+      },
+    };
+    const period = calculateCardPeriod(card, new Date(2026, 2, 1));
+
+    expect(getRewardPeriodMonths(card, period).map((month) => toSimplePeriod(month))).toEqual([
+      { start: '2026-01-31', end: '2026-02-27', label: '2026-01-31 to 2026-02-27' },
+      { start: '2026-02-28', end: '2026-03-30', label: '2026-02-28 to 2026-03-30' },
+      { start: '2026-03-31', end: '2026-04-29', label: '2026-03-31 to 2026-04-29' },
+    ]);
+  });
 });
 
 describe('toSimplePeriod', () => {
@@ -80,6 +128,21 @@ describe('getRecentCardPeriods', () => {
     const periods = getRecentCardPeriods(baseCard, 4);
     expect(periods).toHaveLength(4);
     expect(periods[0].label >= periods[1].label).toBe(true);
+  });
+
+  it('returns distinct preceding multi-month periods rather than duplicate months', () => {
+    const card: CreditCard = {
+      ...baseCard,
+      rewardPeriod: {
+        monthCount: 3,
+        anchorDate: '2025-01-01',
+        monthlyMinimumSpend: 800,
+      },
+    };
+
+    const periods = getRecentCardPeriods(card, 3);
+    expect(new Set(periods.map((period) => period.label)).size).toBe(3);
+    expect(periods[1].endDate.getTime()).toBeLessThan(periods[0].startDate.getTime());
   });
 });
 

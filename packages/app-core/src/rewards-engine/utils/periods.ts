@@ -19,6 +19,20 @@ function createCycleStart(year: number, month: number, requestedDay: number): Da
   return new Date(year, month, effectiveDay);
 }
 
+function addAnchoredMonths(anchor: Date, monthOffset: number): Date {
+  return createCycleStart(
+    anchor.getFullYear(),
+    anchor.getMonth() + monthOffset,
+    anchor.getDate(),
+  );
+}
+
+function monthDistance(from: Date, to: Date): number {
+  return (to.getFullYear() - from.getFullYear()) * 12
+    + to.getMonth()
+    - from.getMonth();
+}
+
 /**
  * Parse ISO date string (YYYY-MM-DD) as local time with validation.
  * Returns null if the date string is invalid or malformed.
@@ -52,6 +66,28 @@ function parseLocalDate(dateStr: string): Date | null {
 
 export function calculateCardPeriod(card: CreditCard, targetDate: Date = new Date()): CardPeriod {
   const reference = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
+
+  // A repeating reward period owns qualification and pooled-cap boundaries,
+  // so it takes precedence over one-off promotional and billing periods.
+  if (card.rewardPeriod) {
+    const anchor = parseLocalDate(card.rewardPeriod.anchorDate);
+    if (anchor) {
+      const monthCount = card.rewardPeriod.monthCount;
+      let periodOffset = Math.floor(monthDistance(anchor, reference) / monthCount);
+      let startDate = addAnchoredMonths(anchor, periodOffset * monthCount);
+      if (reference < startDate) {
+        periodOffset -= 1;
+        startDate = addAnchoredMonths(anchor, periodOffset * monthCount);
+      }
+      const nextStart = addAnchoredMonths(anchor, (periodOffset + 1) * monthCount);
+      const endDate = new Date(nextStart.getTime() - 1);
+      return {
+        startDate,
+        endDate,
+        label: `${formatLocalDate(startDate)} to ${formatLocalDate(endDate)}`,
+      };
+    }
+  }
 
   // Check for promotional period override first
   // Promotional periods override the normal billing cycle only when:
@@ -147,13 +183,37 @@ export function calculateCardPeriod(card: CreditCard, targetDate: Date = new Dat
   };
 }
 
+export function getRewardPeriodMonths(card: CreditCard, period: CardPeriod): CardPeriod[] {
+  if (!card.rewardPeriod) {
+    return [period];
+  }
+
+  const anchor = parseLocalDate(card.rewardPeriod.anchorDate);
+  if (!anchor) {
+    return [period];
+  }
+
+  const firstOffset = monthDistance(anchor, period.startDate);
+  return Array.from({ length: card.rewardPeriod.monthCount }, (_, index) => {
+    const startDate = addAnchoredMonths(anchor, firstOffset + index);
+    const nextStart = addAnchoredMonths(anchor, firstOffset + index + 1);
+    const endDate = new Date(nextStart.getTime() - 1);
+    return {
+      startDate,
+      endDate,
+      label: `${formatLocalDate(startDate)} to ${formatLocalDate(endDate)}`,
+    };
+  });
+}
+
 export function getRecentCardPeriods(card: CreditCard, count: number = 3): CardPeriod[] {
   const periods: CardPeriod[] = [];
-  const now = new Date();
+  let target = new Date();
 
   for (let i = 0; i < count; i++) {
-    const target = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    periods.push(calculateCardPeriod(card, target));
+    const period = calculateCardPeriod(card, target);
+    periods.push(period);
+    target = new Date(period.startDate.getTime() - 1);
   }
 
   return periods;

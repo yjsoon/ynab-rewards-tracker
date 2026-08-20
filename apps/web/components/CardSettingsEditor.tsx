@@ -37,6 +37,10 @@ export interface CardEditState {
   maximumSpend?: number | null;
   billingCycleType?: 'calendar' | 'billing';
   billingCycleDay?: number;
+  rewardPeriodEnabled?: boolean;
+  rewardPeriodMonthCount?: number;
+  rewardPeriodAnchorDate?: string;
+  rewardPeriodMonthlyMinimum?: number;
   promotionalPeriodEnabled?: boolean;
   promotionalPeriodStart?: string;
   promotionalPeriodEnd?: string;
@@ -168,6 +172,12 @@ export function computeCardFieldDiff(
     : card.maximumSpend ?? null;
   const billingCycleType = state.billingCycleType ?? card.billingCycle?.type ?? 'calendar';
   const billingCycleDay = state.billingCycleDay ?? card.billingCycle?.dayOfMonth ?? 1;
+  const rewardPeriodEnabled = state.rewardPeriodEnabled ?? Boolean(card.rewardPeriod);
+  const rewardPeriodMonthCount = state.rewardPeriodMonthCount ?? card.rewardPeriod?.monthCount ?? 3;
+  const rewardPeriodAnchorDate = state.rewardPeriodAnchorDate ?? card.rewardPeriod?.anchorDate ?? '';
+  const rewardPeriodMonthlyMinimum = state.rewardPeriodMonthlyMinimum
+    ?? card.rewardPeriod?.monthlyMinimumSpend
+    ?? 0;
   const subcategoriesEnabled = state.subcategoriesEnabled ?? card.subcategoriesEnabled ?? false;
   const baselineSubcategories = cloneSubcategories(card.subcategories);
   const stateSubcategories = cloneSubcategories(state.subcategories ?? card.subcategories);
@@ -193,6 +203,11 @@ export function computeCardFieldDiff(
     billingCycle:
       billingCycleType !== (card.billingCycle?.type ?? 'calendar') ||
       billingCycleDay !== (card.billingCycle?.dayOfMonth ?? 1),
+    rewardPeriod:
+      rewardPeriodEnabled !== Boolean(card.rewardPeriod) ||
+      rewardPeriodMonthCount !== (card.rewardPeriod?.monthCount ?? 3) ||
+      rewardPeriodAnchorDate !== (card.rewardPeriod?.anchorDate ?? '') ||
+      rewardPeriodMonthlyMinimum !== (card.rewardPeriod?.monthlyMinimumSpend ?? 0),
     promotionalPeriod:
       promotionalPeriodEnabled !== Boolean(card.promotionalPeriod) ||
       promotionalPeriodStart !== (card.promotionalPeriod?.startDate ?? '') ||
@@ -347,6 +362,12 @@ export function CardSettingsEditor({
     : card.maximumSpend ?? null;
   const billingCycleType = state.billingCycleType ?? card.billingCycle?.type ?? 'calendar';
   const billingCycleDay = state.billingCycleDay ?? card.billingCycle?.dayOfMonth ?? 1;
+  const rewardPeriodEnabled = state.rewardPeriodEnabled ?? Boolean(card.rewardPeriod);
+  const rewardPeriodMonthCount = state.rewardPeriodMonthCount ?? card.rewardPeriod?.monthCount ?? 3;
+  const rewardPeriodAnchorDate = state.rewardPeriodAnchorDate ?? card.rewardPeriod?.anchorDate ?? '';
+  const rewardPeriodMonthlyMinimum = state.rewardPeriodMonthlyMinimum
+    ?? card.rewardPeriod?.monthlyMinimumSpend
+    ?? 0;
   const promotionalPeriodEnabled = state.promotionalPeriodEnabled ?? Boolean(card.promotionalPeriod);
   const promotionalPeriodStart = state.promotionalPeriodStart ?? card.promotionalPeriod?.startDate ?? '';
   const promotionalPeriodEnd = state.promotionalPeriodEnd ?? card.promotionalPeriod?.endDate ?? '';
@@ -783,6 +804,7 @@ export function CardSettingsEditor({
             }
             icon={<CalendarClock className="h-4 w-4 text-muted-foreground" />}
             isDirty={fieldDirty.billingCycle}
+            disabled={rewardPeriodEnabled}
           >
             <div className="space-y-3">
               <Select
@@ -823,6 +845,97 @@ export function CardSettingsEditor({
           </SettingCapsule>
 
           <SettingCapsule
+            label="Reward period"
+            description="Pool selected caps and qualify month by month"
+            value={rewardPeriodEnabled ? `${rewardPeriodMonthCount} months` : 'Monthly'}
+            icon={<CalendarClock className="h-4 w-4 text-muted-foreground" />}
+            isDirty={fieldDirty.rewardPeriod}
+          >
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <Label className="text-sm font-medium">Multi-month period</Label>
+                  <p className="text-xs text-muted-foreground">Off keeps existing monthly or billing-cycle behaviour.</p>
+                </div>
+                <Switch
+                  checked={rewardPeriodEnabled}
+                  onCheckedChange={(checked) => {
+                    onFieldChange('rewardPeriodEnabled', checked);
+                    if (checked && !rewardPeriodAnchorDate) {
+                      const today = new Date();
+                      onFieldChange(
+                        'rewardPeriodAnchorDate',
+                        toIsoDateString(new Date(today.getFullYear(), today.getMonth(), 1)),
+                      );
+                      onFieldChange('rewardPeriodMonthCount', 3);
+                    }
+                    if (checked && promotionalPeriodEnabled) {
+                      onFieldChange('promotionalPeriodEnabled', false);
+                      onFieldChange('promotionalPeriodStart', '');
+                      onFieldChange('promotionalPeriodEnd', '');
+                      onFieldChange('promotionalPeriodDescription', '');
+                    }
+                  }}
+                />
+              </div>
+              {rewardPeriodEnabled && (
+                <>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">Months per period</Label>
+                    <Input
+                      aria-label="Months per reward period"
+                      type="number"
+                      min="2"
+                      max="24"
+                      value={rewardPeriodMonthCount}
+                      onChange={(event) => onFieldChange(
+                        'rewardPeriodMonthCount',
+                        Math.max(2, Math.min(24, Number(event.target.value) || 3)),
+                      )}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">First period starts</Label>
+                    <Input
+                      aria-label="Reward period anchor date"
+                      type="date"
+                      value={rewardPeriodAnchorDate}
+                      onChange={(event) => onFieldChange('rewardPeriodAnchorDate', event.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Periods repeat from this boundary. “Last two months” means the two completed anchored months before the current one.
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">Card-wide minimum each month</Label>
+                    <div className="relative">
+                      <DollarSign className="absolute left-3 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        aria-label="Monthly card-wide minimum spend"
+                        type="number"
+                        min="0"
+                        step="50"
+                        className="pl-8"
+                        value={rewardPeriodMonthlyMinimum}
+                        onChange={(event) => onFieldChange(
+                          'rewardPeriodMonthlyMinimum',
+                          Math.max(0, Number(event.target.value) || 0),
+                        )}
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Spend from every card transaction counts. A current month stays pending until it reaches this amount; a completed shortfall fails the period.
+                    </p>
+                  </div>
+                  <p className="rounded-md bg-muted/50 p-2 text-xs text-muted-foreground">
+                    Each subcategory maximum becomes one pooled cap for the whole period. Uncapped subcategories are unchanged.
+                  </p>
+                </>
+              )}
+            </div>
+          </SettingCapsule>
+
+          <SettingCapsule
             label="Promotional period"
             description="Override normal billing cycle with a fixed period"
             value={
@@ -834,6 +947,7 @@ export function CardSettingsEditor({
             }
             icon={<Sparkles className="h-4 w-4 text-muted-foreground" />}
             isDirty={fieldDirty.promotionalPeriod}
+            disabled={rewardPeriodEnabled}
           >
             <div className="space-y-3">
               <div className="flex items-center justify-between">
@@ -914,6 +1028,7 @@ export function CardSettingsEditor({
           onToggleEnabled={handleSubcategoryToggle}
           onChange={handleSubcategoriesChange}
           baseRewardRate={earningRate ?? 0}
+          pooledCaps={rewardPeriodEnabled}
           flagNames={resolvedFlagNames}
         />
       </div>

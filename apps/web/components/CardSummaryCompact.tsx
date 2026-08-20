@@ -63,11 +63,16 @@ export function CardSummaryCompactContent({
     eligibleSpend,
     minimumSpend,
     minimumSpendMet,
+    monthlyMinimumSpend,
+    qualificationStatus,
+    monthlyQualifications = [],
     maximumSpend,
     maximumSpendExceeded,
     subcategoryBreakdowns = [],
   } = calculation;
   const currency = settings?.currency;
+  const activeQualificationMonth = monthlyQualifications.find((month) => month.status === "pending")
+    ?? monthlyQualifications[monthlyQualifications.length - 1];
   const hasBlockRounding = cardUsesBlockRounding(card);
   const displayedSpend = hasBlockRounding ? countedSpend : totalSpend;
   const hasMinimum = hasMinimumSpendRequirement(minimumSpend);
@@ -292,6 +297,26 @@ export function CardSummaryCompactContent({
         <span className={cn("shrink-0 font-medium", daysSeverityClass)}>{daysRemaining}d</span>
       </div>
 
+      {card.rewardPeriod && activeQualificationMonth && (
+        <div className={cn(
+          "text-[11px] font-medium",
+          qualificationStatus === "failed"
+            ? "text-red-600 dark:text-red-300"
+            : qualificationStatus === "met"
+              ? "text-emerald-600 dark:text-emerald-300"
+              : "text-amber-600 dark:text-amber-300",
+        )}>
+          {qualificationStatus === "failed"
+            ? "Period qualification failed"
+            : qualificationStatus === "met"
+              ? `All ${card.rewardPeriod.monthCount} monthly minimums met`
+              : <>
+                  This month: <CurrencyAmount value={activeQualificationMonth.spend} currency={currency} decimals={0} /> of{' '}
+                  <CurrencyAmount value={monthlyMinimumSpend ?? 0} currency={currency} decimals={0} />
+                </>}
+        </div>
+      )}
+
       {showBlocks && blockSize && eligibleSpend !== undefined && (
         <div className="text-[11px] text-muted-foreground">
           {Math.floor(eligibleSpend / blockSize)} ×{" "}
@@ -372,6 +397,7 @@ export function CardSummaryCompact({
     () => ({
       ...period,
       end: period.end < asOfDate ? period.end : asOfDate,
+      asOf: asOfDate,
     }),
     [asOfDate, period]
   );

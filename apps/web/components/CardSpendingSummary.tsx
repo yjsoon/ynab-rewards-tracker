@@ -55,6 +55,9 @@ export function CardSpendingSummaryContent({
     rewardEarnedDollars,
     minimumSpend,
     minimumSpendMet,
+    monthlyMinimumSpend,
+    qualificationStatus,
+    monthlyQualifications = [],
     maximumSpend,
     maximumSpendExceeded,
     subcategoryBreakdowns = [],
@@ -71,6 +74,9 @@ export function CardSpendingSummaryContent({
   const currency = settings?.currency;
   const milesValuation = settings?.milesValuation ?? 0.01;
   const hasMinimum = hasMinimumSpendRequirement(minimumSpend);
+  const qualificationBlocked = Boolean(card.rewardPeriod && qualificationStatus !== 'met');
+  const activeQualificationMonth = monthlyQualifications.find((month) => month.status === 'pending')
+    ?? monthlyQualifications[monthlyQualifications.length - 1];
   const hasMaximum = typeof maximumSpend === 'number' && maximumSpend > 0;
   const hasBlockRounding = Boolean(
     (typeof card.earningBlockSize === 'number' && card.earningBlockSize > 0) ||
@@ -85,7 +91,7 @@ export function CardSpendingSummaryContent({
     ? 'exceeded'
     : intermediateMaximumSpendExceeded
       ? 'warn'
-    : (!minimumSpendMet && hasMinimum ? 'warn' : (minimumSpendMet ? 'success' : 'neutral'));
+    : (qualificationBlocked || (!minimumSpendMet && hasMinimum) ? 'warn' : (minimumSpendMet ? 'success' : 'neutral'));
 
   const rewardTileClasses = {
     success: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300',
@@ -94,7 +100,7 @@ export function CardSpendingSummaryContent({
     neutral: 'bg-muted/10 text-muted-foreground',
   }[rewardTileState];
 
-  const rewardValue = (!minimumSpendMet && hasMinimum)
+  const rewardValue = qualificationBlocked || (!minimumSpendMet && hasMinimum)
     ? 'No reward'
     : card.type === 'cashback'
       ? <CurrencyAmount value={rewardEarned} currency={currency} />
@@ -104,6 +110,8 @@ export function CardSpendingSummaryContent({
     ? 'Capped at max'
     : intermediateMaximumSpendExceeded
       ? 'Current level capped'
+    : qualificationBlocked
+      ? qualificationStatus === 'failed' ? 'Qualification failed' : 'Qualification pending'
     : !minimumSpendMet && hasMinimum
       ? 'Minimum not met'
       : card.type === 'cashback'
@@ -152,7 +160,27 @@ export function CardSpendingSummaryContent({
         </div>
       </div>
 
-      {(isMinimumSpendConfigured(minimumSpend) || hasMaximum || card.spendingTiers?.length) ? (
+      {card.rewardPeriod && activeQualificationMonth && (
+        <div className={cn(
+          'rounded-md border px-3 py-2 text-center text-xs font-medium',
+          qualificationStatus === 'failed'
+            ? 'border-red-200 bg-red-50/50 text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300'
+            : qualificationStatus === 'met'
+              ? 'border-emerald-200 bg-emerald-50/50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300'
+              : 'border-amber-200 bg-amber-50/50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300',
+        )}>
+          {qualificationStatus === 'failed'
+            ? 'A completed month missed its card-wide minimum'
+            : qualificationStatus === 'met'
+              ? `All ${card.rewardPeriod.monthCount} monthly minimums met`
+              : <>
+                  Current anchored month: <CurrencyAmount value={activeQualificationMonth.spend} currency={currency} /> of{' '}
+                  <CurrencyAmount value={monthlyMinimumSpend ?? 0} currency={currency} />
+                </>}
+        </div>
+      )}
+
+      {(card.rewardPeriod || isMinimumSpendConfigured(minimumSpend) || hasMaximum || card.spendingTiers?.length) ? (
         <div className="space-y-3">
           {card.spendingTiers?.length ? (
             <div className="space-y-1.5">
@@ -336,6 +364,7 @@ export function CardSpendingSummary({
     () => ({
       ...period,
       end: period.end < asOfDate ? period.end : asOfDate,
+      asOf: asOfDate,
     }),
     [asOfDate, period]
   );

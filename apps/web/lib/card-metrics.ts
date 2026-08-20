@@ -309,6 +309,7 @@ export function buildCardMetricsById(
       const calculationPeriod = {
         ...period,
         end: period.end < asOfDate ? period.end : asOfDate,
+        asOf: asOfDate,
       };
       const accountTransactions = transactionsByAccountId.get(card.ynabAccountId) ?? [];
       const periodTransactions = filterTransactionsForCardPeriod(
