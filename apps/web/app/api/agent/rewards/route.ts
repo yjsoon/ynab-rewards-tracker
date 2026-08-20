@@ -6,6 +6,8 @@ import type {
   StorageData,
   RewardCalculation,
   CreditCard,
+  MonthlyQualificationBreakdown,
+  RewardQualificationStatus,
   ThemeGroup,
 } from '@ynab-counter/app-core/storage/types';
 import type { TransactionWithRewards } from '@ynab-counter/app-core/storage/types';
@@ -84,6 +86,9 @@ type SummaryAvailable = {
   minimumSpend: number | null | undefined;
   minimumMet: boolean;
   minimumProgress: number | null;
+  monthlyMinimumSpend: number | null;
+  qualificationStatus: RewardQualificationStatus | null;
+  monthlyQualifications: MonthlyQualificationBreakdown[];
   maximumSpend: number | null | undefined;
   maximumExceeded: boolean;
   maximumProgress: number | null;
@@ -107,6 +112,11 @@ type CardStatusAvailable = {
       remaining: number | null;
       progress: number | null;
       met: boolean | null;
+    };
+    qualification: {
+      status: RewardQualificationStatus | null;
+      monthlyMinimum: number | null;
+      activeMonth: MonthlyQualificationBreakdown | null;
     };
     maximum: {
       cap: number | null;
@@ -440,6 +450,9 @@ function summariseCalculations(calculations: RewardCalculation[]): SummaryResult
     minimumSpend: cardDefaultCalculation?.minimumSpend,
     minimumMet: calculations.every((calc) => calc.minimumMet),
     minimumProgress: minProgressValues.length > 0 ? Math.min(...minProgressValues) : null,
+    monthlyMinimumSpend: getPositiveNumber(cardDefaultCalculation?.monthlyMinimumSpend),
+    qualificationStatus: cardDefaultCalculation?.qualificationStatus ?? null,
+    monthlyQualifications: cardDefaultCalculation?.monthlyQualifications ?? [],
     maximumSpend: cardDefaultCalculation?.maximumSpend,
     maximumExceeded: calculations.some((calc) => calc.maximumExceeded),
     maximumProgress: maxProgressValues.length > 0 ? Math.max(...maxProgressValues) : null,
@@ -488,6 +501,9 @@ function buildRulePayload(
       minimumRemaining,
       minimumMet: calc.minimumMet,
       minimumProgress: typeof calc.minimumProgress === 'number' ? calc.minimumProgress : null,
+      monthlyMinimumSpend: getPositiveNumber(calc.monthlyMinimumSpend),
+      qualificationStatus: calc.qualificationStatus ?? null,
+      monthlyQualifications: includeBreakdowns ? calc.monthlyQualifications ?? null : undefined,
       maximumCap,
       maximumRemaining,
       maximumExceeded: calc.maximumExceeded,
@@ -526,12 +542,32 @@ function buildCardStatus(
   const eligibleSpend = summary.eligibleSpend;
   const eligibleSpendBeforeBlocks = summary.eligibleSpendBeforeBlocks;
 
-  const minimumTarget = summary.minimumSpend === undefined
-    ? getPositiveNumber(card.minimumSpend)
-    : getPositiveNumber(summary.minimumSpend);
-  const minimumRemaining = minimumTarget ? Math.max(0, minimumTarget - totalSpend) : null;
-  const minimumProgress = minimumTarget ? Math.min(100, (totalSpend / minimumTarget) * 100) : null;
-  const minimumMet = minimumTarget === null ? null : totalSpend >= minimumTarget;
+  const today = new Date();
+  const todayValue = [
+    today.getFullYear(),
+    String(today.getMonth() + 1).padStart(2, '0'),
+    String(today.getDate()).padStart(2, '0'),
+  ].join('-');
+  const activeMonth = summary.monthlyQualifications.find(
+    (month) => month.start <= todayValue && month.end >= todayValue,
+  ) ?? null;
+
+  const minimumTarget = activeMonth?.minimumSpend
+    ?? (summary.minimumSpend === undefined
+      ? getPositiveNumber(card.minimumSpend)
+      : getPositiveNumber(summary.minimumSpend));
+  const minimumProgressSpend = activeMonth?.spend ?? totalSpend;
+  const minimumRemaining = minimumTarget
+    ? Math.max(0, minimumTarget - minimumProgressSpend)
+    : null;
+  const minimumProgress = minimumTarget
+    ? Math.min(100, (minimumProgressSpend / minimumTarget) * 100)
+    : null;
+  const minimumMet = minimumTarget === null
+    ? null
+    : activeMonth
+      ? activeMonth.status === 'met'
+      : totalSpend >= minimumTarget;
 
   const maximumCap = summary.maximumSpend === undefined
     ? getPositiveNumber(card.maximumSpend)
@@ -557,6 +593,11 @@ function buildCardStatus(
         remaining: minimumRemaining,
         progress: minimumProgress,
         met: minimumMet,
+      },
+      qualification: {
+        status: summary.qualificationStatus,
+        monthlyMinimum: summary.monthlyMinimumSpend,
+        activeMonth,
       },
       maximum: {
         cap: maximumCap,
@@ -1229,7 +1270,11 @@ export async function POST(request: Request) {
           ({ ruleId }) => ruleId.startsWith('card-'),
         );
         const minimumRemaining = status.limits.minimum.remaining;
-        if (typeof minimumRemaining === 'number' && minimumRemaining > 0) {
+        if (
+          status.limits.qualification.status !== 'failed' &&
+          typeof minimumRemaining === 'number' &&
+          minimumRemaining > 0
+        ) {
           minimumSpendNeeded.push({
             cardId: card.id,
             cardName: card.name,

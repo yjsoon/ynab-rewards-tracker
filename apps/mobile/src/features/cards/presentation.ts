@@ -190,6 +190,9 @@ export function attentionCopy(
     case 'unconfigured':
       return 'Add an earning rate to start tracking rewards.';
     case 'building':
+      if (projection.calculation.qualificationStatus === 'failed') {
+        return 'Monthly qualification failed for this reward period.';
+      }
       return `${formatting.currencyCompact(projection.minimum.remaining ?? 0)} more to unlock rewards.`;
     case 'near_cap':
       return `${formatting.currencyCompact(projection.maximum.remaining ?? 0)} left before the cap.`;

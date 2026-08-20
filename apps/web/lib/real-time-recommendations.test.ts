@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { SimpleRewardsCalculator } from '@/lib/rewards-engine';
 import type { CardSubcategory, CreditCard, ThemeGroup } from '@/lib/storage';
@@ -346,5 +346,41 @@ describe('RealTimeRecommendations', () => {
         expect.objectContaining({ subcategoryId: 'blue', isMaxed: false }),
       ])
     );
+  });
+
+  it('moves a card with failed monthly qualification out of recommended choices', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 1, 15, 12));
+    try {
+      const card = createCard({
+        subcategoriesEnabled: false,
+        earningRate: 5,
+        rewardPeriod: {
+          monthCount: 3,
+          anchorDate: '2026-01-01',
+          monthlyMinimumSpend: 800,
+        },
+      });
+      const theme = createTheme({ cards: [{ cardId: card.id }] });
+      const [recommendation] = new RealTimeRecommendations().generateRecommendations(
+        [theme],
+        [card],
+        [
+          createTransaction({ id: 'jan', date: '2026-01-10', amount: -799_000 }),
+          createTransaction({ id: 'feb', date: '2026-02-10', amount: -500_000 }),
+        ],
+      );
+
+      expect(recommendation.bestCard).toBeNull();
+      expect(recommendation.notRecommended[0]).toMatchObject({
+        cardId: card.id,
+        recommendation: 'avoid',
+        effectiveRate: 0,
+        qualificationStatus: 'failed',
+      });
+      expect(recommendation.notRecommended[0].reasons[0]).toContain('qualification already failed');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

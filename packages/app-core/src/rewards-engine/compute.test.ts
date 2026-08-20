@@ -178,7 +178,47 @@ describe('computeCurrentPeriod', () => {
     expect(calculation).toMatchObject({
       ruleId: `card-${card.id}`,
       rewardEarned: 2,
-      qualificationStatus: 'met',
+      qualificationStatus: 'not_required',
+    });
+  });
+
+  it('keeps retained legacy rules active before the reward-period anchor', async () => {
+    const now = new Date();
+    const futureAnchor = formatLocalDate(new Date(now.getFullYear(), now.getMonth() + 1, 1));
+    const card = createCard({
+      earningRate: 2,
+      rewardPeriod: {
+        monthCount: 3,
+        anchorDate: futureAnchor,
+        monthlyMinimumSpend: 800,
+      },
+    });
+    const period = RewardsCalculator.calculatePeriod(card);
+    const rule: RewardRule = {
+      id: 'legacy-rule',
+      cardId: card.id,
+      name: 'Legacy rewards',
+      rewardType: 'cashback',
+      rewardValue: 10,
+      startDate: formatLocalDate(period.startDate),
+      endDate: formatLocalDate(period.endDate),
+      active: true,
+      priority: 0,
+    };
+
+    const [calculation] = await computeCurrentPeriod(
+      createClient([createTransaction({
+        date: formatLocalDate(period.startDate),
+        amount: -100_000,
+      })]),
+      'budget-1',
+      [card],
+      [rule],
+    );
+
+    expect(calculation).toMatchObject({
+      ruleId: rule.id,
+      rewardEarned: 10,
     });
   });
 

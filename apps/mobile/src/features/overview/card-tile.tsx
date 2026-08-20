@@ -103,10 +103,10 @@ export function CardTile({
 
   const remainingToMaximum = hasMaximum ? Math.max(0, maximumTarget - displayedSpend) : 0;
   const exceededAmount = hasMaximum ? Math.max(0, displayedSpend - maximumTarget) : 0;
-  const remainingToMinimum = hasMinimum ? Math.max(0, minimumTarget - projection.spend.total) : 0;
+  const remainingToMinimum = hasMinimum ? projection.minimum.remaining ?? 0 : 0;
   const clampedProgress =
     hasMinimum && minimumTarget > 0
-      ? Math.min(1, Math.max(0, projection.spend.total / minimumTarget))
+      ? Math.min(1, Math.max(0, projection.minimum.progress ?? 0))
       : 0;
   const progressPercent = Math.round(clampedProgress * 100);
 
@@ -394,7 +394,7 @@ export function CardTile({
 
       {allowHideCard && exceeded ? (
         <Pressable
-          onPress={() => onHideCard(card.id, projection.period.end)}
+          onPress={() => onHideCard(card.id, projection.resetsOn)}
           accessibilityRole="button"
           accessibilityLabel={`Hide ${card.name} until next cycle`}
           style={({ pressed }) => [styles.hideButton, pressed && styles.pressed]}

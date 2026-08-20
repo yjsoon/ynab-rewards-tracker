@@ -64,12 +64,32 @@ function parseLocalDate(dateStr: string): Date | null {
   return date;
 }
 
+/** Reward-period rules start at the configured anchor; they are not retroactive. */
+export function isRewardPeriodActive(
+  card: Pick<CreditCard, 'rewardPeriod'>,
+  targetDate: Date,
+): boolean {
+  if (!card.rewardPeriod) {
+    return false;
+  }
+  const anchor = parseLocalDate(card.rewardPeriod.anchorDate);
+  if (!anchor) {
+    return false;
+  }
+  const reference = new Date(
+    targetDate.getFullYear(),
+    targetDate.getMonth(),
+    targetDate.getDate(),
+  );
+  return reference >= anchor;
+}
+
 export function calculateCardPeriod(card: CreditCard, targetDate: Date = new Date()): CardPeriod {
   const reference = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
 
   // A repeating reward period owns qualification and pooled-cap boundaries,
   // so it takes precedence over one-off promotional and billing periods.
-  if (card.rewardPeriod) {
+  if (card.rewardPeriod && isRewardPeriodActive(card, reference)) {
     const anchor = parseLocalDate(card.rewardPeriod.anchorDate);
     if (anchor) {
       const monthCount = card.rewardPeriod.monthCount;

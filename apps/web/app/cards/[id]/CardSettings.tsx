@@ -173,6 +173,17 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
       return;
     }
 
+    if (
+      card.promotionalPeriod &&
+      formData.rewardPeriodEnabled &&
+      !window.confirm(
+        'Saving this multi-month reward period will remove the existing promotional period. Continue?',
+      )
+    ) {
+      setSaving(false);
+      return;
+    }
+
     try {
       const toggledOn = Boolean(formData.subcategoriesEnabled);
       const preparedSubcategories = toggledOn
@@ -198,7 +209,7 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
               monthlyMinimumSpend: formData.rewardPeriodMonthlyMinimum ?? 0,
             }
           : undefined,
-        promotionalPeriod: formData.promotionalPeriodEnabled && formData.promotionalPeriodEnd
+        promotionalPeriod: !formData.rewardPeriodEnabled && formData.promotionalPeriodEnabled && formData.promotionalPeriodEnd
           ? {
               startDate: formData.promotionalPeriodStart || null,
               endDate: formData.promotionalPeriodEnd,
@@ -295,13 +306,20 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
               <p className="text-sm font-medium text-muted-foreground">Reward Period</p>
               <p className="mt-1 font-medium">
                 {card.rewardPeriod
-                  ? `${card.rewardPeriod.monthCount} months from ${card.rewardPeriod.anchorDate}`
+                  ? `${card.rewardPeriod.monthCount} months from ${new Date(`${card.rewardPeriod.anchorDate}T12:00:00`).toLocaleDateString()}`
                   : 'Follows billing cycle'}
               </p>
               {card.rewardPeriod && (
-                <p className="text-xs text-muted-foreground">
-                  ${card.rewardPeriod.monthlyMinimumSpend.toLocaleString()} card-wide minimum each month
-                </p>
+                <>
+                  <p className="text-xs text-muted-foreground">
+                    {card.rewardPeriod.monthlyMinimumSpend > 0
+                      ? `${formatDollars(card.rewardPeriod.monthlyMinimumSpend, { currency: settings.currency })} card-wide minimum each month`
+                      : 'No monthly minimum'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    This overrides the billing cycle and any promotional period.
+                  </p>
+                </>
               )}
             </div>
             <div>
@@ -321,7 +339,7 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
               <p className="mt-1 font-medium">
                 {card.earningBlockSize === null || card.earningBlockSize === undefined
                   ? 'Exact amount (down to the cent)'
-                  : `Fixed blocks: $${card.earningBlockSize} per block`}
+                  : `Fixed blocks: ${formatDollars(card.earningBlockSize, { currency: settings.currency })} per block`}
               </p>
             </div>
             <div>
@@ -331,7 +349,7 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
                   ? 'Not configured'
                   : card.minimumSpend === 0
                   ? 'No minimum required'
-                  : `$${card.minimumSpend.toLocaleString()} required`}
+                  : `${formatDollars(card.minimumSpend, { currency: settings.currency })} required`}
               </p>
             </div>
             <div>
@@ -341,7 +359,7 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
                   ? 'Not configured'
                   : card.maximumSpend === 0
                   ? 'No limit'
-                  : `$${card.maximumSpend.toLocaleString()} limit`}
+                  : `${formatDollars(card.maximumSpend, { currency: settings.currency })} limit`}
               </p>
             </div>
           </div>
@@ -392,12 +410,12 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
                     const minLabel = typeof subcategory.minimumSpend === 'number'
                       ? subcategory.minimumSpend === 0
                         ? 'No minimum'
-                        : `$${subcategory.minimumSpend.toLocaleString()}`
+                        : formatDollars(subcategory.minimumSpend, { currency: settings.currency })
                       : 'Not configured';
                     const maxLabel = typeof subcategory.maximumSpend === 'number'
                       ? subcategory.maximumSpend === 0
                         ? 'No cap'
-                        : `$${subcategory.maximumSpend.toLocaleString()}`
+                        : formatDollars(subcategory.maximumSpend, { currency: settings.currency })
                       : 'Not configured';
                     const flagLabel = flagNames[subcategory.flagColor as YnabFlagColor] ?? (
                       subcategory.flagColor === UNFLAGGED_FLAG.value

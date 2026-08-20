@@ -254,6 +254,7 @@ function SettingCapsule({
   emphasise?: boolean;
   disabled?: boolean;
 }) {
+  const headingId = `setting-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
   if (disabled) {
     return (
       <div
@@ -305,9 +306,12 @@ function SettingCapsule({
           </div>
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-72 space-y-3">
+      <PopoverContent
+        aria-labelledby={headingId}
+        className="max-h-[min(var(--radix-popover-content-available-height,calc(100vh-2rem)),calc(100vh-2rem))] w-72 space-y-3 overflow-y-auto"
+      >
         <div className="space-y-1">
-          <p className="text-sm font-medium">{label}</p>
+          <p id={headingId} className="text-sm font-medium">{label}</p>
           {description && <p className="text-xs text-muted-foreground">{description}</p>}
         </div>
         {children}
@@ -796,7 +800,9 @@ export function CardSettingsEditor({
         <div className="flex flex-wrap gap-3">
           <SettingCapsule
             label="Billing cycle"
-            description="Choose calendar month or a billing day"
+            description={rewardPeriodEnabled
+              ? 'Ignored while the multi-month reward period is enabled'
+              : 'Choose calendar month or a billing day'}
             value={
               billingCycleType === 'billing'
                 ? `Billing day ${billingCycleDay}`
@@ -858,6 +864,7 @@ export function CardSettingsEditor({
                   <p className="text-xs text-muted-foreground">Off keeps existing monthly or billing-cycle behaviour.</p>
                 </div>
                 <Switch
+                  aria-label="Enable multi-month reward period"
                   checked={rewardPeriodEnabled}
                   onCheckedChange={(checked) => {
                     onFieldChange('rewardPeriodEnabled', checked);
@@ -868,12 +875,6 @@ export function CardSettingsEditor({
                         toIsoDateString(new Date(today.getFullYear(), today.getMonth(), 1)),
                       );
                       onFieldChange('rewardPeriodMonthCount', 3);
-                    }
-                    if (checked && promotionalPeriodEnabled) {
-                      onFieldChange('promotionalPeriodEnabled', false);
-                      onFieldChange('promotionalPeriodStart', '');
-                      onFieldChange('promotionalPeriodEnd', '');
-                      onFieldChange('promotionalPeriodDescription', '');
                     }
                   }}
                 />
@@ -924,12 +925,17 @@ export function CardSettingsEditor({
                       />
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Spend from every card transaction counts. A current month stays pending until it reaches this amount; a completed shortfall fails the period.
+                      Purchases across the whole card count, net of refunds. A current month stays pending until it reaches this amount; a completed shortfall fails the period.
                     </p>
                   </div>
                   <p className="rounded-md bg-muted/50 p-2 text-xs text-muted-foreground">
                     Each subcategory maximum becomes one pooled cap for the whole period. Uncapped subcategories are unchanged.
                   </p>
+                  {promotionalPeriodEnabled && (
+                    <p className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                      The reward period overrides the promotional period while enabled. Saving will remove the promotion; switch this off before saving to keep it.
+                    </p>
+                  )}
                 </>
               )}
             </div>
@@ -937,7 +943,9 @@ export function CardSettingsEditor({
 
           <SettingCapsule
             label="Promotional period"
-            description="Override normal billing cycle with a fixed period"
+            description={rewardPeriodEnabled
+              ? 'Overridden while the multi-month reward period is enabled'
+              : 'Override normal billing cycle with a fixed period'}
             value={
               promotionalPeriodEnabled && promotionalPeriodEnd
                 ? promotionalPeriodStart

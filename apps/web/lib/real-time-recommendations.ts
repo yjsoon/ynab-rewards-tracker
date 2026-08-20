@@ -16,6 +16,7 @@ import {
   resolveSubcategory,
 } from '@/lib/rewards-engine/utils/subcategories';
 import { resolveCardSpendingTier } from '@ynab-counter/app-core/rewards-engine';
+import type { SimplifiedCalculation } from '@/lib/rewards-engine';
 
 export interface SubcategoryProgress {
   subcategoryId: string;
@@ -40,6 +41,7 @@ export interface CardOption {
   headroom: number | null; // How much more can be spent
   score: number; // Combined score for ranking
   recommendation: 'use' | 'consider' | 'avoid';
+  qualificationStatus?: SimplifiedCalculation['qualificationStatus'];
   reasons: string[];
   subcategoryProgress?: SubcategoryProgress[]; // Progress for linked subcategories
 }
@@ -58,6 +60,13 @@ interface CardSpendingSummary {
   cardId: string;
   totalSpend: number;
   subcategorySpends: Map<string, number>;
+}
+
+function localDateValue(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 export class RealTimeRecommendations {
@@ -81,12 +90,27 @@ export class RealTimeRecommendations {
 
     // Calculate current spending for each card
     const spendingSummaries = this.calculateSpending(cards, transactions);
+    const calculations = new Map(cards.map((card) => {
+      const period = SimpleRewardsCalculator.calculatePeriod(card);
+      const cardTransactions = transactions.filter(
+        (transaction) => transaction.account_id === card.ynabAccountId,
+      );
+      return [
+        card.id,
+        SimpleRewardsCalculator.calculateCardRewards(
+          card,
+          cardTransactions,
+          period,
+        ),
+      ] as const;
+    }));
     const cardsById = new Map(cards.map((card) => [card.id, card]));
 
     return themes.map(theme => this.recommendForTheme(
       theme,
       cardsById,
-      spendingSummaries
+      spendingSummaries,
+      calculations,
     ));
   }
 
@@ -172,7 +196,8 @@ export class RealTimeRecommendations {
   private recommendForTheme(
     theme: ThemeGroup,
     cardsById: Map<string, CreditCard>,
-    spendingSummaries: Map<string, CardSpendingSummary>
+    spendingSummaries: Map<string, CardSpendingSummary>,
+    calculations: Map<string, SimplifiedCalculation>,
   ): ThemeRecommendation {
     const cardOptions: CardOption[] = [];
 
@@ -196,7 +221,8 @@ export class RealTimeRecommendations {
       const option = this.evaluateCard(
         card,
         theme,
-        spendingSummaries.get(cardId)
+        spendingSummaries.get(cardId),
+        calculations.get(cardId),
       );
 
       if (option) {
@@ -245,7 +271,8 @@ export class RealTimeRecommendations {
   private evaluateCard(
     card: CreditCard,
     theme: ThemeGroup,
-    spending?: CardSpendingSummary
+    spending?: CardSpendingSummary,
+    calculation?: SimplifiedCalculation,
   ): CardOption | null {
     const currentSpend = spending?.totalSpend || 0;
     const spendingTier = resolveCardSpendingTier(card, currentSpend);
@@ -343,9 +370,16 @@ export class RealTimeRecommendations {
     }
 
     // Calculate progress towards limits
-    const spendingTarget = nextSpendingLevel?.spendThreshold ?? effectiveCard.minimumSpend;
+    const today = localDateValue(new Date());
+    const activeQualification = calculation?.monthlyQualifications?.find(
+      (month) => month.start <= today && month.end >= today,
+    );
+    const spendingTarget = activeQualification?.minimumSpend
+      ?? nextSpendingLevel?.spendThreshold
+      ?? effectiveCard.minimumSpend;
+    const minimumProgressSpend = activeQualification?.spend ?? currentSpend;
     const minimumProgress = spendingTarget
-      ? Math.min(100, (currentSpend / spendingTarget) * 100)
+      ? Math.min(100, (minimumProgressSpend / spendingTarget) * 100)
       : 100;
 
     const maximumProgress = effectiveCard.maximumSpend
@@ -361,9 +395,10 @@ export class RealTimeRecommendations {
     // Calculate score with heavy emphasis on minimum spend
     const baseScore = effectiveRate * 1000; // Base score from rate (assuming max 10% rate)
     let score = baseScore;
+    const qualificationFailed = calculation?.qualificationStatus === 'failed';
 
     // PRIORITY 1: Cards that haven't met minimum spend get massive boost
-    const needsMinimum = spendingTarget && minimumProgress < 100;
+    const needsMinimum = !qualificationFailed && spendingTarget && minimumProgress < 100;
     if (needsMinimum) {
       // Add up to 300 points based on how far from minimum (more urgent = higher score)
       score += (100 - minimumProgress) * 3;
@@ -397,6 +432,11 @@ export class RealTimeRecommendations {
 
     // Determine recommendation
     let recommendation: 'use' | 'consider' | 'avoid';
+    if (qualificationFailed) {
+      score = 0;
+      reasons.unshift('Monthly qualification already failed for this reward period');
+    }
+
     if (
       score === 0
       || (
@@ -420,7 +460,11 @@ export class RealTimeRecommendations {
       cardId: card.id,
       cardName: card.name,
       cardType: effectiveCard.type,
-      effectiveRate,
+      effectiveRate: calculation?.qualificationStatus === 'met'
+        || calculation?.qualificationStatus === 'not_required'
+        || calculation?.qualificationStatus === undefined
+        ? effectiveRate
+        : 0,
       earningRate: effectiveCard.earningRate ?? undefined,
       currentSpend,
       minimumSpend: spendingTarget,
@@ -430,6 +474,7 @@ export class RealTimeRecommendations {
       headroom,
       score,
       recommendation,
+      qualificationStatus: calculation?.qualificationStatus,
       reasons,
       subcategoryProgress: subcategoryProgress.length > 0 ? subcategoryProgress : undefined,
     };

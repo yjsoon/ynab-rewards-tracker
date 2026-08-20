@@ -7,7 +7,7 @@ import { RewardsCalculator } from './calculator';
 import { SimpleRewardsCalculator } from './simple-calculator';
 import { TransactionMatcher } from './matcher';
 import { formatLocalDate, parseYnabDate } from './date-utils';
-import { periodOverlapsWindow } from './utils/periods';
+import { isRewardPeriodActive, periodOverlapsWindow } from './utils/periods';
 import { createRewardCalculationFromSimple } from './utils/reward-calculation';
 import type {
   AppSettings,
@@ -45,7 +45,6 @@ export async function computeCurrentPeriod(
   const txnsByAccount = new Map<string, TransactionWithRewards[]>();
 
   for (const txn of allTxns) {
-    if (txn.amount >= 0) continue;
     const bucket = txnsByAccount.get(txn.account_id);
     if (bucket) {
       bucket.push(txn);
@@ -71,7 +70,14 @@ export async function computeCurrentPeriod(
     const period = periods[i];
 
     const forCard = txnsByAccount.get(card.ynabAccountId) ?? [];
-    const inRange = TransactionMatcher.filterByDateRange(forCard, period.startDate, period.endDate);
+    // Legacy rule calculations historically ignore credits. Keep that contract;
+    // the simple reward-period calculator receives both signs so monthly
+    // qualification can net refunds against purchases.
+    const inRange = TransactionMatcher.filterByDateRange(
+      forCard.filter((transaction) => transaction.amount < 0),
+      period.startDate,
+      period.endDate,
+    );
     const simplePeriod = {
       start: formatLocalDate(period.startDate),
       end: formatLocalDate(period.endDate),
@@ -81,7 +87,11 @@ export async function computeCurrentPeriod(
     // Spend-based levels are a card-wide replacement for the legacy rule
     // path. Existing cards without levels keep their legacy rules unchanged,
     // while adding a level makes the card's current earning fields the base.
-    if (card.rewardPeriod || card.subcategoriesEnabled || card.spendingTiers?.length) {
+    if (
+      isRewardPeriodActive(card, new Date()) ||
+      card.subcategoriesEnabled ||
+      card.spendingTiers?.length
+    ) {
       const simpleCalc = SimpleRewardsCalculator.calculateCardRewards(card, forCard, simplePeriod, settings);
       results.push(createRewardCalculationFromSimple(card, simpleCalc));
       continue;

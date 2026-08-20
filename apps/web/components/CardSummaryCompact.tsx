@@ -10,6 +10,7 @@ import {
   NEAR_CAP_RATIO,
   cardUsesBlockRounding,
   filterTransactionsForCardPeriod,
+  getActiveMonthlyQualification,
 } from "@/lib/card-metrics";
 import { useSelectedBudget, useSettings } from "@/hooks/useLocalStorage";
 import { hasMinimumSpendRequirement } from "@/lib/minimum-spend-helpers";
@@ -56,7 +57,7 @@ export function CardSummaryCompactContent({
   allowHideCard = true,
   transactionsHref,
 }: CardSummaryCompactContentProps) {
-  const { calculation, daysRemaining, period } = metrics;
+  const { calculation, calculationPeriod, daysRemaining, period } = metrics;
   const {
     totalSpend,
     countedSpend,
@@ -71,8 +72,13 @@ export function CardSummaryCompactContent({
     subcategoryBreakdowns = [],
   } = calculation;
   const currency = settings?.currency;
-  const activeQualificationMonth = monthlyQualifications.find((month) => month.status === "pending")
-    ?? monthlyQualifications[monthlyQualifications.length - 1];
+  const calculationAsOf = calculationPeriod.asOf ?? calculationPeriod.end;
+  const activeQualificationMonth = getActiveMonthlyQualification(
+    monthlyQualifications,
+    calculationAsOf,
+  )
+    ?? monthlyQualifications.find((month) => month.status === "pending");
+  const hasMonthlyMinimum = (monthlyMinimumSpend ?? 0) > 0;
   const hasBlockRounding = cardUsesBlockRounding(card);
   const displayedSpend = hasBlockRounding ? countedSpend : totalSpend;
   const hasMinimum = hasMinimumSpendRequirement(minimumSpend);
@@ -297,7 +303,7 @@ export function CardSummaryCompactContent({
         <span className={cn("shrink-0 font-medium", daysSeverityClass)}>{daysRemaining}d</span>
       </div>
 
-      {card.rewardPeriod && activeQualificationMonth && (
+      {card.rewardPeriod && hasMonthlyMinimum && activeQualificationMonth && (
         <div className={cn(
           "text-[11px] font-medium",
           qualificationStatus === "failed"
@@ -346,7 +352,8 @@ export function CardSummaryCompactContent({
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
-              onHideCard(card.id, period.end);
+              const [year, month, day] = period.end.split('-').map(Number);
+              onHideCard(card.id, formatDateValue(new Date(year, month - 1, day + 1)));
             }}
           >
             Hide until next cycle

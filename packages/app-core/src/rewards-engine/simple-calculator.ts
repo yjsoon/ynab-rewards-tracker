@@ -19,6 +19,7 @@ import { UNFLAGGED_FLAG, type YnabFlagColor } from '../ynab/constants';
 import {
   calculateCardPeriod,
   getRewardPeriodMonths,
+  isRewardPeriodActive,
   toSimplePeriod,
 } from './utils/periods';
 import {
@@ -143,12 +144,20 @@ function calculateMonthlyQualification(
   breakdowns?: MonthlyQualificationBreakdown[];
   progress?: number;
 } {
-  if (!card.rewardPeriod) {
+  const today = dateValue(new Date());
+  const qualificationDateValue = period.asOf
+    ?? (period.end < today ? period.end : today);
+  const qualificationDate = parseDateValue(qualificationDateValue);
+  if (
+    !card.rewardPeriod ||
+    card.rewardPeriod.monthlyMinimumSpend <= 0 ||
+    !isRewardPeriodActive(card, qualificationDate)
+  ) {
     return { status: 'not_required' };
   }
 
-  const today = dateValue(new Date());
-  const asOf = period.asOf ?? (period.end < today ? period.end : today);
+  const requestedAsOf = period.asOf ?? (period.end < today ? period.end : today);
+  const asOf = requestedAsOf < today ? requestedAsOf : today;
   const cardPeriod = {
     startDate: parseDateValue(period.start),
     endDate: parseDateValue(period.end),
@@ -158,14 +167,14 @@ function calculateMonthlyQualification(
   const breakdowns = getRewardPeriodMonths(card, cardPeriod).map((month) => {
     const start = dateValue(month.startDate);
     const end = dateValue(month.endDate);
-    const spend = Math.abs(transactions.reduce((sum, transaction) => (
-      transaction.amount < 0
-      && transaction.date >= start
+    const netMilliunits = transactions.reduce((sum, transaction) => (
+      transaction.date >= start
       && transaction.date <= end
       && transaction.date <= asOf
         ? sum + transaction.amount
         : sum
-    ), 0)) / 1000;
+    ), 0);
+    const spend = Math.max(0, -netMilliunits / 1000);
     const monthComplete = end < asOf || (end === asOf && asOf < today);
     const status = spend >= minimumSpend
       ? 'met'
@@ -300,10 +309,20 @@ export class SimpleRewardsCalculator {
     const milesValuation = settings?.milesValuation ?? 0.01;
     const configuredContext = createSubcategoryContext(card);
 
-    const periodTransactions = transactions
+    const requestedCutoff = period.asOf && period.asOf < period.end
+      ? period.asOf
+      : period.end;
+    const today = dateValue(new Date());
+    const transactionCutoff = period.asOf && requestedCutoff > today
+      ? today
+      : requestedCutoff;
+    const qualificationTransactions = transactions.filter((txn) => (
+      txn.date >= period.start && txn.date <= transactionCutoff
+    ));
+
+    const periodTransactions = qualificationTransactions
       .filter((txn) => {
-        const txnDate = txn.date;
-        return txnDate >= period.start && txnDate <= period.end && txn.amount < 0;
+        return txn.amount < 0;
       })
       .sort((left, right) => (
         left.date.localeCompare(right.date) || left.id.localeCompare(right.id)
@@ -311,7 +330,7 @@ export class SimpleRewardsCalculator {
 
     const monthlyQualification = calculateMonthlyQualification(
       card,
-      periodTransactions,
+      qualificationTransactions,
       period,
     );
     const qualificationMet = monthlyQualification.status === 'not_required'
@@ -366,9 +385,8 @@ export class SimpleRewardsCalculator {
     const minimumSpend = calculationCard.minimumSpend;
     const minimumSpendMet = qualificationMet && resolvedSpendingTier.minimumSpendMet &&
       isMinimumSpendMet(totalSpend, minimumSpend);
-    const minimumSpendProgress = card.rewardPeriod
-      ? monthlyQualification.progress
-      : calculateMinimumSpendProgress(totalSpend, minimumSpend);
+    const minimumSpendProgress = monthlyQualification.progress
+      ?? calculateMinimumSpendProgress(totalSpend, minimumSpend);
 
     const maximumSpend = calculationCard.maximumSpend;
 
@@ -637,7 +655,9 @@ export class SimpleRewardsCalculator {
       minimumSpend,
       minimumSpendMet,
       minimumSpendProgress,
-      monthlyMinimumSpend: card.rewardPeriod?.monthlyMinimumSpend,
+      monthlyMinimumSpend: monthlyQualification.status === 'not_required'
+        ? undefined
+        : card.rewardPeriod?.monthlyMinimumSpend,
       qualificationStatus: monthlyQualification.status,
       monthlyQualifications: monthlyQualification.breakdowns,
       maximumSpend,

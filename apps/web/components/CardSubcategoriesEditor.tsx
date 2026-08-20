@@ -277,6 +277,7 @@ const SubcategoryItem = memo(function SubcategoryItem({
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1">
               <Input
+                aria-label={`${flagDisplayName} reward rate`}
                 type="number"
                 value={localExcluded ? 0 : (localReward ?? 0)}
                 onChange={(e) => {
@@ -306,6 +307,7 @@ const SubcategoryItem = memo(function SubcategoryItem({
               <div className="relative">
                 <span className="absolute left-2 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
                 <Input
+                  aria-label={`${flagDisplayName} minimum spend`}
                   type="number"
                   value={localMin ?? ''}
                   onChange={(e) => {
@@ -328,6 +330,7 @@ const SubcategoryItem = memo(function SubcategoryItem({
               <div className="relative">
                 <span className="absolute left-2 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
                 <Input
+                  aria-label={`${flagDisplayName} period cap`}
                   type="number"
                   value={localMax ?? ''}
                   onChange={(e) => {
@@ -347,6 +350,7 @@ const SubcategoryItem = memo(function SubcategoryItem({
               <div className="flex items-center gap-1">
                 <span className="text-xs font-medium text-muted-foreground uppercase">Block</span>
                 <Input
+                  aria-label={`${flagDisplayName} miles block size`}
                   type="number"
                   value={localMilesBlock ?? ''}
                   onChange={(e) => {
@@ -508,6 +512,7 @@ const SubcategoryItem = memo(function SubcategoryItem({
               </span>
               <div className="flex items-center">
                 <Input
+                  aria-label={`${flagDisplayName} reward rate`}
                   type="number"
                   value={localExcluded ? 0 : (localReward ?? 0)}
                   onChange={(e) => {
@@ -538,6 +543,7 @@ const SubcategoryItem = memo(function SubcategoryItem({
               <div className="relative">
                 <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
                 <Input
+                  aria-label={`${flagDisplayName} minimum spend`}
                   type="number"
                   value={localMin ?? ''}
                   onChange={(e) => {
@@ -561,6 +567,7 @@ const SubcategoryItem = memo(function SubcategoryItem({
               <div className="relative">
                 <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
                 <Input
+                  aria-label={`${flagDisplayName} period cap`}
                   type="number"
                   value={localMax ?? ''}
                   onChange={(e) => {
@@ -582,6 +589,7 @@ const SubcategoryItem = memo(function SubcategoryItem({
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Block size</span>
               <Input
+                aria-label={`${flagDisplayName} miles block size`}
                 type="number"
                 value={localMilesBlock ?? ''}
                 onChange={(e) => {

@@ -110,6 +110,33 @@ describe('calculateCardPeriod', () => {
       { start: '2026-03-31', end: '2026-04-29', label: '2026-03-31 to 2026-04-29' },
     ]);
   });
+
+  it('keeps billing or promotion boundaries before the reward-period anchor', () => {
+    const card: CreditCard = {
+      ...baseCard,
+      billingCycle: { type: 'billing', dayOfMonth: 10 },
+      promotionalPeriod: {
+        startDate: '2026-01-05',
+        endDate: '2026-01-31',
+      },
+      rewardPeriod: {
+        monthCount: 3,
+        anchorDate: '2026-02-01',
+        monthlyMinimumSpend: 800,
+      },
+    };
+
+    expect(toSimplePeriod(calculateCardPeriod(card, new Date(2026, 0, 20)))).toEqual({
+      start: '2026-01-05',
+      end: '2026-01-31',
+      label: '2026-01-05 to 2026-01-31',
+    });
+    expect(toSimplePeriod(calculateCardPeriod(card, new Date(2026, 1, 1)))).toEqual({
+      start: '2026-02-01',
+      end: '2026-04-30',
+      label: '2026-02-01 to 2026-04-30',
+    });
+  });
 });
 
 describe('toSimplePeriod', () => {

@@ -208,7 +208,19 @@ export default function SpendingStatus({
   const currency = settings?.currency;
   const milesValuation = settings?.milesValuation ?? 0.01;
   const hasMaximum = typeof maximumSpend === 'number' && maximumSpend > 0;
-  const qualificationBlocked = Boolean(card.rewardPeriod && qualificationStatus !== 'met');
+  const hasMonthlyMinimum = Boolean(card.rewardPeriod && card.rewardPeriod.monthlyMinimumSpend > 0);
+  const qualificationBlocked = Boolean(hasMonthlyMinimum && qualificationStatus !== 'met');
+  const today = new Date();
+  const asOf = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const currentQualification = monthlyQualifications.find(
+    (month) => asOf >= month.start && asOf <= month.end
+  );
+  const conciseQualifications = monthlyQualifications.filter(
+    (month) => month === currentQualification || month.status === 'failed'
+  );
+  const historicalQualifications = monthlyQualifications.filter(
+    (month) => !conciseQualifications.includes(month)
+  );
   const hasBlockRounding = Boolean(
     (typeof card.earningBlockSize === 'number' && card.earningBlockSize > 0) ||
       (card.subcategoriesEnabled &&
@@ -351,7 +363,7 @@ export default function SpendingStatus({
             )}
           </div>
 
-          {card.rewardPeriod && (
+          {hasMonthlyMinimum && (
             <div className="rounded-lg border bg-muted/10 p-4">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <h3 className="text-sm font-semibold">Monthly qualification</h3>
@@ -374,9 +386,11 @@ export default function SpendingStatus({
                 At least <CurrencyAmount value={monthlyMinimumSpend ?? 0} currency={currency} /> across the whole card in each anchored month. Rewards stay locked while a month is pending.
               </p>
               <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                {monthlyQualifications.map((month, index) => (
+                {conciseQualifications.map((month) => (
                   <div key={month.start} className="rounded-md border border-border/50 bg-background/50 p-2 text-xs">
-                    <p className="font-medium">Month {index + 1}</p>
+                    <p className="font-medium">
+                      {month === currentQualification ? 'Current month' : 'Failed month'}
+                    </p>
                     <p className="text-muted-foreground">{month.start} – {month.end}</p>
                     <p className="mt-1">
                       <CurrencyAmount value={month.spend} currency={currency} /> · {month.status}
@@ -384,6 +398,21 @@ export default function SpendingStatus({
                   </div>
                 ))}
               </div>
+              {historicalQualifications.length > 0 && (
+                <details className="mt-3 text-xs">
+                  <summary className="cursor-pointer font-medium text-muted-foreground">
+                    Show full monthly history ({historicalQualifications.length})
+                  </summary>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                    {historicalQualifications.map((month) => (
+                      <div key={month.start} className="rounded-md border border-border/50 bg-background/50 p-2">
+                        <p className="text-muted-foreground">{month.start} – {month.end}</p>
+                        <p className="mt-1"><CurrencyAmount value={month.spend} currency={currency} /> · {month.status}</p>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
             </div>
           )}
 

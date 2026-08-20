@@ -60,7 +60,7 @@ export function CardSettingsDialog({
             </Link>
           </Button>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Close
+            {isChanged ? 'Cancel' : 'Close'}
           </Button>
         </DialogFooter>
       </DialogContent>

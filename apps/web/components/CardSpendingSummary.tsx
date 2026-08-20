@@ -7,7 +7,10 @@ import { SimpleRewardsCalculator } from '@/lib/rewards-engine';
 import { resolveCardSpendingTier } from '@ynab-counter/app-core/rewards-engine';
 import { YnabClient } from '@/lib/ynab-client';
 import { storage } from '@/lib/storage';
-import { filterTransactionsForCardPeriod } from '@/lib/card-metrics';
+import {
+  filterTransactionsForCardPeriod,
+  getActiveMonthlyQualification,
+} from '@/lib/card-metrics';
 import { useSelectedBudget, useSettings } from '@/hooks/useLocalStorage';
 import { cn } from '@/lib/utils';
 import { CurrencyAmount } from '@/components/CurrencyAmount';
@@ -45,7 +48,7 @@ export function CardSpendingSummaryContent({
   settings,
   allowHideCard = true,
 }: CardSpendingSummaryContentProps) {
-  const { calculation, daysRemaining, period } = metrics;
+  const { calculation, calculationPeriod, daysRemaining, period } = metrics;
   const {
     totalSpend,
     countedSpend,
@@ -74,9 +77,16 @@ export function CardSpendingSummaryContent({
   const currency = settings?.currency;
   const milesValuation = settings?.milesValuation ?? 0.01;
   const hasMinimum = hasMinimumSpendRequirement(minimumSpend);
-  const qualificationBlocked = Boolean(card.rewardPeriod && qualificationStatus !== 'met');
-  const activeQualificationMonth = monthlyQualifications.find((month) => month.status === 'pending')
-    ?? monthlyQualifications[monthlyQualifications.length - 1];
+  const qualificationBlocked = Boolean(
+    card.rewardPeriod && card.rewardPeriod.monthlyMinimumSpend > 0 && qualificationStatus !== 'met'
+  );
+  const calculationAsOf = calculationPeriod.asOf ?? calculationPeriod.end;
+  const activeQualificationMonth = getActiveMonthlyQualification(
+    monthlyQualifications,
+    calculationAsOf,
+  )
+    ?? monthlyQualifications.find((month) => month.status === 'pending');
+  const hasMonthlyMinimum = (monthlyMinimumSpend ?? 0) > 0;
   const hasMaximum = typeof maximumSpend === 'number' && maximumSpend > 0;
   const hasBlockRounding = Boolean(
     (typeof card.earningBlockSize === 'number' && card.earningBlockSize > 0) ||
@@ -160,7 +170,7 @@ export function CardSpendingSummaryContent({
         </div>
       </div>
 
-      {card.rewardPeriod && activeQualificationMonth && (
+      {card.rewardPeriod && hasMonthlyMinimum && activeQualificationMonth && (
         <div className={cn(
           'rounded-md border px-3 py-2 text-center text-xs font-medium',
           qualificationStatus === 'failed'
@@ -236,7 +246,8 @@ export function CardSpendingSummaryContent({
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
-                onHideCard(card.id, period.end);
+                const [year, month, day] = period.end.split('-').map(Number);
+                onHideCard(card.id, formatDateValue(new Date(year, month - 1, day + 1)));
               }}
             >
               Hide until next cycle

@@ -409,6 +409,7 @@ function applyPersistedCalculation(
   calculation: SimplifiedCalculation,
   persisted: RewardCalculation | undefined,
   settings: AppSettings,
+  asOf: string,
 ): SimplifiedCalculation {
   if (!persisted) {
     return calculation;
@@ -416,6 +417,38 @@ function applyPersistedCalculation(
   if (!isSpendingTierCalculationCompatible(card, persisted)) {
     return calculation;
   }
+  if (
+    card.rewardPeriod &&
+    card.rewardPeriod.monthlyMinimumSpend > 0 &&
+    (
+      persisted.qualificationStatus === undefined ||
+      !persisted.monthlyQualifications?.length
+    )
+  ) {
+    return calculation;
+  }
+
+  const today = formatLocalDate(new Date());
+  const persistedMonthlyQualifications = persisted.monthlyQualifications?.map((month) => ({
+    ...month,
+    status: month.spend >= month.minimumSpend
+      ? 'met' as const
+      : month.end < asOf || (month.end === asOf && asOf < today)
+        ? 'failed' as const
+        : 'pending' as const,
+  }));
+  const persistedQualificationStatus = persistedMonthlyQualifications?.some(
+    (month) => month.status === 'failed',
+  )
+    ? 'failed' as const
+    : persistedMonthlyQualifications?.every((month) => month.status === 'met')
+      ? 'met' as const
+      : persistedMonthlyQualifications?.length
+        ? 'pending' as const
+        : calculation.qualificationStatus;
+  const persistedActiveMonth = persistedMonthlyQualifications?.find(
+    (month) => month.start <= asOf && month.end >= asOf,
+  );
 
   const persistedSubcategories = new Map(
     persisted.subcategoryBreakdowns?.map((entry) => [entry.subcategoryId, entry] as const) ?? [],
@@ -451,11 +484,17 @@ function applyPersistedCalculation(
     minimumSpend: persisted.minimumSpend !== undefined
       ? persisted.minimumSpend
       : calculation.minimumSpend,
-    minimumSpendMet: persisted.minimumMet,
-    minimumSpendProgress: persisted.minimumProgress,
-    monthlyMinimumSpend: persisted.monthlyMinimumSpend,
-    qualificationStatus: persisted.qualificationStatus,
-    monthlyQualifications: persisted.monthlyQualifications,
+    minimumSpendMet: card.rewardPeriod && card.rewardPeriod.monthlyMinimumSpend > 0
+      ? persistedQualificationStatus === 'met' && persisted.minimumMet
+      : persisted.minimumMet,
+    minimumSpendProgress: persistedActiveMonth
+      ? Math.min(100, (persistedActiveMonth.spend / persistedActiveMonth.minimumSpend) * 100)
+      : persisted.minimumProgress,
+    // Keep persisted spend when it fills a truncated live cache, but derive
+    // statuses again for this view date so pending months cannot freeze.
+    monthlyMinimumSpend: persisted.monthlyMinimumSpend ?? calculation.monthlyMinimumSpend,
+    qualificationStatus: persistedQualificationStatus,
+    monthlyQualifications: persistedMonthlyQualifications ?? calculation.monthlyQualifications,
     maximumSpend: persisted.maximumSpend !== undefined
       ? persisted.maximumSpend
       : calculation.maximumSpend,
@@ -574,6 +613,7 @@ export function buildRewardsDashboard(
     const calculationPeriod: CalculationPeriod = {
       ...period,
       end: period.end < asOf ? period.end : asOf,
+      asOf,
     };
     const periodTransactions = (transactionsByAccount.get(card.ynabAccountId) ?? []).filter(
       (transaction) =>
@@ -586,30 +626,38 @@ export function buildRewardsDashboard(
       calculationPeriod,
       settings,
     );
-    const persistedCalculation = findPersistedCalculation(
-      card,
-      period,
-      persistedCalculations,
-    );
+    const persistedCalculation = (
+      calculationPeriod.end === period.end ||
+      asOf === formatLocalDate(new Date())
+    )
+      ? findPersistedCalculation(card, period, persistedCalculations)
+      : undefined;
     const calculation = applyPersistedCalculation(
       card,
       cachedCalculation,
       persistedCalculation,
       settings,
+      asOf,
     );
     const blockSizes = getBlockSizes(card);
     const usesBlocks = blockSizes.length > 0;
     const maximumProgressSpend = usesBlocks
       ? calculation.countedSpend
       : calculation.totalSpend;
-    const configuredMinimum = calculation.minimumSpend;
+    const activeMonthlyQualification = calculation.monthlyQualifications?.find(
+      (month) => month.start <= asOf && month.end >= asOf,
+    );
+    const configuredMinimum = activeMonthlyQualification?.minimumSpend
+      ?? calculation.minimumSpend;
     const configuredMaximum = calculation.maximumSpend;
     const hasMinimum = hasPositiveThreshold(configuredMinimum);
     const hasMaximum = hasPositiveThreshold(configuredMaximum);
     const minimumTarget = hasMinimum ? configuredMinimum : null;
     const maximumTarget = hasMaximum ? configuredMaximum : null;
+    const minimumProgressSpend = activeMonthlyQualification?.spend
+      ?? calculation.totalSpend;
     const minimumProgress = minimumTarget
-      ? Math.min(1, calculation.totalSpend / minimumTarget)
+      ? Math.min(1, minimumProgressSpend / minimumTarget)
       : null;
     const maximumProgress = maximumTarget
       ? calculation.maximumSpendExceeded
@@ -621,13 +669,19 @@ export function buildRewardsDashboard(
       card,
       calculation.totalSpend,
     ).hasNextSpendingTier;
-    const minimumMet = minimumTarget !== null ? calculation.minimumSpendMet : null;
+    const minimumMet = minimumTarget !== null
+      ? activeMonthlyQualification
+        ? activeMonthlyQualification.status === 'met'
+        : calculation.minimumSpendMet
+      : null;
     const eligibleSpendBeforeBlocks = calculation.eligibleSpendBeforeBlocks
       ?? calculation.eligibleSpend;
     const status = getStatus({
       configured: hasEarningConfiguration(card),
       hasMinimum,
-      minimumMet: minimumMet ?? true,
+      minimumMet: calculation.qualificationStatus === 'failed'
+        ? false
+        : minimumMet ?? true,
       hasMaximum,
       maximumReached: maximumReached && !canUnlockHigherSpendingLevel,
       maximumProgress: canUnlockHigherSpendingLevel ? null : maximumProgress,
@@ -656,7 +710,7 @@ export function buildRewardsDashboard(
         target: minimumTarget,
         remaining: minimumTarget === null
           ? null
-          : Math.max(0, minimumTarget - calculation.totalSpend),
+          : Math.max(0, minimumTarget - minimumProgressSpend),
         progress: minimumProgress,
         met: minimumMet,
       },
@@ -677,7 +731,7 @@ export function buildRewardsDashboard(
       progress: {
         minimumSpend: minimumTarget,
         maximumSpend: maximumTarget,
-        minimumProgressSpend: calculation.totalSpend,
+        minimumProgressSpend,
         maximumProgressSpend,
         minimumProgress,
         maximumProgress,
