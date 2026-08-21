@@ -6,7 +6,7 @@ import {
   SPENDING_TIER_CALCULATION_VERSION,
 } from './spending-tiers';
 
-export const REWARD_PERIOD_CALCULATION_VERSION = 2;
+export const REWARD_PERIOD_CALCULATION_VERSION = 3;
 
 /**
  * Recomputes the dollar-denominated fields that depend only on the user's

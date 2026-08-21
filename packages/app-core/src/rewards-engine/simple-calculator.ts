@@ -135,6 +135,32 @@ function parseDateValue(value: string): Date {
   return new Date(year, month - 1, day);
 }
 
+function isSpendRefund(transaction: Transaction): boolean {
+  if (transaction.amount <= 0) {
+    return false;
+  }
+
+  // Payments and account-to-account reimbursements are transfers, not
+  // reductions in purchase spend. The payee fallback covers older cached
+  // transactions saved before transfer metadata was retained.
+  if (
+    transaction.transfer_account_id ||
+    /^transfer\s*:/i.test(transaction.payee_name?.trim() ?? '')
+  ) {
+    return false;
+  }
+
+  // A merchant refund is normally credited back to its spending category.
+  // Ready-to-Assign inflows, card rebates and uncategorised credits are not
+  // purchase reversals and therefore must not reduce qualifying spend.
+  const category = transaction.category_name?.trim();
+  return Boolean(
+    category &&
+    category.toLowerCase() !== 'uncategorized' &&
+    !category.toLowerCase().startsWith('inflow:'),
+  );
+}
+
 function calculateMonthlyQualification(
   card: CreditCard,
   transactions: Transaction[],
@@ -167,13 +193,17 @@ function calculateMonthlyQualification(
   const breakdowns = getRewardPeriodMonths(card, cardPeriod).map((month) => {
     const start = dateValue(month.startDate);
     const end = dateValue(month.endDate);
-    const netMilliunits = transactions.reduce((sum, transaction) => (
-      transaction.date >= start
-      && transaction.date <= end
-      && transaction.date <= asOf
-        ? sum + transaction.amount
-        : sum
-    ), 0);
+    const netMilliunits = transactions.reduce((sum, transaction) => {
+      if (
+        transaction.date < start ||
+        transaction.date > end ||
+        transaction.date > asOf ||
+        (transaction.amount >= 0 && !isSpendRefund(transaction))
+      ) {
+        return sum;
+      }
+      return sum + transaction.amount;
+    }, 0);
     const spend = Math.max(0, -netMilliunits / 1000);
     const monthComplete = end < asOf || (end === asOf && asOf < today);
     const status = spend >= minimumSpend

@@ -51,6 +51,8 @@ export function sanitizeTransactionForCache(
     date: txn.date,
     amount: txn.amount,
     account_id: txn.account_id,
+    transfer_account_id: txn.transfer_account_id ?? null,
+    transfer_transaction_id: txn.transfer_transaction_id ?? null,
     payee_name: txn.payee_name ?? null,
     category_name: txn.category_name ?? null,
     flag_color: txn.flag_color ?? null,

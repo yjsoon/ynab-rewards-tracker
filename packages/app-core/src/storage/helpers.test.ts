@@ -6,6 +6,7 @@ import {
   invalidateDerivedDataAfterSettingsImport,
   mergeRewardCalculations,
   normalizePeriod,
+  sanitizeTransactionForCache,
 } from './helpers';
 import { createDefaultStorage } from './normalisers';
 
@@ -37,6 +38,23 @@ describe('calculation period persistence', () => {
     for (const range of ranges) {
       expect(normalizePeriod(formatCalculationPeriod(range))).toEqual(range);
     }
+  });
+});
+
+describe('transaction cache persistence', () => {
+  it('retains transfer metadata needed to distinguish card payments from refunds', () => {
+    expect(sanitizeTransactionForCache({
+      id: 'payment-1',
+      date: '2026-07-16',
+      amount: 1_080_060,
+      account_id: 'card-account',
+      transfer_account_id: 'checking-account',
+      transfer_transaction_id: 'checking-transaction',
+      payee_name: 'Transfer : Checking',
+    })).toMatchObject({
+      transfer_account_id: 'checking-account',
+      transfer_transaction_id: 'checking-transaction',
+    });
   });
 });
 

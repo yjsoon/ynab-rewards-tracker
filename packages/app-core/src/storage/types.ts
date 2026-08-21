@@ -9,6 +9,8 @@ export interface Transaction {
   date: string;
   amount: number;
   account_id: string;
+  transfer_account_id?: string | null;
+  transfer_transaction_id?: string | null;
   payee_name?: string | null;
   category_name?: string | null;
   memo?: string | null;
@@ -45,6 +47,8 @@ export type CachedTransaction = Pick<
   | "date"
   | "amount"
   | "account_id"
+  | "transfer_account_id"
+  | "transfer_transaction_id"
   | "payee_name"
   | "category_name"
   | "flag_color"

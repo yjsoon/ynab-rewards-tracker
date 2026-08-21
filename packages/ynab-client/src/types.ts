@@ -61,6 +61,8 @@ export interface YnabTransactionSummary {
   amount: number;
   account_id: string;
   account_name?: string;
+  transfer_account_id?: string | null;
+  transfer_transaction_id?: string | null;
   payee_id?: string | null;
   payee_name?: string | null;
   category_id?: string | null;

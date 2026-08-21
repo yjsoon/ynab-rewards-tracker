@@ -192,7 +192,11 @@ describe('SimpleRewardsCalculator.calculateCardRewards', () => {
     };
     const calculation = SimpleRewardsCalculator.calculateCardRewards(card, [
       { ...createTransaction('purchase', -900_000), date: '2026-01-10' },
-      { ...createTransaction('refund', 200_000), date: '2026-01-20' },
+      {
+        ...createTransaction('refund', 200_000),
+        date: '2026-01-20',
+        category_name: 'Dining Out',
+      },
     ], {
       start: '2026-01-01',
       end: '2026-03-31',
@@ -207,6 +211,44 @@ describe('SimpleRewardsCalculator.calculateCardRewards', () => {
     expect(calculation.qualificationStatus).toBe('failed');
     expect(calculation.totalSpend).toBe(900);
     expect(calculation.transactionRewards.refund).toBeUndefined();
+  });
+
+  it('excludes card payments and rebates from monthly qualification credits', () => {
+    const card: CreditCard = {
+      ...createMilesCardWithSubcategories(),
+      rewardPeriod: {
+        monthCount: 3,
+        anchorDate: '2026-07-01',
+        monthlyMinimumSpend: 500,
+      },
+    };
+    const calculation = SimpleRewardsCalculator.calculateCardRewards(card, [
+      { ...createTransaction('purchases', -505_590), date: '2026-07-20' },
+      {
+        ...createTransaction('payment', 1_104_820),
+        date: '2026-07-21',
+        transfer_account_id: 'checking-account',
+        payee_name: 'Transfer : Checking',
+        category_name: 'Uncategorized',
+      },
+      {
+        ...createTransaction('rebate', 30_860),
+        date: '2026-07-22',
+        payee_name: 'Card Rebate',
+        category_name: 'Inflow: Ready to Assign',
+      },
+    ], {
+      start: '2026-07-01',
+      end: '2026-09-30',
+      label: '2026-07-01 to 2026-09-30',
+      asOf: '2026-08-01',
+    });
+
+    expect(calculation.monthlyQualifications?.[0]).toMatchObject({
+      spend: 505.59,
+      status: 'met',
+    });
+    expect(calculation.qualificationStatus).toBe('pending');
   });
 
   it('bounds reward and pooled-cap allocation at asOf', () => {

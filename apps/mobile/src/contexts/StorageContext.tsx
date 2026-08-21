@@ -201,6 +201,8 @@ function toCachedTransaction(transaction: YnabTransactionSummary): Transaction {
     date: transaction.date,
     amount: transaction.amount,
     account_id: transaction.account_id,
+    transfer_account_id: transaction.transfer_account_id ?? null,
+    transfer_transaction_id: transaction.transfer_transaction_id ?? null,
     payee_name: transaction.payee_name ?? null,
     category_name: transaction.category_name ?? null,
     memo: transaction.memo ?? null,
