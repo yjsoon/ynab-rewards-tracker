@@ -213,12 +213,6 @@ export default function SpendingStatus({
   const currentQualification = monthlyQualifications.find(
     (month) => asOf >= month.start && asOf <= month.end
   );
-  const conciseQualifications = monthlyQualifications.filter(
-    (month) => month === currentQualification || month.status === 'failed'
-  );
-  const historicalQualifications = monthlyQualifications.filter(
-    (month) => !conciseQualifications.includes(month)
-  );
   const hasBlockRounding = Boolean(
     (typeof card.earningBlockSize === 'number' && card.earningBlockSize > 0) ||
       (card.subcategoriesEnabled &&
@@ -371,10 +365,10 @@ export default function SpendingStatus({
                     ? 'text-red-600 dark:text-red-300'
                     : qualificationStatus === 'met'
                       ? 'text-emerald-600 dark:text-emerald-300'
-                      : 'text-amber-600 dark:text-amber-300',
+                      : 'text-muted-foreground',
                 )}>
                   {qualificationStatus === 'failed'
-                    ? 'Failed'
+                    ? 'Unmet'
                     : qualificationStatus === 'met'
                       ? 'Qualified'
                       : 'Pending'}
@@ -384,33 +378,53 @@ export default function SpendingStatus({
                 At least <CurrencyAmount value={monthlyMinimumSpend ?? 0} currency={currency} /> across the whole card in each anchored month. Future months do not block rewards; a started month must meet its target.
               </p>
               <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                {conciseQualifications.map((month) => (
-                  <div key={month.start} className="rounded-md border border-border/50 bg-background/50 p-2 text-xs">
-                    <p className="font-medium">
-                      {month === currentQualification ? 'Current month' : 'Failed month'}
-                    </p>
-                    <p className="text-muted-foreground">{month.start} – {month.end}</p>
-                    <p className="mt-1">
-                      <CurrencyAmount value={month.spend} currency={currency} /> · {month.status}
-                    </p>
-                  </div>
-                ))}
-              </div>
-              {historicalQualifications.length > 0 && (
-                <details className="mt-3 text-xs">
-                  <summary className="cursor-pointer font-medium text-muted-foreground">
-                    Show full monthly history ({historicalQualifications.length})
-                  </summary>
-                  <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                    {historicalQualifications.map((month) => (
-                      <div key={month.start} className="rounded-md border border-border/50 bg-background/50 p-2">
-                        <p className="text-muted-foreground">{month.start} – {month.end}</p>
-                        <p className="mt-1"><CurrencyAmount value={month.spend} currency={currency} /> · {month.status}</p>
+                {monthlyQualifications.map((month) => {
+                  const isCurrent = month === currentQualification;
+                  const statusLabel = month.status === 'failed' ? 'unmet' : month.status;
+
+                  return (
+                    <div
+                      key={month.start}
+                      className={cn(
+                        'rounded-md border bg-background/50 p-3 text-xs',
+                        isCurrent
+                          ? 'border-foreground/25 shadow-sm ring-2 ring-foreground/10'
+                          : 'border-border/50',
+                      )}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-semibold">
+                          {new Date(`${month.start}T12:00:00`).toLocaleDateString(undefined, {
+                            month: 'long',
+                            year: 'numeric',
+                          })}
+                        </p>
+                        {isCurrent && (
+                          <span className="rounded-full bg-foreground/10 px-2 py-0.5 text-[11px] font-medium text-foreground">
+                            Current
+                          </span>
+                        )}
                       </div>
-                    ))}
-                  </div>
-                </details>
-              )}
+                      <p className="mt-1 text-muted-foreground">{month.start} – {month.end}</p>
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <span className="font-medium">
+                          <CurrencyAmount value={month.spend} currency={currency} />
+                        </span>
+                        <span className={cn(
+                          'rounded-full px-2 py-0.5 font-medium',
+                          month.status === 'met'
+                            ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                            : month.status === 'failed'
+                              ? 'bg-red-500/10 text-red-700 dark:text-red-300'
+                              : 'bg-muted text-muted-foreground',
+                        )}>
+                          {statusLabel}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 
