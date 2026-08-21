@@ -79,6 +79,12 @@ export function CardSummaryCompactContent({
   )
     ?? monthlyQualifications.find((month) => month.status === "pending");
   const hasMonthlyMinimum = (monthlyMinimumSpend ?? 0) > 0;
+  const allMonthlyMinimumsMet = Boolean(
+    card.rewardPeriod &&
+    monthlyQualifications.length === card.rewardPeriod.monthCount &&
+    monthlyQualifications.every((month) => month.status === "met"),
+  );
+  const [showRewardPeriodSpend, setShowRewardPeriodSpend] = useState(false);
   const hasBlockRounding = cardUsesBlockRounding(card);
   const displayedSpend = hasBlockRounding ? countedSpend : totalSpend;
   const hasMinimum = hasMinimumSpendRequirement(minimumSpend);
@@ -122,6 +128,13 @@ export function CardSummaryCompactContent({
         : hasMaximum
           ? "cap-left"
           : "spent";
+  const canToggleSpendView = Boolean(
+    heroVariant === "spent" && card.rewardPeriod && activeQualificationMonth,
+  );
+  const showingCurrentMonthSpend = canToggleSpendView && !showRewardPeriodSpend;
+  const heroSpend = showingCurrentMonthSpend
+    ? activeQualificationMonth!.spend
+    : displayedSpend;
 
   // The hero lockup pairs the amount with a directional glyph and a qualifier word so
   // its meaning is legible without reading the label: a goal to spend into (rising
@@ -161,7 +174,7 @@ export function CardSummaryCompactContent({
         ? `${exceededAmount.toFixed(2)} over the cap`
         : heroVariant === "min-left"
           ? `${remainingToMinimum.toFixed(2)} more to meet the minimum`
-          : `Spent ${displayedSpend.toFixed(2)} this period`;
+          : `Spent ${heroSpend.toFixed(2)} ${showingCurrentMonthSpend ? "this month" : "this period"}`;
   const displayedSubcategoryBreakdowns = hasBlockRounding
     ? subcategoryBreakdowns.map((entry) => ({ ...entry, totalSpend: entry.countedSpend }))
     : subcategoryBreakdowns;
@@ -203,7 +216,24 @@ export function CardSummaryCompactContent({
               <CurrencyAmount value={minimumTarget} currency={currency} decimals={0} /> min
             </>
           )}
-          {heroVariant === "spent" && "This period"}
+          {heroVariant === "spent" && canToggleSpendView ? (
+            <button
+              type="button"
+              className="rounded-sm underline decoration-dotted underline-offset-4 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              aria-label={showingCurrentMonthSpend
+                ? "Showing this month spend. Show full reward period spend"
+                : "Showing full reward period spend. Show this month spend"}
+              aria-pressed={showRewardPeriodSpend}
+              title={showingCurrentMonthSpend ? "Show full reward period spend" : "Show this month spend"}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                setShowRewardPeriodSpend((current) => !current);
+              }}
+            >
+              {showingCurrentMonthSpend ? "This month" : "This period"}
+            </button>
+          ) : heroVariant === "spent" ? "This period" : null}
         </span>
         <span
           className={cn("flex shrink-0 items-baseline gap-1", heroTone)}
@@ -240,7 +270,7 @@ export function CardSummaryCompactContent({
               <CurrencyAmount value={remainingToMinimum} currency={currency} decimals={0} />
             )}
             {heroVariant === "spent" && (
-              <CurrencyAmount value={displayedSpend} currency={currency} />
+              <CurrencyAmount value={heroSpend} currency={currency} />
             )}
           </span>
           <span
@@ -315,7 +345,12 @@ export function CardSummaryCompactContent({
           {qualificationStatus === "failed"
             ? "Period qualification failed"
             : qualificationStatus === "met"
-              ? `All ${card.rewardPeriod.monthCount} monthly minimums met`
+              ? allMonthlyMinimumsMet
+                ? `All ${card.rewardPeriod.monthCount} monthly minimums met`
+                : <>
+                    This month: <CurrencyAmount value={activeQualificationMonth.spend} currency={currency} decimals={0} /> of{' '}
+                    <CurrencyAmount value={monthlyMinimumSpend ?? 0} currency={currency} decimals={0} /> · met
+                  </>
               : <>
                   This month: <CurrencyAmount value={activeQualificationMonth.spend} currency={currency} decimals={0} /> of{' '}
                   <CurrencyAmount value={monthlyMinimumSpend ?? 0} currency={currency} decimals={0} />

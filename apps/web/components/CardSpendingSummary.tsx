@@ -87,6 +87,11 @@ export function CardSpendingSummaryContent({
   )
     ?? monthlyQualifications.find((month) => month.status === 'pending');
   const hasMonthlyMinimum = (monthlyMinimumSpend ?? 0) > 0;
+  const allMonthlyMinimumsMet = Boolean(
+    card.rewardPeriod &&
+    monthlyQualifications.length === card.rewardPeriod.monthCount &&
+    monthlyQualifications.every((month) => month.status === 'met'),
+  );
   const hasMaximum = typeof maximumSpend === 'number' && maximumSpend > 0;
   const hasBlockRounding = Boolean(
     (typeof card.earningBlockSize === 'number' && card.earningBlockSize > 0) ||
@@ -182,7 +187,12 @@ export function CardSpendingSummaryContent({
           {qualificationStatus === 'failed'
             ? 'A completed month missed its card-wide minimum'
             : qualificationStatus === 'met'
-              ? `All ${card.rewardPeriod.monthCount} monthly minimums met`
+              ? allMonthlyMinimumsMet
+                ? `All ${card.rewardPeriod.monthCount} monthly minimums met`
+                : <>
+                    Current anchored month: <CurrencyAmount value={activeQualificationMonth.spend} currency={currency} /> of{' '}
+                    <CurrencyAmount value={monthlyMinimumSpend ?? 0} currency={currency} /> · met
+                  </>
               : <>
                   Current anchored month: <CurrencyAmount value={activeQualificationMonth.spend} currency={currency} /> of{' '}
                   <CurrencyAmount value={monthlyMinimumSpend ?? 0} currency={currency} />
