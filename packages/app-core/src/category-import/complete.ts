@@ -68,6 +68,23 @@ export async function completeCategoryImportChat(input: {
   }
 }
 
+const GENERIC_PROVIDER_FAILURE = 'The model request failed. Check the API key and try again.';
+
+export function categoryImportProviderFailureMessage(error: unknown): string {
+  if (!(error instanceof Error) || !error.message) {
+    return GENERIC_PROVIDER_FAILURE;
+  }
+  if (
+    error.message.endsWith(' API key was rejected.')
+    || error.message.endsWith(' returned an empty response.')
+    || error.message.endsWith(' request timed out.')
+    || / request failed \(\d+\)\.$/.test(error.message)
+  ) {
+    return error.message;
+  }
+  return GENERIC_PROVIDER_FAILURE;
+}
+
 function extractText(content: unknown): string | null {
   if (typeof content === 'string' && content.trim()) {
     return content;

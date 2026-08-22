@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { completeCategoryImportChat } from './complete';
+import { categoryImportProviderFailureMessage, completeCategoryImportChat } from './complete';
 
 describe('completeCategoryImportChat', () => {
   it('posts to the OpenCode chat-completions URL', async () => {
@@ -32,5 +32,14 @@ describe('completeCategoryImportChat', () => {
       user: 'user',
       fetchImpl,
     })).rejects.toThrow('OpenAI API key was rejected.');
+  });
+});
+
+describe('categoryImportProviderFailureMessage', () => {
+  it('keeps known provider wording and hides unknown errors', () => {
+    expect(categoryImportProviderFailureMessage(new Error('OpenAI API key was rejected.')))
+      .toBe('OpenAI API key was rejected.');
+    expect(categoryImportProviderFailureMessage(new Error('ECONNRESET')))
+      .toBe('The model request failed. Check the API key and try again.');
   });
 });

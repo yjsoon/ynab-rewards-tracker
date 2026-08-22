@@ -14,9 +14,9 @@ import {
   getCategoryImportProvider,
   mergeCategoryImportCredentials,
   type CardCategoryPatch,
+  type ExistingCategoryImportSubcategory,
 } from '@ynab-counter/app-core/category-import';
 import type {
-  CardSubcategory,
   CategoryImportProvider,
   CreditCard,
   StatementFormatterSettings,
@@ -33,7 +33,7 @@ interface CategoryImportComposerProps {
   card: CreditCard;
   cardType: CreditCard['type'];
   earningRate?: number | null;
-  existingSubcategories: Array<Pick<CardSubcategory, 'name' | 'flagColor'>>;
+  existingSubcategories: ExistingCategoryImportSubcategory[];
   formatterSettings?: StatementFormatterSettings;
   onPersistSettings: (settings: StatementFormatterSettings) => void;
   onApply: (patch: CardCategoryPatch) => void;
@@ -55,11 +55,12 @@ export function CategoryImportComposer({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notes, setNotes] = useState<string[]>([]);
+  const [keyDraft, setKeyDraft] = useState<string | null>(null);
 
   const provider: CategoryImportProvider = formatterSettings?.categoryImportProvider ?? 'openai';
   const providerInfo = getCategoryImportProvider(provider);
   const model = formatterSettings?.modelByProvider?.[provider] || defaultModelFor(provider);
-  const apiKey = formatterSettings?.apiKeys?.[provider] || '';
+  const apiKey = keyDraft ?? formatterSettings?.apiKeys?.[provider] ?? '';
   const modelOptions = useMemo(() => {
     if (providerInfo.models.some((option) => option.value === model)) {
       return [...providerInfo.models];
@@ -128,7 +129,10 @@ export function CategoryImportComposer({
                 return (
                   <Pressable
                     key={option.id}
-                    onPress={() => persist({ provider: option.id })}
+                    onPress={() => {
+                      setKeyDraft(null);
+                      persist({ provider: option.id });
+                    }}
                     accessibilityRole="radio"
                     accessibilityLabel={option.label}
                     accessibilityState={{ checked: selected }}
@@ -179,7 +183,10 @@ export function CategoryImportComposer({
             <Headline>API key</Headline>
             <TextInput
               value={apiKey}
-              onChangeText={(value) => persist({ provider, apiKey: value })}
+              onChangeText={(value) => {
+                setKeyDraft(value);
+                persist({ provider, apiKey: value });
+              }}
               placeholder={providerInfo.placeholder}
               placeholderTextColor={semanticColors.tertiaryLabel}
               autoCapitalize="none"

@@ -6,6 +6,7 @@ import {
   getCategoryImportProvider,
   parseCategoryImportSource,
   proposeCardCategories,
+  type ExistingCategoryImportSubcategory,
 } from '@ynab-counter/app-core/category-import';
 import type { CategoryImportProvider, CreditCard } from '@ynab-counter/app-core/storage/types';
 import { UNFLAGGED_FLAG, YNAB_FLAG_COLORS, type YnabFlagColor } from '@ynab-counter/app-core/ynab/constants';
@@ -28,7 +29,12 @@ interface CategoryImportBody {
   instructions?: string;
   termsUrl?: string;
   earningRate?: number | null;
-  existingSubcategories?: Array<{ name?: string; flagColor?: string }>;
+  existingSubcategories?: Array<{
+    name?: string;
+    flagColor?: string;
+    id?: string;
+    createdAt?: string;
+  }>;
 }
 
 export async function POST(request: Request) {
@@ -101,7 +107,7 @@ function isCardType(value: unknown): value is CreditCard['type'] {
 
 function parseExisting(
   value: CategoryImportBody['existingSubcategories'],
-): Array<{ name: string; flagColor: YnabFlagColor }> | undefined {
+): ExistingCategoryImportSubcategory[] | undefined {
   if (!Array.isArray(value)) {
     return undefined;
   }
@@ -109,12 +115,20 @@ function parseExisting(
     if (
       !entry
       || typeof entry.name !== 'string'
+      || !entry.name.trim()
       || typeof entry.flagColor !== 'string'
       || !FLAG_VALUES.has(entry.flagColor)
     ) {
       return [];
     }
-    return [{ name: entry.name, flagColor: entry.flagColor as YnabFlagColor }];
+    const id = typeof entry.id === 'string' ? entry.id.trim() : '';
+    const createdAt = typeof entry.createdAt === 'string' ? entry.createdAt.trim() : '';
+    return [{
+      name: entry.name.trim(),
+      flagColor: entry.flagColor as YnabFlagColor,
+      ...(id ? { id } : {}),
+      ...(createdAt ? { createdAt } : {}),
+    }];
   });
   return rows.length > 0 ? rows : undefined;
 }

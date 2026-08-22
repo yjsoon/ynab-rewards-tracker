@@ -1,5 +1,8 @@
-import type { CategoryImportProposal } from '@ynab-counter/app-core/category-import';
-import type { CardSubcategory, CategoryImportProvider, CreditCard } from '@ynab-counter/app-core/storage/types';
+import type {
+  CategoryImportProposal,
+  ExistingCategoryImportSubcategory,
+} from '@ynab-counter/app-core/category-import';
+import type { CategoryImportProvider, CreditCard } from '@ynab-counter/app-core/storage/types';
 
 export async function requestCategoryImport(input: {
   provider: CategoryImportProvider;
@@ -9,7 +12,7 @@ export async function requestCategoryImport(input: {
   instructions: string;
   termsUrl: string;
   earningRate?: number | null;
-  existingSubcategories?: Array<Pick<CardSubcategory, 'name' | 'flagColor'>>;
+  existingSubcategories?: ExistingCategoryImportSubcategory[];
 }): Promise<CategoryImportProposal> {
   const response = await fetch('/api/category-import', {
     method: 'POST',

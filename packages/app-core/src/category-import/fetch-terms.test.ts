@@ -24,6 +24,19 @@ describe('fetchCategoryImportTerms', () => {
     })).rejects.toThrow('Could not read those terms. Paste the text instead.');
   });
 
+  it('does not follow a redirect onto a private host', async () => {
+    const fetchImpl = vi.fn(async () => new Response(null, {
+      status: 302,
+      headers: { location: 'http://127.0.0.1/secret' },
+    })) as typeof fetch;
+
+    await expect(fetchCategoryImportTerms({
+      url: 'https://bank.example/terms',
+      fetchImpl,
+    })).rejects.toThrow('That link is not a public web address.');
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
   it('returns HTML for a public page', async () => {
     const fetchImpl = vi.fn(async () => new Response('<p>4% dining</p>', {
       status: 200,

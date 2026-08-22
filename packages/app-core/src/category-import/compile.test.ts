@@ -50,6 +50,63 @@ describe('compileCategoryImport', () => {
     expect(proposal.subcategories[0]).toMatchObject({ name: 'Dining', flagColor: 'green' });
   });
 
+  it('keeps an existing subcategory id so spend-tier refs survive', () => {
+    const proposal = compileCategoryImport({
+      parsed: {
+        cardLimits: null,
+        buckets: [bucket('Dining')],
+        spendingTiers: null,
+        notes: [],
+      },
+      cardType: 'cashback',
+      existingSubcategories: [{
+        id: 'sub-dining',
+        name: 'dining',
+        flagColor: 'blue',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      }],
+    });
+
+    expect(proposal.subcategories[0]).toMatchObject({
+      id: 'sub-dining',
+      flagColor: 'blue',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+  });
+
+  it('puts merchant inclusion into notes', () => {
+    const proposal = compileCategoryImport({
+      parsed: {
+        cardLimits: null,
+        buckets: [{ ...bucket('Dining'), inclusion: 'restaurants and cafes' }],
+        spendingTiers: null,
+        notes: [],
+      },
+      cardType: 'cashback',
+    });
+
+    expect(proposal.notes).toContain('Dining includes restaurants and cafes');
+  });
+
+  it('treats a hyphenated catch-all name as the unflagged fallback', () => {
+    const proposal = compileCategoryImport({
+      parsed: {
+        cardLimits: null,
+        buckets: [bucket('Dining'), { ...bucket('Catch-All'), rewardValue: 0.3 }],
+        spendingTiers: null,
+        notes: [],
+      },
+      cardType: 'cashback',
+    });
+
+    expect(proposal.subcategories.find((subcategory) => (
+      subcategory.flagColor === UNFLAGGED_FLAG.value
+    ))).toMatchObject({
+      name: 'Catch-All',
+      rewardValue: 0.3,
+    });
+  });
+
   it('moves an eighth earning bucket into notes', () => {
     const names = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
     const proposal = compileCategoryImport({

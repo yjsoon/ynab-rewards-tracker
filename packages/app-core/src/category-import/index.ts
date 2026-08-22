@@ -9,6 +9,7 @@ export type {
   CategoryImportRequest,
   CategoryImportResult,
   CategoryImportSource,
+  ExistingCategoryImportSubcategory,
   ParsedCategoryImport,
   ProposedCardLimits,
   ProposedSpendingTier,
@@ -32,4 +33,7 @@ export { parseCategoryImportResponse } from './parse';
 export { compileCategoryImport } from './compile';
 export { applyCategoryProposal } from './apply';
 export { proposeCardCategories } from './propose';
-export { completeCategoryImportChat } from './complete';
+export {
+  categoryImportProviderFailureMessage,
+  completeCategoryImportChat,
+} from './complete';

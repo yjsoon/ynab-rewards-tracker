@@ -78,10 +78,14 @@ export interface CategoryImportDeps {
   fetchText: (url: string) => Promise<string>;
 }
 
+export type ExistingCategoryImportSubcategory =
+  Pick<CardSubcategory, 'name' | 'flagColor'>
+  & Partial<Pick<CardSubcategory, 'id' | 'createdAt'>>;
+
 export interface CategoryImportRequest {
   cardType: CreditCard['type'];
   source: CategoryImportSource;
-  existingSubcategories?: Array<Pick<CardSubcategory, 'name' | 'flagColor'>>;
+  existingSubcategories?: ExistingCategoryImportSubcategory[];
   earningRate?: number | null;
 }
 

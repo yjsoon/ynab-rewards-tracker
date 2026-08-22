@@ -2,6 +2,7 @@ import { validatePublicHttpUrl } from './source';
 
 export const CATEGORY_IMPORT_FETCH_TIMEOUT_MS = 15_000;
 export const CATEGORY_IMPORT_MAX_TERMS_BYTES = 1_500_000;
+const MAX_REDIRECTS = 5;
 
 const READ_FAILED = 'Could not read those terms.';
 const PASTE_INSTEAD = 'Could not read those terms. Paste the text instead.';
@@ -24,19 +25,9 @@ export async function fetchCategoryImportTerms(input: {
   );
 
   try {
-    const response = await fetchImpl(input.url, {
-      method: 'GET',
-      redirect: 'follow',
-      headers: { Accept: 'text/html,text/plain;q=0.9,*/*;q=0.1' },
-      signal: controller.signal,
-    });
+    const response = await fetchPublicTerms(fetchImpl, input.url, controller.signal);
     if (!response.ok) {
       throw new Error(READ_FAILED);
-    }
-
-    const redirected = validatePublicHttpUrl(response.url || input.url);
-    if (redirected) {
-      throw new Error(redirected.message);
     }
 
     const contentType = response.headers.get('content-type') ?? '';
@@ -63,6 +54,49 @@ export async function fetchCategoryImportTerms(input: {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function fetchPublicTerms(
+  fetchImpl: typeof fetch,
+  startUrl: string,
+  signal: AbortSignal,
+): Promise<Response> {
+  let url = startUrl;
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
+    const invalid = validatePublicHttpUrl(url);
+    if (invalid) {
+      throw new Error(invalid.message);
+    }
+
+    const response = await fetchImpl(url, {
+      method: 'GET',
+      redirect: 'manual',
+      headers: { Accept: 'text/html,text/plain;q=0.9,*/*;q=0.1' },
+      signal,
+    });
+
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get('location');
+      if (!location) {
+        throw new Error(READ_FAILED);
+      }
+      try {
+        url = new URL(location, url).href;
+      } catch {
+        throw new Error(READ_FAILED);
+      }
+      continue;
+    }
+
+    const finalUrl = response.url || url;
+    const redirected = validatePublicHttpUrl(finalUrl);
+    if (redirected) {
+      throw new Error(redirected.message);
+    }
+    return response;
+  }
+
+  throw new Error(READ_FAILED);
 }
 
 export function categoryImportFetchFailureMessage(error: unknown): string {

@@ -102,7 +102,7 @@ describe('applyCategoryPatchToCardForm', () => {
 
     expect(next.earningRate).toBe('1.4');
     expect(next.earningBlockSize).toBe('5');
-    expect(next.minimumSpend).toBe('');
+    expect(next.minimumSpend).toBe('100');
     expect(next.maximumSpend).toBe('20000');
     expect(next.spendingTiers).toHaveLength(1);
     expect(next.spendingTiers[0]?.spendThreshold).toBe('2000');

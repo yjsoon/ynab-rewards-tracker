@@ -1,4 +1,5 @@
 import type { CategoryImportCredentials, CategoryImportDeps, CategoryImportRequest, CategoryImportResult } from './types';
+import { categoryImportProviderFailureMessage } from './complete';
 import { compileCategoryImport } from './compile';
 import { categoryImportFetchFailureMessage } from './fetch-terms';
 import { htmlToPlainText } from './html-text';
@@ -46,8 +47,8 @@ export async function proposeCardCategories(
       system: prompt.system,
       user: prompt.user,
     });
-  } catch {
-    return { kind: 'provider_failed', message: 'The model request failed. Check the API key and try again.' };
+  } catch (error) {
+    return { kind: 'provider_failed', message: categoryImportProviderFailureMessage(error) };
   }
 
   const parsed = parseCategoryImportResponse(raw, request.cardType);

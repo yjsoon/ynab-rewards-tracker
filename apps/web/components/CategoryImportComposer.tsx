@@ -54,11 +54,12 @@ export function CategoryImportComposer({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notes, setNotes] = useState<string[]>([]);
+  const [keyDraft, setKeyDraft] = useState<string | null>(null);
 
   const provider: CategoryImportProvider = settings.categoryImportProvider ?? 'openai';
   const providerInfo = getCategoryImportProvider(provider);
   const model = settings.modelByProvider?.[provider] || defaultModelFor(provider);
-  const apiKey = settings.apiKeys?.[provider] || '';
+  const apiKey = keyDraft ?? settings.apiKeys?.[provider] ?? '';
   const modelOptions = useMemo(() => {
     if (providerInfo.models.some((option) => option.value === model)) {
       return providerInfo.models;
@@ -123,9 +124,12 @@ export function CategoryImportComposer({
                 <Label htmlFor="category-import-provider">Provider</Label>
                 <Select
                   value={provider}
-                  onValueChange={(value) => updateSettings({
-                    categoryImportProvider: value as CategoryImportProvider,
-                  })}
+                  onValueChange={(value) => {
+                    setKeyDraft(null);
+                    updateSettings({
+                      categoryImportProvider: value as CategoryImportProvider,
+                    });
+                  }}
                 >
                   <SelectTrigger id="category-import-provider">
                     <SelectValue />
@@ -169,7 +173,10 @@ export function CategoryImportComposer({
                 autoComplete="off"
                 placeholder={providerInfo.placeholder}
                 value={apiKey}
-                onChange={(event) => updateSettings({ apiKeys: { [provider]: event.target.value } })}
+                onChange={(event) => {
+                  setKeyDraft(event.target.value);
+                  updateSettings({ apiKeys: { [provider]: event.target.value } });
+                }}
               />
               <p className="text-xs text-muted-foreground">
                 Saved in this browser only.

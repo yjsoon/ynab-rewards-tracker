@@ -96,4 +96,48 @@ describe('POST /api/category-import', () => {
       'Everything else',
     ]);
   });
+
+  it('reuses an existing subcategory id from the request', async () => {
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/v1/chat/completions')) {
+        return new Response(JSON.stringify({
+          choices: [{
+            message: {
+              content: JSON.stringify({
+                buckets: [{ name: 'Dining', rewardValue: 4 }],
+              }),
+            },
+          }],
+        }));
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+
+    const response = await POST(new Request('https://example.test/api/category-import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        provider: 'openai',
+        apiKey: 'sk-test',
+        cardType: 'cashback',
+        instructions: '4% dining',
+        existingSubcategories: [{
+          id: 'sub-dining',
+          name: 'Dining',
+          flagColor: 'blue',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        }],
+      }),
+    }));
+
+    expect(response.status).toBe(200);
+    const payload = await response.json() as {
+      proposal?: { subcategories?: Array<{ id?: string; name?: string }> };
+    };
+    expect(payload.proposal?.subcategories?.[0]).toMatchObject({
+      id: 'sub-dining',
+      name: 'Dining',
+    });
+  });
 });

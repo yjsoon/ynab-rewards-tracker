@@ -54,4 +54,33 @@ describe('parseCategoryImportResponse', () => {
     expect(result.parsed.cardLimits).toBeNull();
     expect(result.parsed.spendingTiers).toBeNull();
   });
+
+  it('treats an empty cardLimits object as omitted', () => {
+    const result = parseCategoryImportResponse(
+      JSON.stringify({
+        cardLimits: { earningRate: null, earningBlockSize: null, minimumSpend: null, maximumSpend: null },
+        buckets: [{ name: 'Dining', rewardValue: 4 }],
+      }),
+      'cashback',
+    );
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+    expect(result.parsed.cardLimits).toBeNull();
+  });
+
+  it('reads numeric strings from the model', () => {
+    const result = parseCategoryImportResponse(
+      JSON.stringify({
+        buckets: [{ name: 'Dining', rewardValue: '4', maximumSpend: '2000' }],
+      }),
+      'cashback',
+    );
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+    expect(result.parsed.buckets[0]).toMatchObject({
+      name: 'Dining',
+      rewardValue: 4,
+      maximumSpend: 2000,
+    });
+  });
 });

@@ -56,4 +56,11 @@ describe('parseCategoryImportSource', () => {
     expect(parseCategoryImportSource({ termsUrl: 'http://198.18.0.1/terms' }).kind).toBe('invalid_url');
     expect(parseCategoryImportSource({ termsUrl: 'http://metadata.google.internal/terms' }).kind).toBe('invalid_url');
   });
+
+  it('rejects dword and short loopback hosts after URL canonicalisation', () => {
+    expect(parseCategoryImportSource({ termsUrl: 'http://2130706433/terms' }).kind).toBe('invalid_url');
+    expect(parseCategoryImportSource({ termsUrl: 'http://127.1/terms' }).kind).toBe('invalid_url');
+    expect(parseCategoryImportSource({ termsUrl: 'http://0x7f.0.0.1/terms' }).kind).toBe('invalid_url');
+    expect(parseCategoryImportSource({ termsUrl: 'http://0177.0.0.1/terms' }).kind).toBe('invalid_url');
+  });
 });

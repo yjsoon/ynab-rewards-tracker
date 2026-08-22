@@ -16,10 +16,10 @@ export function applyCategoryProposal(input: {
 
   const limits = input.proposal.cardLimits;
   if (limits) {
-    patch.earningRate = limits.earningRate;
-    patch.earningBlockSize = limits.earningBlockSize;
-    patch.minimumSpend = limits.minimumSpend;
-    patch.maximumSpend = limits.maximumSpend;
+    if (limits.earningRate !== null) patch.earningRate = limits.earningRate;
+    if (limits.earningBlockSize !== null) patch.earningBlockSize = limits.earningBlockSize;
+    if (limits.minimumSpend !== null) patch.minimumSpend = limits.minimumSpend;
+    if (limits.maximumSpend !== null) patch.maximumSpend = limits.maximumSpend;
   }
 
   if (input.proposal.spendingTiers) {

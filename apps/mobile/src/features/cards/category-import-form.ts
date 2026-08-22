@@ -7,6 +7,7 @@ import {
   type CardCategoryPatch,
   type CategoryImportProposal,
 } from '@ynab-counter/app-core/category-import';
+import type { ExistingCategoryImportSubcategory } from '@ynab-counter/app-core/category-import';
 import type {
   CardSubcategory,
   CategoryImportProvider,
@@ -99,7 +100,7 @@ export async function requestMobileCategoryImport(input: {
   instructions: string;
   termsUrl: string;
   earningRate?: number | null;
-  existingSubcategories?: Array<Pick<CardSubcategory, 'name' | 'flagColor'>>;
+  existingSubcategories?: ExistingCategoryImportSubcategory[];
 }): Promise<CategoryImportProposal> {
   const source = parseCategoryImportSource({
     instructions: input.instructions,

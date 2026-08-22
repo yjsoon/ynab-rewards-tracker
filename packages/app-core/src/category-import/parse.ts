@@ -133,12 +133,13 @@ function parseCardLimits(value: unknown): ProposedCardLimits | null {
     return null;
   }
   const record = value as Record<string, unknown>;
-  return {
+  const cardLimits: ProposedCardLimits = {
     earningRate: optionalNumber(record.earningRate),
     earningBlockSize: optionalPositiveNumber(record.earningBlockSize),
     minimumSpend: optionalNumber(record.minimumSpend),
     maximumSpend: optionalNumber(record.maximumSpend),
   };
+  return Object.values(cardLimits).every((field) => field === null) ? null : cardLimits;
 }
 
 function parseSpendingTiers(value: unknown): ProposedSpendingTier[] | null {
@@ -177,7 +178,14 @@ function parseNotes(value: unknown): string[] {
 }
 
 function finiteNumber(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value.trim());
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
 }
 
 function optionalNumber(value: unknown): number | null {

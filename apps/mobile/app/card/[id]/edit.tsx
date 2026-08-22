@@ -1276,8 +1276,10 @@ export default function EditCardScreen() {
           cardType={form.type}
           earningRate={draftEarningRate}
           existingSubcategories={form.tiers.map((tier) => ({
+            id: tier.id,
             name: tier.name,
             flagColor: tier.flagColor,
+            createdAt: tier.createdAt,
           }))}
           formatterSettings={state.settings.statementFormatter}
           onPersistSettings={(statementFormatter) => {

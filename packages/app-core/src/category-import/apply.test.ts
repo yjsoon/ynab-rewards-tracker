@@ -65,7 +65,7 @@ describe('applyCategoryProposal', () => {
     expect(patch.earningRate).toBe(1.4);
     expect(patch.earningBlockSize).toBe(5);
     expect(patch.minimumSpend).toBe(800);
-    expect(patch.maximumSpend).toBeNull();
+    expect(patch.maximumSpend).toBeUndefined();
     expect(patch.spendingTiers).toHaveLength(1);
     expect(patch.spendingTiers?.[0]?.spendThreshold).toBe(2000);
   });

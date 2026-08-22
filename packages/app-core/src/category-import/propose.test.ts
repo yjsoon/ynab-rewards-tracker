@@ -75,4 +75,23 @@ describe('proposeCardCategories', () => {
       message: 'Could not read those terms. Paste the text instead.',
     });
   });
+
+  it('keeps a rejected-key provider message', async () => {
+    const result = await proposeCardCategories(
+      { cardType: 'cashback', source: { kind: 'instructions', instructions: '4% dining' } },
+      { provider: 'openai', apiKey: 'bad', model: 'gpt-4o-mini' },
+      {
+        fetchText: async () => {
+          throw new Error('should not run');
+        },
+        completeChat: async () => {
+          throw new Error('OpenAI API key was rejected.');
+        },
+      },
+    );
+    expect(result).toEqual({
+      kind: 'provider_failed',
+      message: 'OpenAI API key was rejected.',
+    });
+  });
 });
