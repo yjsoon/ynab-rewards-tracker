@@ -67,6 +67,33 @@ describe('completeCategoryImportChat', () => {
       fetchImpl,
     })).resolves.toBe('{"buckets":[]}');
   });
+
+  it('omits temperature for GPT-5.6 Terra and Sol', async () => {
+    for (const model of ['gpt-5.6-terra', 'gpt-5.6-sol', 'openai/gpt-5.6-sol']) {
+      const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body)) as {
+          model?: string;
+          reasoning_effort?: string;
+          temperature?: number;
+        };
+        expect(body.model).toBe(model);
+        expect(body.temperature).toBeUndefined();
+        expect(body.reasoning_effort).toBeUndefined();
+        return new Response(JSON.stringify({
+          choices: [{ message: { content: '{"buckets":[]}' } }],
+        }), { status: 200 });
+      }) as typeof fetch;
+
+      await expect(completeCategoryImportChat({
+        provider: model.startsWith('openai/') ? 'openrouter' : 'openai',
+        apiKey: 'sk-test',
+        model,
+        system: 'sys',
+        user: 'user',
+        fetchImpl,
+      })).resolves.toBe('{"buckets":[]}');
+    }
+  });
 });
 
 describe('categoryImportProviderFailureMessage', () => {

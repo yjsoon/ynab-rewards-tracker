@@ -83,7 +83,17 @@ export function categoryImportProviderFailureMessage(error: unknown): string {
 }
 
 export function isGpt56Luna(model: string): boolean {
-  return model === 'gpt-5.6-luna' || model.endsWith('/gpt-5.6-luna');
+  return isExactOrPrefixedModel(model, 'gpt-5.6-luna');
+}
+
+function isGpt56Family(model: string): boolean {
+  return isExactOrPrefixedModel(model, 'gpt-5.6-luna')
+    || isExactOrPrefixedModel(model, 'gpt-5.6-terra')
+    || isExactOrPrefixedModel(model, 'gpt-5.6-sol');
+}
+
+function isExactOrPrefixedModel(model: string, id: string): boolean {
+  return model === id || model.endsWith(`/${id}`);
 }
 
 function chatCompletionsPayload(input: {
@@ -100,9 +110,10 @@ function chatCompletionsPayload(input: {
   };
   if (isGpt56Luna(input.model)) {
     payload.reasoning_effort = 'max';
-    return payload;
   }
-  payload.temperature = 0.1;
+  if (!isGpt56Family(input.model)) {
+    payload.temperature = 0.1;
+  }
   return payload;
 }
 
