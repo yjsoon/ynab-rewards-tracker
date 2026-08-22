@@ -69,4 +69,47 @@ describe('applyCategoryProposal', () => {
     expect(patch.spendingTiers).toHaveLength(1);
     expect(patch.spendingTiers?.[0]?.spendThreshold).toBe(2000);
   });
+
+  it('restores persisted subcategory ids so spend-tier links stay valid', () => {
+    const proposal = compileCategoryImport({
+      parsed: {
+        cardLimits: null,
+        buckets: [bucket('Dining')],
+        spendingTiers: null,
+        notes: [],
+      },
+      cardType: 'cashback',
+    });
+
+    const patch = applyCategoryProposal({
+      card: {
+        ...card,
+        subcategories: [{
+          id: 'dining-1',
+          name: 'Dining',
+          flagColor: 'red',
+          rewardValue: 4,
+          milesBlockSize: null,
+          minimumSpend: null,
+          maximumSpend: null,
+          priority: 0,
+          active: true,
+          excludeFromRewards: false,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        }],
+        spendingTiers: [{
+          id: 'tier-1',
+          spendThreshold: 2000,
+          earningRate: 8,
+          maximumSpend: null,
+          subcategories: [{ subcategoryId: 'dining-1', rewardValue: 10, maximumSpend: 500 }],
+        }],
+      },
+      proposal,
+    });
+
+    expect(patch.subcategories.find((subcategory) => subcategory.name === 'Dining')?.id).toBe('dining-1');
+    expect(patch.spendingTiers).toBeUndefined();
+  });
 });

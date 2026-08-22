@@ -6,12 +6,28 @@ export function applyCategoryProposal(input: {
   card: CreditCard;
   proposal: CategoryImportProposal;
 }): CardCategoryPatch {
+  const existingIdByName = new Map(
+    (input.card.subcategories ?? []).map((subcategory) => [
+      normaliseName(subcategory.name),
+      subcategory.id,
+    ]),
+  );
+  const usedIds = new Set<string>();
+
   const patch: CardCategoryPatch = {
     subcategoriesEnabled: true,
-    subcategories: input.proposal.subcategories.map((subcategory, index) => ({
-      ...subcategory,
-      priority: index,
-    })),
+    subcategories: input.proposal.subcategories.map((subcategory, index) => {
+      const existingId = existingIdByName.get(normaliseName(subcategory.name));
+      const id = existingId && !usedIds.has(existingId) ? existingId : subcategory.id;
+      if (existingId && id === existingId) {
+        usedIds.add(id);
+      }
+      return {
+        ...subcategory,
+        id,
+        priority: index,
+      };
+    }),
   };
 
   const limits = input.proposal.cardLimits;
@@ -32,4 +48,12 @@ export function applyCategoryProposal(input: {
   }
 
   return patch;
+}
+
+function normaliseName(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[-_]+/g, ' ')
+    .replace(/\s+/g, ' ');
 }

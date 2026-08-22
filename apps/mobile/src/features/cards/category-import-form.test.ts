@@ -107,4 +107,65 @@ describe('applyCategoryPatchToCardForm', () => {
     expect(next.spendingTiers).toHaveLength(1);
     expect(next.spendingTiers[0]?.spendThreshold).toBe('2000');
   });
+
+  it('relinks spend-tier overrides when imported categories reuse the same names', () => {
+    const patch = applyCategoryProposal({
+      card,
+      proposal: {
+        cardType: 'cashback',
+        cardLimits: null,
+        subcategories: [{
+          id: 'new-dining',
+          name: 'Dining',
+          flagColor: 'red',
+          rewardValue: 4,
+          milesBlockSize: null,
+          minimumSpend: null,
+          maximumSpend: 2000,
+          priority: 0,
+          active: true,
+          excludeFromRewards: false,
+          createdAt: '2026-08-22T00:00:00.000Z',
+          updatedAt: '2026-08-22T00:00:00.000Z',
+        }],
+        spendingTiers: null,
+        notes: [],
+      },
+    });
+
+    const next = applyCategoryPatchToCardForm({
+      ...emptyForm(),
+      tiers: [{
+        id: 'old-dining',
+        flagColor: 'red',
+        name: 'Dining',
+        rewardValue: '4',
+        milesBlockSize: '',
+        minimumSpend: '',
+        maximumSpend: '2000',
+        priority: 0,
+        active: true,
+        excludeFromRewards: false,
+        createdAt: '2026-01-01T00:00:00.000Z',
+      }],
+      spendingTiers: [{
+        id: 'tier-1',
+        spendThreshold: '2000',
+        earningRate: '8',
+        maximumSpend: '',
+        subcategories: [{
+          subcategoryId: 'old-dining',
+          rewardValue: '10',
+          maximumSpend: '500',
+        }],
+      }],
+    }, patch);
+
+    expect(next.tiers[0]?.id).toBe('new-dining');
+    expect(next.spendingTiers[0]?.subcategories).toEqual([{
+      subcategoryId: 'new-dining',
+      rewardValue: '10',
+      maximumSpend: '500',
+    }]);
+  });
 });
