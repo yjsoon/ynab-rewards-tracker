@@ -2,6 +2,7 @@ import type { CategoryImportProvider } from '../storage/types';
 import { getCategoryImportProvider } from './providers';
 
 const DEFAULT_TIMEOUT_MS = 45_000;
+const LUNA_MAX_TIMEOUT_MS = 90_000;
 const OPENROUTER_REFERRER = 'https://rewards.soon.sg';
 const OPENROUTER_TITLE = 'Rewards Tracker';
 
@@ -17,7 +18,10 @@ export async function completeCategoryImportChat(input: {
   const provider = getCategoryImportProvider(input.provider);
   const fetchImpl = input.fetchImpl ?? fetch;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), input.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+  const timeout = setTimeout(
+    () => controller.abort(),
+    input.timeoutMs ?? (isGpt56Luna(input.model) ? LUNA_MAX_TIMEOUT_MS : DEFAULT_TIMEOUT_MS),
+  );
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -32,14 +36,7 @@ export async function completeCategoryImportChat(input: {
     const response = await fetchImpl(provider.chatCompletionsUrl, {
       method: 'POST',
       headers,
-      body: JSON.stringify({
-        model: input.model,
-        temperature: 0.1,
-        messages: [
-          { role: 'system', content: input.system },
-          { role: 'user', content: input.user },
-        ],
-      }),
+      body: JSON.stringify(chatCompletionsPayload(input)),
       signal: controller.signal,
     });
 
@@ -83,6 +80,30 @@ export function categoryImportProviderFailureMessage(error: unknown): string {
     return error.message;
   }
   return GENERIC_PROVIDER_FAILURE;
+}
+
+export function isGpt56Luna(model: string): boolean {
+  return model === 'gpt-5.6-luna' || model.endsWith('/gpt-5.6-luna');
+}
+
+function chatCompletionsPayload(input: {
+  model: string;
+  system: string;
+  user: string;
+}): Record<string, unknown> {
+  const payload: Record<string, unknown> = {
+    model: input.model,
+    messages: [
+      { role: 'system', content: input.system },
+      { role: 'user', content: input.user },
+    ],
+  };
+  if (isGpt56Luna(input.model)) {
+    payload.reasoning_effort = 'max';
+    return payload;
+  }
+  payload.temperature = 0.1;
+  return payload;
 }
 
 function extractText(content: unknown): string | null {

@@ -1,8 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { categoryImportProviderFailureMessage, completeCategoryImportChat } from './complete';
+import { defaultModelFor } from './providers';
 
 describe('completeCategoryImportChat', () => {
+  it('defaults OpenAI to GPT-5.6 Luna', () => {
+    expect(defaultModelFor('openai')).toBe('gpt-5.6-luna');
+    expect(defaultModelFor('openrouter')).toBe('openai/gpt-5.6-luna');
+    expect(defaultModelFor('opencode')).toBe('minimax-m3');
+  });
+
   it('posts to the OpenCode chat-completions URL', async () => {
     const fetchImpl = vi.fn(async (url: string | URL | Request) => {
       expect(String(url)).toBe('https://opencode.ai/zen/v1/chat/completions');
@@ -27,11 +34,38 @@ describe('completeCategoryImportChat', () => {
     await expect(completeCategoryImportChat({
       provider: 'openai',
       apiKey: 'bad',
-      model: 'gpt-4o-mini',
+      model: 'gpt-5.6-luna',
       system: 'sys',
       user: 'user',
       fetchImpl,
     })).rejects.toThrow('OpenAI API key was rejected.');
+  });
+
+  it('sends Luna at max reasoning effort', async () => {
+    const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as {
+        model?: string;
+        reasoning_effort?: string;
+        temperature?: number;
+      };
+      expect(body).toMatchObject({
+        model: 'gpt-5.6-luna',
+        reasoning_effort: 'max',
+      });
+      expect(body.temperature).toBeUndefined();
+      return new Response(JSON.stringify({
+        choices: [{ message: { content: '{"buckets":[]}' } }],
+      }), { status: 200 });
+    }) as typeof fetch;
+
+    await expect(completeCategoryImportChat({
+      provider: 'openai',
+      apiKey: 'sk-test',
+      model: 'gpt-5.6-luna',
+      system: 'sys',
+      user: 'user',
+      fetchImpl,
+    })).resolves.toBe('{"buckets":[]}');
   });
 });
 
