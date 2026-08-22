@@ -150,10 +150,13 @@ export default function OverviewScreen() {
     [activeHiddenEntries, state.cards],
   );
 
+  const connected = Boolean(state.pat && state.selectedBudget.id);
+  const needsSyncAttention = connected
+    && state.cards.length > 0
+    && (model.syncState === 'offline' || model.syncState === 'attention');
   const syncActionLabel = model.canSync
     ? `${model.syncLabel} — Retry`
     : `${model.syncLabel} — Review settings`;
-  const connected = Boolean(state.pat && state.selectedBudget.id);
   const hasDashboardContent = featuredCards.length > 0;
 
   const openCard = (id: string) => {
@@ -269,28 +272,25 @@ export default function OverviewScreen() {
         </Pressable>
 
         <View style={styles.toolbarActions}>
-          {connected && state.cards.length > 0 &&
-          (model.syncState === 'offline' || model.syncState === 'attention') ? (
-            <Pressable
-              onPress={model.canSync ? model.refresh : () => router.push('/settings')}
-              accessibilityRole="button"
-              accessibilityLabel={syncActionLabel}
-              style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
-            >
-              <Footnote color="action">{syncActionLabel}</Footnote>
-            </Pressable>
-          ) : null}
-
           <Pressable
             onPress={model.canSync ? model.refresh : () => router.push('/settings')}
             accessibilityRole="button"
-            accessibilityLabel={model.canSync ? 'Refresh rewards from YNAB' : 'Review YNAB connection settings'}
+            accessibilityLabel={needsSyncAttention
+              ? syncActionLabel
+              : model.canSync
+                ? 'Refresh rewards from YNAB'
+                : 'Review YNAB connection settings'}
+            accessibilityHint={needsSyncAttention
+              ? (model.canSync
+                ? 'Retries syncing rewards from YNAB'
+                : 'Opens YNAB connection settings')
+              : undefined}
             style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
           >
             <SymbolView
               name="arrow.clockwise"
               size={16}
-              tintColor={semanticColors.secondaryLabel}
+              tintColor={needsSyncAttention ? semanticColors.action : semanticColors.secondaryLabel}
             />
           </Pressable>
 
