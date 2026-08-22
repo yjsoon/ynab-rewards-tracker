@@ -18,6 +18,7 @@ export {
   CATEGORY_IMPORT_PROVIDERS,
   defaultModelFor,
   getCategoryImportProvider,
+  resolveCategoryImportEndpoint,
 } from './providers';
 export { parseCategoryImportSource, validatePublicHttpUrl } from './source';
 export { CATEGORY_IMPORT_TEXT_LIMIT, htmlToPlainText } from './html-text';
