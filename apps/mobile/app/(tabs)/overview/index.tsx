@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import {
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -27,6 +28,8 @@ import {
 import { semanticColors } from '@/theme';
 import { interaction, nativeMetrics, radii, spacing } from '@/theme/tokens';
 import type { CardDashboardProjection } from '@ynab-counter/app-core/rewards-engine';
+
+const EXPO_WEB_TOP_TAB_INSET = 64;
 
 function isExpansionMap(
   value: unknown,
@@ -224,7 +227,10 @@ export default function OverviewScreen() {
   return (
     <ScrollView
       style={styles.screen}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[
+        styles.content,
+        Platform.OS === 'web' && styles.webContent,
+      ]}
       contentInsetAdjustmentBehavior="automatic"
       automaticallyAdjustsScrollIndicatorInsets
       refreshControl={(
@@ -399,6 +405,9 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     paddingBottom: 120,
     gap: spacing.xl,
+  },
+  webContent: {
+    paddingTop: EXPO_WEB_TOP_TAB_INSET + spacing.md,
   },
   toolbar: {
     flexDirection: 'row',

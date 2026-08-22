@@ -370,7 +370,7 @@ export function CardTile({
               tintColor={rewardChipColor}
               style={styles.rewardIcon}
             />
-            <Footnote color={rewardChipTone} style={styles.rewardChipText}>
+            <Footnote style={[styles.rewardChipText, { color: rewardChipColor }]}>
               {earnedDisplay}
             </Footnote>
           </View>
