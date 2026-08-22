@@ -1,6 +1,7 @@
 import type { CardSubcategory, CreditCard } from '../storage/types';
 import { createSubcategoryId } from '../storage/normalisers';
 import { UNFLAGGED_FLAG, YNAB_FLAG_COLORS, type YnabFlagColor } from '../ynab/constants';
+import { normaliseCategoryImportName } from './names';
 import type {
   CategoryBucketDraft,
   CategoryImportProposal,
@@ -33,28 +34,33 @@ export function compileCategoryImport(input: {
   const notes = [...input.parsed.notes];
   const existingByName = new Map(
     (input.existingSubcategories ?? []).map((subcategory) => [
-      normaliseName(subcategory.name),
+      normaliseCategoryImportName(subcategory.name),
       subcategory,
     ]),
   );
 
-  const catchAllIndex = input.parsed.buckets.findIndex((bucket) => isCatchAll(bucket));
-  const catchAllBucket = catchAllIndex >= 0 ? input.parsed.buckets[catchAllIndex] : undefined;
-  const earningBuckets = input.parsed.buckets.filter((_, index) => index !== catchAllIndex);
+  const catchAllBuckets = input.parsed.buckets.filter((bucket) => isCatchAll(bucket));
+  const earningBuckets = input.parsed.buckets.filter((bucket) => !isCatchAll(bucket));
+  const catchAllBucket = catchAllBuckets[0];
+  for (const extra of catchAllBuckets.slice(1)) {
+    rememberInclusion(notes, extra);
+    notes.push(`${extra.name} did not fit the six flag colours.`);
+  }
 
   const usedFlags = new Set<YnabFlagColor>();
+  const usedIds = new Set<string>();
   const subcategories: CardSubcategory[] = [];
 
   for (const bucket of earningBuckets) {
     rememberInclusion(notes, bucket);
-    const existing = existingByName.get(normaliseName(bucket.name));
+    const existing = claimExisting(existingByName.get(normaliseCategoryImportName(bucket.name)), usedIds);
     const flagColor = nextFlag(usedFlags, existing?.flagColor);
     if (!flagColor) {
       notes.push(`${bucket.name} did not fit the six flag colours.`);
       continue;
     }
     usedFlags.add(flagColor);
-    subcategories.push(toSubcategory(bucket, flagColor, subcategories.length, existing));
+    subcategories.push(toSubcategory(bucket, flagColor, subcategories.length, existing, usedIds));
   }
 
   const fallbackRate = catchAllBucket?.rewardValue
@@ -72,15 +78,19 @@ export function compileCategoryImport(input: {
   if (catchAllBucket) {
     rememberInclusion(notes, catchAllBucket);
   }
-  const existingFallback = existingByName.get(normaliseName(fallbackBucket.name))
-    ?? (input.existingSubcategories ?? []).find((subcategory) => (
-      subcategory.flagColor === UNFLAGGED_FLAG.value
-    ));
+  const existingFallback = claimExisting(
+    existingByName.get(normaliseCategoryImportName(fallbackBucket.name))
+      ?? (input.existingSubcategories ?? []).find((subcategory) => (
+        subcategory.flagColor === UNFLAGGED_FLAG.value
+      )),
+    usedIds,
+  );
   subcategories.push(toSubcategory(
     fallbackBucket,
     UNFLAGGED_FLAG.value,
     subcategories.length,
     existingFallback,
+    usedIds,
   ));
 
   return {
@@ -103,7 +113,20 @@ function nextFlag(
 }
 
 function isCatchAll(bucket: CategoryBucketDraft): boolean {
-  return CATCH_ALL_NAMES.has(normaliseName(bucket.name));
+  return CATCH_ALL_NAMES.has(normaliseCategoryImportName(bucket.name));
+}
+
+function claimExisting(
+  existing: ExistingCategoryImportSubcategory | undefined,
+  usedIds: Set<string>,
+): ExistingCategoryImportSubcategory | undefined {
+  if (!existing) {
+    return undefined;
+  }
+  if (existing.id && usedIds.has(existing.id)) {
+    return { ...existing, id: undefined };
+  }
+  return existing;
 }
 
 function rememberInclusion(notes: string[], bucket: CategoryBucketDraft): void {
@@ -112,23 +135,20 @@ function rememberInclusion(notes: string[], bucket: CategoryBucketDraft): void {
   }
 }
 
-function normaliseName(name: string): string {
-  return name
-    .trim()
-    .toLowerCase()
-    .replace(/[-_]+/g, ' ')
-    .replace(/\s+/g, ' ');
-}
-
 function toSubcategory(
   bucket: CategoryBucketDraft,
   flagColor: YnabFlagColor,
   priority: number,
-  existing?: Partial<Pick<CardSubcategory, 'id' | 'createdAt'>>,
+  existing: Partial<Pick<CardSubcategory, 'id' | 'createdAt'>> | undefined,
+  usedIds: Set<string>,
 ): CardSubcategory {
   const now = new Date().toISOString();
+  const id = existing?.id && !usedIds.has(existing.id)
+    ? existing.id
+    : createSubcategoryId();
+  usedIds.add(id);
   return {
-    id: existing?.id || createSubcategoryId(),
+    id,
     name: bucket.name,
     flagColor,
     rewardValue: bucket.excludeFromRewards ? 0 : bucket.rewardValue,

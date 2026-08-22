@@ -1,5 +1,6 @@
 import type { CreditCard } from '../storage/types';
 import { createSpendingTierId } from '../storage/normalisers';
+import { normaliseCategoryImportName } from './names';
 import type { CardCategoryPatch, CategoryImportProposal } from './types';
 
 export function applyCategoryProposal(input: {
@@ -8,7 +9,7 @@ export function applyCategoryProposal(input: {
 }): CardCategoryPatch {
   const existingIdByName = new Map(
     (input.card.subcategories ?? []).map((subcategory) => [
-      normaliseName(subcategory.name),
+      normaliseCategoryImportName(subcategory.name),
       subcategory.id,
     ]),
   );
@@ -17,7 +18,7 @@ export function applyCategoryProposal(input: {
   const patch: CardCategoryPatch = {
     subcategoriesEnabled: true,
     subcategories: input.proposal.subcategories.map((subcategory, index) => {
-      const existingId = existingIdByName.get(normaliseName(subcategory.name));
+      const existingId = existingIdByName.get(normaliseCategoryImportName(subcategory.name));
       const id = existingId && !usedIds.has(existingId) ? existingId : subcategory.id;
       if (existingId && id === existingId) {
         usedIds.add(id);
@@ -48,12 +49,4 @@ export function applyCategoryProposal(input: {
   }
 
   return patch;
-}
-
-function normaliseName(name: string): string {
-  return name
-    .trim()
-    .toLowerCase()
-    .replace(/[-_]+/g, ' ')
-    .replace(/\s+/g, ' ');
 }

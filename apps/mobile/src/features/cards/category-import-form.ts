@@ -4,6 +4,7 @@ import {
   fetchCategoryImportTerms,
   parseCategoryImportSource,
   proposeCardCategories,
+  relinkSpendingTierOverrides,
   type CardCategoryPatch,
   type CategoryImportProposal,
 } from '@ynab-counter/app-core/category-import';
@@ -88,7 +89,11 @@ export function applyCategoryPatchToCardForm<Form extends CategoryImportFormFiel
             maximumSpend: numberInput(subcategory.maximumSpend),
           })),
         }))
-      : relinkSpendingTiers(form.spendingTiers, form.tiers, patch.subcategories),
+      : relinkSpendingTierOverrides({
+        spendingTiers: form.spendingTiers,
+        previousSubcategories: form.tiers,
+        nextSubcategories: patch.subcategories,
+      }),
   };
 }
 
@@ -145,37 +150,3 @@ export function applyImportedProposal(input: {
   );
 }
 
-function relinkSpendingTiers(
-  spendingTiers: CategoryImportFormFields['spendingTiers'],
-  previousTiers: CategoryImportFormFields['tiers'],
-  nextSubcategories: CardCategoryPatch['subcategories'],
-): CategoryImportFormFields['spendingTiers'] {
-  const previousNameById = new Map(
-    previousTiers.map((tier) => [tier.id, normaliseName(tier.name)]),
-  );
-  const nextIdByName = new Map(
-    nextSubcategories.map((subcategory) => [normaliseName(subcategory.name), subcategory.id]),
-  );
-  const nextIds = new Set(nextSubcategories.map((subcategory) => subcategory.id));
-
-  return spendingTiers.map((tier) => ({
-    ...tier,
-    subcategories: tier.subcategories.flatMap((override) => {
-      const nextId = nextIds.has(override.subcategoryId)
-        ? override.subcategoryId
-        : nextIdByName.get(previousNameById.get(override.subcategoryId) ?? '');
-      if (!nextId) {
-        return [];
-      }
-      return [{ ...override, subcategoryId: nextId }];
-    }),
-  }));
-}
-
-function normaliseName(name: string): string {
-  return name
-    .trim()
-    .toLowerCase()
-    .replace(/[-_]+/g, ' ')
-    .replace(/\s+/g, ' ');
-}

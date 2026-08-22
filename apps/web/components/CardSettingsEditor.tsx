@@ -10,6 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { CardSubcategoriesEditor, type CardSubcategoryDraft } from '@/components/CardSubcategoriesEditor';
 import { CardSpendingTiersEditor } from '@/components/CardSpendingTiersEditor';
 import { CategoryImportComposer } from '@/components/CategoryImportComposer';
+import { relinkSpendingTierOverrides } from '@ynab-counter/app-core/category-import';
 import {
   Percent,
   DollarSign,
@@ -1044,7 +1045,15 @@ export function CardSettingsEditor({
             if (patch.earningBlockSize !== undefined) onFieldChange('earningBlockSize', patch.earningBlockSize);
             if (patch.minimumSpend !== undefined) onFieldChange('minimumSpend', patch.minimumSpend);
             if (patch.maximumSpend !== undefined) onFieldChange('maximumSpend', patch.maximumSpend);
-            if (patch.spendingTiers) onFieldChange('spendingTiers', patch.spendingTiers);
+            onFieldChange(
+              'spendingTiers',
+              patch.spendingTiers
+                ?? relinkSpendingTierOverrides({
+                  spendingTiers: spendingTierDrafts,
+                  previousSubcategories: subcategoryDrafts,
+                  nextSubcategories: patch.subcategories,
+                }),
+            );
           }}
         />
         <CardSubcategoriesEditor

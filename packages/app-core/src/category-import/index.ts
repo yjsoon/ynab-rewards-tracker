@@ -31,6 +31,8 @@ export { mergeCategoryImportCredentials } from './settings';
 export { buildCategoryImportPrompt, existingNamesFrom } from './prompt';
 export { parseCategoryImportResponse } from './parse';
 export { compileCategoryImport } from './compile';
+export { normaliseCategoryImportName } from './names';
+export { relinkSpendingTierOverrides } from './relink';
 export { applyCategoryProposal } from './apply';
 export { proposeCardCategories } from './propose';
 export {

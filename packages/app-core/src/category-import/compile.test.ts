@@ -107,6 +107,46 @@ describe('compileCategoryImport', () => {
     });
   });
 
+  it('does not reuse an unflagged id that an earning bucket already claimed', () => {
+    const proposal = compileCategoryImport({
+      parsed: {
+        cardLimits: null,
+        buckets: [bucket('Dining')],
+        spendingTiers: null,
+        notes: [],
+      },
+      cardType: 'cashback',
+      existingSubcategories: [{
+        id: 'unflagged-1',
+        name: 'Dining',
+        flagColor: UNFLAGGED_FLAG.value,
+      }],
+    });
+
+    const ids = proposal.subcategories.map((subcategory) => subcategory.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(proposal.subcategories[0]?.id).toBe('unflagged-1');
+    expect(proposal.subcategories[1]?.id).not.toBe('unflagged-1');
+  });
+
+  it('keeps extra catch-all names out of the earning flags', () => {
+    const proposal = compileCategoryImport({
+      parsed: {
+        cardLimits: null,
+        buckets: [bucket('Dining'), bucket('Other'), { ...bucket('Everything else'), rewardValue: 0.3 }],
+        spendingTiers: null,
+        notes: [],
+      },
+      cardType: 'cashback',
+    });
+
+    expect(proposal.subcategories.map((subcategory) => subcategory.name)).toEqual([
+      'Dining',
+      'Other',
+    ]);
+    expect(proposal.notes.some((note) => note.includes('Everything else'))).toBe(true);
+  });
+
   it('moves an eighth earning bucket into notes', () => {
     const names = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
     const proposal = compileCategoryImport({
