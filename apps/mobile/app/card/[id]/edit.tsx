@@ -24,6 +24,8 @@ import {
   Title3,
 } from '@/components/ios';
 import { useHaptics } from '@/hooks/useHaptics';
+import { CategoryImportComposer } from '@/features/cards/CategoryImportComposer';
+import { applyCategoryPatchToCardForm } from '@/features/cards/category-import-form';
 import { createCardFormatting, flagColor } from '@/features/cards/presentation';
 import { planCardEditRefresh } from '@/features/cards/card-edit-refresh';
 import { createLocalFlagUpdatePublication } from '@/features/activity/flag-update-publication';
@@ -1096,6 +1098,11 @@ export default function EditCardScreen() {
     );
   }
 
+  const parsedEarningRate = Number(form.earningRate);
+  const draftEarningRate = form.earningRate.trim() && Number.isFinite(parsedEarningRate)
+    ? parsedEarningRate
+    : null;
+
   return (
     <KeyboardAvoidingView
       style={styles.keyboard}
@@ -1251,7 +1258,10 @@ export default function EditCardScreen() {
           ) : null}
         </Group>
 
-        <Group title="YNAB flag tiers">
+        <Group
+          title="YNAB flag tiers"
+          footer="Paste the card terms or a link. Review the categories before you save."
+        >
           <ToggleRow
             label="Use flag-based tiers"
             detail="Match reward rates to YNAB flags."
@@ -1260,6 +1270,24 @@ export default function EditCardScreen() {
             showDivider={false}
           />
         </Group>
+
+        <CategoryImportComposer
+          card={sourceCard}
+          cardType={form.type}
+          earningRate={draftEarningRate}
+          existingSubcategories={form.tiers.map((tier) => ({
+            name: tier.name,
+            flagColor: tier.flagColor,
+          }))}
+          formatterSettings={state.settings.statementFormatter}
+          onPersistSettings={(statementFormatter) => {
+            void actions.setSettings({ statementFormatter });
+          }}
+          onApply={(patch) => {
+            setError(undefined);
+            setForm((previous) => previous ? applyCategoryPatchToCardForm(previous, patch) : previous);
+          }}
+        />
 
         {form.subcategoriesEnabled ? (
           <View style={styles.tierComposer}>

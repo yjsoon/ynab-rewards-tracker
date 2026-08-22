@@ -139,6 +139,7 @@ const CLOUD_SYNC_DEVICE_SETTING_KEYS = new Set<keyof AppSettings>([
   'cloudSyncMnemonic',
   'rememberCloudSyncCode',
   'autoSyncEnabled',
+  'statementFormatter',
 ]);
 
 function settingsAffectCloudPayload(settings: Partial<AppSettings>): boolean {
