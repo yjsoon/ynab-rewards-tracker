@@ -1,8 +1,5 @@
 import React, { useMemo, useState } from 'react';
 import {
-  ActionSheetIOS,
-  Alert,
-  Platform,
   Pressable,
   StyleSheet,
   View,
@@ -13,7 +10,12 @@ import { SymbolView } from 'expo-symbols';
 
 import { Caption1, Footnote, Headline, Title3 } from '@/components/ios';
 import type { CardFormatting } from '@/features/cards/presentation';
-import { isPromotionalPeriodActive } from '@/features/cards/presentation';
+import {
+  attentionCopy,
+  isPromotionalPeriodActive,
+  statusPresentation,
+} from '@/features/cards/presentation';
+import { presentActionSheet } from './present-action-sheet';
 import { semanticColors, withAlpha } from '@/theme';
 import { interaction, nativeMetrics, radii, spacing } from '@/theme/tokens';
 import type { TextColor } from '@/components/ios/Typography';
@@ -61,34 +63,16 @@ function presentCardMenu(params: {
   allowHideCard: boolean;
   onEdit: () => void;
   onHide: () => void;
-  onOpen: () => void;
 }): void {
-  const actions = [
-    { label: 'Edit settings', run: params.onEdit },
-    ...(params.allowHideCard
-      ? [{ label: 'Hide from dashboard', run: params.onHide }]
-      : []),
-    { label: 'View card details', run: params.onOpen },
-  ];
-
-  if (Platform.OS === 'ios') {
-    ActionSheetIOS.showActionSheetWithOptions(
-      {
-        options: [...actions.map((action) => action.label), 'Cancel'],
-        cancelButtonIndex: actions.length,
-      },
-      (buttonIndex) => {
-        const action = typeof buttonIndex === 'number' ? actions[buttonIndex] : undefined;
-        action?.run();
-      },
-    );
-    return;
-  }
-
-  Alert.alert('Card actions', undefined, [
-    ...actions.map((action) => ({ text: action.label, onPress: action.run })),
-    { text: 'Cancel', style: 'cancel' },
-  ]);
+  presentActionSheet({
+    title: 'Card actions',
+    actions: [
+      { label: 'Edit settings', run: params.onEdit },
+      ...(params.allowHideCard
+        ? [{ label: 'Hide from dashboard', run: params.onHide }]
+        : []),
+    ],
+  });
 }
 
 export interface CardTileProps {
@@ -273,11 +257,9 @@ export function CardTile({
   const daysRemaining = projection.daysRemaining;
   const daysTone: TextColor = daysRemaining <= 1
     ? 'destructive'
-    : daysRemaining <= 3
+    : daysRemaining <= 7
       ? 'attention'
-      : daysRemaining <= 7
-        ? 'attention'
-        : 'tertiary';
+      : 'tertiary';
   const daysLabel = `${daysRemaining}d`;
 
   const blockCount = projection.blockInfo?.blocksEarned ?? null;
@@ -311,16 +293,16 @@ export function CardTile({
     : undefined;
   const noLimitsMeta = !hasMinimum && !hasMaximum && !nextSpendingLevel;
 
-  const borderTone = nextSpendingLevel
-    ? {
-        borderColor: hasUnlockedSpendingTier ? semanticColors.positive : semanticColors.attention,
-        borderWidth: 1.5,
-      }
-    : exceeded || qualificationFailed
+  const borderTone = qualificationFailed || exceeded
     ? { borderColor: semanticColors.capped, borderWidth: 1.5 }
-    : nearCap
-      ? { borderColor: semanticColors.attention, borderWidth: 1.5 }
-      : { borderColor: semanticColors.separator, borderWidth: StyleSheet.hairlineWidth };
+    : nextSpendingLevel
+      ? {
+          borderColor: hasUnlockedSpendingTier ? semanticColors.positive : semanticColors.attention,
+          borderWidth: 1.5,
+        }
+      : nearCap
+        ? { borderColor: semanticColors.attention, borderWidth: 1.5 }
+        : { borderColor: semanticColors.separator, borderWidth: StyleSheet.hairlineWidth };
 
   const qualificationCopy = !card.rewardPeriod || !hasMonthlyMinimum || !qualificationMonth
     ? undefined
@@ -337,38 +319,91 @@ export function CardTile({
       ? 'positive'
       : 'attention';
 
+  const kebab = (
+    <Pressable
+      onPress={() => presentCardMenu({
+        allowHideCard,
+        onEdit,
+        onHide: () => onHideCard(card.id, projection.resetsOn),
+      })}
+      accessibilityRole="button"
+      accessibilityLabel={`${card.name} actions`}
+      hitSlop={8}
+      style={({ pressed }) => [styles.kebab, pressed && styles.pressed]}
+    >
+      <SymbolView
+        name="ellipsis"
+        size={16}
+        tintColor={semanticColors.tertiaryLabel}
+        accessibilityElementsHidden
+      />
+    </Pressable>
+  );
+
+  if (projection.status === 'unconfigured') {
+    const setup = statusPresentation('unconfigured');
+    const setupCopy = attentionCopy(projection, formatting);
+    return (
+      <View
+        style={[
+          styles.tile,
+          { borderColor: semanticColors.attention, borderWidth: 1.5 },
+          style,
+        ]}
+      >
+        {kebab}
+        <Pressable
+          onPress={onOpen}
+          accessible
+          accessibilityRole="button"
+          accessibilityLabel={`${card.name}, ${setup.label}. ${setupCopy}`}
+          accessibilityHint="Opens card details"
+          style={({ pressed }) => [styles.body, pressed && styles.pressed]}
+        >
+          <View style={styles.header}>
+            <Headline numberOfLines={1} style={styles.cardName}>{card.name}</Headline>
+          </View>
+          <Footnote color={setup.tone === 'attention' ? 'attention' : 'secondary'}>
+            {setup.label}
+          </Footnote>
+          <Footnote color="secondary">{setupCopy}</Footnote>
+        </Pressable>
+      </View>
+    );
+  }
+
+  const tileAccessibilityLabel = [
+    card.name,
+    `${earnedDisplay} ${card.type === 'cashback' ? 'cashback' : 'miles'} earned`,
+    hero.label,
+    qualificationCopy,
+    `${daysRemaining} ${daysRemaining === 1 ? 'day' : 'days'} remaining`,
+    intermediateCapReached
+      ? 'current level capped; next tier can unlock more rewards'
+      : undefined,
+    blockCopy,
+  ].filter((part): part is string => Boolean(part)).join(', ');
+
   return (
     <View style={[styles.tile, borderTone, style]}>
-      <Pressable
-        onPress={() => presentCardMenu({
-          allowHideCard,
-          onEdit,
-          onHide: () => onHideCard(card.id, projection.resetsOn),
-          onOpen,
-        })}
-        accessibilityRole="button"
-        accessibilityLabel={`${card.name} actions`}
-        hitSlop={8}
-        style={({ pressed }) => [styles.kebab, pressed && styles.pressed]}
-      >
-        <SymbolView
-          name="ellipsis"
-          size={16}
-          tintColor={semanticColors.tertiaryLabel}
-          accessibilityElementsHidden
-        />
-      </Pressable>
+      {kebab}
       <Pressable
         onPress={onOpen}
-        accessible
-        accessibilityRole="button"
-        accessibilityLabel={`${card.name}, ${earnedDisplay} ${card.type === 'cashback' ? 'cashback' : 'miles'} earned, ${hero.label}${intermediateCapReached ? ', current level capped; next tier can unlock more rewards' : ''}${blockCopy ? `, ${blockCopy}` : ''}`}
-        accessibilityHint="Opens card details"
-        style={({ pressed }) => [styles.pressable, pressed && styles.pressed]}
+        accessible={false}
+        style={({ pressed }) => [styles.body, pressed && styles.pressed]}
       >
-        <View style={styles.header} accessibilityElementsHidden>
-          <Headline numberOfLines={1} style={styles.cardName}>{card.name}</Headline>
-          <View style={styles.headerTrailing}>
+        <View style={styles.header}>
+          <Pressable
+            onPress={onOpen}
+            accessible
+            accessibilityRole="button"
+            accessibilityLabel={tileAccessibilityLabel}
+            accessibilityHint="Opens card details"
+            style={styles.titleHit}
+          >
+            <Headline numberOfLines={1} style={styles.cardName}>{card.name}</Headline>
+          </Pressable>
+          <View style={styles.headerTrailing} accessibilityElementsHidden>
             {promoActive ? (
               <View style={styles.promoPill}>
                 <SymbolView
@@ -393,7 +428,7 @@ export function CardTile({
           </View>
         </View>
 
-        <View style={styles.heroRow} accessibilityElementsHidden>
+        <View style={styles.heroRow}>
           {canToggleSpendView ? (
             <Pressable
               onPress={() => setShowRewardPeriodSpend((current) => !current)}
@@ -409,11 +444,11 @@ export function CardTile({
               </Caption1>
             </Pressable>
           ) : (
-            <Caption1 color="secondary" style={styles.heroLabel}>
+            <Caption1 color="secondary" style={styles.heroLabel} accessible={false}>
               {heroLabel}
             </Caption1>
           )}
-          <View style={styles.heroValueRow}>
+          <View style={styles.heroValueRow} accessibilityElementsHidden>
             {hero.variant === 'min-left' || hero.variant === 'tier-left' ? (
               <SymbolView
                 name="arrow.up.right"
@@ -490,13 +525,13 @@ export function CardTile({
         </View>
 
         {qualificationCopy ? (
-          <Caption1 color={qualificationTone} style={styles.qualification} accessibilityElementsHidden>
+          <Caption1 color={qualificationTone} style={styles.qualification} accessible={false}>
             {qualificationCopy}
           </Caption1>
         ) : null}
 
         {blockCopy ? (
-          <Caption1 color="tertiary" style={styles.tabular} accessibilityElementsHidden>
+          <Caption1 color="tertiary" style={styles.tabular} accessible={false}>
             {blockCopy}
           </Caption1>
         ) : null}
@@ -551,10 +586,14 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: radii.medium,
     backgroundColor: semanticColors.secondarySystemGroupedBackground,
   },
-  pressable: {
+  body: {
     padding: spacing.lg,
-    paddingRight: nativeMetrics.minimumTouchTarget,
     gap: spacing.md,
+  },
+  titleHit: {
+    flex: 1,
+    minWidth: 120,
+    justifyContent: 'center',
   },
   footerSection: {
     paddingHorizontal: spacing.lg,
@@ -569,10 +608,10 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     alignItems: 'center',
     gap: spacing.sm,
+    paddingRight: nativeMetrics.hairlineInset - spacing.lg,
   },
   cardName: {
-    flex: 1,
-    minWidth: 120,
+    flexShrink: 1,
   },
   headerTrailing: {
     flexDirection: 'row',

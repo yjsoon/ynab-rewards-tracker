@@ -43,4 +43,8 @@ describe('formatLastUpdated', () => {
   it('returns a short date after a day', () => {
     expect(formatLastUpdated('2026-08-20T12:00:00.000Z')).toBe('Aug 20');
   });
+
+  it('returns null for an unparseable timestamp', () => {
+    expect(formatLastUpdated('not-a-date')).toBeNull();
+  });
 });

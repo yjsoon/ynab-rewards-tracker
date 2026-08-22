@@ -4,13 +4,18 @@ export function formatLastUpdated(isoString: string | null): string | null {
   }
 
   const date = new Date(isoString);
+  const timestamp = date.getTime();
+  if (!Number.isFinite(timestamp)) {
+    return null;
+  }
+
   const now = new Date();
 
-  if (date.getTime() > now.getTime()) {
+  if (timestamp > now.getTime()) {
     return 'just now';
   }
 
-  const diffMs = now.getTime() - date.getTime();
+  const diffMs = now.getTime() - timestamp;
   const diffMins = Math.floor(diffMs / 60000);
 
   if (diffMins < 1) {

@@ -1,9 +1,6 @@
 import React, { useMemo } from 'react';
 import {
-  ActionSheetIOS,
   ActivityIndicator,
-  Alert,
-  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -15,13 +12,11 @@ import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 
 import { useStorage } from '@/contexts/StorageContext';
-import { EmptyState } from '@/components/native';
+import { EmptyState, SyncBadge } from '@/components/native';
 import { Footnote } from '@/components/ios';
 import { createCardFormatting } from '@/features/cards/presentation';
-import {
-  orderCardProjections,
-  useRewardsDashboard,
-} from '@/features/cards/dashboard';
+import { orderTypedCardProjections } from '@/features/cards/card-ordering';
+import { useRewardsDashboard } from '@/features/cards/dashboard';
 import {
   CardGroupHeader,
   CardTile,
@@ -30,6 +25,7 @@ import {
   useDashboardPeriod,
   type HiddenCardEntry,
 } from '@/features/overview';
+import { presentActionSheet } from '@/features/overview/present-action-sheet';
 import { semanticColors } from '@/theme';
 import { interaction, nativeMetrics, radii, spacing } from '@/theme/tokens';
 import type { CardDashboardProjection } from '@ynab-counter/app-core/rewards-engine';
@@ -71,32 +67,18 @@ function presentViewOptions(params: {
   onToggleGroupByType: () => void;
   onOpenCategories: () => void;
 }): void {
-  const groupLabel = params.groupByType
-    ? "Don't group cards by type"
-    : 'Group cards by type';
-  const actions = [
-    { label: groupLabel, run: params.onToggleGroupByType },
-    { label: 'Reward categories', run: params.onOpenCategories },
-  ];
-
-  if (Platform.OS === 'ios') {
-    ActionSheetIOS.showActionSheetWithOptions(
+  presentActionSheet({
+    title: 'View options',
+    actions: [
       {
-        options: [...actions.map((action) => action.label), 'Cancel'],
-        cancelButtonIndex: actions.length,
+        label: params.groupByType
+          ? "Don't group cards by type"
+          : 'Group cards by type',
+        run: params.onToggleGroupByType,
       },
-      (buttonIndex) => {
-        const action = typeof buttonIndex === 'number' ? actions[buttonIndex] : undefined;
-        action?.run();
-      },
-    );
-    return;
-  }
-
-  Alert.alert('View options', undefined, [
-    ...actions.map((action) => ({ text: action.label, onPress: action.run })),
-    { text: 'Cancel', style: 'cancel' },
-  ]);
+      { label: 'Reward categories', run: params.onOpenCategories },
+    ],
+  });
 }
 
 function CardGroupSection({
@@ -149,16 +131,6 @@ export default function OverviewScreen() {
     : (contentWidth - spacing.md * (columns - 1)) / columns;
   const groupByType = state.settings.groupCardsByType ?? true;
 
-  const orderedCards = useMemo(
-    () => orderCardProjections(
-      model.dashboard.cards,
-      state.settings.cardOrdering?.all,
-      state.settings.cardOrdering?.cashback,
-      state.settings.cardOrdering?.miles,
-    ),
-    [model.dashboard.cards, state.settings.cardOrdering],
-  );
-
   const activeHiddenEntries = useMemo(() => {
     if (!period.isToday) {
       return [];
@@ -168,16 +140,15 @@ export default function OverviewScreen() {
     );
   }, [period.isToday, period.referenceDate, state.hiddenCards]);
 
-  const activeHiddenIds = useMemo(
-    () => new Set(activeHiddenEntries.map((entry) => entry.cardId)),
-    [activeHiddenEntries],
-  );
-
   const dashboardCards = useMemo(
-    () => orderedCards.filter(
-      ({ card }) => card.featured !== false && !activeHiddenIds.has(card.id),
-    ),
-    [activeHiddenIds, orderedCards],
+    () => groupByType
+      ? orderTypedCardProjections(
+          model.visibleCards,
+          state.settings.cardOrdering?.cashback,
+          state.settings.cardOrdering?.miles,
+        )
+      : model.visibleCards,
+    [groupByType, model.visibleCards, state.settings.cardOrdering],
   );
 
   const configuredCards = useMemo(
@@ -215,9 +186,13 @@ export default function OverviewScreen() {
   const connected = Boolean(state.pat && state.selectedBudget.id);
   const hasDashboardContent = dashboardCards.length > 0;
   const lastUpdatedLabel = formatLastUpdated(model.lastUpdatedAt ?? null);
-  const refreshAccessibilityLabel = lastUpdatedLabel
-    ? `Refresh dashboard data, last updated ${lastUpdatedLabel}`
-    : 'Refresh dashboard data';
+  const refreshAccessibilityLabel = model.canSync
+    ? lastUpdatedLabel
+      ? `Refresh dashboard data, last updated ${lastUpdatedLabel}`
+      : 'Refresh dashboard data'
+    : lastUpdatedLabel
+      ? `Open YNAB connection settings, last updated ${lastUpdatedLabel}`
+      : 'Open YNAB connection settings';
 
   const openCard = (id: string) => {
     router.push({ pathname: '/card/[id]', params: { id } });
@@ -407,6 +382,17 @@ export default function OverviewScreen() {
         ) : null}
       </View>
 
+      {connected && (model.syncState === 'offline' || model.syncState === 'attention') ? (
+        <SyncBadge
+          state={model.syncState}
+          label={model.syncLabel}
+          onPress={model.canSync ? model.refresh : () => router.push('/settings')}
+          accessibilityHint={model.canSync
+            ? 'Retries the YNAB refresh'
+            : 'Opens YNAB connection settings'}
+        />
+      ) : null}
+
       {connected && model.isRefreshing ? (
         <View style={styles.refreshBanner}>
           <ActivityIndicator size="small" color={semanticColors.systemBlue} />
@@ -455,7 +441,7 @@ export default function OverviewScreen() {
         )
       ) : (
         <>
-          {configuredCards.length > 0 ? (
+          {configuredCards.length > 0 || hiddenChips.length > 0 ? (
             <StatusSummary
               projections={configuredCards}
               earnedDollars={earnedDollars}

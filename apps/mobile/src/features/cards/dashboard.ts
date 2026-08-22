@@ -27,6 +27,9 @@ import {
 } from '@ynab-counter/app-core/storage';
 
 import { startDashboardClock } from './local-day-clock';
+import { orderCardProjections } from './card-ordering';
+
+export { orderCardProjections, orderTypedCardProjections } from './card-ordering';
 
 export type DashboardSyncState = 'synced' | 'syncing' | 'attention' | 'offline';
 
@@ -60,60 +63,6 @@ function requestAutomaticDashboardRefresh(
   sinceDate: string,
 ): Promise<void> {
   return automaticDashboardRefreshes.run(key, () => sync({ sinceDate }));
-}
-
-function applyOrdering(
-  cards: CardDashboardProjection[],
-  order: string[] | undefined,
-): CardDashboardProjection[] {
-  if (!order?.length) {
-    return cards;
-  }
-
-  const byId = new Map(cards.map((projection) => [projection.card.id, projection] as const));
-  const seen = new Set<string>();
-  const ordered: CardDashboardProjection[] = [];
-
-  for (const id of order) {
-    const match = byId.get(id);
-    if (match && !seen.has(id)) {
-      ordered.push(match);
-      seen.add(id);
-    }
-  }
-
-  for (const projection of cards) {
-    if (!seen.has(projection.card.id)) {
-      ordered.push(projection);
-    }
-  }
-
-  return ordered;
-}
-
-export function orderCardProjections(
-  cards: CardDashboardProjection[],
-  allOrder?: string[],
-  cashbackOrder?: string[],
-  milesOrder?: string[],
-): CardDashboardProjection[] {
-  if (allOrder?.length) {
-    return applyOrdering(cards, allOrder);
-  }
-
-  if (cashbackOrder?.length || milesOrder?.length) {
-    const cashback = applyOrdering(
-      cards.filter(({ card }) => card.type === 'cashback'),
-      cashbackOrder,
-    );
-    const miles = applyOrdering(
-      cards.filter(({ card }) => card.type === 'miles'),
-      milesOrder,
-    );
-    return [...cashback, ...miles];
-  }
-
-  return cards;
 }
 
 function isHiddenAt(cardId: string, hiddenUntil: string, referenceDate: Date): boolean {
@@ -303,8 +252,6 @@ export function useRewardsDashboard(referenceDate?: Date): RewardsDashboardModel
   );
 
   const visibleCards = useMemo(() => {
-    // Hide-until-next-cycle is a live-period affordance. Historical snapshots
-    // include those cards so tiles, status totals, and recommendations match.
     if (referenceDate) {
       return orderedCards.filter(({ card }) => card.featured !== false);
     }
@@ -369,7 +316,6 @@ export function useRewardsDashboard(referenceDate?: Date): RewardsDashboardModel
         sinceDate: requiredSinceDate,
       });
     } catch {
-      // StorageContext keeps cached data visible and exposes retry state.
     }
   }, [actions, canSync, requiredSinceDate, state.isSyncing]);
 
@@ -405,7 +351,6 @@ export function useRewardsDashboard(referenceDate?: Date): RewardsDashboardModel
       actions.syncBudgetsAndAccounts,
       requiredSinceDate,
     ).catch(() => {
-      // Keep the cached dashboard visible; foregrounding again permits another attempt.
     });
   }, [
     actions,
