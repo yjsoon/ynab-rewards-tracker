@@ -3,10 +3,14 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 
 import { Caption1, Footnote } from '@/components/ios';
-import type { CardFormatting } from '@/features/cards/presentation';
+import {
+  cardAttentionStatus,
+  type CardAttentionStatus,
+  type CardFormatting,
+} from '@/features/cards/presentation';
 import { semanticColors } from '@/theme';
 import { interaction, nativeMetrics, radii, spacing } from '@/theme/tokens';
-import type { CardDashboardProjection, CardPortfolioStatus } from '@ynab-counter/app-core/rewards-engine';
+import type { CardDashboardProjection } from '@ynab-counter/app-core/rewards-engine';
 
 export interface HiddenCardEntry {
   cardId: string;
@@ -24,34 +28,40 @@ const SLOT_COLORS = {
 } as const;
 
 type SummarySlot = {
-  key: 'below-minimum' | 'earning' | 'near-cap' | 'at-cap';
-  statuses: CardPortfolioStatus[];
+  key: Exclude<CardAttentionStatus, 'no-limits'>;
+  matches: CardAttentionStatus[];
   describe: (count: number) => string;
   color: SlotColor;
 };
 
 const STATUS_SLOTS: SummarySlot[] = [
   {
+    key: 'qualification-failed',
+    matches: ['qualification-failed'],
+    describe: (count) => `${count} failed qualification`,
+    color: 'red',
+  },
+  {
     key: 'below-minimum',
-    statuses: ['building'],
+    matches: ['below-minimum'],
     describe: (count) => `${count} below minimum spend`,
     color: 'sky',
   },
   {
     key: 'earning',
-    statuses: ['earning', 'open'],
+    matches: ['earning', 'no-limits'],
     describe: (count) => `${count} earning rewards`,
     color: 'green',
   },
   {
     key: 'near-cap',
-    statuses: ['near_cap'],
+    matches: ['near-cap'],
     describe: (count) => `${count} near cap`,
     color: 'amber',
   },
   {
     key: 'at-cap',
-    statuses: ['capped'],
+    matches: ['at-cap'],
     describe: (count) => `${count} at cap`,
     color: 'red',
   },
@@ -59,21 +69,14 @@ const STATUS_SLOTS: SummarySlot[] = [
 
 export interface StatusSummaryProps {
   projections: CardDashboardProjection[];
-  earnedDollars: number;
   formatting: CardFormatting;
   hiddenCards?: HiddenCardEntry[];
   onUnhideCard?: (cardId: string) => void;
   onUnhideAll?: () => void;
 }
 
-/**
- * The web dashboard's lifecycle strip: four dot/count clusters (below minimum,
- * earning, near cap, at cap), the approximate value earned this period, and
- * expandable chips for cards hidden until their next cycle.
- */
 export function StatusSummary({
   projections,
-  earnedDollars,
   formatting,
   hiddenCards = [],
   onUnhideCard,
@@ -82,17 +85,23 @@ export function StatusSummary({
   const [hiddenOpen, setHiddenOpen] = useState(false);
 
   const counts = projections.reduce((acc, projection) => {
-    const slot = STATUS_SLOTS.find((candidate) => candidate.statuses.includes(projection.status));
+    const status = cardAttentionStatus(projection);
+    const slot = STATUS_SLOTS.find((candidate) => candidate.matches.includes(status));
     if (slot) {
       acc[slot.key] += 1;
     }
     return acc;
   }, {
+    'qualification-failed': 0,
     'below-minimum': 0,
     earning: 0,
     'near-cap': 0,
     'at-cap': 0,
   });
+  const earnedDollars = projections.reduce(
+    (sum, projection) => sum + projection.reward.dollars,
+    0,
+  );
 
   const showHidden = hiddenCards.length > 0 && Boolean(onUnhideCard);
   const earnedLabel = `≈ ${formatting.currencyRounded(earnedDollars)} earned this period`;

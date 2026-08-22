@@ -2,9 +2,9 @@ import React from 'react';
 import { Pressable, StyleSheet, View, type ColorValue } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 
-import { Headline, Title2 } from '@/components/ios';
+import { Caption1, Footnote } from '@/components/ios';
 import { semanticColors } from '@/theme';
-import { interaction, nativeMetrics, spacing } from '@/theme/tokens';
+import { interaction, nativeMetrics, radii, spacing } from '@/theme/tokens';
 
 export interface CardGroupHeaderProps {
   title: string;
@@ -15,10 +15,6 @@ export interface CardGroupHeaderProps {
   onToggle: () => void;
 }
 
-/**
- * Collapsible section header for the type-grouped dashboard grid, mirroring
- * the web dashboard's cashback/miles groups with count badges.
- */
 export function CardGroupHeader({
   title,
   count,
@@ -36,27 +32,27 @@ export function CardGroupHeader({
       accessibilityHint={collapsed ? 'Expands this group' : 'Collapses this group'}
       style={({ pressed }) => [styles.header, pressed && styles.pressed]}
     >
-      <View style={styles.identity}>
-        <SymbolView
-          name={icon}
-          size={15}
-          tintColor={iconColor}
-          style={styles.icon}
-          accessibilityElementsHidden
-        />
-        <Headline accessible={false}>{title}</Headline>
-      </View>
-      <View style={styles.trailing}>
-        <Title2 color="secondary" style={styles.count} accessible={false}>
+      <SymbolView
+        name="chevron.down"
+        size={11}
+        tintColor={semanticColors.tertiaryLabel}
+        style={collapsed && styles.chevronCollapsed}
+        accessibilityElementsHidden
+      />
+      <SymbolView
+        name={icon}
+        size={13}
+        tintColor={iconColor}
+        style={styles.icon}
+        accessibilityElementsHidden
+      />
+      <Caption1 color="secondary" style={styles.title} accessible={false}>
+        {title}
+      </Caption1>
+      <View style={styles.badge}>
+        <Footnote color="secondary" style={styles.count} accessible={false}>
           {count}
-        </Title2>
-        <SymbolView
-          name="chevron.down"
-          size={12}
-          tintColor={semanticColors.tertiaryLabel}
-          style={collapsed && styles.chevronCollapsed}
-          accessibilityElementsHidden
-        />
+        </Footnote>
       </View>
     </Pressable>
   );
@@ -67,25 +63,32 @@ const styles = StyleSheet.create({
     minHeight: nativeMetrics.minimumTouchTarget,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-    paddingVertical: spacing.xs,
-  },
-  identity: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: spacing.sm,
+    paddingVertical: spacing.xs,
   },
   icon: {
     flexShrink: 0,
   },
-  trailing: {
-    flexDirection: 'row',
+  title: {
+    flexShrink: 1,
+    fontWeight: '600',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  badge: {
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radii.pill,
+    backgroundColor: semanticColors.tertiarySystemFill,
     alignItems: 'center',
-    gap: spacing.xs,
+    justifyContent: 'center',
   },
   count: {
     fontVariant: ['tabular-nums'],
+    fontWeight: '600',
+    fontSize: 11,
+    lineHeight: 13,
   },
   chevronCollapsed: {
     transform: [{ rotate: '-90deg' }],

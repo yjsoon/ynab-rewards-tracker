@@ -1,8 +1,12 @@
 import React, { useMemo } from 'react';
 import {
+  ActionSheetIOS,
+  Alert,
+  Platform,
   Pressable,
   StyleSheet,
   View,
+  type ColorValue,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
@@ -10,9 +14,13 @@ import { SymbolView } from 'expo-symbols';
 
 import { Caption1, Footnote, Headline, Title3 } from '@/components/ios';
 import type { CardFormatting } from '@/features/cards/presentation';
-import { isPromotionalPeriodActive } from '@/features/cards/presentation';
+import {
+  daysLeftInPeriod,
+  isPromotionalPeriodActive,
+  qualificationRow,
+} from '@/features/cards/presentation';
 import { semanticColors, withAlpha } from '@/theme';
-import { interaction, radii, spacing } from '@/theme/tokens';
+import { interaction, nativeMetrics, radii, spacing } from '@/theme/tokens';
 import type { TextColor } from '@/components/ios/Typography';
 import {
   resolveCardSpendingTier,
@@ -55,14 +63,61 @@ export interface CardTileProps {
   onToggleSubcategories: () => void;
   onHideCard: (cardId: string, hiddenUntil: string) => void;
   onOpen: () => void;
+  onEdit: () => void;
   style?: StyleProp<ViewStyle>;
 }
 
-/**
- * The web dashboard's card tile, adapted for a native touch target: reward
- * chip, hero number ("X to go / left / over / spent"), zone-coloured progress
- * bar, spend meta row, block copy, and an expandable category breakdown.
- */
+function presentCardActions(params: {
+  cardName: string;
+  allowHide: boolean;
+  onEdit: () => void;
+  onHide: () => void;
+  onDetails: () => void;
+}): void {
+  const actions = [
+    { label: 'Edit settings', run: params.onEdit },
+    ...(params.allowHide
+      ? [{ label: 'Hide from dashboard', run: params.onHide }]
+      : []),
+    { label: 'View card details', run: params.onDetails },
+  ];
+  if (Platform.OS === 'ios') {
+    ActionSheetIOS.showActionSheetWithOptions(
+      {
+        options: [...actions.map((action) => action.label), 'Cancel'],
+        cancelButtonIndex: actions.length,
+      },
+      (index) => {
+        if (typeof index === 'number' && index < actions.length) {
+          actions[index]?.run();
+        }
+      },
+    );
+    return;
+  }
+  Alert.alert(
+    params.cardName,
+    undefined,
+    [
+      ...actions.map((action) => ({ text: action.label, onPress: action.run })),
+      { text: 'Cancel', style: 'cancel' },
+    ],
+  );
+}
+
+function whisperColor(tone: TextColor): ColorValue {
+  if (tone === 'destructive') {
+    return semanticColors.whisperDestructive;
+  }
+  if (tone === 'attention') {
+    return semanticColors.whisperAttention;
+  }
+  if (tone === 'positive') {
+    return semanticColors.whisperPositive;
+  }
+  return semanticColors.label;
+}
+
 export function CardTile({
   projection,
   formatting,
@@ -72,6 +127,7 @@ export function CardTile({
   onToggleSubcategories,
   onHideCard,
   onOpen,
+  onEdit,
   style,
 }: CardTileProps) {
   const { card } = projection;
@@ -207,13 +263,20 @@ export function CardTile({
         ? `${formatting.currencyRounded(minimumTarget)} min`
         : 'This period';
 
-  const daysRemaining = projection.daysRemaining;
+  const qualification = qualificationRow(projection, formatting);
+  const daysRemaining = daysLeftInPeriod(
+    projection.period.end,
+    referenceDate ?? new Date(),
+  );
   const daysTone: TextColor = daysRemaining <= 1
     ? 'destructive'
-    : daysRemaining <= 7
+    : daysRemaining <= 3
       ? 'attention'
-      : 'tertiary';
+      : daysRemaining <= 7
+        ? 'attention'
+        : 'tertiary';
   const daysLabel = `${daysRemaining}d`;
+  const heroWhisper = whisperColor(hero.tone);
 
   const blockCount = projection.blockInfo?.blocksEarned ?? null;
   const blockSize = projection.blockInfo?.sizes[0] ?? null;
@@ -239,11 +302,13 @@ export function CardTile({
     : hero.variant === 'spent'
       ? undefined
       : `Spent ${formatting.currencyRounded(displayedSpend)}`;
-  const minimumMeta = hasMinimum && hero.variant !== 'min-left'
-    ? minimumMet
-      ? `Met ${formatting.currencyRounded(minimumTarget)} min`
-      : `${progressPercent}% of ${formatting.currencyRounded(minimumTarget)} min`
-    : undefined;
+  const minimumMeta = !hasMinimum
+    ? undefined
+    : hero.variant === 'min-left'
+      ? `${progressPercent}% of min`
+      : minimumMet
+        ? `Met ${formatting.currencyRounded(minimumTarget)} min`
+        : `${progressPercent}% of ${formatting.currencyRounded(minimumTarget)} min`;
   const noLimitsMeta = !hasMinimum && !hasMaximum && !nextSpendingLevel;
 
   const borderTone = nextSpendingLevel
@@ -260,39 +325,65 @@ export function CardTile({
   return (
     <View style={[styles.tile, borderTone, style]}>
       <Pressable
+        onPress={() => presentCardActions({
+          cardName: card.name,
+          allowHide: allowHideCard,
+          onEdit,
+          onHide: () => onHideCard(card.id, projection.resetsOn),
+          onDetails: onOpen,
+        })}
+        accessibilityRole="button"
+        accessibilityLabel={`Card actions for ${card.name}`}
+        style={({ pressed }) => [styles.overflowButton, pressed && styles.pressed]}
+      >
+        <SymbolView
+          name="ellipsis"
+          size={16}
+          tintColor={semanticColors.secondaryLabel}
+        />
+      </Pressable>
+      <View style={styles.headerBar}>
+        <Pressable
+          onPress={onOpen}
+          accessibilityRole="button"
+          accessibilityLabel={`${card.name}, ${earnedDisplay} ${card.type === 'cashback' ? 'cashback' : 'miles'} earned`}
+          accessibilityHint="Opens card details"
+          style={({ pressed }) => [styles.headerNameHit, pressed && styles.pressed]}
+        >
+          <Headline numberOfLines={1} style={styles.cardName}>{card.name}</Headline>
+        </Pressable>
+        <View style={styles.headerTrailing}>
+          {promoActive ? (
+            <View style={styles.promoPill} accessibilityElementsHidden>
+              <SymbolView
+                name="sparkles"
+                size={11}
+                tintColor={semanticColors.systemPurple}
+              />
+              <Caption1 color="action" style={styles.promoText}>Promo</Caption1>
+            </View>
+          ) : null}
+          <View style={styles.rewardChip} accessibilityElementsHidden>
+            <SymbolView
+              name={card.type === 'cashback' ? 'dollarsign.circle.fill' : 'airplane'}
+              size={14}
+              tintColor={rewardChipColor}
+              style={styles.rewardIcon}
+            />
+            <Footnote color={rewardChipTone} style={styles.rewardChipText}>
+              {earnedDisplay}
+            </Footnote>
+          </View>
+        </View>
+      </View>
+      <Pressable
         onPress={onOpen}
         accessible
         accessibilityRole="button"
-        accessibilityLabel={`${card.name}, ${earnedDisplay} ${card.type === 'cashback' ? 'cashback' : 'miles'} earned, ${hero.label}${intermediateCapReached ? ', current level capped; next tier can unlock more rewards' : ''}${blockCopy ? `, ${blockCopy}` : ''}`}
+        accessibilityLabel={`${hero.label}${intermediateCapReached ? ', current level capped; next tier can unlock more rewards' : ''}${blockCopy ? `, ${blockCopy}` : ''}`}
         accessibilityHint="Opens card details"
         style={({ pressed }) => [styles.pressable, pressed && styles.pressed]}
       >
-        <View style={styles.header} accessibilityElementsHidden>
-          <Headline numberOfLines={1} style={styles.cardName}>{card.name}</Headline>
-          <View style={styles.headerTrailing}>
-            {promoActive ? (
-              <View style={styles.promoPill}>
-                <SymbolView
-                  name="sparkles"
-                  size={11}
-                  tintColor={semanticColors.systemPurple}
-                />
-                <Caption1 color="action" style={styles.promoText}>Promo</Caption1>
-              </View>
-            ) : null}
-            <View style={styles.rewardChip}>
-              <SymbolView
-                name={card.type === 'cashback' ? 'dollarsign.circle.fill' : 'airplane'}
-                size={14}
-                tintColor={rewardChipColor}
-                style={styles.rewardIcon}
-              />
-              <Footnote color={rewardChipTone} style={styles.rewardChipText}>
-                {earnedDisplay}
-              </Footnote>
-            </View>
-          </View>
-        </View>
 
         <View style={styles.heroRow} accessibilityElementsHidden>
           <Caption1 color="secondary" style={styles.heroLabel}>
@@ -325,13 +416,20 @@ export function CardTile({
             ) : null}
             <Title3
               color={hero.tone}
-              style={[styles.heroNumber, hero.weight === 'medium' && styles.heroNumberMedium]}
+              style={[
+                styles.heroNumber,
+                hero.weight === 'medium' && styles.heroNumberMedium,
+                { color: heroWhisper },
+              ]}
             >
               {heroNumberText}
             </Title3>
             <Caption1
               color={hero.variant === 'spent' ? 'secondary' : hero.tone}
-              style={styles.heroSuffix}
+              style={[
+                styles.heroSuffix,
+                hero.variant !== 'spent' && { color: heroWhisper },
+              ]}
             >
               {hero.suffix}
             </Caption1>
@@ -374,6 +472,16 @@ export function CardTile({
           </Footnote>
         </View>
 
+        {qualification ? (
+          <Caption1
+            color={qualification.tone}
+            style={styles.tabular}
+            accessibilityElementsHidden
+          >
+            {qualification.label}
+          </Caption1>
+        ) : null}
+
         {blockCopy ? (
           <Caption1 color="tertiary" style={styles.tabular} accessibilityElementsHidden>
             {blockCopy}
@@ -414,8 +522,40 @@ const styles = StyleSheet.create({
     backgroundColor: semanticColors.secondarySystemGroupedBackground,
     overflow: 'hidden',
   },
+  overflowButton: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    zIndex: 2,
+    width: nativeMetrics.minimumTouchTarget,
+    height: nativeMetrics.minimumTouchTarget,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderBottomLeftRadius: radii.medium,
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: semanticColors.separator,
+    backgroundColor: semanticColors.secondarySystemGroupedBackground,
+  },
+  headerBar: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingTop: spacing.lg,
+    paddingLeft: spacing.lg,
+    paddingRight: nativeMetrics.minimumTouchTarget + spacing.sm,
+  },
+  headerNameHit: {
+    flex: 1,
+    minWidth: 120,
+    minHeight: nativeMetrics.minimumTouchTarget,
+    justifyContent: 'center',
+  },
   pressable: {
-    padding: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
     gap: spacing.md,
   },
   footerSection: {
@@ -425,12 +565,6 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: interaction.subtlePressedOpacity,
-  },
-  header: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: spacing.sm,
   },
   cardName: {
     flex: 1,
@@ -519,12 +653,15 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   hideButton: {
-    alignSelf: 'flex-start',
-    minHeight: 36,
+    alignSelf: 'stretch',
+    minHeight: nativeMetrics.minimumTouchTarget,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.lg,
+    borderRadius: radii.medium,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: semanticColors.separator,
+    alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.md,
-    marginTop: -spacing.xs,
   },
   hideButtonText: {
     fontWeight: '600',

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import {
   Pressable,
   RefreshControl,
@@ -10,25 +10,13 @@ import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 
 import { useStorage } from '@/contexts/StorageContext';
-import { EmptyState, SectionTitle } from '@/components/native';
-import { Footnote, Headline } from '@/components/ios';
-import {
-  createCardFormatting,
-  flagColor,
-  formatResetDate,
-  type CardFormatting,
-} from '@/features/cards/presentation';
+import { EmptyState } from '@/components/native';
+import { Footnote } from '@/components/ios';
+import { createCardFormatting } from '@/features/cards/presentation';
 import {
   orderCardProjections,
   useRewardsDashboard,
 } from '@/features/cards/dashboard';
-import {
-  collectRewardCategories,
-  rankCardUses,
-  rankRewardCategoryPreview,
-  type PortfolioRewardCategory,
-  type RankedCardUse,
-} from '@/features/cards/reward-categories';
 import {
   CardGroupHeader,
   CardTile,
@@ -59,275 +47,6 @@ function compactCardName(name: string): string {
     .map((segment) => segment.trim())
     .filter(Boolean);
   return segments.at(-1) ?? name;
-}
-
-function decisionCurrency(value: number, formatting: CardFormatting): string {
-  if (value !== 0 && Math.abs(value) < 1) {
-    return formatting.currencyExact(value);
-  }
-  return formatting.currencyRounded(value);
-}
-
-function thresholdCurrency(value: number, formatting: CardFormatting): string {
-  return Number.isInteger(value)
-    ? decisionCurrency(value, formatting)
-    : formatting.currencyExact(value);
-}
-
-function categoryRateLabel(
-  item: PortfolioRewardCategory,
-  formatting: CardFormatting,
-): string {
-  const rate = formatting.number(item.category.rate);
-  const label = item.card.card.type === 'cashback'
-    ? `${rate}% cashback`
-    : `${rate} ${item.category.rate === 1 ? 'mile' : 'miles'}/${formatting.currency} 1`;
-  return item.category.blockInfo
-    ? `${label} · ${thresholdCurrency(item.category.blockInfo.size, formatting)} blocks`
-    : label;
-}
-
-function cardUseRateLabel(
-  item: RankedCardUse,
-  formatting: CardFormatting,
-): string {
-  const rate = formatting.number(item.rate.value);
-  const nativeRate = item.rate.type === 'cashback'
-    ? `${rate}% cashback`
-    : `${rate} ${item.rate.value === 1 ? 'mile' : 'miles'}/${formatting.currency} 1`;
-  const blockAwareRate = item.rate.blockSize === null
-    ? nativeRate
-    : `${nativeRate} · ${thresholdCurrency(item.rate.blockSize, formatting)} blocks`;
-  return item.rate.prospective ? `${blockAwareRate} after unlock` : blockAwareRate;
-}
-
-function cardUseOperationalLabel(
-  item: RankedCardUse,
-  formatting: CardFormatting,
-): string | undefined {
-  if (item.operational?.kind === 'minimum') {
-    const category = item.operational.category
-      ? ` on ${item.operational.category}`
-      : '';
-    return `${thresholdCurrency(item.operational.remaining, formatting)} more${category} before ${formatResetDate(item.operational.resetsOn)} to unlock`;
-  }
-  if (item.operational?.kind === 'cap') {
-    return `${thresholdCurrency(item.operational.remaining, formatting)} cap room`;
-  }
-  return undefined;
-}
-
-function compactCardUseDetail(
-  item: RankedCardUse,
-  formatting: CardFormatting,
-): string {
-  if (item.operational?.kind === 'minimum') {
-    return `${thresholdCurrency(item.operational.remaining, formatting)} to unlock`;
-  }
-
-  const rate = formatting.number(item.rate.value);
-  const rateLabel = item.rate.type === 'cashback'
-    ? `${rate}%`
-    : `${rate} mi/${formatting.currency}1`;
-  const blockLabel = item.rate.blockSize === null
-    ? ''
-    : ` · ${thresholdCurrency(item.rate.blockSize, formatting)} blocks`;
-  const roomLabel = item.operational?.kind === 'cap'
-    ? ` · ${thresholdCurrency(item.operational.remaining, formatting)} left`
-    : '';
-  return `${rateLabel}${blockLabel}${roomLabel}`;
-}
-
-function CardUseColumn({
-  item,
-  formatting,
-  onPress,
-  showDivider,
-}: {
-  item: RankedCardUse;
-  formatting: CardFormatting;
-  onPress: () => void;
-  showDivider: boolean;
-}) {
-  const rateLabel = cardUseRateLabel(item, formatting);
-  const operationalLabel = cardUseOperationalLabel(item, formatting);
-  const compactDetail = compactCardUseDetail(item, formatting);
-
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={[
-        item.card.card.name,
-        item.use.label,
-        rateLabel,
-        operationalLabel,
-      ].filter(Boolean).join(', ')}
-      accessibilityHint={item.use.categoryId
-        ? `Opens the ${item.use.label} earning tier on ${item.card.card.name}`
-        : `Opens details for ${item.card.card.name}`}
-      style={({ pressed }) => [
-        styles.cardUseColumn,
-        showDivider && styles.columnDivider,
-        pressed && styles.pressed,
-      ]}
-    >
-      <View
-        style={styles.rowCopy}
-        accessibilityElementsHidden
-        importantForAccessibility="no-hide-descendants"
-      >
-        <Headline numberOfLines={1}>{compactCardName(item.card.card.name)}</Headline>
-        <View style={styles.useLabelRow}>
-          {item.use.flagColor ? (
-            <SymbolView
-              name="flag.fill"
-              size={14}
-              tintColor={flagColor(item.use.flagColor)}
-              style={styles.flagIcon}
-            />
-          ) : null}
-          <Footnote color="secondary" numberOfLines={1} style={styles.flexibleText}>
-            {item.use.label}
-          </Footnote>
-        </View>
-        <Footnote numberOfLines={1} style={styles.tabular}>{compactDetail}</Footnote>
-      </View>
-    </Pressable>
-  );
-}
-
-function SetupCardRow({
-  projection,
-  onPress,
-  showDivider,
-}: {
-  projection: CardDashboardProjection;
-  onPress: () => void;
-  showDivider: boolean;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={`${projection.card.name}, Add an earning rate`}
-      accessibilityHint={`Opens details for ${projection.card.name}`}
-      style={({ pressed }) => [
-        styles.setupRow,
-        showDivider && styles.rowDivider,
-        pressed && styles.pressed,
-      ]}
-    >
-      <View
-        style={styles.rowCopy}
-        accessibilityElementsHidden
-        importantForAccessibility="no-hide-descendants"
-      >
-        <Headline>{compactCardName(projection.card.name)}</Headline>
-        <Footnote color="secondary">Add an earning rate</Footnote>
-      </View>
-    </Pressable>
-  );
-}
-
-function categorySpendOperationalState(
-  item: PortfolioRewardCategory,
-  formatting: CardFormatting,
-): {
-  label: string;
-  color: 'secondary' | 'attention' | 'destructive';
-} | undefined {
-  const { category } = item;
-  if (category.excluded) {
-    return { label: 'Excluded', color: 'secondary' };
-  }
-  if (category.maximum.reached) {
-    return { label: 'Cap reached', color: 'destructive' };
-  }
-  if ((category.maximum.progress ?? 0) >= 0.8) {
-    return {
-      label: `${thresholdCurrency(category.maximum.remaining ?? 0, formatting)} cap room`,
-      color: 'attention',
-    };
-  }
-  if (category.blockedByCardMinimum) {
-    return {
-      label: `${thresholdCurrency(item.card.minimum.remaining ?? 0, formatting)} more to meet card minimum`,
-      color: 'attention',
-    };
-  }
-  if (category.minimum.target !== null && category.minimum.met === false) {
-    return {
-      label: `${thresholdCurrency(category.minimum.remaining ?? 0, formatting)} more to meet tier minimum`,
-      color: 'attention',
-    };
-  }
-  if (category.maximum.target !== null) {
-    return {
-      label: `${thresholdCurrency(category.maximum.remaining ?? 0, formatting)} cap room`,
-      color: 'secondary',
-    };
-  }
-  return undefined;
-}
-
-function CategorySpendRow({
-  item,
-  formatting,
-  onPress,
-  showDivider,
-}: {
-  item: PortfolioRewardCategory;
-  formatting: CardFormatting;
-  onPress: () => void;
-  showDivider: boolean;
-}) {
-  const rateLabel = categoryRateLabel(item, formatting);
-  const spendLabel = `${decisionCurrency(item.category.spend.total, formatting)} spent`;
-  const operationalState = categorySpendOperationalState(item, formatting);
-  const context = `${compactCardName(item.card.card.name)}, ${rateLabel}`;
-
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={[
-        item.category.name,
-        item.card.card.name,
-        rateLabel,
-        spendLabel,
-        operationalState?.label,
-      ].filter(Boolean).join(', ')}
-      accessibilityHint={`Opens the ${item.category.name} reward tier on ${item.card.card.name}`}
-      style={({ pressed }) => [
-        styles.categoryRow,
-        showDivider && styles.rowDivider,
-        pressed && styles.pressed,
-      ]}
-    >
-      <SymbolView
-        name="flag.fill"
-        size={15}
-        tintColor={flagColor(item.category.flagColor)}
-        style={styles.categoryFlagIcon}
-        accessibilityElementsHidden
-      />
-      <View
-        style={styles.rowCopy}
-        accessibilityElementsHidden
-        importantForAccessibility="no-hide-descendants"
-      >
-        <Headline>{item.category.name}</Headline>
-        <Footnote color="secondary">{context}</Footnote>
-        <Headline style={styles.tabular}>{spendLabel}</Headline>
-        {operationalState ? (
-          <Footnote color={operationalState.color} style={styles.tabular}>
-            {operationalState.label}
-          </Footnote>
-        ) : null}
-      </View>
-    </Pressable>
-  );
 }
 
 function CardGroupSection({
@@ -368,11 +87,11 @@ function CardGroupSection({
 export default function OverviewScreen() {
   const router = useRouter();
   const { state, actions } = useStorage();
-  const [highlightsOpen, setHighlightsOpen] = useState(false);
   const period = useDashboardPeriod();
   const referenceDate = period.isToday ? undefined : period.referenceDate;
   const model = useRewardsDashboard(referenceDate);
   const formatting = useMemo(() => createCardFormatting(state.settings), [state.settings]);
+  const groupByType = state.settings.groupCardsByType ?? true;
 
   const orderedCards = useMemo(
     () => orderCardProjections(
@@ -398,59 +117,19 @@ export default function OverviewScreen() {
     [activeHiddenEntries],
   );
 
-  const dashboardCards = useMemo(
+  const featuredCards = useMemo(
     () => orderedCards.filter(
       ({ card }) => card.featured !== false && !activeHiddenIds.has(card.id),
     ),
     [activeHiddenIds, orderedCards],
   );
-
-  const configuredCards = useMemo(
-    () => dashboardCards.filter((projection) => projection.status !== 'unconfigured'),
-    [dashboardCards],
-  );
-  const setupCards = useMemo(
-    () => dashboardCards.filter((projection) => projection.status === 'unconfigured'),
-    [dashboardCards],
-  );
   const cashbackCards = useMemo(
-    () => configuredCards.filter(
-      ({ card, status }) => card.type === 'cashback' && (
-        !period.isToday || status !== 'capped'
-      ),
-    ),
-    [configuredCards, period.isToday],
+    () => featuredCards.filter(({ card }) => card.type === 'cashback'),
+    [featuredCards],
   );
   const milesCards = useMemo(
-    () => configuredCards.filter(
-      ({ card, status }) => card.type === 'miles' && (
-        !period.isToday || status !== 'capped'
-      ),
-    ),
-    [configuredCards, period.isToday],
-  );
-  const earnedDollars = useMemo(
-    () => configuredCards.reduce((sum, projection) => sum + projection.reward.dollars, 0),
-    [configuredCards],
-  );
-  const nonCappedCards = useMemo(
-    () => period.isToday
-      ? model.visibleCards.filter((projection) => projection.status !== 'capped')
-      : model.visibleCards,
-    [model.visibleCards, period.isToday],
-  );
-  const cardUses = useMemo(
-    () => rankCardUses(nonCappedCards, state.settings),
-    [nonCappedCards, state.settings],
-  );
-  const cardUsePreview = useMemo(() => cardUses.slice(0, 3), [cardUses]);
-  const rewardCategories = useMemo(
-    () => collectRewardCategories(nonCappedCards),
-    [nonCappedCards],
-  );
-  const categoryPreview = useMemo(
-    () => rankRewardCategoryPreview(rewardCategories),
-    [rewardCategories],
+    () => featuredCards.filter(({ card }) => card.type === 'miles'),
+    [featuredCards],
   );
 
   const groupCollapsed = state.settings.collapsedCardGroups ?? {};
@@ -472,25 +151,14 @@ export default function OverviewScreen() {
     ? `${model.syncLabel} — Retry`
     : `${model.syncLabel} — Review settings`;
   const connected = Boolean(state.pat && state.selectedBudget.id);
-  const hasDashboardContent = cashbackCards.length > 0
-    || milesCards.length > 0
-    || setupCards.length > 0;
+  const hasDashboardContent = featuredCards.length > 0;
 
   const openCard = (id: string) => {
     router.push({ pathname: '/card/[id]', params: { id } });
   };
 
-  const openCardUse = (item: RankedCardUse) => {
-    router.push({
-      pathname: '/card/[id]',
-      params: item.use.categoryId
-        ? { id: item.card.card.id, categoryId: item.use.categoryId }
-        : { id: item.card.card.id },
-    });
-  };
-
-  const openRewardCategory = (id: string, categoryId: string) => {
-    router.push({ pathname: '/card/[id]', params: { id, categoryId } });
+  const editCard = (id: string) => {
+    router.push({ pathname: '/card/[id]/edit', params: { id } });
   };
 
   const toggleGroup = (type: 'cashback' | 'miles') => {
@@ -506,10 +174,9 @@ export default function OverviewScreen() {
     const currentValue = isExpansionMap(subcategoryExpansion)
       ? subcategoryExpansion[cardId] ?? false
       : Boolean(subcategoryExpansion);
-    const nextValue = !currentValue;
     const nextSetting: Record<string, boolean> = isExpansionMap(subcategoryExpansion)
-      ? { ...subcategoryExpansion, [cardId]: nextValue }
-      : { [cardId]: nextValue };
+      ? { ...subcategoryExpansion, [cardId]: !currentValue }
+      : { [cardId]: !currentValue };
     void actions.setSettings({ summaryViewSubcategoriesExpanded: nextSetting });
   };
 
@@ -539,30 +206,19 @@ export default function OverviewScreen() {
     );
   };
 
-  const periodTrigger = (
-    <Pressable
-      onPress={() => router.push('/(tabs)/overview/period')}
-      accessibilityRole="button"
-      accessibilityLabel={`Dashboard period, ${period.isToday ? 'today' : period.asOfLabel}`}
-      accessibilityHint="Changes the dashboard period"
-      style={({ pressed }) => [styles.periodPill, pressed && styles.pressed]}
-    >
-      <SymbolView
-        name={period.isToday ? 'calendar' : 'clock.arrow.circlepath'}
-        size={13}
-        tintColor={semanticColors.action}
-        accessibilityElementsHidden
-      />
-      <Footnote color={period.isToday ? 'action' : 'primary'} style={styles.periodLabel} accessible={false}>
-        {period.triggerLabel}
-      </Footnote>
-      <SymbolView
-        name="chevron.down"
-        size={9}
-        tintColor={semanticColors.tertiaryLabel}
-        accessibilityElementsHidden
-      />
-    </Pressable>
+  const renderTile = (projection: CardDashboardProjection) => (
+    <CardTile
+      key={projection.card.id}
+      projection={projection}
+      formatting={formatting}
+      referenceDate={period.referenceDate}
+      allowHideCard={period.isToday}
+      isSubcategoryExpanded={isSubcategoryExpanded(projection.card.id)}
+      onToggleSubcategories={() => toggleSubcategories(projection.card.id)}
+      onHideCard={(cardId, hiddenUntil) => void hideCard(cardId, hiddenUntil)}
+      onOpen={() => openCard(projection.card.id)}
+      onEdit={() => editCard(projection.card.id)}
+    />
   );
 
   return (
@@ -581,25 +237,73 @@ export default function OverviewScreen() {
         />
       )}
     >
-      <View style={styles.topRow}>
-        {periodTrigger}
-        {connected && state.cards.length > 0 &&
-        (model.syncState === 'offline' || model.syncState === 'attention') ? (
+      <View style={styles.toolbar}>
+        <Pressable
+          onPress={() => router.push('/(tabs)/overview/period')}
+          accessibilityRole="button"
+          accessibilityLabel={`Dashboard period, ${period.isToday ? 'today' : period.asOfLabel}`}
+          accessibilityHint="Changes the dashboard period"
+          style={({ pressed }) => [styles.periodPill, pressed && styles.pressed]}
+        >
+          <SymbolView
+            name={period.isToday ? 'calendar' : 'clock.arrow.circlepath'}
+            size={13}
+            tintColor={semanticColors.action}
+            accessibilityElementsHidden
+          />
+          <Footnote color={period.isToday ? 'action' : 'primary'} style={styles.periodLabel} accessible={false}>
+            {period.triggerLabel}
+          </Footnote>
+          <SymbolView
+            name="chevron.down"
+            size={9}
+            tintColor={semanticColors.tertiaryLabel}
+            accessibilityElementsHidden
+          />
+        </Pressable>
+
+        <View style={styles.toolbarActions}>
+          {connected && state.cards.length > 0 &&
+          (model.syncState === 'offline' || model.syncState === 'attention') ? (
+            <Pressable
+              onPress={model.canSync ? model.refresh : () => router.push('/settings')}
+              accessibilityRole="button"
+              accessibilityLabel={syncActionLabel}
+              style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
+            >
+              <Footnote color="action">{syncActionLabel}</Footnote>
+            </Pressable>
+          ) : null}
+
           <Pressable
             onPress={model.canSync ? model.refresh : () => router.push('/settings')}
             accessibilityRole="button"
-            accessibilityLabel={syncActionLabel}
-            accessibilityHint={model.canSync
-              ? 'Retries syncing rewards from YNAB'
-              : 'Opens YNAB connection settings'}
-            style={({ pressed }) => [
-              styles.syncAction,
-              pressed && styles.pressed,
-            ]}
+            accessibilityLabel={model.canSync ? 'Refresh rewards from YNAB' : 'Review YNAB connection settings'}
+            style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
           >
-            <Footnote color="action">{syncActionLabel}</Footnote>
+            <SymbolView
+              name="arrow.clockwise"
+              size={16}
+              tintColor={semanticColors.secondaryLabel}
+            />
           </Pressable>
-        ) : null}
+
+          <Pressable
+            onPress={() => {
+              void actions.setSettings({ groupCardsByType: !groupByType });
+            }}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: groupByType }}
+            accessibilityLabel="Group cards by type"
+            style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
+          >
+            <SymbolView
+              name="slider.horizontal.3"
+              size={16}
+              tintColor={groupByType ? semanticColors.action : semanticColors.secondaryLabel}
+            />
+          </Pressable>
+        </View>
       </View>
 
       {!connected ? (
@@ -620,7 +324,7 @@ export default function OverviewScreen() {
             accessibilityHint: 'Opens tracked account settings',
           }}
         />
-      ) : !hasDashboardContent && cardUses.length === 0 ? (
+      ) : !hasDashboardContent ? (
         activeHiddenEntries.length > 0 ? (
           <EmptyState
             title="All cards hidden"
@@ -643,146 +347,42 @@ export default function OverviewScreen() {
         )
       ) : (
         <>
-          {configuredCards.length > 0 ? (
-            <StatusSummary
-              projections={configuredCards}
-              earnedDollars={earnedDollars}
-              formatting={formatting}
-              hiddenCards={period.isToday ? hiddenChips : undefined}
-              onUnhideCard={period.isToday ? (cardId) => void unhideCard(cardId) : undefined}
-              onUnhideAll={period.isToday ? () => void unhideAll() : undefined}
-            />
-          ) : null}
+          <StatusSummary
+            projections={featuredCards}
+            formatting={formatting}
+            hiddenCards={period.isToday ? hiddenChips : undefined}
+            onUnhideCard={period.isToday ? (cardId) => void unhideCard(cardId) : undefined}
+            onUnhideAll={period.isToday ? () => void unhideAll() : undefined}
+          />
 
-          {cardUsePreview.length > 0 ? (
-            <View style={styles.highlights}>
-              <Pressable
-                onPress={() => setHighlightsOpen((open) => !open)}
-                accessibilityRole="button"
-                accessibilityLabel={`Highlights, ${cardUsePreview.length} ${cardUsePreview.length === 1 ? 'card' : 'cards'}`}
-                accessibilityHint={highlightsOpen ? 'Collapses card highlights' : 'Shows card highlights'}
-                accessibilityState={{ expanded: highlightsOpen }}
-                style={({ pressed }) => [
-                  styles.highlightsDisclosure,
-                  pressed && styles.pressed,
-                ]}
+          {groupByType ? (
+            <>
+              <CardGroupSection
+                title="Cashback Cards"
+                icon="percent"
+                iconColor={semanticColors.positive}
+                collapsed={groupCollapsed.cashback ?? false}
+                count={cashbackCards.length}
+                onToggle={() => toggleGroup('cashback')}
               >
-                <Footnote color="secondary" style={styles.highlightsLabel} accessible={false}>
-                  Highlights
-                </Footnote>
-                <View style={styles.highlightsTrailing} accessibilityElementsHidden>
-                  <Footnote color="tertiary" style={styles.tabular}>
-                    {cardUsePreview.length}
-                  </Footnote>
-                  <SymbolView
-                    name="chevron.down"
-                    size={10}
-                    tintColor={semanticColors.tertiaryLabel}
-                    style={!highlightsOpen && styles.highlightsChevronClosed}
-                  />
-                </View>
-              </Pressable>
-              {highlightsOpen ? (
-                <View style={styles.cardUseColumns}>
-                  {cardUsePreview.map((item, index) => (
-                    <CardUseColumn
-                      key={item.key}
-                      item={item}
-                      formatting={formatting}
-                      onPress={() => openCardUse(item)}
-                      showDivider={index > 0}
-                    />
-                  ))}
-                </View>
-              ) : null}
+                {cashbackCards.map(renderTile)}
+              </CardGroupSection>
+              <CardGroupSection
+                title="Miles Cards"
+                icon="chart.line.uptrend.xyaxis"
+                iconColor={semanticColors.systemBlue}
+                collapsed={groupCollapsed.miles ?? false}
+                count={milesCards.length}
+                onToggle={() => toggleGroup('miles')}
+              >
+                {milesCards.map(renderTile)}
+              </CardGroupSection>
+            </>
+          ) : (
+            <View style={styles.tileStack}>
+              {featuredCards.map(renderTile)}
             </View>
-          ) : null}
-
-          <CardGroupSection
-            title="Cashback Cards"
-            icon="percent"
-            iconColor={semanticColors.positive}
-            collapsed={groupCollapsed.cashback ?? false}
-            count={cashbackCards.length}
-            onToggle={() => toggleGroup('cashback')}
-          >
-            {cashbackCards.map((projection) => (
-              <CardTile
-                key={projection.card.id}
-                projection={projection}
-                formatting={formatting}
-                referenceDate={period.referenceDate}
-                allowHideCard={period.isToday}
-                isSubcategoryExpanded={isSubcategoryExpanded(projection.card.id)}
-                onToggleSubcategories={() => toggleSubcategories(projection.card.id)}
-                onHideCard={(cardId, hiddenUntil) => void hideCard(cardId, hiddenUntil)}
-                onOpen={() => openCard(projection.card.id)}
-              />
-            ))}
-          </CardGroupSection>
-
-          <CardGroupSection
-            title="Miles Cards"
-            icon="chart.line.uptrend.xyaxis"
-            iconColor={semanticColors.systemBlue}
-            collapsed={groupCollapsed.miles ?? false}
-            count={milesCards.length}
-            onToggle={() => toggleGroup('miles')}
-          >
-            {milesCards.map((projection) => (
-              <CardTile
-                key={projection.card.id}
-                projection={projection}
-                formatting={formatting}
-                referenceDate={period.referenceDate}
-                allowHideCard={period.isToday}
-                isSubcategoryExpanded={isSubcategoryExpanded(projection.card.id)}
-                onToggleSubcategories={() => toggleSubcategories(projection.card.id)}
-                onHideCard={(cardId, hiddenUntil) => void hideCard(cardId, hiddenUntil)}
-                onOpen={() => openCard(projection.card.id)}
-              />
-            ))}
-          </CardGroupSection>
-
-          {setupCards.length > 0 ? (
-            <View style={styles.section}>
-              <SectionTitle title="Set up" />
-              <View style={styles.rows}>
-                {setupCards.map((projection, index) => (
-                  <SetupCardRow
-                    key={projection.card.id}
-                    projection={projection}
-                    onPress={() => openCard(projection.card.id)}
-                    showDivider={index < setupCards.length - 1}
-                  />
-                ))}
-              </View>
-            </View>
-          ) : null}
-
-          {categoryPreview.length > 0 ? (
-            <View style={styles.section}>
-              <SectionTitle
-                title="Category activity"
-                action={{
-                  label: 'See all',
-                  onPress: () => router.push('/(tabs)/overview/categories'),
-                  accessibilityHint: 'Opens every reward category on Overview, grouped by card',
-                }}
-              />
-              <View style={styles.rows}>
-                {categoryPreview.map((item, index) => (
-                  <CategorySpendRow
-                    key={item.key}
-                    item={item}
-                    formatting={formatting}
-                    onPress={() => openRewardCategory(item.card.card.id, item.category.id)}
-                    showDivider={index < categoryPreview.length - 1}
-                  />
-                ))}
-              </View>
-            </View>
-          ) : null}
+          )}
         </>
       )}
     </ScrollView>
@@ -798,13 +398,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: nativeMetrics.screenGutter,
     paddingTop: spacing.md,
     paddingBottom: 120,
-    gap: spacing.xxl,
+    gap: spacing.xl,
   },
-  topRow: {
+  toolbar: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
     gap: spacing.sm,
+  },
+  toolbarActions: {
+    marginLeft: 'auto',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
   },
   periodPill: {
     minHeight: nativeMetrics.minimumTouchTarget,
@@ -818,107 +424,17 @@ const styles = StyleSheet.create({
   periodLabel: {
     fontWeight: '600',
   },
-  syncAction: {
-    minHeight: nativeMetrics.minimumTouchTarget,
-    alignSelf: 'flex-start',
+  iconButton: {
+    width: nativeMetrics.minimumTouchTarget,
+    height: nativeMetrics.minimumTouchTarget,
+    alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 'auto',
   },
   section: {
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   tileStack: {
     gap: spacing.md,
-  },
-  rows: {
-    marginHorizontal: -spacing.md,
-    borderRadius: radii.large,
-    backgroundColor: semanticColors.secondarySystemGroupedBackground,
-    overflow: 'hidden',
-  },
-  highlights: {
-    gap: spacing.sm,
-  },
-  highlightsDisclosure: {
-    minHeight: nativeMetrics.minimumTouchTarget,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-  },
-  highlightsLabel: {
-    fontWeight: '600',
-  },
-  highlightsTrailing: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  highlightsChevronClosed: {
-    transform: [{ rotate: '-90deg' }],
-  },
-  cardUseColumns: {
-    minHeight: 88,
-    flexDirection: 'row',
-    marginHorizontal: -spacing.md,
-    borderRadius: radii.large,
-    backgroundColor: semanticColors.secondarySystemGroupedBackground,
-    overflow: 'hidden',
-  },
-  cardUseColumn: {
-    flex: 1,
-    minWidth: 0,
-    minHeight: nativeMetrics.minimumTouchTarget,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.md,
-  },
-  columnDivider: {
-    borderLeftWidth: StyleSheet.hairlineWidth,
-    borderLeftColor: semanticColors.separator,
-  },
-  setupRow: {
-    minHeight: nativeMetrics.minimumTouchTarget,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-  },
-  categoryRow: {
-    minHeight: nativeMetrics.minimumTouchTarget,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.md,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-  },
-  rowCopy: {
-    flex: 1,
-    minWidth: 0,
-    gap: spacing.xs,
-  },
-  useLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.sm,
-  },
-  flexibleText: {
-    flex: 1,
-    minWidth: 0,
-  },
-  flagIcon: {
-    flexShrink: 0,
-    marginTop: 3,
-  },
-  categoryFlagIcon: {
-    flexShrink: 0,
-    marginTop: 2,
-  },
-  tabular: {
-    fontVariant: ['tabular-nums'],
-  },
-  rowDivider: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: semanticColors.separator,
   },
   pressed: {
     opacity: interaction.pressedOpacity,
