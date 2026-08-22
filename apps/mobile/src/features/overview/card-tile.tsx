@@ -347,7 +347,7 @@ export function CardTile({
           onOpen,
         })}
         accessibilityRole="button"
-        accessibilityLabel="Card actions"
+        accessibilityLabel={`${card.name} actions`}
         hitSlop={8}
         style={({ pressed }) => [styles.kebab, pressed && styles.pressed]}
       >
@@ -545,6 +545,9 @@ const styles = StyleSheet.create({
     minHeight: nativeMetrics.minimumTouchTarget,
     alignItems: 'center',
     justifyContent: 'center',
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: semanticColors.separator,
     borderBottomLeftRadius: radii.medium,
     backgroundColor: semanticColors.secondarySystemGroupedBackground,
   },
@@ -665,12 +668,15 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   hideButton: {
-    alignSelf: 'flex-start',
+    alignSelf: 'stretch',
     minHeight: nativeMetrics.minimumTouchTarget,
+    alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.md,
-    marginTop: -spacing.xs,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: semanticColors.separator,
+    borderRadius: radii.small,
   },
   hideButtonText: {
     fontWeight: '600',

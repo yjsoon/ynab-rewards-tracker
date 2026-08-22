@@ -31,7 +31,7 @@ import {
   type HiddenCardEntry,
 } from '@/features/overview';
 import { semanticColors } from '@/theme';
-import { interaction, nativeMetrics, spacing } from '@/theme/tokens';
+import { interaction, nativeMetrics, radii, spacing } from '@/theme/tokens';
 import type { CardDashboardProjection } from '@ynab-counter/app-core/rewards-engine';
 import type { HiddenCard } from '@ynab-counter/app-core/storage';
 
@@ -408,7 +408,10 @@ export default function OverviewScreen() {
       </View>
 
       {connected && model.isRefreshing ? (
-        <Footnote color="secondary">Refreshing YNAB data…</Footnote>
+        <View style={styles.refreshBanner}>
+          <ActivityIndicator size="small" color={semanticColors.systemBlue} />
+          <Footnote color="secondary">Refreshing YNAB data…</Footnote>
+        </View>
       ) : null}
 
       {!connected ? (
@@ -442,7 +445,7 @@ export default function OverviewScreen() {
           />
         ) : (
           <EmptyState
-            title="No cards to use right now"
+            title="No featured cards"
             action={{
               label: 'View cards',
               onPress: () => router.push('/(tabs)/cards'),
@@ -553,6 +556,17 @@ const styles = StyleSheet.create({
   },
   tileFull: {
     alignSelf: 'stretch',
+  },
+  refreshBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.small,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: semanticColors.separator,
+    backgroundColor: semanticColors.secondarySystemGroupedBackground,
   },
   pressed: {
     opacity: interaction.pressedOpacity,
