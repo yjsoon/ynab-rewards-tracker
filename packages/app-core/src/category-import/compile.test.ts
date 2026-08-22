@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { UNFLAGGED_FLAG } from '../ynab/constants';
-import { compileCategoryImport } from './compile';
+import { compileCategoryProposal } from './compile';
 import type { CategoryBucketDraft } from './types';
 
 function bucket(name: string, rewardValue = 4): CategoryBucketDraft {
@@ -16,9 +16,9 @@ function bucket(name: string, rewardValue = 4): CategoryBucketDraft {
   };
 }
 
-describe('compileCategoryImport', () => {
+describe('compileCategoryProposal', () => {
   it('assigns unique flags and always keeps an unflagged fallback', () => {
-    const proposal = compileCategoryImport({
+    const proposal = compileCategoryProposal({
       parsed: {
         cardLimits: null,
         buckets: [bucket('Dining'), bucket('Groceries')],
@@ -30,52 +30,33 @@ describe('compileCategoryImport', () => {
     });
 
     const flags = proposal.subcategories.map((subcategory) => subcategory.flagColor);
+    expect(flags).toEqual(['red', 'orange', 'unflagged']);
     expect(new Set(flags).size).toBe(flags.length);
     expect(flags).toContain(UNFLAGGED_FLAG.value);
     expect(proposal.subcategories.find((subcategory) => subcategory.flagColor === UNFLAGGED_FLAG.value)?.rewardValue).toBe(1.4);
+    expect(proposal.subcategories[0]).not.toHaveProperty('id');
   });
 
-  it('reuses an existing flag when the name matches', () => {
-    const proposal = compileCategoryImport({
+  it('reserves unflagged for a named catch-all in model order', () => {
+    const proposal = compileCategoryProposal({
       parsed: {
         cardLimits: null,
-        buckets: [bucket('Dining')],
+        buckets: [bucket('Dining'), bucket('Everything else', 0.3), bucket('Travel')],
         spendingTiers: null,
         notes: [],
       },
       cardType: 'cashback',
-      existingSubcategories: [{ name: 'Dining', flagColor: 'green' }],
     });
 
-    expect(proposal.subcategories[0]).toMatchObject({ name: 'Dining', flagColor: 'green' });
-  });
-
-  it('keeps an existing subcategory id so spend-tier refs survive', () => {
-    const proposal = compileCategoryImport({
-      parsed: {
-        cardLimits: null,
-        buckets: [bucket('Dining')],
-        spendingTiers: null,
-        notes: [],
-      },
-      cardType: 'cashback',
-      existingSubcategories: [{
-        id: 'sub-dining',
-        name: 'dining',
-        flagColor: 'blue',
-        createdAt: '2026-01-01T00:00:00.000Z',
-      }],
-    });
-
-    expect(proposal.subcategories[0]).toMatchObject({
-      id: 'sub-dining',
-      flagColor: 'blue',
-      createdAt: '2026-01-01T00:00:00.000Z',
-    });
+    expect(proposal.subcategories.map(({ name, flagColor }) => ({ name, flagColor }))).toEqual([
+      { name: 'Dining', flagColor: 'red' },
+      { name: 'Everything else', flagColor: 'unflagged' },
+      { name: 'Travel', flagColor: 'orange' },
+    ]);
   });
 
   it('puts merchant inclusion into notes', () => {
-    const proposal = compileCategoryImport({
+    const proposal = compileCategoryProposal({
       parsed: {
         cardLimits: null,
         buckets: [{ ...bucket('Dining'), inclusion: 'restaurants and cafes' }],
@@ -89,7 +70,7 @@ describe('compileCategoryImport', () => {
   });
 
   it('treats a hyphenated catch-all name as the unflagged fallback', () => {
-    const proposal = compileCategoryImport({
+    const proposal = compileCategoryProposal({
       parsed: {
         cardLimits: null,
         buckets: [bucket('Dining'), { ...bucket('Catch-All'), rewardValue: 0.3 }],
@@ -109,7 +90,7 @@ describe('compileCategoryImport', () => {
 
   it('moves an eighth earning bucket into notes', () => {
     const names = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
-    const proposal = compileCategoryImport({
+    const proposal = compileCategoryProposal({
       parsed: {
         cardLimits: null,
         buckets: names.map((name) => bucket(name)),
@@ -120,6 +101,7 @@ describe('compileCategoryImport', () => {
     });
 
     expect(proposal.subcategories.filter((subcategory) => subcategory.flagColor !== UNFLAGGED_FLAG.value)).toHaveLength(6);
+    expect(proposal.notes.some((note) => note.includes('G'))).toBe(true);
     expect(proposal.notes.some((note) => note.includes('H'))).toBe(true);
   });
 });

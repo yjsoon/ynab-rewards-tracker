@@ -1,26 +1,25 @@
-import type { CardSubcategory, CreditCard } from '../storage/types';
+import type { CreditCard } from '../storage/types';
 
 export function buildCategoryImportPrompt(input: {
   cardType: CreditCard['type'];
   instructions?: string;
   termsText?: string;
-  existingNames?: string[];
 }): { system: string; user: string } {
-  const unit = input.cardType === 'cashback'
-    ? 'cashback percent (for example 4 means 4%)'
-    : 'miles per dollar';
+  const cardType = input.cardType === 'cashback'
+    ? 'cashback (%), where rewardValue 4 means 4%'
+    : 'miles (miles per dollar)';
 
   const system = [
     'You extract credit-card reward categories from terms and user instructions.',
-    'Return one JSON object and nothing else.',
+    'Return ONE JSON object and nothing else.',
     'Do not assign YNAB flags or colours. The app maps categories onto flags.',
-    'Prefer at most six earning categories plus one catch-all for everything else.',
-    'Put leftover categories that will not fit in notes.',
+    'Prefer at most 6 earning buckets plus a catch-all for everything else.',
+    'Put leftover buckets in notes.',
     'Use the card reward unit exactly. Do not invent a second currency.',
   ].join(' ');
 
   const sections = [
-    `Card type: ${input.cardType}. rewardValue is ${unit}.`,
+    `Card type is ${cardType}.`,
     'JSON shape:',
     '{',
     '  "cardLimits": { "earningRate": number|null, "earningBlockSize": number|null, "minimumSpend": number|null, "maximumSpend": number|null } | null,',
@@ -30,9 +29,6 @@ export function buildCategoryImportPrompt(input: {
     '}',
   ];
 
-  if (input.existingNames && input.existingNames.length > 0) {
-    sections.push(`Existing category names: ${input.existingNames.join(', ')}.`);
-  }
   if (input.instructions) {
     sections.push(`User instructions:\n${input.instructions}`);
   }
@@ -41,15 +37,4 @@ export function buildCategoryImportPrompt(input: {
   }
 
   return { system, user: sections.join('\n\n') };
-}
-
-export function existingNamesFrom(
-  subcategories?: Array<Pick<CardSubcategory, 'name'>>,
-): string[] {
-  if (!subcategories) {
-    return [];
-  }
-  return subcategories
-    .map((subcategory) => subcategory.name.trim())
-    .filter((name) => name.length > 0);
 }

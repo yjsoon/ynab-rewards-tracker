@@ -11,7 +11,7 @@ describe('parseCategoryImportSource', () => {
   });
 
   it('accepts a public terms URL', () => {
-    expect(parseCategoryImportSource({ termsUrl: 'https://bank.example/terms' })).toEqual({
+    expect(parseCategoryImportSource({ url: 'https://bank.example/terms' })).toEqual({
       kind: 'ok',
       source: { kind: 'termsUrl', url: 'https://bank.example/terms' },
     });
@@ -20,41 +20,38 @@ describe('parseCategoryImportSource', () => {
   it('accepts both instructions and a URL', () => {
     const result = parseCategoryImportSource({
       instructions: 'Keep petrol at 4%',
-      termsUrl: 'https://bank.example/terms',
+      url: 'https://bank.example/terms',
     });
-    expect(result).toMatchObject({
+    expect(result).toEqual({
       kind: 'ok',
-      source: { kind: 'both', instructions: 'Keep petrol at 4%' },
+      source: {
+        kind: 'both',
+        instructions: 'Keep petrol at 4%',
+        url: 'https://bank.example/terms',
+      },
     });
   });
 
   it('rejects an empty brief', () => {
-    expect(parseCategoryImportSource({})).toEqual({
+    expect(parseCategoryImportSource({ instructions: ' ', url: ' ' })).toEqual({
       kind: 'missing_source',
-      message: 'Enter instructions or a terms link.',
-    });
-  });
-
-  it('accepts url as an alias for termsUrl', () => {
-    expect(parseCategoryImportSource({ url: 'https://bank.example/terms' })).toEqual({
-      kind: 'ok',
-      source: { kind: 'termsUrl', url: 'https://bank.example/terms' },
+      message: 'Enter instructions or a terms URL.',
     });
   });
 
   it('rejects javascript URLs, loopback hosts, and userinfo', () => {
-    expect(parseCategoryImportSource({ termsUrl: 'javascript:alert(1)' }).kind).toBe('invalid_url');
-    expect(parseCategoryImportSource({ termsUrl: 'http://127.0.0.1/terms' }).kind).toBe('invalid_url');
-    expect(parseCategoryImportSource({ termsUrl: 'http://user:pass@example.com/terms' }).kind).toBe('invalid_url');
-    expect(parseCategoryImportSource({ termsUrl: 'http://192.168.0.4/terms' }).kind).toBe('invalid_url');
+    expect(parseCategoryImportSource({ url: 'javascript:alert(1)' }).kind).toBe('invalid_url');
+    expect(parseCategoryImportSource({ url: 'http://127.0.0.1/terms' }).kind).toBe('invalid_url');
+    expect(parseCategoryImportSource({ url: 'http://user:pass@example.com/terms' }).kind).toBe('invalid_url');
+    expect(parseCategoryImportSource({ url: 'http://192.168.0.4/terms' }).kind).toBe('invalid_url');
   });
 
   it('rejects localhost aliases, CGNAT, and benchmark ranges', () => {
-    expect(parseCategoryImportSource({ termsUrl: 'http://app.localhost/terms' }).kind).toBe('invalid_url');
-    expect(parseCategoryImportSource({ termsUrl: 'http://printer.local/terms' }).kind).toBe('invalid_url');
-    expect(parseCategoryImportSource({ termsUrl: 'http://100.64.0.1/terms' }).kind).toBe('invalid_url');
-    expect(parseCategoryImportSource({ termsUrl: 'http://198.18.0.1/terms' }).kind).toBe('invalid_url');
-    expect(parseCategoryImportSource({ termsUrl: 'http://metadata.google.internal/terms' }).kind).toBe('invalid_url');
+    expect(parseCategoryImportSource({ url: 'http://app.localhost/terms' }).kind).toBe('invalid_url');
+    expect(parseCategoryImportSource({ url: 'http://printer.local/terms' }).kind).toBe('invalid_url');
+    expect(parseCategoryImportSource({ url: 'http://100.64.0.1/terms' }).kind).toBe('invalid_url');
+    expect(parseCategoryImportSource({ url: 'http://198.18.0.1/terms' }).kind).toBe('invalid_url');
+    expect(parseCategoryImportSource({ url: 'http://metadata.google.internal/terms' }).kind).toBe('invalid_url');
   });
 
   it('rejects dword and short loopback hosts after URL canonicalisation', () => {

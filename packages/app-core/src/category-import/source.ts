@@ -16,12 +16,12 @@ export function parseCategoryImportSource(input: {
   url?: string | null;
 }): CategoryImportSourceResult {
   const instructions = input.instructions?.trim() ?? '';
-  const url = (input.termsUrl ?? input.url)?.trim() ?? '';
+  const url = (input.url ?? input.termsUrl)?.trim() ?? '';
 
   if (!instructions && !url) {
     return {
       kind: 'missing_source',
-      message: 'Enter instructions or a terms link.',
+      message: 'Enter instructions or a terms URL.',
     };
   }
 

@@ -1,4 +1,3 @@
-import type { CreditCard } from '../storage/types';
 import type {
   CategoryBucketDraft,
   CategoryImportFailure,
@@ -11,39 +10,43 @@ export type ParseCategoryImportResult =
   | { kind: 'ok'; parsed: ParsedCategoryImport }
   | Extract<CategoryImportFailure, { kind: 'unparseable' }>;
 
-export function parseCategoryImportResponse(
-  raw: string,
-  _cardType: CreditCard['type'],
-): ParseCategoryImportResult {
+const UNPARSEABLE: Extract<CategoryImportFailure, { kind: 'unparseable' }> = {
+  kind: 'unparseable',
+  message: 'The model did not return usable categories.',
+};
+
+export function parseCategoryImportResponse(raw: string): ParseCategoryImportResult {
   const objectText = extractFirstJsonObject(stripFences(raw));
   if (!objectText) {
-    return { kind: 'unparseable', message: 'The model did not return usable categories.' };
+    return UNPARSEABLE;
   }
 
   let value: unknown;
   try {
     value = JSON.parse(objectText);
   } catch {
-    return { kind: 'unparseable', message: 'The model did not return usable categories.' };
+    return UNPARSEABLE;
   }
 
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return { kind: 'unparseable', message: 'The model did not return usable categories.' };
+  if (!isRecord(value)) {
+    return UNPARSEABLE;
   }
 
-  const record = value as Record<string, unknown>;
-  const buckets = parseBuckets(record.buckets);
-  if (!buckets) {
-    return { kind: 'unparseable', message: 'The model did not return usable categories.' };
+  const cardLimits = parseCardLimits(value.cardLimits);
+  const buckets = parseBuckets(value.buckets);
+  const spendingTiers = parseSpendingTiers(value.spendingTiers);
+  const notes = parseNotes(value.notes);
+  if (!cardLimits.ok || !buckets.ok || !spendingTiers.ok || !notes.ok) {
+    return UNPARSEABLE;
   }
 
   return {
     kind: 'ok',
     parsed: {
-      cardLimits: parseCardLimits(record.cardLimits),
-      buckets,
-      spendingTiers: parseSpendingTiers(record.spendingTiers),
-      notes: parseNotes(record.notes),
+      cardLimits: cardLimits.value,
+      buckets: buckets.value,
+      spendingTiers: spendingTiers.value,
+      notes: notes.value,
     },
   };
 }
@@ -55,7 +58,7 @@ function stripFences(raw: string): string {
 function extractFirstJsonObject(text: string): string | null {
   let depth = 0;
   let start = -1;
-  let inString: '"' | "'" | null = null;
+  let inString = false;
   let escape = false;
 
   for (let index = 0; index < text.length; index += 1) {
@@ -69,13 +72,13 @@ function extractFirstJsonObject(text: string): string | null {
       continue;
     }
     if (inString) {
-      if (char === inString) {
-        inString = null;
+      if (char === '"') {
+        inString = false;
       }
       continue;
     }
-    if (char === '"' || char === "'") {
-      inString = char;
+    if (char === '"') {
+      inString = true;
       continue;
     }
     if (char === '{') {
@@ -83,7 +86,7 @@ function extractFirstJsonObject(text: string): string | null {
         start = index;
       }
       depth += 1;
-    } else if (char === '}') {
+    } else if (char === '}' && depth > 0) {
       depth -= 1;
       if (depth === 0 && start !== -1) {
         return text.slice(start, index + 1);
@@ -93,109 +96,148 @@ function extractFirstJsonObject(text: string): string | null {
   return null;
 }
 
-function parseBuckets(value: unknown): CategoryBucketDraft[] | null {
-  if (!Array.isArray(value) || value.length === 0) {
-    return null;
+type ParsedValue<Value> =
+  | { ok: true; value: Value }
+  | { ok: false };
+
+function parseBuckets(value: unknown): ParsedValue<CategoryBucketDraft[]> {
+  if (!Array.isArray(value)) {
+    return { ok: false };
   }
 
   const buckets: CategoryBucketDraft[] = [];
   for (const entry of value) {
-    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
-      continue;
+    if (!isRecord(entry)) {
+      return { ok: false };
     }
-    const record = entry as Record<string, unknown>;
-    const name = typeof record.name === 'string' ? record.name.trim() : '';
-    const rewardValue = finiteNumber(record.rewardValue);
-    if (!name || rewardValue === null || rewardValue < 0) {
-      continue;
+
+    const name = typeof entry.name === 'string' ? entry.name.trim() : '';
+    const rewardValue = parseNumber(entry.rewardValue);
+    const milesBlockSize = parseNullableNumber(entry.milesBlockSize, true);
+    const minimumSpend = parseNullableNumber(entry.minimumSpend);
+    const maximumSpend = parseNullableNumber(entry.maximumSpend);
+    if (
+      !name
+      || !rewardValue.ok
+      || !milesBlockSize.ok
+      || !minimumSpend.ok
+      || !maximumSpend.ok
+      || typeof entry.excludeFromRewards !== 'boolean'
+      || (entry.inclusion !== null && typeof entry.inclusion !== 'string')
+    ) {
+      return { ok: false };
     }
+
     buckets.push({
       name,
-      rewardValue,
-      milesBlockSize: optionalPositiveNumber(record.milesBlockSize),
-      minimumSpend: optionalNumber(record.minimumSpend),
-      maximumSpend: optionalNumber(record.maximumSpend),
-      excludeFromRewards: record.excludeFromRewards === true,
-      inclusion: typeof record.inclusion === 'string' && record.inclusion.trim()
-        ? record.inclusion.trim()
+      rewardValue: rewardValue.value,
+      milesBlockSize: milesBlockSize.value,
+      minimumSpend: minimumSpend.value,
+      maximumSpend: maximumSpend.value,
+      excludeFromRewards: entry.excludeFromRewards,
+      inclusion: typeof entry.inclusion === 'string'
+        ? entry.inclusion.trim() || null
         : null,
     });
   }
 
-  return buckets.length > 0 ? buckets : null;
+  return { ok: true, value: buckets };
 }
 
-function parseCardLimits(value: unknown): ProposedCardLimits | null {
-  if (value == null) {
-    return null;
+function parseCardLimits(value: unknown): ParsedValue<ProposedCardLimits | null> {
+  if (value === null) {
+    return { ok: true, value: null };
   }
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return null;
+  if (!isRecord(value)) {
+    return { ok: false };
   }
-  const record = value as Record<string, unknown>;
-  const cardLimits: ProposedCardLimits = {
-    earningRate: optionalNumber(record.earningRate),
-    earningBlockSize: optionalPositiveNumber(record.earningBlockSize),
-    minimumSpend: optionalNumber(record.minimumSpend),
-    maximumSpend: optionalNumber(record.maximumSpend),
+
+  const earningRate = parseNullableNumber(value.earningRate);
+  const earningBlockSize = parseNullableNumber(value.earningBlockSize, true);
+  const minimumSpend = parseNullableNumber(value.minimumSpend);
+  const maximumSpend = parseNullableNumber(value.maximumSpend);
+  if (!earningRate.ok || !earningBlockSize.ok || !minimumSpend.ok || !maximumSpend.ok) {
+    return { ok: false };
+  }
+
+  return {
+    ok: true,
+    value: {
+      earningRate: earningRate.value,
+      earningBlockSize: earningBlockSize.value,
+      minimumSpend: minimumSpend.value,
+      maximumSpend: maximumSpend.value,
+    },
   };
-  return Object.values(cardLimits).every((field) => field === null) ? null : cardLimits;
 }
 
-function parseSpendingTiers(value: unknown): ProposedSpendingTier[] | null {
-  if (value == null) {
-    return null;
+function parseSpendingTiers(value: unknown): ParsedValue<ProposedSpendingTier[] | null> {
+  if (value === null) {
+    return { ok: true, value: null };
   }
   if (!Array.isArray(value)) {
-    return null;
+    return { ok: false };
   }
-  const tiers = value.flatMap((entry) => {
-    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
-      return [];
+
+  const tiers: ProposedSpendingTier[] = [];
+  for (const entry of value) {
+    if (!isRecord(entry)) {
+      return { ok: false };
     }
-    const record = entry as Record<string, unknown>;
-    const spendThreshold = finiteNumber(record.spendThreshold);
-    if (spendThreshold === null || spendThreshold < 0) {
-      return [];
+
+    const spendThreshold = parseNumber(entry.spendThreshold);
+    const earningRate = parseNullableNumber(entry.earningRate);
+    const maximumSpend = parseNullableNumber(entry.maximumSpend);
+    if (!spendThreshold.ok || !earningRate.ok || !maximumSpend.ok) {
+      return { ok: false };
     }
-    return [{
-      spendThreshold,
-      earningRate: optionalNumber(record.earningRate),
-      maximumSpend: optionalNumber(record.maximumSpend),
-    }];
-  });
-  return tiers.length > 0 ? tiers : null;
+
+    tiers.push({
+      spendThreshold: spendThreshold.value,
+      earningRate: earningRate.value,
+      maximumSpend: maximumSpend.value,
+    });
+  }
+
+  return { ok: true, value: tiers };
 }
 
-function parseNotes(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    return [];
+function parseNotes(value: unknown): ParsedValue<string[]> {
+  if (
+    !Array.isArray(value)
+    || !value.every((entry): entry is string => typeof entry === 'string')
+  ) {
+    return { ok: false };
   }
-  return value
-    .filter((entry): entry is string => typeof entry === 'string')
-    .map((entry) => entry.trim())
-    .filter((entry) => entry.length > 0);
+  return {
+    ok: true,
+    value: value
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0),
+  };
 }
 
-function finiteNumber(value: unknown): number | null {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value;
+function parseNumber(value: unknown): ParsedValue<number> {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    return { ok: false };
   }
-  if (typeof value === 'string' && value.trim()) {
-    const parsed = Number(value.trim());
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  return null;
+  return { ok: true, value };
 }
 
-function optionalNumber(value: unknown): number | null {
-  if (value == null) {
-    return null;
+function parseNullableNumber(
+  value: unknown,
+  positive = false,
+): ParsedValue<number | null> {
+  if (value === null) {
+    return { ok: true, value: null };
   }
-  return finiteNumber(value);
+  const parsed = parseNumber(value);
+  if (!parsed.ok || (positive && parsed.value === 0)) {
+    return { ok: false };
+  }
+  return parsed;
 }
 
-function optionalPositiveNumber(value: unknown): number | null {
-  const number = optionalNumber(value);
-  return number !== null && number > 0 ? number : null;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

@@ -13,6 +13,7 @@ export type {
   ParsedCategoryImport,
   ProposedCardLimits,
   ProposedSpendingTier,
+  ProposedSubcategory,
 } from './types';
 export {
   CATEGORY_IMPORT_PROVIDERS,
@@ -28,9 +29,9 @@ export {
   fetchCategoryImportTerms,
 } from './fetch-terms';
 export { mergeCategoryImportCredentials } from './settings';
-export { buildCategoryImportPrompt, existingNamesFrom } from './prompt';
+export { buildCategoryImportPrompt } from './prompt';
 export { parseCategoryImportResponse } from './parse';
-export { compileCategoryImport } from './compile';
+export { compileCategoryProposal } from './compile';
 export { applyCategoryProposal } from './apply';
 export { proposeCardCategories } from './propose';
 export {

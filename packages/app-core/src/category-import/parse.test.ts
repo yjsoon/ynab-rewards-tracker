@@ -18,7 +18,7 @@ describe('parseCategoryImportResponse', () => {
       '```',
     ].join('\n');
 
-    const result = parseCategoryImportResponse(raw, 'miles');
+    const result = parseCategoryImportResponse(raw);
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
     expect(result.parsed.buckets[0]).toMatchObject({ name: 'Dining', rewardValue: 4, milesBlockSize: 5 });
@@ -28,59 +28,61 @@ describe('parseCategoryImportResponse', () => {
   });
 
   it('returns unparseable when buckets are missing', () => {
-    expect(parseCategoryImportResponse('{"notes":[]}', 'cashback')).toEqual({
+    expect(parseCategoryImportResponse('{"notes":[]}')).toEqual({
       kind: 'unparseable',
       message: 'The model did not return usable categories.',
     });
   });
 
-  it('fills omitted optional bucket fields', () => {
-    const result = parseCategoryImportResponse(
+  it('rejects buckets that do not match the model schema', () => {
+    expect(parseCategoryImportResponse(
       JSON.stringify({ buckets: [{ name: 'Dining', rewardValue: 4 }] }),
-      'cashback',
-    );
-    expect(result.kind).toBe('ok');
-    if (result.kind !== 'ok') return;
-    expect(result.parsed.buckets[0]).toEqual({
-      name: 'Dining',
-      rewardValue: 4,
-      milesBlockSize: null,
-      minimumSpend: null,
-      maximumSpend: null,
-      excludeFromRewards: false,
-      inclusion: null,
-    });
-    expect(result.parsed.notes).toEqual([]);
-    expect(result.parsed.cardLimits).toBeNull();
-    expect(result.parsed.spendingTiers).toBeNull();
+    )).toMatchObject({ kind: 'unparseable' });
   });
 
-  it('treats an empty cardLimits object as omitted', () => {
+  it('keeps an explicit all-null cardLimits object', () => {
     const result = parseCategoryImportResponse(
       JSON.stringify({
         cardLimits: { earningRate: null, earningBlockSize: null, minimumSpend: null, maximumSpend: null },
-        buckets: [{ name: 'Dining', rewardValue: 4 }],
+        buckets: [{
+          name: 'Dining',
+          rewardValue: 4,
+          milesBlockSize: null,
+          minimumSpend: null,
+          maximumSpend: null,
+          excludeFromRewards: false,
+          inclusion: null,
+        }],
+        spendingTiers: null,
+        notes: [],
       }),
-      'cashback',
     );
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
-    expect(result.parsed.cardLimits).toBeNull();
+    expect(result.parsed.cardLimits).toEqual({
+      earningRate: null,
+      earningBlockSize: null,
+      minimumSpend: null,
+      maximumSpend: null,
+    });
   });
 
-  it('reads numeric strings from the model', () => {
-    const result = parseCategoryImportResponse(
+  it('rejects numeric strings from the model', () => {
+    expect(parseCategoryImportResponse(
       JSON.stringify({
-        buckets: [{ name: 'Dining', rewardValue: '4', maximumSpend: '2000' }],
+        cardLimits: null,
+        buckets: [{
+          name: 'Dining',
+          rewardValue: '4',
+          milesBlockSize: null,
+          minimumSpend: null,
+          maximumSpend: null,
+          excludeFromRewards: false,
+          inclusion: null,
+        }],
+        spendingTiers: null,
+        notes: [],
       }),
-      'cashback',
-    );
-    expect(result.kind).toBe('ok');
-    if (result.kind !== 'ok') return;
-    expect(result.parsed.buckets[0]).toMatchObject({
-      name: 'Dining',
-      rewardValue: 4,
-      maximumSpend: 2000,
-    });
+    )).toMatchObject({ kind: 'unparseable' });
   });
 });
