@@ -57,3 +57,6 @@ apps/mobile/android/
 
 # Amp orb portal metadata
 .amp/portals/
+
+# Generated visual-harness inputs (re-export before capture)
+scripts/dashboard-visual/generated/

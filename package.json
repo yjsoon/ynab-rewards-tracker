@@ -23,7 +23,9 @@
     "mobile:start": "pnpm --filter ./apps/mobile start",
     "mobile:ios": "pnpm --filter ./apps/mobile ios",
     "mobile:android": "pnpm --filter ./apps/mobile android",
-    "mobile:typecheck": "pnpm --filter ./apps/mobile typecheck"
+    "mobile:typecheck": "pnpm --filter ./apps/mobile typecheck",
+    "visual:dashboard:capture": "node scripts/dashboard-visual/capture.mjs",
+    "visual:dashboard:diff": "node scripts/dashboard-visual/diff.mjs"
   },
   "workspaces": [
     "apps/*",

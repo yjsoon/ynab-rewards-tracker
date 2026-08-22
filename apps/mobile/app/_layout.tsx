@@ -36,6 +36,9 @@ function AppShell() {
     : preference === 'auto' ? systemScheme ?? 'light' : preference;
 
   useEffect(() => {
+    if (typeof Appearance.setColorScheme !== 'function') {
+      return;
+    }
     Appearance.setColorScheme(
       Platform.OS === 'android' ? 'light' : preference === 'auto' ? null : preference,
     );

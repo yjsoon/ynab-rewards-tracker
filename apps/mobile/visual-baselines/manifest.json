@@ -1,0 +1,10 @@
+{
+  "referenceIso": "2026-07-31T12:00:00.000Z",
+  "viewport": { "width": 390, "height": 844, "deviceScaleFactor": 1 },
+  "timezone": "UTC",
+  "files": {
+    "web-featured-full.png": "Web Featured dashboard at phone width, including nav and footer. Target.",
+    "web-featured-main.png": "Web Featured dashboard main column only. Target.",
+    "ios-overview-full.png": "Current iOS Overview via Expo web and the demo fixture. Do not edit."
+  }
+}
