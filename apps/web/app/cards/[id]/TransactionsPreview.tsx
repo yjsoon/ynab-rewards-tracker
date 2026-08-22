@@ -125,24 +125,24 @@ export default function TransactionsPreview({
                 return (
                   <div
                     key={txn.id}
-                    className="flex items-center justify-between p-3 border rounded-md">
-                    <div>
-                      <div className="flex items-center gap-3">
-                        <span className="font-medium">{txn.payee_name}</span>
+                    className="flex min-w-0 items-start justify-between gap-3 rounded-md border p-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                        <span className="min-w-0 break-words font-medium">{txn.payee_name}</span>
                         {txn.flag_color && (
-                          <Badge variant="outline" className="text-xs">
+                          <Badge variant="outline" className="max-w-full whitespace-normal break-words text-xs">
                             {txn.flag_name || txn.flag_color}
                           </Badge>
                         )}
-                        <span className="text-xs text-muted-foreground">
+                        <span className="shrink-0 text-xs text-muted-foreground">
                           {new Date(txn.date).toLocaleDateString()}
                         </span>
                       </div>
-                      <div className="text-sm text-muted-foreground mt-1">
+                      <div className="mt-1 break-words text-sm text-muted-foreground">
                         YNAB Category: {txn.category_name || "Uncategorised"}
                       </div>
                     </div>
-                    <div className="text-right">
+                    <div className="shrink-0 text-right">
                       <div className="font-mono">
                         <CurrencyAmount value={amount} currency={settings.currency} />
                       </div>
