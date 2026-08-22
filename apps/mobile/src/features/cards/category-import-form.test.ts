@@ -3,7 +3,19 @@ import { describe, expect, it } from 'vitest';
 import type { CreditCard } from '@ynab-counter/app-core/storage/types';
 import { applyCategoryProposal } from '@ynab-counter/app-core/category-import';
 
-import { applyCategoryPatchToCardForm } from './category-import-form';
+import { applyCategoryPatchToCardForm, type CategoryImportFormFields } from './category-import-form';
+
+function emptyForm(): CategoryImportFormFields {
+  return {
+    earningRate: '1',
+    earningBlockSize: '',
+    minimumSpend: '500',
+    maximumSpend: '',
+    subcategoriesEnabled: false,
+    tiers: [],
+    spendingTiers: [],
+  };
+}
 
 const card: CreditCard = {
   id: 'card-1',
@@ -41,15 +53,7 @@ describe('applyCategoryPatchToCardForm', () => {
       },
     });
 
-    const next = applyCategoryPatchToCardForm({
-      earningRate: '1',
-      earningBlockSize: '',
-      minimumSpend: '500',
-      maximumSpend: '',
-      subcategoriesEnabled: false,
-      tiers: [],
-      spendingTiers: [],
-    }, patch);
+    const next = applyCategoryPatchToCardForm(emptyForm(), patch);
 
     expect(next.subcategoriesEnabled).toBe(true);
     expect(next.earningRate).toBe('1');
@@ -91,13 +95,9 @@ describe('applyCategoryPatchToCardForm', () => {
     });
 
     const next = applyCategoryPatchToCardForm({
+      ...emptyForm(),
       earningRate: '',
-      earningBlockSize: '',
       minimumSpend: '100',
-      maximumSpend: '',
-      subcategoriesEnabled: false,
-      tiers: [],
-      spendingTiers: [],
     }, patch);
 
     expect(next.earningRate).toBe('1.4');
