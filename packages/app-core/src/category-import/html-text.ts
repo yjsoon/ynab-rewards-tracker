@@ -14,21 +14,18 @@ export function htmlToPlainText(
   maxChars = CATEGORY_IMPORT_TEXT_LIMIT,
 ): { text: string; truncated: boolean } {
   const withoutBlocks = html
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, ' ')
-    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, ' ')
-    .replace(/<noscript\b[^<]*(?:(?!<\/noscript>)<[^<]*)*<\/noscript>/gi, ' ');
+    .replace(/<(script|style|noscript)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, ' ')
+    .replace(/<(script|style|noscript)\b[^>]*>[\s\S]*$/gi, ' ');
 
   const withoutTags = withoutBlocks.replace(/<[^>]+>/g, ' ');
   const decoded = withoutTags.replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (_, entity: string) => {
     if (entity.startsWith('#x') || entity.startsWith('#X')) {
-      const code = Number.parseInt(entity.slice(2), 16);
-      return Number.isFinite(code) ? String.fromCodePoint(code) : '';
+      return decodeCodePoint(entity.slice(2), 16);
     }
     if (entity.startsWith('#')) {
-      const code = Number.parseInt(entity.slice(1), 10);
-      return Number.isFinite(code) ? String.fromCodePoint(code) : '';
+      return decodeCodePoint(entity.slice(1), 10);
     }
-    return ENTITY_MAP[entity.toLowerCase()] ?? '';
+    return ENTITY_MAP[entity.toLowerCase()] ?? `&${entity};`;
   });
 
   const text = decoded.replace(/\s+/g, ' ').trim();
@@ -36,4 +33,17 @@ export function htmlToPlainText(
     return { text, truncated: false };
   }
   return { text: text.slice(0, maxChars).trimEnd(), truncated: true };
+}
+
+function decodeCodePoint(value: string, radix: number): string {
+  const codePoint = Number.parseInt(value, radix);
+  if (
+    !Number.isInteger(codePoint)
+    || codePoint < 0
+    || codePoint > 0x10ffff
+    || (codePoint >= 0xd800 && codePoint <= 0xdfff)
+  ) {
+    return '';
+  }
+  return String.fromCodePoint(codePoint);
 }

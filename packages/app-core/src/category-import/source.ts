@@ -11,31 +11,32 @@ export type CategoryImportSourceResult =
   | Extract<CategoryImportFailure, { kind: 'missing_source' | 'invalid_url' }>;
 
 export function parseCategoryImportSource(input: {
-  instructions?: string;
-  termsUrl?: string;
+  instructions?: string | null;
+  termsUrl?: string | null;
+  url?: string | null;
 }): CategoryImportSourceResult {
   const instructions = input.instructions?.trim() ?? '';
-  const termsUrl = input.termsUrl?.trim() ?? '';
+  const url = (input.termsUrl ?? input.url)?.trim() ?? '';
 
-  if (!instructions && !termsUrl) {
+  if (!instructions && !url) {
     return {
       kind: 'missing_source',
       message: 'Enter instructions or a terms link.',
     };
   }
 
-  if (termsUrl) {
-    const urlError = validatePublicHttpUrl(termsUrl);
+  if (url) {
+    const urlError = validatePublicHttpUrl(url);
     if (urlError) {
       return urlError;
     }
   }
 
-  if (instructions && termsUrl) {
-    return { kind: 'ok', source: { kind: 'both', instructions, url: termsUrl } };
+  if (instructions && url) {
+    return { kind: 'ok', source: { kind: 'both', instructions, url } };
   }
-  if (termsUrl) {
-    return { kind: 'ok', source: { kind: 'termsUrl', url: termsUrl } };
+  if (url) {
+    return { kind: 'ok', source: { kind: 'termsUrl', url } };
   }
   return { kind: 'ok', source: { kind: 'instructions', instructions } };
 }
@@ -57,8 +58,15 @@ export function validatePublicHttpUrl(
     return { kind: 'invalid_url', message: 'That link is not a public web address.' };
   }
 
-  const hostname = parsed.hostname.replace(/^\[|\]$/g, '').toLowerCase();
-  if (!hostname || BLOCKED_HOSTS.has(hostname) || isPrivateHostname(hostname)) {
+  const hostname = parsed.hostname.replace(/^\[|\]$/g, '').replace(/\.$/, '').toLowerCase();
+  if (
+    !hostname
+    || BLOCKED_HOSTS.has(hostname)
+    || hostname.endsWith('.localhost')
+    || hostname.endsWith('.local')
+    || hostname.endsWith('.internal')
+    || isPrivateHostname(hostname)
+  ) {
     return { kind: 'invalid_url', message: 'That link is not a public web address.' };
   }
 
@@ -66,15 +74,14 @@ export function validatePublicHttpUrl(
 }
 
 function isPrivateHostname(hostname: string): boolean {
-  if (hostname === '::1' || hostname === '0.0.0.0') {
+  if (hostname === '::' || hostname === '::1' || hostname === '0.0.0.0') {
     return true;
   }
   if (hostname.includes(':')) {
-    const normalised = hostname.toLowerCase();
     return (
-      normalised.startsWith('fc') ||
-      normalised.startsWith('fd') ||
-      normalised.startsWith('fe80:')
+      /^f[cd]/i.test(hostname)
+      || /^fe[89ab]/i.test(hostname)
+      || hostname.startsWith('::ffff:')
     );
   }
 
@@ -84,16 +91,22 @@ function isPrivateHostname(hostname: string): boolean {
   }
 
   const [a, b] = parts;
-  if (a === 10 || a === 127 || a === 0) {
+  if (a === 0 || a === 10 || a === 127 || a >= 224) {
+    return true;
+  }
+  if (a === 100 && b >= 64 && b <= 127) {
     return true;
   }
   if (a === 169 && b === 254) {
     return true;
   }
+  if (a === 172 && b >= 16 && b <= 31) {
+    return true;
+  }
   if (a === 192 && b === 168) {
     return true;
   }
-  if (a === 172 && b >= 16 && b <= 31) {
+  if (a === 198 && (b === 18 || b === 19)) {
     return true;
   }
   return false;

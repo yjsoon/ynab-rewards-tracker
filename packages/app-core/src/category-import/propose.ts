@@ -1,5 +1,6 @@
 import type { CategoryImportCredentials, CategoryImportDeps, CategoryImportRequest, CategoryImportResult } from './types';
 import { compileCategoryImport } from './compile';
+import { categoryImportFetchFailureMessage } from './fetch-terms';
 import { htmlToPlainText } from './html-text';
 import { parseCategoryImportResponse } from './parse';
 import { buildCategoryImportPrompt, existingNamesFrom } from './prompt';
@@ -24,8 +25,8 @@ export async function proposeCardCategories(
       if (truncated) {
         termsText = `${text}\n\n[Terms were truncated.]`;
       }
-    } catch {
-      return { kind: 'fetch_failed', message: 'Could not read those terms.' };
+    } catch (error) {
+      return { kind: 'fetch_failed', message: categoryImportFetchFailureMessage(error) };
     }
   }
 

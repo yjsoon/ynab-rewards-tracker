@@ -19,5 +19,13 @@ describe('htmlToPlainText', () => {
 
   it('uses the shared import limit by default', () => {
     expect(CATEGORY_IMPORT_TEXT_LIMIT).toBe(100_000);
+    const { truncated, text } = htmlToPlainText('x'.repeat(CATEGORY_IMPORT_TEXT_LIMIT + 1));
+    expect(truncated).toBe(true);
+    expect(text).toHaveLength(100_000);
+  });
+
+  it('drops an unclosed script at the end of a page', () => {
+    const { text } = htmlToPlainText('<p>Dining</p><script>secret()');
+    expect(text).toBe('Dining');
   });
 });

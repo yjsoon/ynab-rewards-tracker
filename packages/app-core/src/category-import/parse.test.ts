@@ -33,4 +33,25 @@ describe('parseCategoryImportResponse', () => {
       message: 'The model did not return usable categories.',
     });
   });
+
+  it('fills omitted optional bucket fields', () => {
+    const result = parseCategoryImportResponse(
+      JSON.stringify({ buckets: [{ name: 'Dining', rewardValue: 4 }] }),
+      'cashback',
+    );
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+    expect(result.parsed.buckets[0]).toEqual({
+      name: 'Dining',
+      rewardValue: 4,
+      milesBlockSize: null,
+      minimumSpend: null,
+      maximumSpend: null,
+      excludeFromRewards: false,
+      inclusion: null,
+    });
+    expect(result.parsed.notes).toEqual([]);
+    expect(result.parsed.cardLimits).toBeNull();
+    expect(result.parsed.spendingTiers).toBeNull();
+  });
 });

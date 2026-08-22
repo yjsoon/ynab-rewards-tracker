@@ -35,10 +35,25 @@ describe('parseCategoryImportSource', () => {
     });
   });
 
+  it('accepts url as an alias for termsUrl', () => {
+    expect(parseCategoryImportSource({ url: 'https://bank.example/terms' })).toEqual({
+      kind: 'ok',
+      source: { kind: 'termsUrl', url: 'https://bank.example/terms' },
+    });
+  });
+
   it('rejects javascript URLs, loopback hosts, and userinfo', () => {
     expect(parseCategoryImportSource({ termsUrl: 'javascript:alert(1)' }).kind).toBe('invalid_url');
     expect(parseCategoryImportSource({ termsUrl: 'http://127.0.0.1/terms' }).kind).toBe('invalid_url');
     expect(parseCategoryImportSource({ termsUrl: 'http://user:pass@example.com/terms' }).kind).toBe('invalid_url');
     expect(parseCategoryImportSource({ termsUrl: 'http://192.168.0.4/terms' }).kind).toBe('invalid_url');
+  });
+
+  it('rejects localhost aliases, CGNAT, and benchmark ranges', () => {
+    expect(parseCategoryImportSource({ termsUrl: 'http://app.localhost/terms' }).kind).toBe('invalid_url');
+    expect(parseCategoryImportSource({ termsUrl: 'http://printer.local/terms' }).kind).toBe('invalid_url');
+    expect(parseCategoryImportSource({ termsUrl: 'http://100.64.0.1/terms' }).kind).toBe('invalid_url');
+    expect(parseCategoryImportSource({ termsUrl: 'http://198.18.0.1/terms' }).kind).toBe('invalid_url');
+    expect(parseCategoryImportSource({ termsUrl: 'http://metadata.google.internal/terms' }).kind).toBe('invalid_url');
   });
 });

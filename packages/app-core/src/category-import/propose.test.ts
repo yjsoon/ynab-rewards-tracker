@@ -56,4 +56,23 @@ describe('proposeCardCategories', () => {
       message: 'Could not read those terms.',
     });
   });
+
+  it('keeps a paste-instead fetch message', async () => {
+    const result = await proposeCardCategories(
+      { cardType: 'cashback', source: { kind: 'termsUrl', url: 'https://bank.example/terms.pdf' } },
+      { provider: 'openai', apiKey: 'sk-test', model: 'gpt-4o-mini' },
+      {
+        fetchText: async () => {
+          throw new Error('Could not read those terms. Paste the text instead.');
+        },
+        completeChat: async () => {
+          throw new Error('should not run');
+        },
+      },
+    );
+    expect(result).toEqual({
+      kind: 'fetch_failed',
+      message: 'Could not read those terms. Paste the text instead.',
+    });
+  });
 });
