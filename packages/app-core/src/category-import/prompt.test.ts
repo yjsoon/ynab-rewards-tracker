@@ -10,10 +10,7 @@ describe('buildCategoryImportPrompt', () => {
     });
 
     expect(prompt.system.toLowerCase()).toContain('do not assign ynab flags');
-    expect(prompt.user).toContain('Card type is miles (miles per dollar)');
-    expect(prompt.system).toContain('at most 6 earning buckets plus a catch-all');
-
-    const cashbackPrompt = buildCategoryImportPrompt({ cardType: 'cashback' });
-    expect(cashbackPrompt.user).toContain('Card type is cashback (%)');
+    expect(prompt.user).toContain('Card type: miles');
+    expect(prompt.user.toLowerCase()).toContain('miles per dollar');
   });
 });

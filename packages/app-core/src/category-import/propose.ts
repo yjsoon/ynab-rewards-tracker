@@ -1,41 +1,19 @@
-import type {
-  CategoryImportCredentials,
-  CategoryImportDeps,
-  CategoryImportRequest,
-  CategoryImportResult,
-  CategoryImportSource,
-} from './types';
+import type { CategoryImportCredentials, CategoryImportDeps, CategoryImportRequest, CategoryImportResult } from './types';
 import { categoryImportProviderFailureMessage } from './complete';
-import { compileCategoryProposal } from './compile';
+import { compileCategoryImport } from './compile';
 import { categoryImportFetchFailureMessage } from './fetch-terms';
 import { htmlToPlainText } from './html-text';
 import { parseCategoryImportResponse } from './parse';
-import { buildCategoryImportPrompt } from './prompt';
-import { defaultModelFor } from './providers';
-import { parseCategoryImportSource } from './source';
+import { buildCategoryImportPrompt, existingNamesFrom } from './prompt';
 
 export async function proposeCardCategories(
   request: CategoryImportRequest,
   credentials: CategoryImportCredentials,
   deps: CategoryImportDeps,
 ): Promise<CategoryImportResult> {
-  let source: CategoryImportSource;
-  if (request.source) {
-    source = request.source;
-  } else {
-    const sourceResult = parseCategoryImportSource({
-      instructions: request.instructions,
-      url: request.url,
-    });
-    if (sourceResult.kind !== 'ok') {
-      return sourceResult;
-    }
-    source = sourceResult.source;
-  }
-
   let termsText: string | undefined;
-  const url = source.kind === 'instructions' ? undefined : source.url;
-  const instructions = source.kind === 'termsUrl' ? undefined : source.instructions;
+  const url = request.source.kind === 'instructions' ? undefined : request.source.url;
+  const instructions = request.source.kind === 'termsUrl' ? undefined : request.source.instructions;
 
   if (url) {
     try {
@@ -57,6 +35,7 @@ export async function proposeCardCategories(
     cardType: request.cardType,
     instructions,
     termsText,
+    existingNames: existingNamesFrom(request.existingSubcategories),
   });
 
   let raw: string;
@@ -64,7 +43,7 @@ export async function proposeCardCategories(
     raw = await deps.completeChat({
       provider: credentials.provider,
       apiKey: credentials.apiKey,
-      model: credentials.model?.trim() || defaultModelFor(credentials.provider),
+      model: credentials.model,
       system: prompt.system,
       user: prompt.user,
     });
@@ -72,17 +51,18 @@ export async function proposeCardCategories(
     return { kind: 'provider_failed', message: categoryImportProviderFailureMessage(error) };
   }
 
-  const parsed = parseCategoryImportResponse(raw);
+  const parsed = parseCategoryImportResponse(raw, request.cardType);
   if (parsed.kind !== 'ok') {
     return parsed;
   }
 
   return {
     kind: 'ok',
-    proposal: compileCategoryProposal({
+    proposal: compileCategoryImport({
       parsed: parsed.parsed,
       cardType: request.cardType,
       earningRate: request.earningRate,
+      existingSubcategories: request.existingSubcategories,
     }),
   };
 }

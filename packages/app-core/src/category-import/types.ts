@@ -4,7 +4,6 @@ import type {
   CategoryImportProvider,
   CreditCard,
 } from '../storage/types';
-import type { YnabFlagColor } from '../ynab/constants';
 
 export type { CategoryImportProvider };
 
@@ -16,7 +15,7 @@ export type CategoryImportSource =
 export interface CategoryImportCredentials {
   provider: CategoryImportProvider;
   apiKey: string;
-  model?: string;
+  model: string;
 }
 
 export interface CategoryBucketDraft {
@@ -42,16 +41,10 @@ export interface ProposedSpendingTier {
   maximumSpend: number | null;
 }
 
-export interface ProposedSubcategory extends CategoryBucketDraft {
-  flagColor: YnabFlagColor;
-  priority: number;
-  active: true;
-}
-
 export interface CategoryImportProposal {
   cardType: CreditCard['type'];
   cardLimits: ProposedCardLimits | null;
-  subcategories: ProposedSubcategory[];
+  subcategories: CardSubcategory[];
   spendingTiers: ProposedSpendingTier[] | null;
   notes: string[];
 }
@@ -89,24 +82,12 @@ export type ExistingCategoryImportSubcategory =
   Pick<CardSubcategory, 'name' | 'flagColor'>
   & Partial<Pick<CardSubcategory, 'id' | 'createdAt'>>;
 
-interface CategoryImportRequestBase {
+export interface CategoryImportRequest {
   cardType: CreditCard['type'];
+  source: CategoryImportSource;
   existingSubcategories?: ExistingCategoryImportSubcategory[];
   earningRate?: number | null;
 }
-
-export type CategoryImportRequest = CategoryImportRequestBase & (
-  | {
-    source: CategoryImportSource;
-    instructions?: never;
-    url?: never;
-  }
-  | {
-    source?: never;
-    instructions?: string;
-    url?: string;
-  }
-);
 
 export interface CardCategoryPatch {
   subcategoriesEnabled: true;

@@ -7,8 +7,7 @@ describe('proposeCardCategories', () => {
     const result = await proposeCardCategories(
       {
         cardType: 'cashback',
-        instructions: 'Keep dining at 4%',
-        url: 'https://bank.example/terms',
+        source: { kind: 'both', instructions: 'Keep dining at 4%', url: 'https://bank.example/terms' },
         earningRate: 0.3,
       },
       { provider: 'openai', apiKey: 'sk-test', model: 'gpt-4o-mini' },
@@ -41,7 +40,7 @@ describe('proposeCardCategories', () => {
 
   it('maps a fetch throw to fetch_failed', async () => {
     const result = await proposeCardCategories(
-      { cardType: 'cashback', url: 'https://bank.example/terms' },
+      { cardType: 'cashback', source: { kind: 'termsUrl', url: 'https://bank.example/terms' } },
       { provider: 'opencode', apiKey: 'zen', model: 'minimax-m2.7' },
       {
         fetchText: async () => {
@@ -60,7 +59,7 @@ describe('proposeCardCategories', () => {
 
   it('keeps a paste-instead fetch message', async () => {
     const result = await proposeCardCategories(
-      { cardType: 'cashback', url: 'https://bank.example/terms.pdf' },
+      { cardType: 'cashback', source: { kind: 'termsUrl', url: 'https://bank.example/terms.pdf' } },
       { provider: 'openai', apiKey: 'sk-test', model: 'gpt-4o-mini' },
       {
         fetchText: async () => {
@@ -94,27 +93,5 @@ describe('proposeCardCategories', () => {
       kind: 'provider_failed',
       message: 'OpenAI API key was rejected.',
     });
-  });
-
-  it('validates the source before calling dependencies', async () => {
-    const deps = {
-      fetchText: async () => {
-        throw new Error('should not run');
-      },
-      completeChat: async () => {
-        throw new Error('should not run');
-      },
-    };
-
-    await expect(proposeCardCategories(
-      { cardType: 'cashback' },
-      { provider: 'openai', apiKey: 'sk-test' },
-      deps,
-    )).resolves.toMatchObject({ kind: 'missing_source' });
-    await expect(proposeCardCategories(
-      { cardType: 'cashback', url: 'javascript:alert(1)' },
-      { provider: 'openai', apiKey: 'sk-test' },
-      deps,
-    )).resolves.toMatchObject({ kind: 'invalid_url' });
   });
 });
