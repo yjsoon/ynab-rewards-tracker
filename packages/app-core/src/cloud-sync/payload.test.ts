@@ -24,7 +24,7 @@ describe('Cloud Sync payloads', () => {
       cloudSyncLocalChangedAt: '2026-07-31T01:00:00Z',
       rememberCloudSyncCode: true,
       autoSyncEnabled: true,
-      statementFormatter: { apiKeys: { openai: 'secret-key' } },
+      statementFormatter: { apiKeys: { openai: 'secret-key', opencode: 'zen-secret' } },
     };
     data.calculations = [{
       cardId: 'card-1', ruleId: 'rule-1', period: '2026-07', totalSpend: 10,
@@ -56,7 +56,7 @@ describe('Cloud Sync payloads', () => {
         currency: 'SGD',
         cloudSyncMnemonic: 'must-not-import',
         cloudSyncLocalChangedAt: '2026-07-31T01:00:00Z',
-        statementFormatter: { apiKeys: { openai: 'must-not-import' } },
+        statementFormatter: { apiKeys: { openai: 'must-not-import', opencode: 'must-not-import' } },
       },
       cachedData: { transactions: [{ secret: true }] },
     });

@@ -9,6 +9,8 @@ import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { CardSubcategoriesEditor, type CardSubcategoryDraft } from '@/components/CardSubcategoriesEditor';
 import { CardSpendingTiersEditor } from '@/components/CardSpendingTiersEditor';
+import { CategoryImportComposer } from '@/components/CategoryImportComposer';
+import { relinkSpendingTierOverrides } from '@ynab-counter/app-core/category-import';
 import {
   Percent,
   DollarSign,
@@ -1031,6 +1033,29 @@ export function CardSettingsEditor({
           : ''
       }`}>
         <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Subcategory Rewards</h4>
+        <CategoryImportComposer
+          card={card}
+          cardType={cardType}
+          earningRate={earningRate}
+          existingSubcategories={subcategoryDrafts}
+          onApply={(patch) => {
+            onFieldChange('subcategoriesEnabled', true);
+            onFieldChange('subcategories', patch.subcategories);
+            if (patch.earningRate !== undefined) onFieldChange('earningRate', patch.earningRate);
+            if (patch.earningBlockSize !== undefined) onFieldChange('earningBlockSize', patch.earningBlockSize);
+            if (patch.minimumSpend !== undefined) onFieldChange('minimumSpend', patch.minimumSpend);
+            if (patch.maximumSpend !== undefined) onFieldChange('maximumSpend', patch.maximumSpend);
+            onFieldChange(
+              'spendingTiers',
+              patch.spendingTiers
+                ?? relinkSpendingTierOverrides({
+                  spendingTiers: spendingTierDrafts,
+                  previousSubcategories: subcategoryDrafts,
+                  nextSubcategories: patch.subcategories,
+                }),
+            );
+          }}
+        />
         <CardSubcategoriesEditor
           cardType={cardType}
           enabled={subcategoriesEnabled}
