@@ -1,5 +1,8 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
+  ActionSheetIOS,
+  Alert,
+  Platform,
   Pressable,
   StyleSheet,
   View,
@@ -12,13 +15,13 @@ import { Caption1, Footnote, Headline, Title3 } from '@/components/ios';
 import type { CardFormatting } from '@/features/cards/presentation';
 import { isPromotionalPeriodActive } from '@/features/cards/presentation';
 import { semanticColors, withAlpha } from '@/theme';
-import { interaction, radii, spacing } from '@/theme/tokens';
+import { interaction, nativeMetrics, radii, spacing } from '@/theme/tokens';
 import type { TextColor } from '@/components/ios/Typography';
 import {
   resolveCardSpendingTier,
   type CardDashboardProjection,
 } from '@ynab-counter/app-core/rewards-engine';
-import type { CreditCard } from '@ynab-counter/app-core/storage';
+import type { CreditCard, MonthlyQualificationBreakdown } from '@ynab-counter/app-core/storage';
 import { CardSubcategoryBreakdown } from './subcategory-breakdown';
 import { ZonesProgressBar } from './zones-progress-bar';
 
@@ -46,6 +49,48 @@ function cardUsesBlocks(card: CreditCard): boolean {
   );
 }
 
+function activeMonthlyQualification(
+  months: readonly MonthlyQualificationBreakdown[],
+  asOf: string,
+): MonthlyQualificationBreakdown | undefined {
+  return months.find((month) => month.start <= asOf && month.end >= asOf)
+    ?? months.find((month) => month.status === 'pending');
+}
+
+function presentCardMenu(params: {
+  allowHideCard: boolean;
+  onEdit: () => void;
+  onHide: () => void;
+  onOpen: () => void;
+}): void {
+  const actions = [
+    { label: 'Edit settings', run: params.onEdit },
+    ...(params.allowHideCard
+      ? [{ label: 'Hide from dashboard', run: params.onHide }]
+      : []),
+    { label: 'View card details', run: params.onOpen },
+  ];
+
+  if (Platform.OS === 'ios') {
+    ActionSheetIOS.showActionSheetWithOptions(
+      {
+        options: [...actions.map((action) => action.label), 'Cancel'],
+        cancelButtonIndex: actions.length,
+      },
+      (buttonIndex) => {
+        const action = typeof buttonIndex === 'number' ? actions[buttonIndex] : undefined;
+        action?.run();
+      },
+    );
+    return;
+  }
+
+  Alert.alert('Card actions', undefined, [
+    ...actions.map((action) => ({ text: action.label, onPress: action.run })),
+    { text: 'Cancel', style: 'cancel' },
+  ]);
+}
+
 export interface CardTileProps {
   projection: CardDashboardProjection;
   formatting: CardFormatting;
@@ -54,15 +99,11 @@ export interface CardTileProps {
   isSubcategoryExpanded: boolean;
   onToggleSubcategories: () => void;
   onHideCard: (cardId: string, hiddenUntil: string) => void;
+  onEdit: () => void;
   onOpen: () => void;
   style?: StyleProp<ViewStyle>;
 }
 
-/**
- * The web dashboard's card tile, adapted for a native touch target: reward
- * chip, hero number ("X to go / left / over / spent"), zone-coloured progress
- * bar, spend meta row, block copy, and an expandable category breakdown.
- */
 export function CardTile({
   projection,
   formatting,
@@ -71,10 +112,12 @@ export function CardTile({
   isSubcategoryExpanded,
   onToggleSubcategories,
   onHideCard,
+  onEdit,
   onOpen,
   style,
 }: CardTileProps) {
   const { card } = projection;
+  const [showRewardPeriodSpend, setShowRewardPeriodSpend] = useState(false);
   const promoActive = isPromotionalPeriodActive(card, referenceDate);
   const hasBlockRounding = cardUsesBlocks(card);
   const displayedSpend = hasBlockRounding ? projection.spend.counted : projection.spend.total;
@@ -101,6 +144,20 @@ export function CardTile({
     maximumTarget > 0 &&
     displayedSpend / maximumTarget >= NEAR_CAP_RATIO;
 
+  const qualificationFailed = projection.calculation.qualificationStatus === 'failed';
+  const qualificationPending = projection.calculation.qualificationStatus === 'pending';
+  const monthlyQualifications = projection.calculation.monthlyQualifications ?? [];
+  const calculationAsOf = projection.calculationPeriod.asOf ?? projection.calculationPeriod.end;
+  const qualificationMonth = activeMonthlyQualification(monthlyQualifications, calculationAsOf);
+  const monthlyMinimumSpend = projection.calculation.monthlyMinimumSpend
+    ?? card.rewardPeriod?.monthlyMinimumSpend
+    ?? 0;
+  const hasMonthlyMinimum = monthlyMinimumSpend > 0;
+  const allMonthlyMinimumsMet = Boolean(
+    card.rewardPeriod &&
+    monthlyQualifications.length === card.rewardPeriod.monthCount &&
+    monthlyQualifications.every((month) => month.status === 'met'),
+  );
   const remainingToMaximum = hasMaximum ? Math.max(0, maximumTarget - displayedSpend) : 0;
   const exceededAmount = hasMaximum ? Math.max(0, displayedSpend - maximumTarget) : 0;
   const remainingToMinimum = hasMinimum ? projection.minimum.remaining ?? 0 : 0;
@@ -110,83 +167,89 @@ export function CardTile({
       : 0;
   const progressPercent = Math.round(clampedProgress * 100);
 
+  const heroVariant: HeroVariant = nextSpendingLevel
+    ? 'tier-left'
+    : hasMinimum && !minimumMet
+      ? 'min-left'
+      : hasMaximum && exceeded
+        ? 'cap-over'
+        : hasMaximum
+          ? 'cap-left'
+          : 'spent';
+  const canToggleSpendView = Boolean(
+    heroVariant === 'spent' && card.rewardPeriod && qualificationMonth,
+  );
+  const showingCurrentMonthSpend = canToggleSpendView && !showRewardPeriodSpend;
+  const heroSpend = showingCurrentMonthSpend && qualificationMonth
+    ? qualificationMonth.spend
+    : displayedSpend;
+
   const hero: HeroModel = useMemo(() => {
-    const variant: HeroVariant = nextSpendingLevel
-      ? 'tier-left'
-      : hasMinimum && !minimumMet
-        ? 'min-left'
-        : hasMaximum && exceeded
-          ? 'cap-over'
-          : hasMaximum
-            ? 'cap-left'
-            : 'spent';
-    const capUrgent = variant === 'cap-left' && nearCap;
+    const capUrgent = heroVariant === 'cap-left' && nearCap;
     const tone: TextColor =
-      variant === 'cap-over'
+      heroVariant === 'cap-over'
         ? 'destructive'
-        : variant === 'tier-left'
+        : heroVariant === 'tier-left'
           ? hasUnlockedSpendingTier ? 'positive' : 'attention'
-        : variant === 'min-left' || capUrgent
+        : heroVariant === 'min-left' || capUrgent
           ? 'attention'
-          : variant === 'cap-left' || (hasMinimum && minimumMet)
+          : heroVariant === 'cap-left' || (hasMinimum && minimumMet)
             ? 'positive'
             : 'primary';
     const amount =
-      variant === 'tier-left'
+      heroVariant === 'tier-left'
         ? remainingToSpendingTier
-        : variant === 'cap-left'
+        : heroVariant === 'cap-left'
         ? remainingToMaximum
-        : variant === 'cap-over'
+        : heroVariant === 'cap-over'
           ? exceededAmount
-          : variant === 'min-left'
+          : heroVariant === 'min-left'
             ? remainingToMinimum
-            : displayedSpend;
+            : heroSpend;
     const suffix =
-      variant === 'tier-left' || variant === 'min-left' ? 'to go'
-        : variant === 'cap-left' ? 'left'
-          : variant === 'cap-over' ? 'over'
+      heroVariant === 'tier-left' || heroVariant === 'min-left' ? 'to go'
+        : heroVariant === 'cap-left' ? 'left'
+          : heroVariant === 'cap-over' ? 'over'
             : 'spent';
     const label =
-      variant === 'tier-left' && nextSpendingLevel
+      heroVariant === 'tier-left' && nextSpendingLevel
         ? `${formatting.currencyRounded(remainingToSpendingTier)} to go to the ${formatting.currencyRounded(nextSpendingLevel.spendThreshold)} tier`
-        : variant === 'cap-left'
+        : heroVariant === 'cap-left'
         ? `${formatting.currencyRounded(remainingToMaximum)} left before the cap`
-        : variant === 'cap-over'
+        : heroVariant === 'cap-over'
           ? `${formatting.currencyRounded(exceededAmount)} over the cap`
-          : variant === 'min-left'
+          : heroVariant === 'min-left'
             ? `${formatting.currencyRounded(remainingToMinimum)} more to meet the minimum`
-            : `Spent ${formatting.currencyRounded(displayedSpend)} this period`;
+            : `Spent ${formatting.currencyRounded(heroSpend)} ${showingCurrentMonthSpend ? 'this month' : 'this period'}`;
     return {
-      variant,
+      variant: heroVariant,
       amount,
       tone,
       suffix,
       label,
-      weight: variant === 'spent' || variant === 'cap-over' ? 'semibold' : 'medium',
+      weight: heroVariant === 'spent' || heroVariant === 'cap-over' ? 'semibold' : 'medium',
     };
   }, [
-    displayedSpend,
-    exceeded,
     exceededAmount,
     formatting,
-    hasMaximum,
     hasMinimum,
     hasUnlockedSpendingTier,
+    heroSpend,
+    heroVariant,
     minimumMet,
     nearCap,
     nextSpendingLevel,
     remainingToMaximum,
     remainingToMinimum,
     remainingToSpendingTier,
+    showingCurrentMonthSpend,
   ]);
 
   const earnedNumber = projection.reward.amount;
   const earnedDisplay = Math.round(earnedNumber).toLocaleString();
-  const rewardChipTone: TextColor = exceeded
+  const rewardChipTone: TextColor = exceeded || qualificationFailed
     ? 'destructive'
-    : intermediateCapReached
-      ? 'attention'
-    : hasMinimum && !minimumMet
+    : intermediateCapReached || qualificationPending || (hasMinimum && !minimumMet)
       ? 'attention'
       : card.type === 'cashback'
         ? 'positive'
@@ -205,14 +268,16 @@ export function CardTile({
       ? `${formatting.currencyRounded(maximumTarget)} cap`
       : hero.variant === 'min-left'
         ? `${formatting.currencyRounded(minimumTarget)} min`
-        : 'This period';
+        : showingCurrentMonthSpend ? 'This month' : 'This period';
 
   const daysRemaining = projection.daysRemaining;
   const daysTone: TextColor = daysRemaining <= 1
     ? 'destructive'
-    : daysRemaining <= 7
+    : daysRemaining <= 3
       ? 'attention'
-      : 'tertiary';
+      : daysRemaining <= 7
+        ? 'attention'
+        : 'tertiary';
   const daysLabel = `${daysRemaining}d`;
 
   const blockCount = projection.blockInfo?.blocksEarned ?? null;
@@ -251,14 +316,48 @@ export function CardTile({
         borderColor: hasUnlockedSpendingTier ? semanticColors.positive : semanticColors.attention,
         borderWidth: 1.5,
       }
-    : exceeded
+    : exceeded || qualificationFailed
     ? { borderColor: semanticColors.capped, borderWidth: 1.5 }
     : nearCap
       ? { borderColor: semanticColors.attention, borderWidth: 1.5 }
       : { borderColor: semanticColors.separator, borderWidth: StyleSheet.hairlineWidth };
 
+  const qualificationCopy = !card.rewardPeriod || !hasMonthlyMinimum || !qualificationMonth
+    ? undefined
+    : projection.calculation.qualificationStatus === 'failed'
+      ? 'Period qualification failed'
+      : projection.calculation.qualificationStatus === 'met'
+        ? allMonthlyMinimumsMet
+          ? `All ${card.rewardPeriod.monthCount} monthly minimums met`
+          : `This month: ${formatting.currencyRounded(qualificationMonth.spend)} of ${formatting.currencyRounded(monthlyMinimumSpend)} · met`
+        : `This month: ${formatting.currencyRounded(qualificationMonth.spend)} of ${formatting.currencyRounded(monthlyMinimumSpend)}`;
+  const qualificationTone: TextColor = projection.calculation.qualificationStatus === 'failed'
+    ? 'destructive'
+    : projection.calculation.qualificationStatus === 'met'
+      ? 'positive'
+      : 'attention';
+
   return (
     <View style={[styles.tile, borderTone, style]}>
+      <Pressable
+        onPress={() => presentCardMenu({
+          allowHideCard,
+          onEdit,
+          onHide: () => onHideCard(card.id, projection.resetsOn),
+          onOpen,
+        })}
+        accessibilityRole="button"
+        accessibilityLabel="Card actions"
+        hitSlop={8}
+        style={({ pressed }) => [styles.kebab, pressed && styles.pressed]}
+      >
+        <SymbolView
+          name="ellipsis"
+          size={16}
+          tintColor={semanticColors.tertiaryLabel}
+          accessibilityElementsHidden
+        />
+      </Pressable>
       <Pressable
         onPress={onOpen}
         accessible
@@ -295,9 +394,25 @@ export function CardTile({
         </View>
 
         <View style={styles.heroRow} accessibilityElementsHidden>
-          <Caption1 color="secondary" style={styles.heroLabel}>
-            {heroLabel}
-          </Caption1>
+          {canToggleSpendView ? (
+            <Pressable
+              onPress={() => setShowRewardPeriodSpend((current) => !current)}
+              accessibilityRole="button"
+              accessibilityLabel={showingCurrentMonthSpend
+                ? 'Showing this month spend. Show full reward period spend'
+                : 'Showing full reward period spend. Show this month spend'}
+              hitSlop={8}
+              style={styles.heroLabelHit}
+            >
+              <Caption1 color="secondary" style={[styles.heroLabel, styles.heroLabelToggle]}>
+                {heroLabel}
+              </Caption1>
+            </Pressable>
+          ) : (
+            <Caption1 color="secondary" style={styles.heroLabel}>
+              {heroLabel}
+            </Caption1>
+          )}
           <View style={styles.heroValueRow}>
             {hero.variant === 'min-left' || hero.variant === 'tier-left' ? (
               <SymbolView
@@ -374,6 +489,12 @@ export function CardTile({
           </Footnote>
         </View>
 
+        {qualificationCopy ? (
+          <Caption1 color={qualificationTone} style={styles.qualification} accessibilityElementsHidden>
+            {qualificationCopy}
+          </Caption1>
+        ) : null}
+
         {blockCopy ? (
           <Caption1 color="tertiary" style={styles.tabular} accessibilityElementsHidden>
             {blockCopy}
@@ -410,12 +531,26 @@ export function CardTile({
 
 const styles = StyleSheet.create({
   tile: {
+    position: 'relative',
     borderRadius: radii.xlarge,
     backgroundColor: semanticColors.secondarySystemGroupedBackground,
     overflow: 'hidden',
   },
+  kebab: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    zIndex: 2,
+    minWidth: nativeMetrics.minimumTouchTarget,
+    minHeight: nativeMetrics.minimumTouchTarget,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderBottomLeftRadius: radii.medium,
+    backgroundColor: semanticColors.secondarySystemGroupedBackground,
+  },
   pressable: {
     padding: spacing.lg,
+    paddingRight: nativeMetrics.minimumTouchTarget,
     gap: spacing.md,
   },
   footerSection: {
@@ -479,6 +614,17 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
     fontWeight: '600',
   },
+  heroLabelHit: {
+    minHeight: nativeMetrics.minimumTouchTarget,
+    justifyContent: 'center',
+    marginVertical: -spacing.sm,
+  },
+  heroLabelToggle: {
+    textDecorationLine: 'underline',
+  },
+  qualification: {
+    fontWeight: '600',
+  },
   heroValueRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
@@ -520,7 +666,7 @@ const styles = StyleSheet.create({
   },
   hideButton: {
     alignSelf: 'flex-start',
-    minHeight: 36,
+    minHeight: nativeMetrics.minimumTouchTarget,
     justifyContent: 'center',
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.md,

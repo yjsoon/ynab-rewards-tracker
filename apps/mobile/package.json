@@ -8,7 +8,7 @@
     "ios": "pnpm exec expo run:ios",
     "android": "pnpm exec expo start --android",
     "typecheck": "tsc --project tsconfig.json --noEmit",
-    "test": "vitest run src/storage/service.test.ts src/features/activity/flag-update.integration.test.ts src/features/activity/flag-update.test.ts src/features/cards/card-edit-publication.integration.test.ts src/features/cards/card-edit-refresh.test.ts src/features/cards/category-import-form.test.ts src/features/cards/local-day-clock.test.ts src/features/cards/reward-categories.test.ts src/features/preferences/currency-sample.test.ts src/contexts/setup-sync-chain.test.ts src/lib/cloud-sync-key.test.ts src/lib/cloud-sync-revision.test.ts src/lib/dashboard-period.test.ts"
+    "test": "vitest run src/storage/service.test.ts src/features/activity/flag-update.integration.test.ts src/features/activity/flag-update.test.ts src/features/cards/card-edit-publication.integration.test.ts src/features/cards/card-edit-refresh.test.ts src/features/cards/category-import-form.test.ts src/features/cards/local-day-clock.test.ts src/features/cards/reward-categories.test.ts src/features/overview/format-last-updated.test.ts src/features/overview/status-summary-model.test.ts src/features/preferences/currency-sample.test.ts src/contexts/setup-sync-chain.test.ts src/lib/cloud-sync-key.test.ts src/lib/cloud-sync-revision.test.ts src/lib/dashboard-period.test.ts"
   },
   "dependencies": {
     "@babel/runtime": "^7.25.0",

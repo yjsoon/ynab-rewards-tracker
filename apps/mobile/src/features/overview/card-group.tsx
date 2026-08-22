@@ -2,9 +2,9 @@ import React from 'react';
 import { Pressable, StyleSheet, View, type ColorValue } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 
-import { Headline, Title2 } from '@/components/ios';
+import { Caption1, Footnote } from '@/components/ios';
 import { semanticColors } from '@/theme';
-import { interaction, nativeMetrics, spacing } from '@/theme/tokens';
+import { interaction, nativeMetrics, radii, spacing } from '@/theme/tokens';
 
 export interface CardGroupHeaderProps {
   title: string;
@@ -15,10 +15,6 @@ export interface CardGroupHeaderProps {
   onToggle: () => void;
 }
 
-/**
- * Collapsible section header for the type-grouped dashboard grid, mirroring
- * the web dashboard's cashback/miles groups with count badges.
- */
 export function CardGroupHeader({
   title,
   count,
@@ -38,25 +34,27 @@ export function CardGroupHeader({
     >
       <View style={styles.identity}>
         <SymbolView
+          name={collapsed ? 'chevron.right' : 'chevron.down'}
+          size={13}
+          tintColor={semanticColors.tertiaryLabel}
+          style={styles.icon}
+          accessibilityElementsHidden
+        />
+        <SymbolView
           name={icon}
-          size={15}
+          size={13}
           tintColor={iconColor}
           style={styles.icon}
           accessibilityElementsHidden
         />
-        <Headline accessible={false}>{title}</Headline>
+        <Footnote color="secondary" style={styles.title} accessible={false}>
+          {title}
+        </Footnote>
       </View>
-      <View style={styles.trailing}>
-        <Title2 color="secondary" style={styles.count} accessible={false}>
+      <View style={styles.badge} accessibilityElementsHidden>
+        <Caption1 color="secondary" style={styles.count}>
           {count}
-        </Title2>
-        <SymbolView
-          name="chevron.down"
-          size={12}
-          tintColor={semanticColors.tertiaryLabel}
-          style={collapsed && styles.chevronCollapsed}
-          accessibilityElementsHidden
-        />
+        </Caption1>
       </View>
     </Pressable>
   );
@@ -67,28 +65,36 @@ const styles = StyleSheet.create({
     minHeight: nativeMetrics.minimumTouchTarget,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.md,
+    gap: spacing.sm,
     paddingVertical: spacing.xs,
   },
   identity: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
+    minWidth: 0,
+    flexShrink: 1,
   },
   icon: {
     flexShrink: 0,
   },
-  trailing: {
-    flexDirection: 'row',
+  title: {
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    fontWeight: '600',
+  },
+  badge: {
+    minWidth: 20,
+    minHeight: 20,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radii.pill,
+    backgroundColor: semanticColors.tertiarySystemFill,
     alignItems: 'center',
-    gap: spacing.xs,
+    justifyContent: 'center',
   },
   count: {
     fontVariant: ['tabular-nums'],
-  },
-  chevronCollapsed: {
-    transform: [{ rotate: '-90deg' }],
+    fontWeight: '600',
   },
   pressed: {
     opacity: interaction.pressedOpacity,
