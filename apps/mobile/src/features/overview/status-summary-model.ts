@@ -33,7 +33,15 @@ function slotForProjection(projection: CardDashboardProjection): DashboardStatus
   if (projection.calculation.qualificationStatus === 'failed') {
     return 'qualification-failed';
   }
-  return STATUS_SLOT[projection.status];
+  const slot = STATUS_SLOT[projection.status];
+  if (
+    projection.calculation.qualificationStatus === 'pending'
+    && slot !== 'at-cap'
+    && slot !== 'near-cap'
+  ) {
+    return 'below-minimum';
+  }
+  return slot;
 }
 
 export function summariseDashboardStatus(

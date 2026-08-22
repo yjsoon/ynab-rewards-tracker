@@ -116,6 +116,21 @@ describe('summariseDashboardStatus', () => {
     });
   });
 
+  it('does not count pending qualification as earning unless already near or at cap', () => {
+    expect(summariseDashboardStatus([
+      project({ card: { id: 'pending-earning' }, status: 'earning', qualificationStatus: 'pending' }),
+      project({ card: { id: 'pending-open' }, status: 'open', qualificationStatus: 'pending' }),
+      project({ card: { id: 'pending-capped' }, status: 'capped', qualificationStatus: 'pending' }),
+      project({ card: { id: 'pending-near' }, status: 'near_cap', qualificationStatus: 'pending' }),
+    ])).toEqual({
+      'qualification-failed': 0,
+      'below-minimum': 2,
+      earning: 0,
+      'near-cap': 1,
+      'at-cap': 1,
+    });
+  });
+
   it('skips unconfigured cards', () => {
     expect(summariseDashboardStatus([
       project({
