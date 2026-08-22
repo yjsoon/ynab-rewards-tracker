@@ -1,0 +1,68 @@
+import { describe, expect, it } from 'vitest';
+
+import { UNFLAGGED_FLAG } from '../ynab/constants';
+import { compileCategoryImport } from './compile';
+import type { CategoryBucketDraft } from './types';
+
+function bucket(name: string, rewardValue = 4): CategoryBucketDraft {
+  return {
+    name,
+    rewardValue,
+    milesBlockSize: null,
+    minimumSpend: null,
+    maximumSpend: null,
+    excludeFromRewards: false,
+    inclusion: null,
+  };
+}
+
+describe('compileCategoryImport', () => {
+  it('assigns unique flags and always keeps an unflagged fallback', () => {
+    const proposal = compileCategoryImport({
+      parsed: {
+        cardLimits: null,
+        buckets: [bucket('Dining'), bucket('Groceries')],
+        spendingTiers: null,
+        notes: [],
+      },
+      cardType: 'miles',
+      earningRate: 1.4,
+    });
+
+    const flags = proposal.subcategories.map((subcategory) => subcategory.flagColor);
+    expect(new Set(flags).size).toBe(flags.length);
+    expect(flags).toContain(UNFLAGGED_FLAG.value);
+    expect(proposal.subcategories.find((subcategory) => subcategory.flagColor === UNFLAGGED_FLAG.value)?.rewardValue).toBe(1.4);
+  });
+
+  it('reuses an existing flag when the name matches', () => {
+    const proposal = compileCategoryImport({
+      parsed: {
+        cardLimits: null,
+        buckets: [bucket('Dining')],
+        spendingTiers: null,
+        notes: [],
+      },
+      cardType: 'cashback',
+      existingSubcategories: [{ name: 'Dining', flagColor: 'green' }],
+    });
+
+    expect(proposal.subcategories[0]).toMatchObject({ name: 'Dining', flagColor: 'green' });
+  });
+
+  it('moves an eighth earning bucket into notes', () => {
+    const names = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+    const proposal = compileCategoryImport({
+      parsed: {
+        cardLimits: null,
+        buckets: names.map((name) => bucket(name)),
+        spendingTiers: null,
+        notes: [],
+      },
+      cardType: 'cashback',
+    });
+
+    expect(proposal.subcategories.filter((subcategory) => subcategory.flagColor !== UNFLAGGED_FLAG.value)).toHaveLength(6);
+    expect(proposal.notes.some((note) => note.includes('H'))).toBe(true);
+  });
+});

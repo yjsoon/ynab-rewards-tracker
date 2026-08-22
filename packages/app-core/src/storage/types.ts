@@ -288,12 +288,15 @@ export interface YnabConnection {
   trackedAccountIds?: string[];
 }
 
+export type LlmProvider = "openai" | "gemini" | "openrouter" | "opencode";
 export type StatementFormatterProvider = "openai" | "gemini" | "openrouter";
+export type CategoryImportProvider = "openai" | "openrouter" | "opencode";
 
 export interface StatementFormatterSettings {
   provider?: StatementFormatterProvider;
-  modelByProvider?: Partial<Record<StatementFormatterProvider, string>>;
-  apiKeys?: Partial<Record<StatementFormatterProvider, string>>;
+  categoryImportProvider?: CategoryImportProvider;
+  modelByProvider?: Partial<Record<LlmProvider, string>>;
+  apiKeys?: Partial<Record<LlmProvider, string>>;
   customPrompt?: string;
 }
 
