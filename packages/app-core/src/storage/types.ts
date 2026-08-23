@@ -268,6 +268,8 @@ export interface CardReference {
   cardId: string;
 }
 
+export type BudgetProvider = "ynab" | "howmuch";
+
 export interface ThemeGroup {
   id: string;
   name: string;
@@ -281,7 +283,9 @@ export interface ThemeGroup {
 }
 
 export interface YnabConnection {
+  provider?: BudgetProvider;
   pat?: string;
+  howmuchToken?: string;
   lastSync?: string;
   selectedBudgetId?: string;
   selectedBudgetName?: string;

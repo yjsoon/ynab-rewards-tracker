@@ -29,6 +29,7 @@ import { projectTransactions } from "@/lib/rewards-engine";
 import type { YnabFlagColor } from "@/lib/ynab-constants";
 import { buildRewardCategoryNamesByFlag } from "@/lib/card-metrics";
 import { updateTrackedTransactionFlagCache } from "@/hooks/useTrackedTransactions";
+import { YnabClient } from "@/lib/ynab-client";
 
 interface EnhancedTransactionsTableProps {
   loading: boolean;
@@ -345,26 +346,8 @@ export function EnhancedTransactionsTable({
       setUpdateError("");
 
       try {
-        const response = await fetch(
-          `/api/ynab/plans/${selectedBudgetId}/transactions/${transactionId}`,
-          {
-            method: "PATCH",
-            headers: {
-              Authorization: `Bearer ${pat}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              transaction: {
-                flag_color: newFlagColor || null,
-              },
-            }),
-          },
-        );
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.message || "Failed to update transaction");
-        }
+        const client = new YnabClient(pat);
+        await client.updateTransactionFlag(selectedBudgetId, transactionId, newFlagColor);
 
         updateTrackedTransactionFlagCache(
           selectedBudgetId,

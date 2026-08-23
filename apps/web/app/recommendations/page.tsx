@@ -24,6 +24,7 @@ import { useThemeGroups, useCreditCards, useSettings, useYnabPAT, useSelectedBud
 import { buildCardMetricsById } from '@/lib/card-metrics';
 import { storage } from '@/lib/storage';
 import type { Transaction } from '@/types/transaction';
+import { YnabClient } from '@/lib/ynab-client';
 
 
 export default function RecommendationsPage() {
@@ -82,24 +83,13 @@ export default function RecommendationsPage() {
       // for cards with billing cycles that extend into the previous month
       const sinceDate = getEarliestPeriodStart(cards);
 
-      const response = await fetch(
-        `/api/ynab/plans/${selectedBudget.id}/transactions?since_date=${sinceDate}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${pat}`,
-          },
-          signal: controller.signal,
-        }
-      );
+      const client = new YnabClient(pat);
+      const txns = await client.getTransactions(selectedBudget.id, {
+        since_date: sinceDate,
+        signal: controller.signal,
+      });
 
       clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch transactions: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      const txns = data.data?.transactions || [];
 
       // Filter for credit card transactions
       const cardAccountIds = cards.map(c => c.ynabAccountId);

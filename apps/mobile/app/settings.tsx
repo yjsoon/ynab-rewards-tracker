@@ -46,13 +46,16 @@ export default function SettingsScreen() {
   const isConnected = state.connectionStatus === 'connected';
   const isDisconnected = state.connectionStatus === 'disconnected';
   const isError = state.connectionStatus === 'error';
+  const providerName = state.provider === 'howmuch' ? 'HowMuch' : 'YNAB';
 
   const isSetupMode = useMemo(
     () => !state.pat || !state.selectedBudget.id || state.trackedAccountIds.length === 0 || state.connectionStatus !== 'connected',
     [state.pat, state.selectedBudget.id, state.trackedAccountIds.length, state.connectionStatus]
   );
 
-  const [tokenInput, setTokenInput] = useState(state.pat ?? '');
+  const [tokenInput, setTokenInput] = useState(
+    state.provider === 'howmuch' ? state.pat?.replace(/^howmuch-token:/, '') ?? '' : state.pat ?? '',
+  );
   const [tokenVisible, setTokenVisible] = useState(false);
   const [validationError, setValidationError] = useState<string | undefined>();
   const [selectedBudgetId, setSelectedBudgetId] = useState<string | undefined>(state.selectedBudget.id);
@@ -61,6 +64,7 @@ export default function SettingsScreen() {
   const [isApplyingChanges, setIsApplyingChanges] = useState(false);
   const [hasLocalAccountToggles, setHasLocalAccountToggles] = useState(false);
   const [activeBudgetSyncId, setActiveBudgetSyncId] = useState<string | undefined>();
+  const [isSwitchingProvider, setIsSwitchingProvider] = useState(false);
 
   const isApplyingRef = useRef(false);
 
@@ -134,8 +138,10 @@ export default function SettingsScreen() {
   }, [connectedAccounts, trackedAccounts, hasLocalAccountToggles, getSortedAccounts]);
 
   useEffect(() => {
-    setTokenInput(state.pat ?? '');
-  }, [state.pat]);
+    setTokenInput(state.provider === 'howmuch'
+      ? state.pat?.replace(/^howmuch-token:/, '') ?? ''
+      : state.pat ?? '');
+  }, [state.pat, state.provider]);
 
   useEffect(() => {
     if (!state.pending?.budget) {
@@ -308,6 +314,23 @@ export default function SettingsScreen() {
     }
   }, [tokenInput, actions, notification, impact]);
 
+  const handleProviderChange = useCallback(async (provider: 'ynab' | 'howmuch') => {
+    if (provider === state.provider) return;
+    impact('light');
+    setValidationError(undefined);
+    setSelectedBudgetId(undefined);
+    setTrackedAccounts([]);
+    setIsSwitchingProvider(true);
+    try {
+      await actions.setBudgetProvider(provider);
+    } catch (error) {
+      setValidationError(error instanceof Error ? error.message : `Failed to connect to ${provider === 'howmuch' ? 'HowMuch' : 'YNAB'}`);
+      notification('error');
+    } finally {
+      setIsSwitchingProvider(false);
+    }
+  }, [actions, impact, notification, state.provider]);
+
   const handleDisconnect = useCallback(async () => {
     impact('medium');
     await actions.clearPAT();
@@ -370,12 +393,12 @@ export default function SettingsScreen() {
   }, [trackedAccounts, actions, impact, state.isSyncing, isApplyingChanges]);
 
   const shouldShowConnectButton = isDisconnected || isError || isAuthenticating;
-  const connectButtonLabel = isAuthenticating ? 'Connecting…' : (isError ? 'Retry connection' : 'Connect to YNAB');
+  const connectButtonLabel = isAuthenticating ? 'Connecting…' : (isError ? 'Retry connection' : `Connect to ${providerName}`);
   const connectButtonDisabled = isAuthenticating || isSyncing || isApplyingChanges || !tokenInput.trim();
 
   const statusMessage = (() => {
     if (isAwaitingBudget) {
-      return 'Token verified. Select a budget and at least one account, then tap Finish setup.';
+      return 'Access verified. Select a budget and at least one account, then tap Finish setup.';
     }
     if (isConnected) {
       if (!isSetupMode) {
@@ -406,7 +429,7 @@ export default function SettingsScreen() {
                 <ListItem>
                   <View style={styles.setupBannerContent}>
                     <Caption1 color="secondary">
-                      Complete setup by connecting your YNAB account, selecting a budget, and choosing accounts to track.
+                      Complete setup by connecting {providerName}, selecting a budget, and choosing accounts to track.
                     </Caption1>
                   </View>
                 </ListItem>
@@ -414,6 +437,34 @@ export default function SettingsScreen() {
             ) : null}
 
             <Card>
+              <ListItem>
+                <View style={styles.fieldGroup}>
+                  <Footnote color="secondary">Budget provider</Footnote>
+                  <View style={styles.providerPicker}>
+                    {(['ynab', 'howmuch'] as const).map((provider) => (
+                      <TouchableOpacity
+                        key={provider}
+                        onPress={() => handleProviderChange(provider)}
+                        disabled={isSwitchingProvider}
+                        style={[
+                          styles.providerOption,
+                          state.provider === provider && styles.providerOptionSelected,
+                          isSwitchingProvider && styles.providerOptionDisabled,
+                        ]}
+                        accessibilityRole="radio"
+                        accessibilityState={{ selected: state.provider === provider }}
+                      >
+                        <Caption1 color={state.provider === provider ? 'primary' : 'secondary'}>
+                          {provider === 'ynab' ? 'YNAB' : 'HowMuch'}
+                        </Caption1>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              </ListItem>
+
+              <Separator inset={16} />
+
               <ListItem>
                 <View style={styles.fieldGroup}>
                   <Footnote color="secondary">Status</Footnote>
@@ -433,9 +484,11 @@ export default function SettingsScreen() {
 
               <ListItem>
                 <View style={styles.fieldGroup}>
-                  <Footnote color="secondary">Personal Access Token</Footnote>
+                  <Footnote color="secondary">
+                    {state.provider === 'ynab' ? 'Personal Access Token' : 'HowMuch API key'}
+                  </Footnote>
                   <TextInput
-                    placeholder="Enter your YNAB PAT"
+                    placeholder={state.provider === 'ynab' ? 'Enter your YNAB PAT' : 'Enter your HowMuch API key'}
                     secureTextEntry={!tokenVisible}
                     value={tokenInput}
                     onChangeText={setTokenInput}
@@ -464,8 +517,8 @@ export default function SettingsScreen() {
                     size="medium"
                     onPress={handleConnect}
                     style={styles.connectButton}
-                    accessibilityLabel="Connect to YNAB"
-                    accessibilityHint="Saves your personal access token and fetches budgets"
+                    accessibilityLabel={`Connect to ${providerName}`}
+                    accessibilityHint={state.provider === 'ynab' ? 'Saves your personal access token and fetches budgets' : 'Connects through the Rewards Tracker server and fetches budgets'}
                     disabled={connectButtonDisabled}
                   >
                     {connectButtonLabel}
@@ -488,8 +541,8 @@ export default function SettingsScreen() {
                     size="medium"
                     onPress={handleDisconnect}
                     style={styles.connectButton}
-                    accessibilityLabel="Disconnect YNAB"
-                    accessibilityHint="Disconnects your YNAB account from Rewards Tracker"
+                    accessibilityLabel={`Disconnect ${providerName}`}
+                    accessibilityHint={`Disconnects ${providerName} from Rewards Tracker`}
                     disabled={!state.pat}
                   >
                     Disconnect
@@ -660,6 +713,24 @@ const styles = StyleSheet.create({
   fieldGroup: {
     gap: 8,
     width: '100%',
+  },
+  providerPicker: {
+    flexDirection: 'row',
+    borderRadius: 8,
+    padding: 2,
+    backgroundColor: semanticColors.tertiarySystemBackground,
+  },
+  providerOption: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderRadius: 6,
+  },
+  providerOptionSelected: {
+    backgroundColor: semanticColors.secondarySystemBackground,
+  },
+  providerOptionDisabled: {
+    opacity: 0.55,
   },
   statusRow: {
     flexDirection: 'row',
