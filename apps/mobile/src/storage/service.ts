@@ -45,6 +45,7 @@ import type {
 } from '@ynab-counter/app-core/storage';
 
 const PAT_SECURE_STORE_KEY = 'ynab_counter_pat';
+const HOWMUCH_TOKEN_SECURE_STORE_KEY = 'ynab_counter_howmuch_token';
 const CLOUD_SYNC_CODE_SECURE_STORE_KEY = 'ynab_counter_cloud_sync_code';
 const LEGACY_PAT_SECURE_STORE_KEYS = [
   'ynab_counter_pat_legacy',
@@ -351,12 +352,18 @@ export class StorageService {
     });
   }
 
-  private async deleteSecurePAT(expectedGeneration: number): Promise<void> {
+  private async deleteSecurePAT(
+    expectedGeneration: number,
+    provider?: NonNullable<YnabConnection['provider']>,
+  ): Promise<void> {
     await this.enqueueCredentialOperation(async () => {
       this.assertGeneration(expectedGeneration);
       await Promise.all([
-        SecureStore.deleteItemAsync(PAT_SECURE_STORE_KEY),
-        ...LEGACY_PAT_SECURE_STORE_KEYS.map((key) => SecureStore.deleteItemAsync(key)),
+        ...(provider !== 'howmuch' ? [
+          SecureStore.deleteItemAsync(PAT_SECURE_STORE_KEY),
+          ...LEGACY_PAT_SECURE_STORE_KEYS.map((key) => SecureStore.deleteItemAsync(key)),
+        ] : []),
+        ...(provider !== 'ynab' ? [SecureStore.deleteItemAsync(HOWMUCH_TOKEN_SECURE_STORE_KEY)] : []),
       ]);
       this.assertGeneration(expectedGeneration);
     });
@@ -395,6 +402,13 @@ export class StorageService {
   async getPAT(): Promise<YnabConnection['pat']> {
     const credentialResetVersion = await this.waitForCredentialResets();
     const storageGeneration = this.captureGeneration();
+    const storage = await this.load();
+    this.assertCredentialReadCurrent(storageGeneration, credentialResetVersion);
+    if (storage.ynab.provider === 'howmuch') {
+      const howmuchToken = await SecureStore.getItemAsync(HOWMUCH_TOKEN_SECURE_STORE_KEY);
+      this.assertCredentialReadCurrent(storageGeneration, credentialResetVersion);
+      return howmuchToken ? `howmuch-token:${howmuchToken}` : undefined;
+    }
     let securePat = await SecureStore.getItemAsync(PAT_SECURE_STORE_KEY);
     this.assertCredentialReadCurrent(storageGeneration, credentialResetVersion);
     if (!securePat) {
@@ -412,7 +426,6 @@ export class StorageService {
       return securePat;
     }
 
-    const storage = await this.load();
     this.assertCredentialReadCurrent(storageGeneration, credentialResetVersion);
     const legacyPat = storage.ynab.pat;
     if (legacyPat) {
@@ -430,6 +443,25 @@ export class StorageService {
     return migratedPat ?? undefined;
   }
 
+  async getBudgetProvider(): Promise<NonNullable<YnabConnection['provider']>> {
+    return (await this.load()).ynab.provider === 'howmuch' ? 'howmuch' : 'ynab';
+  }
+
+  async setBudgetProvider(
+    provider: NonNullable<YnabConnection['provider']>,
+    expectedGeneration = this.operationGeneration,
+  ): Promise<void> {
+    this.assertGeneration(expectedGeneration);
+    const storage = await this.load() as MutableStorageData;
+    this.assertGeneration(expectedGeneration);
+    storage.ynab.provider = provider;
+    delete storage.ynab.selectedBudgetId;
+    delete storage.ynab.selectedBudgetName;
+    delete storage.ynab.trackedAccountIds;
+    delete storage.cachedData;
+    await this.save(storage, expectedGeneration);
+  }
+
   async setPAT(
     pat: string,
     expectedGeneration = this.operationGeneration,
@@ -437,6 +469,14 @@ export class StorageService {
     this.assertGeneration(expectedGeneration);
     const storage = await this.load();
     this.assertGeneration(expectedGeneration);
+    if (storage.ynab.provider === 'howmuch') {
+      await this.enqueueCredentialOperation(async () => {
+        this.assertGeneration(expectedGeneration);
+        await SecureStore.setItemAsync(HOWMUCH_TOKEN_SECURE_STORE_KEY, pat);
+        this.assertGeneration(expectedGeneration);
+      });
+      return;
+    }
     if (storage.ynab.pat) {
       delete storage.ynab.pat;
       await this.save(storage, expectedGeneration);
@@ -454,9 +494,11 @@ export class StorageService {
   ): Promise<void> {
     return this.enqueueCredentialReset(async () => {
       this.assertGeneration(expectedGeneration);
+      let provider: NonNullable<YnabConnection['provider']> = 'ynab';
       try {
         const storage = await this.load() as MutableStorageData;
         this.assertGeneration(expectedGeneration);
+        provider = storage.ynab.provider === 'howmuch' ? 'howmuch' : 'ynab';
         if (storage.ynab.pat) {
           delete storage.ynab.pat;
         }
@@ -467,7 +509,7 @@ export class StorageService {
         // Delete after loading so an embedded legacy PAT cannot be migrated back
         // into SecureStore during the clear operation.
         if (this.isGenerationCurrent(expectedGeneration)) {
-          await this.deleteSecurePAT(expectedGeneration);
+          await this.deleteSecurePAT(expectedGeneration, provider);
         }
       }
     });
@@ -981,7 +1023,7 @@ export class StorageService {
       : undefined;
     const exportData = {
       ...storage,
-      ynab: { ...storage.ynab, pat: undefined },
+      ynab: { ...storage.ynab, pat: undefined, howmuchToken: undefined },
       settings: {
         ...storage.settings,
         cloudSyncMnemonic: undefined,
@@ -1020,9 +1062,10 @@ export class StorageService {
           ? importedDraft.ynab
           : {};
         storage.ynab = { ...importedYnab };
-        // PAT ownership stays exclusively with SecureStore. Imported payloads
-        // must never replace it or reintroduce an embedded credential.
+        // Provider credential ownership stays exclusively with SecureStore.
+        // Imported payloads must never replace or reintroduce credentials.
         delete storage.ynab.pat;
+        delete storage.ynab.howmuchToken;
 
         storage.settings = storage.settings && typeof storage.settings === 'object'
           ? { ...storage.settings }

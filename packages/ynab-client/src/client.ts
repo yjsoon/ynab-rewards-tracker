@@ -16,6 +16,8 @@ import type {
   YnabTransactionSummary,
 } from './types';
 
+const MAX_TRANSACTION_PAGES = 1000;
+
 export interface YnabClientOptions {
   /** YNAB Personal Access Token */
   accessToken: string;
@@ -29,6 +31,8 @@ export interface YnabClientOptions {
   maxRetries?: number;
   /** Custom backoff function */
   backoffMs?: RequestOptions['backoffMs'];
+  /** Follow HowMuch's bounded transaction-list pagination. */
+  paginateTransactions?: boolean;
 }
 
 export interface ListOptions {
@@ -130,11 +134,39 @@ export class YnabClient {
     options?: TransactionFilterOptions,
   ): Promise<YnabTransactionSummary[]> {
     const path = buildTransactionsPath(budgetId, options);
-    const response = await this.request<YnabApiResponse<{ transactions: YnabTransactionSummary[] }>>(
-      path,
-      options,
-    );
-    return response.data.transactions;
+    if (!this.options.paginateTransactions) {
+      const response = await this.request<YnabApiResponse<{ transactions: YnabTransactionSummary[] }>>(
+        path,
+        options,
+      );
+      return response.data.transactions;
+    }
+
+    const transactions: YnabTransactionSummary[] = [];
+    let offset = 0;
+    let hasMore = true;
+    let pageCount = 0;
+    while (hasMore) {
+      if (++pageCount > MAX_TRANSACTION_PAGES) {
+        throw new Error('HowMuch transaction pagination exceeded the safety limit');
+      }
+      const separator = path.includes('?') ? '&' : '?';
+      const response = await this.request<YnabApiResponse<{
+        transactions: YnabTransactionSummary[];
+        has_more?: boolean;
+        next_offset?: number | null;
+      }>>(`${path}${separator}limit=250&offset=${offset}`, options);
+      transactions.push(...response.data.transactions);
+      const nextOffset = response.data.next_offset;
+      if (!response.data.has_more || nextOffset === null || nextOffset === undefined) {
+        hasMore = false;
+      } else if (!Number.isSafeInteger(nextOffset) || nextOffset <= offset) {
+        throw new Error('Invalid HowMuch transaction pagination cursor');
+      } else {
+        offset = nextOffset;
+      }
+    }
+    return transactions;
   }
 
   /**

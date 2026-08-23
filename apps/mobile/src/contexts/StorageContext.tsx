@@ -27,6 +27,7 @@ import {
 } from '@ynab-counter/app-core/storage';
 import type {
   AppSettings,
+  BudgetProvider,
   CreditCard,
   RewardRule,
   TagMapping,
@@ -67,6 +68,7 @@ type Metadata = {
 };
 
 type StorageState = {
+  provider: BudgetProvider;
   pat?: string;
   connectionStatus: ConnectionStatus;
   isSyncing: boolean;
@@ -98,6 +100,7 @@ type StorageActions = {
   invalidatePendingOperations: () => number;
   invalidateSyncRequests: () => void;
   setPAT: (pat: string) => Promise<boolean>;
+  setBudgetProvider: (provider: BudgetProvider) => Promise<void>;
   clearPAT: () => Promise<void>;
   disconnect: () => Promise<void>;
   setSelectedBudget: (budgetId: string, budgetName: string) => Promise<void>;
@@ -152,6 +155,7 @@ function localChangeSettings(): Pick<AppSettings, 'cloudSyncLocalChangedAt'> {
 }
 
 const defaultState: StorageState = {
+  provider: 'ynab',
   connectionStatus: 'disconnected',
   isSyncing: false,
   selectedBudget: {},
@@ -238,6 +242,7 @@ const noopActions: StorageActions = {
   invalidatePendingOperations: () => 0,
   invalidateSyncRequests: () => {},
   setPAT: async () => true,
+  setBudgetProvider: async () => {},
   clearPAT: async () => {},
   disconnect: async () => {},
   setSelectedBudget: async () => {},
@@ -267,6 +272,7 @@ const StorageContext = createContext<StorageContextValue>({
 async function hydrate(): Promise<StorageState> {
   const [
     pat,
+    provider,
     selectedBudget,
     trackedAccountIds,
     cards,
@@ -279,6 +285,7 @@ async function hydrate(): Promise<StorageState> {
     cachedData,
   ] = await Promise.all([
     storage.getPAT(),
+    storage.getBudgetProvider(),
     storage.getSelectedBudget(),
     storage.getTrackedAccountIds(),
     storage.getCards(),
@@ -301,6 +308,7 @@ async function hydrate(): Promise<StorageState> {
   }
 
   return {
+    provider,
     pat: pat ?? undefined,
     connectionStatus,
     isSyncing: false,
@@ -885,6 +893,9 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         }));
         return true;
       },
+      setBudgetProvider: async (provider) => {
+        setState((prev) => ({ ...withoutConnection(prev), provider }));
+      },
       clearPAT: async () => {
         setState(withoutConnection);
       },
@@ -1006,10 +1017,12 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         try {
           await storage.setPAT(trimmed, storageGeneration);
           if (!storage.isGenerationCurrent(storageGeneration)) return false;
+          const credential = await storage.getPAT();
+          if (!credential || !storage.isGenerationCurrent(storageGeneration)) return false;
           const storedSelection = await storage.getSelectedBudget();
           if (!storage.isGenerationCurrent(storageGeneration)) return false;
           await initialiseConnection(
-            trimmed,
+            credential,
             state.trackedAccountIds,
             storedSelection.id,
             storageGeneration,
@@ -1023,6 +1036,21 @@ export function StorageProvider({ children }: { children: ReactNode }) {
             return false;
           }
           throw error;
+        }
+      },
+      setBudgetProvider: async (provider) => {
+        const storageGeneration = invalidatePendingOperations();
+        await storage.setBudgetProvider(provider, storageGeneration);
+        if (!storage.isGenerationCurrent(storageGeneration)) return;
+        const credential = await storage.getPAT();
+        if (!storage.isGenerationCurrent(storageGeneration)) return;
+        setState((prev) => ({
+          ...withoutConnection(prev),
+          provider,
+          pat: credential,
+        }));
+        if (credential) {
+          await initialiseConnection(credential, [], undefined, storageGeneration);
         }
       },
       clearPAT: async () => {

@@ -257,18 +257,45 @@ export class StorageService {
   }
 
   getPAT(): YnabConnection["pat"] {
-    return this.getStorage().ynab.pat;
+    const storage = this.getStorage();
+    return storage.ynab.provider === "howmuch"
+      ? storage.ynab.howmuchToken
+        ? `howmuch-token:${storage.ynab.howmuchToken}`
+        : undefined
+      : storage.ynab.pat;
+  }
+
+  getBudgetProvider(): NonNullable<YnabConnection["provider"]> {
+    return this.getStorage().ynab.provider === "howmuch" ? "howmuch" : "ynab";
+  }
+
+  setBudgetProvider(provider: NonNullable<YnabConnection["provider"]>): void {
+    const storage = this.getStorage();
+    storage.ynab.provider = provider;
+    delete storage.ynab.selectedBudgetId;
+    delete storage.ynab.selectedBudgetName;
+    delete storage.ynab.trackedAccountIds;
+    delete storage.cachedData;
+    this.setStorage(storage);
   }
 
   setPAT(pat: string): void {
     const storage = this.getStorage();
-    storage.ynab.pat = pat;
+    if (storage.ynab.provider === "howmuch") {
+      storage.ynab.howmuchToken = pat;
+    } else {
+      storage.ynab.pat = pat;
+    }
     this.setStorage(storage);
   }
 
   clearPAT(): void {
     const storage = this.getStorage();
-    delete storage.ynab.pat;
+    if (storage.ynab.provider === "howmuch") {
+      delete storage.ynab.howmuchToken;
+    } else {
+      delete storage.ynab.pat;
+    }
     this.setStorage(storage);
   }
 
@@ -883,7 +910,7 @@ export class StorageService {
       : undefined;
     const exportData = {
       ...storage,
-      ynab: { ...storage.ynab, pat: undefined },
+      ynab: { ...storage.ynab, pat: undefined, howmuchToken: undefined },
       settings: {
         ...storage.settings,
         cloudSyncMnemonic: undefined,
@@ -956,6 +983,10 @@ export class StorageService {
         : {};
 
     const next: YnabConnection = { ...localYnab, ...imported };
+    delete next.pat;
+    delete next.howmuchToken;
+    if (localYnab.pat) next.pat = localYnab.pat;
+    if (localYnab.howmuchToken) next.howmuchToken = localYnab.howmuchToken;
     const importedBudgetId = this.nonEmptyString(imported.selectedBudgetId);
     const importedBudgetName = this.nonEmptyString(imported.selectedBudgetName);
     const localBudgetId = this.nonEmptyString(localYnab.selectedBudgetId);

@@ -44,6 +44,7 @@ import { StorageService } from './service';
 import { retryExpectedStorageCancellation } from '../contexts/storage-cancellation';
 
 const SECURE_PAT_KEY = 'ynab_counter_pat';
+const SECURE_HOWMUCH_TOKEN_KEY = 'ynab_counter_howmuch_token';
 const SECURE_RECOVERY_CODE_KEY = 'ynab_counter_cloud_sync_code';
 
 beforeEach(() => {
@@ -51,6 +52,36 @@ beforeEach(() => {
   mocks.asyncValues.clear();
   mocks.secureValues.clear();
   vi.stubGlobal('__DEV__', false);
+});
+
+describe('budget provider credentials', () => {
+  it('keeps YNAB and HowMuch credentials separate in SecureStore', async () => {
+    const service = new StorageService();
+    await service.setPAT('ynab-pat');
+    await service.setBudgetProvider('howmuch');
+    await service.setPAT('howmuch-api-key');
+
+    expect(mocks.secureValues.get(SECURE_PAT_KEY)).toBe('ynab-pat');
+    expect(mocks.secureValues.get(SECURE_HOWMUCH_TOKEN_KEY)).toBe('howmuch-api-key');
+    await expect(service.getPAT()).resolves.toBe('howmuch-token:howmuch-api-key');
+
+    await service.setBudgetProvider('ynab');
+    await expect(service.getPAT()).resolves.toBe('ynab-pat');
+  });
+
+  it('strips embedded HowMuch credentials from imports and exports', async () => {
+    const service = new StorageService();
+    await service.setBudgetProvider('howmuch');
+    await service.setPAT('secure-howmuch-key');
+    const imported = createDefaultStorage();
+    imported.ynab.provider = 'howmuch';
+    imported.ynab.howmuchToken = 'embedded-key';
+
+    await service.importSettings(JSON.stringify(imported));
+
+    await expect(service.getPAT()).resolves.toBe('howmuch-token:secure-howmuch-key');
+    expect(JSON.parse(await service.exportSettings()).ynab.howmuchToken).toBeUndefined();
+  });
 });
 
 describe('derived reward valuation', () => {

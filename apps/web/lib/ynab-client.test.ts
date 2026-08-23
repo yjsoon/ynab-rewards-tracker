@@ -52,6 +52,21 @@ describe("YnabClient cache bypass", () => {
     vi.restoreAllMocks();
   });
 
+  it("keeps provider credentials separate when switching in both directions", () => {
+    storage.setPAT("ynab-pat");
+    storage.setBudgetProvider("howmuch");
+    expect(storage.getPAT()).toBeUndefined();
+
+    storage.setPAT("howmuch-api-key");
+    expect(storage.getPAT()).toBe("howmuch-token:howmuch-api-key");
+
+    storage.setBudgetProvider("ynab");
+    expect(storage.getPAT()).toBe("ynab-pat");
+
+    storage.setBudgetProvider("howmuch");
+    expect(storage.getPAT()).toBe("howmuch-token:howmuch-api-key");
+  });
+
   it("forces a fresh transactions request when bypassCache is set", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -72,6 +87,75 @@ describe("YnabClient cache bypass", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/ynab/plans/budget-1/transactions?since_date=2026-04-01",
       expect.any(Object),
+    );
+  });
+
+  it("forwards the HowMuch account token and follows transaction pages", async () => {
+    storage.setBudgetProvider("howmuch");
+    storage.setPAT("howmuch-api-key");
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: { transactions: [{ id: "one" }], has_more: true, next_offset: 250 } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: { transactions: [{ id: "two" }], has_more: false, next_offset: null } }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new YnabClient(storage.getPAT()!);
+    const transactions = await client.getTransactions("plan-1");
+
+    expect(transactions.map((transaction) => transaction.id)).toEqual(["one", "two"]);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/ynab/plans/plan-1/transactions?limit=250&offset=0",
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer howmuch-token:howmuch-api-key",
+        }),
+      }),
+    );
+  });
+
+  it("rejects a non-progressing HowMuch transaction cursor", async () => {
+    storage.setBudgetProvider("howmuch");
+    storage.setPAT("howmuch-api-key");
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { transactions: [], has_more: true, next_offset: 0 } }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new YnabClient(storage.getPAT()!);
+
+    await expect(client.getTransactions("plan-1")).rejects.toThrow(
+      "Invalid HowMuch transaction pagination cursor",
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("routes flag updates through the provider-bound client", async () => {
+    storage.setBudgetProvider("howmuch");
+    storage.setPAT("howmuch-api-key");
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { transaction: { id: "txn-1", flag_color: "green" } } }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new YnabClient(storage.getPAT()!);
+    await client.updateTransactionFlag("plan-1", "txn-1", "green");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/ynab/plans/plan-1/transactions/txn-1",
+      expect.objectContaining({
+        method: "PATCH",
+        headers: expect.objectContaining({
+          Authorization: "Bearer howmuch-token:howmuch-api-key",
+        }),
+      }),
     );
   });
 
