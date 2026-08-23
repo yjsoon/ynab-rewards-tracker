@@ -45,7 +45,6 @@ interface CardEditState {
 }
 
 interface AllCardsTabProps {
-  /** Card ID to auto-open in dialog (from URL param) */
   initialCardId?: string | null;
 }
 
@@ -108,7 +107,6 @@ export function AllCardsTab({ initialCardId }: AllCardsTabProps) {
   const cashbackCards = cards.filter(card => card.type === 'cashback');
   const milesCards = cards.filter(card => card.type === 'miles');
 
-  // Initialise edit state from cards
   useEffect(() => {
     const initialState: CardEditState = {};
     cards.forEach(card => {
@@ -119,7 +117,6 @@ export function AllCardsTab({ initialCardId }: AllCardsTabProps) {
     setSelectedCards(new Set());
   }, [cards]);
 
-  // Handle initial card ID from URL
   useEffect(() => {
     if (initialCardId && cards.some(c => c.id === initialCardId)) {
       const card = cards.find(c => c.id === initialCardId)!;
@@ -319,7 +316,6 @@ export function AllCardsTab({ initialCardId }: AllCardsTabProps) {
       try {
         await autoBackup();
       } catch {
-        // Silent failure for backup
       }
     } catch (error) {
       console.error('Failed to save changes:', error);
@@ -412,7 +408,6 @@ export function AllCardsTab({ initialCardId }: AllCardsTabProps) {
 
   return (
     <div>
-      {/* Header actions */}
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
         <div className="flex flex-wrap items-center gap-3">
           {selectedCount > 0 && (
@@ -445,7 +440,6 @@ export function AllCardsTab({ initialCardId }: AllCardsTabProps) {
         </Alert>
       )}
 
-      {/* Controls row */}
       <div className="flex flex-wrap items-center gap-4 mb-6 p-4 rounded-lg bg-muted/30 border">
         <div className="flex items-center gap-2">
           <Checkbox
@@ -479,7 +473,6 @@ export function AllCardsTab({ initialCardId }: AllCardsTabProps) {
         </Select>
       </div>
 
-      {/* Card grid */}
       {groupByType ? (
         <div className="space-y-6">
           {cashbackCards.length > 0 && (
@@ -492,7 +485,7 @@ export function AllCardsTab({ initialCardId }: AllCardsTabProps) {
                 <h2 className="text-lg font-semibold flex items-center gap-2">
                   <Percent className="h-4 w-4 text-muted-foreground" />
                   Cashback Cards
-                  <Badge variant="secondary" className="ml-1">{cashbackCards.length}</Badge>
+                  <span className="text-sm font-normal text-muted-foreground tabular-nums">{cashbackCards.length}</span>
                 </h2>
               </CollapsibleTrigger>
               <CollapsibleContent className="pt-4">
@@ -510,7 +503,7 @@ export function AllCardsTab({ initialCardId }: AllCardsTabProps) {
                 <h2 className="text-lg font-semibold flex items-center gap-2">
                   <CreditCardIcon className="h-4 w-4 text-muted-foreground" />
                   Miles Cards
-                  <Badge variant="secondary" className="ml-1">{milesCards.length}</Badge>
+                  <span className="text-sm font-normal text-muted-foreground tabular-nums">{milesCards.length}</span>
                 </h2>
               </CollapsibleTrigger>
               <CollapsibleContent className="pt-4">
@@ -543,7 +536,6 @@ export function AllCardsTab({ initialCardId }: AllCardsTabProps) {
         </div>
       )}
 
-      {/* Themes section */}
       {showThemes && (
         <div className="mt-8">
           <h2 className="text-lg font-semibold mb-4">Theme Groups</h2>
@@ -556,7 +548,6 @@ export function AllCardsTab({ initialCardId }: AllCardsTabProps) {
         </div>
       )}
 
-      {/* Dialog for editing card */}
       <CardSettingsDialog
         card={dialogCard ?? null}
         state={dialogCardId ? editState[dialogCardId] || {} : {}}
@@ -571,7 +562,6 @@ export function AllCardsTab({ initialCardId }: AllCardsTabProps) {
         flagNames={flagNames}
       />
 
-      {/* Sticky batch action bar */}
       {showStickyBar && (
         <div className="fixed bottom-6 left-1/2 z-40 w-full max-w-3xl -translate-x-1/2 rounded-2xl border bg-background/90 p-4 shadow-xl backdrop-blur">
           <div className="flex flex-wrap items-center justify-between gap-4">
