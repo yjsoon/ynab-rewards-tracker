@@ -1,6 +1,5 @@
 import React, { useMemo } from 'react';
 import {
-  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -28,8 +27,6 @@ import {
 import { semanticColors } from '@/theme';
 import { interaction, nativeMetrics, radii, spacing } from '@/theme/tokens';
 import type { CardDashboardProjection } from '@ynab-counter/app-core/rewards-engine';
-
-const EXPO_WEB_TOP_TAB_INSET = 64;
 
 function isExpansionMap(
   value: unknown,
@@ -230,10 +227,7 @@ export default function OverviewScreen() {
   return (
     <ScrollView
       style={styles.screen}
-      contentContainerStyle={[
-        styles.content,
-        Platform.OS === 'web' && styles.webContent,
-      ]}
+      contentContainerStyle={styles.content}
       contentInsetAdjustmentBehavior="automatic"
       automaticallyAdjustsScrollIndicatorInsets
       refreshControl={(
@@ -246,7 +240,7 @@ export default function OverviewScreen() {
         />
       )}
     >
-      <View style={styles.toolbar}>
+      <View style={styles.topRow}>
         <Pressable
           onPress={() => router.push('/(tabs)/overview/period')}
           accessibilityRole="button"
@@ -270,46 +264,19 @@ export default function OverviewScreen() {
             accessibilityElementsHidden
           />
         </Pressable>
-
-        <View style={styles.toolbarActions}>
+        {needsSyncAttention ? (
           <Pressable
             onPress={model.canSync ? model.refresh : () => router.push('/settings')}
             accessibilityRole="button"
-            accessibilityLabel={needsSyncAttention
-              ? syncActionLabel
-              : model.canSync
-                ? 'Refresh rewards from YNAB'
-                : 'Review YNAB connection settings'}
-            accessibilityHint={needsSyncAttention
-              ? (model.canSync
-                ? 'Retries syncing rewards from YNAB'
-                : 'Opens YNAB connection settings')
-              : undefined}
-            style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
+            accessibilityLabel={syncActionLabel}
+            accessibilityHint={model.canSync
+              ? 'Retries syncing rewards from YNAB'
+              : 'Opens YNAB connection settings'}
+            style={({ pressed }) => [styles.syncAction, pressed && styles.pressed]}
           >
-            <SymbolView
-              name="arrow.clockwise"
-              size={16}
-              tintColor={needsSyncAttention ? semanticColors.action : semanticColors.secondaryLabel}
-            />
+            <Footnote color="action">{syncActionLabel}</Footnote>
           </Pressable>
-
-          <Pressable
-            onPress={() => {
-              void actions.setSettings({ groupCardsByType: !groupByType });
-            }}
-            accessibilityRole="switch"
-            accessibilityState={{ checked: groupByType }}
-            accessibilityLabel="Group cards by type"
-            style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
-          >
-            <SymbolView
-              name="slider.horizontal.3"
-              size={16}
-              tintColor={groupByType ? semanticColors.action : semanticColors.secondaryLabel}
-            />
-          </Pressable>
-        </View>
+        ) : null}
       </View>
 
       {!connected ? (
@@ -406,20 +373,11 @@ const styles = StyleSheet.create({
     paddingBottom: 120,
     gap: spacing.xl,
   },
-  webContent: {
-    paddingTop: EXPO_WEB_TOP_TAB_INSET + spacing.md,
-  },
-  toolbar: {
+  topRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
     gap: spacing.sm,
-  },
-  toolbarActions: {
-    marginLeft: 'auto',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
   },
   periodPill: {
     minHeight: nativeMetrics.minimumTouchTarget,
@@ -433,11 +391,11 @@ const styles = StyleSheet.create({
   periodLabel: {
     fontWeight: '600',
   },
-  iconButton: {
-    width: nativeMetrics.minimumTouchTarget,
-    height: nativeMetrics.minimumTouchTarget,
-    alignItems: 'center',
+  syncAction: {
+    minHeight: nativeMetrics.minimumTouchTarget,
+    alignSelf: 'flex-start',
     justifyContent: 'center',
+    marginLeft: 'auto',
   },
   section: {
     gap: spacing.sm,
