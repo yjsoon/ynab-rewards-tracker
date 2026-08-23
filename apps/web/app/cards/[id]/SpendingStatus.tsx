@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { SpendingProgressBar } from '@/components/SpendingProgressBar';
 import { SubcategoryBreakdownDetailed } from '@/components/SubcategoryBreakdownDetailed';
@@ -44,10 +43,8 @@ export default function SpendingStatus({
   const abortRef = useRef<AbortController | null>(null);
   const hasPrefetchedTransactions = Array.isArray(prefetchedTransactions);
 
-  // Calculate current period
   const period = useMemo(() => SimpleRewardsCalculator.calculatePeriod(card), [card]);
 
-  // Calculate days remaining in period
   const daysRemaining = useMemo(() => {
     const now = new Date();
     const end = new Date(period.end);
@@ -55,7 +52,6 @@ export default function SpendingStatus({
     return Math.ceil(diff / (1000 * 60 * 60 * 24));
   }, [period]);
 
-  // Fetch transactions
   const fetchTransactions = useCallback(async () => {
     if (hasPrefetchedTransactions) {
       return;
@@ -65,7 +61,6 @@ export default function SpendingStatus({
       return;
     }
 
-    // Abort any previous request
     if (abortRef.current) {
       abortRef.current.abort();
     }
@@ -91,7 +86,6 @@ export default function SpendingStatus({
       );
 
       if (Array.isArray(allTransactions)) {
-        // Filter transactions for this specific account and period
         const accountTransactions = allTransactions.filter(
           (t: Transaction) =>
             t.account_id === card.ynabAccountId &&
@@ -152,7 +146,6 @@ export default function SpendingStatus({
     };
   }, []);
 
-  // Calculate spending and rewards using the simplified calculator
   const spendingAnalysis = useMemo(() => {
     const calculation = SimpleRewardsCalculator.calculateCardRewards(
       card,
@@ -234,7 +227,6 @@ export default function SpendingStatus({
 
   return (
     <div className="space-y-6">
-      {/* Main Status Card */}
       <Card className="border-primary/20">
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -243,9 +235,9 @@ export default function SpendingStatus({
               <div className="flex items-center gap-2 mt-2 text-sm text-muted-foreground">
                 <Calendar className="h-4 w-4" />
                 {new Date(period.start).toLocaleDateString()} - {new Date(period.end).toLocaleDateString()}
-                <Badge variant="secondary" className="ml-2">
+                <span>
                   {daysRemaining} {daysRemaining === 1 ? 'day' : 'days'} remaining
-                </Badge>
+                </span>
               </div>
             </div>
           </div>
@@ -290,7 +282,6 @@ export default function SpendingStatus({
             </div>
           ) : null}
 
-          {/* Spending Summary */}
           <div className={`grid grid-cols-1 ${card.type === 'cashback' ? 'md:grid-cols-2' : 'md:grid-cols-3'} gap-4`}>
             <div className="p-4 rounded-lg bg-muted/50">
               <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
@@ -328,7 +319,6 @@ export default function SpendingStatus({
               ) : null}
             </div>
 
-            {/* Only show Reward Value for miles cards since it's different from miles earned */}
             {card.type === 'miles' && (
               <div className="p-4 rounded-lg bg-muted/50">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
@@ -400,7 +390,7 @@ export default function SpendingStatus({
                           })}
                         </p>
                         {isCurrent && (
-                          <span className="rounded-full bg-foreground/10 px-2 py-0.5 text-[11px] font-medium text-foreground">
+                          <span className="text-[11px] text-muted-foreground">
                             Current
                           </span>
                         )}
@@ -410,16 +400,20 @@ export default function SpendingStatus({
                         <span className="font-medium">
                           <CurrencyAmount value={month.spend} currency={currency} />
                         </span>
-                        <span className={cn(
-                          'rounded-full px-2 py-0.5 font-medium',
-                          month.status === 'met'
-                            ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-                            : month.status === 'failed'
+                        {month.status === 'met' ? (
+                          <span className="text-muted-foreground">
+                            {statusLabel}
+                          </span>
+                        ) : (
+                          <span className={cn(
+                            'rounded-full px-2 py-0.5 font-medium',
+                            month.status === 'failed'
                               ? 'bg-red-500/10 text-red-700 dark:text-red-300'
                               : 'bg-muted text-muted-foreground',
-                        )}>
-                          {statusLabel}
-                        </span>
+                          )}>
+                            {statusLabel}
+                          </span>
+                        )}
                       </div>
                     </div>
                   );
@@ -428,7 +422,6 @@ export default function SpendingStatus({
             </div>
           )}
 
-          {/* Spending Progress Bar */}
           {(minimumSpend !== null && minimumSpend !== undefined) || hasMaximum ? (
             <div className="space-y-4">
               {!nextSpendingLevel ? (
@@ -447,7 +440,6 @@ export default function SpendingStatus({
                 </div>
               ) : null}
 
-              {/* Status Alerts */}
               {terminalMaximumSpendExceeded ? (
                 <Alert className="border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/30">
                   <XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
@@ -487,7 +479,6 @@ export default function SpendingStatus({
             </Alert>
           ) : null}
 
-          {/* Subcategory Breakdown - Show if enabled and has data */}
           {card.subcategoriesEnabled && subcategoryBreakdowns.length > 0 && (
             <div className="bg-muted/5 rounded-lg p-4">
               <div className="flex items-center gap-2 mb-3">
@@ -504,7 +495,6 @@ export default function SpendingStatus({
             </div>
           )}
 
-          {/* Earning Block Info */}
           {card.earningBlockSize && card.earningBlockSize > 0 && eligibleSpend !== undefined && eligibleSpend > 0 && (
             <Alert className="mt-4">
               <AlertCircle className="h-4 w-4" />
@@ -528,7 +518,6 @@ export default function SpendingStatus({
             </Alert>
           )}
 
-          {/* No earning rate warning */}
           {!resolvedSpendingTier.effectiveCard.earningRate && (
             <Alert>
               <AlertCircle className="h-4 w-4" />

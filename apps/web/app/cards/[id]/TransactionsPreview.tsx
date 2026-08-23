@@ -148,13 +148,13 @@ export default function TransactionsPreview({
                       </div>
                       {reward > 0 && (
                         <div className="mt-1">
-                          <Badge variant="secondary">
+                          <p className="text-xs text-green-600 dark:text-green-400">
                             {card.type === "cashback" ? (
                               <CurrencyAmount value={reward} currency={settings.currency} showPlus />
                             ) : (
                               `+${Math.round(reward)} miles`
                             )}
-                          </Badge>
+                          </p>
                           {blockInfo && (
                             <p className="text-xs text-muted-foreground mt-1">
                               {blockInfo}

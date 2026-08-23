@@ -90,10 +90,6 @@ function joinContext(issuer?: string, periodLabel?: string): string | undefined 
   return values.length > 0 ? values.join(' · ') : undefined;
 }
 
-/**
- * The primary Home/Cards scanning primitive: one native list row, two metrics,
- * and one meaningful progress rail. It intentionally avoids dashboard tiles.
- */
 export function CardStatusRow({
   name,
   issuer,
@@ -182,22 +178,13 @@ export function CardStatusRow({
             </View>
           ) : null}
           {ruleCount > 0 ? (
-            <View
-              style={styles.rulePill}
+            <Caption1
+              color="secondary"
               accessible={!groupsAccessibilityContent}
               accessibilityLabel={`${ruleCount} flag ${ruleCount === 1 ? 'rule' : 'rules'}`}
             >
-              <SymbolView
-                name="tag"
-                size={10}
-                tintColor={semanticColors.secondaryLabel}
-                accessibilityElementsHidden
-                fallback={<Text style={styles.ruleFallback}>#</Text>}
-              />
-              <Caption1 color="secondary" style={styles.ruleText} accessible={false}>
-                {ruleCount} {ruleCount === 1 ? 'rule' : 'rules'}
-              </Caption1>
-            </View>
+              {ruleCount} {ruleCount === 1 ? 'rule' : 'rules'}
+            </Caption1>
           ) : null}
           {showsStatus ? (
             <StatusPill
@@ -349,24 +336,6 @@ const styles = StyleSheet.create({
   },
   promoFallback: {
     color: semanticColors.systemPurple,
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  rulePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xxs,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    borderRadius: radii.pill,
-    backgroundColor: semanticColors.tertiarySystemFill,
-  },
-  ruleText: {
-    fontWeight: '600',
-    fontSize: 11,
-  },
-  ruleFallback: {
-    color: semanticColors.secondaryLabel,
     fontSize: 10,
     fontWeight: '700',
   },

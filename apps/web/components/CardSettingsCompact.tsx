@@ -77,7 +77,6 @@ export function CardSettingsCompact({
       role="button"
       tabIndex={0}
     >
-      {/* Header row: checkbox, name, featured star */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-start gap-3 min-w-0">
           <input
@@ -114,30 +113,25 @@ export function CardSettingsCompact({
         </button>
       </div>
 
-      {/* Divider */}
       <div className="my-3 border-t border-border/40" />
 
-      {/* Details */}
       <div className="space-y-1.5 text-xs">
-        {/* Type + rate */}
         <div className="flex items-center gap-1.5">
-          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-            {cardType === 'cashback' ? '💵' : '✈️'} {spendingTierCount > 0 ? 'Base · ' : ''}{rateDisplay}
-          </Badge>
+          <p className="text-muted-foreground">
+            {spendingTierCount > 0 ? 'Base · ' : ''}{rateDisplay}
+          </p>
         </div>
 
-        {/* Spend limits */}
         {spendLimits.length > 0 && (
           <p className="text-muted-foreground">{spendLimits.join(' · ')}</p>
         )}
 
-        {/* Subcategories + promo badges */}
         <div className="flex flex-wrap items-center gap-1.5">
           {subcategoryCount > 0 && (
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-1">
+            <span className="inline-flex items-center gap-1 text-muted-foreground">
               <Tag className="h-3 w-3" />
               {subcategoryCount} flag {subcategoryCount === 1 ? 'rule' : 'rules'}
-            </Badge>
+            </span>
           )}
           {hasPromo && (
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-1 border-purple-300 text-purple-700 dark:border-purple-700 dark:text-purple-300">
@@ -146,15 +140,14 @@ export function CardSettingsCompact({
             </Badge>
           )}
           {spendingTierCount > 0 && (
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-1">
+            <span className="inline-flex items-center gap-1 text-muted-foreground">
               <Sparkles className="h-3 w-3" />
               {spendingTierCount + 1} spend levels
-            </Badge>
+            </span>
           )}
         </div>
       </div>
 
-      {/* Changed indicator */}
       {isChanged && (
         <div className="absolute top-2 right-10">
           <div className="h-2 w-2 rounded-full bg-amber-500" title="Unsaved changes" />

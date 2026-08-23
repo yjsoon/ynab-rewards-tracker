@@ -109,7 +109,7 @@ function TransactionRewardDisplay({
   }
 
   return (
-    <Badge className="max-w-full whitespace-normal break-all bg-green-100 text-xs text-green-800 hover:bg-green-100 dark:bg-green-900 dark:text-green-100 dark:hover:bg-green-900">
+    <span className="max-w-full whitespace-normal break-all text-xs text-green-600 dark:text-green-400">
       {card.type === "cashback" ? (
         <CurrencyAmount
           value={reward}
@@ -119,7 +119,7 @@ function TransactionRewardDisplay({
       ) : (
         `+${Math.round(reward)} miles`
       )}
-    </Badge>
+    </span>
   );
 }
 
@@ -205,7 +205,6 @@ export function EnhancedTransactionsTable({
   const [sortField, setSortField] = useState<SortField>("date");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
-  // Build card lookup map for reward calculation
   const cardsByAccountId = useMemo(() => {
     const map = new Map<string, CreditCard>();
     cards.forEach((card) => {
@@ -216,7 +215,6 @@ export function EnhancedTransactionsTable({
     return map;
   }, [cards]);
 
-  // Build subcategory mappings lookup: cardId -> (flagColor -> subcategoryName)
   const subcategoryMappingsByCard = useMemo(() => {
     const map = new Map<string, Map<string, string>>();
     cards.forEach((card) => {
@@ -228,11 +226,9 @@ export function EnhancedTransactionsTable({
     return map;
   }, [cards]);
 
-  // Filter transactions
   const filteredTransactions = useMemo(() => {
     let filtered = [...transactions];
 
-    // Search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(
@@ -243,7 +239,6 @@ export function EnhancedTransactionsTable({
       );
     }
 
-    // Account filter
     if (selectedAccountFilter !== "all") {
       filtered = filtered.filter(
         (txn) => txn.account_id === selectedAccountFilter,
@@ -269,7 +264,6 @@ export function EnhancedTransactionsTable({
     [cards, periodDataSinceDate, rewardTransactions, settings, transactions],
   );
 
-  // Calculate rewards and sort transactions
   const sortedTransactions = useMemo(() => {
     const withRewards: TransactionWithComputedReward[] =
       filteredTransactions.map((txn) => {
@@ -328,7 +322,6 @@ export function EnhancedTransactionsTable({
     rewardProjections,
   ]);
 
-  // Toggle row expansion
   const toggleRow = useCallback((transactionId: string) => {
     setExpandedRows((prev) => {
       const next = new Set(prev);
@@ -341,7 +334,6 @@ export function EnhancedTransactionsTable({
     });
   }, []);
 
-  // Update transaction flag (auto-save)
   const updateTransactionFlag = useCallback(
     async (transactionId: string, newFlagColor: YnabFlagColor | null) => {
       if (!selectedBudgetId || !pat) {
@@ -350,7 +342,7 @@ export function EnhancedTransactionsTable({
       }
 
       setSavingTransaction(transactionId);
-      setUpdateError(""); // Clear any previous errors
+      setUpdateError("");
 
       try {
         const response = await fetch(
@@ -390,7 +382,6 @@ export function EnhancedTransactionsTable({
     [selectedBudgetId, pat, onTransactionUpdated],
   );
 
-  // Toggle sort
   const toggleSort = useCallback((field: SortField) => {
     setSortField((prev) => {
       if (prev === field) {
@@ -467,9 +458,7 @@ export function EnhancedTransactionsTable({
 
   return (
     <div className="space-y-4">
-      {/* Filters and Controls */}
       <div className="flex flex-col sm:flex-row gap-4">
-        {/* Search */}
         <div className="flex-1">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -484,7 +473,6 @@ export function EnhancedTransactionsTable({
           </div>
         </div>
 
-        {/* Account Filter */}
         {showAccountFilter && (
           <div className="w-full sm:w-64">
             <Select
@@ -513,7 +501,6 @@ export function EnhancedTransactionsTable({
         )}
       </div>
 
-      {/* Refreshing indicator */}
       {refreshing && (
         <div className="flex items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50/50 py-2 px-4 text-sm text-blue-700 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-300">
           <Loader2 className="h-4 w-4 animate-spin" />
@@ -521,7 +508,6 @@ export function EnhancedTransactionsTable({
         </div>
       )}
 
-      {/* Update error alert */}
       {updateError && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" aria-hidden="true" />
@@ -529,7 +515,6 @@ export function EnhancedTransactionsTable({
         </Alert>
       )}
 
-      {/* Results count and mobile sorting */}
       <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="text-sm text-muted-foreground">
           Showing {sortedTransactions.length} of {transactions.length}{" "}
@@ -560,7 +545,6 @@ export function EnhancedTransactionsTable({
         </div>
       </div>
 
-      {/* Mobile transaction cards */}
       <div
         className="space-y-3 lg:hidden"
         role="list"
@@ -670,7 +654,6 @@ export function EnhancedTransactionsTable({
         })}
       </div>
 
-      {/* Transactions Table */}
       <div className="hidden overflow-x-auto lg:block">
         <table
           className="w-full"
@@ -747,7 +730,6 @@ export function EnhancedTransactionsTable({
 
               return (
                 <Fragment key={txn.id}>
-                  {/* Main Row */}
                   <tr
                     className={cn(
                       "border-b transition-colors",
@@ -820,7 +802,6 @@ export function EnhancedTransactionsTable({
                     </td>
                   </tr>
 
-                  {/* Expanded Details Row */}
                   {isExpanded && (
                     <tr
                       className={cn(
