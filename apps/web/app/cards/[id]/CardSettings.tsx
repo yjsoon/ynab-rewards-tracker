@@ -45,6 +45,7 @@ const createFormState = (nextCard: CreditCard): CardEditState => ({
   rewardPeriodMonthCount: nextCard.rewardPeriod?.monthCount ?? 3,
   rewardPeriodAnchorDate: nextCard.rewardPeriod?.anchorDate ?? '',
   rewardPeriodMonthlyMinimum: nextCard.rewardPeriod?.monthlyMinimumSpend ?? 0,
+  rewardPeriodMinimumScope: nextCard.rewardPeriod?.minimumScope ?? 'each_month',
   promotionalPeriodEnabled: Boolean(nextCard.promotionalPeriod),
   promotionalPeriodStart: nextCard.promotionalPeriod?.startDate || '',
   promotionalPeriodEnd: nextCard.promotionalPeriod?.endDate || '',
@@ -207,6 +208,7 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
               monthCount: formData.rewardPeriodMonthCount ?? 3,
               anchorDate: formData.rewardPeriodAnchorDate,
               monthlyMinimumSpend: formData.rewardPeriodMonthlyMinimum ?? 0,
+              minimumScope: formData.rewardPeriodMinimumScope ?? 'each_month',
             }
           : undefined,
         promotionalPeriod: !formData.rewardPeriodEnabled && formData.promotionalPeriodEnabled && formData.promotionalPeriodEnd
@@ -313,8 +315,10 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
                 <>
                   <p className="text-xs text-muted-foreground">
                     {card.rewardPeriod.monthlyMinimumSpend > 0
-                      ? `${formatDollars(card.rewardPeriod.monthlyMinimumSpend, { currency: settings.currency })} card-wide minimum each month`
-                      : 'No monthly minimum'}
+                      ? card.rewardPeriod.minimumScope === 'whole_period'
+                        ? `${formatDollars(card.rewardPeriod.monthlyMinimumSpend, { currency: settings.currency })} card-wide minimum over the period`
+                        : `${formatDollars(card.rewardPeriod.monthlyMinimumSpend, { currency: settings.currency })} card-wide minimum each month`
+                      : 'No card-wide minimum'}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     This overrides the billing cycle and any promotional period.
@@ -352,7 +356,7 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
                   : `${formatDollars(card.minimumSpend, { currency: settings.currency })} required`}
               </p>
               {card.rewardPeriod && card.minimumSpend !== null && card.minimumSpend !== undefined && card.minimumSpend > 0 && (
-                <p className="text-xs text-muted-foreground">Additional to the monthly minimum</p>
+                <p className="text-xs text-muted-foreground">Additional to the reward-period minimum</p>
               )}
             </div>
             <div>

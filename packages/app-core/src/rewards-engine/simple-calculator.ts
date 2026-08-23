@@ -28,6 +28,10 @@ import {
   resolveSubcategory,
 } from './utils/subcategories';
 import { applyBlock, getBlockSize, getRewardRate } from './utils/reward-math';
+import {
+  evaluateRewardPeriodQualification,
+  getRewardPeriodMinimumScope,
+} from './utils/reward-period-qualification';
 import { resolveCardSpendingTier } from './utils/spending-tiers';
 
 export interface SubcategoryCalculation {
@@ -190,7 +194,7 @@ function calculateMonthlyQualification(
     label: period.label,
   };
   const minimumSpend = card.rewardPeriod.monthlyMinimumSpend;
-  const breakdowns = getRewardPeriodMonths(card, cardPeriod).map((month) => {
+  const monthSpend = getRewardPeriodMonths(card, cardPeriod).map((month) => {
     const start = dateValue(month.startDate);
     const end = dateValue(month.endDate);
     const netMilliunits = transactions.reduce((sum, transaction) => {
@@ -205,28 +209,20 @@ function calculateMonthlyQualification(
       return sum + transaction.amount;
     }, 0);
     const spend = Math.max(0, -netMilliunits / 1000);
-    const monthComplete = end < asOf || (end === asOf && asOf < today);
-    const status = spend >= minimumSpend
-      ? 'met'
-      : monthComplete
-        ? 'failed'
-        : 'pending';
-    return { start, end, spend, minimumSpend, status } as MonthlyQualificationBreakdown;
+    return { start, end, spend, minimumSpend, status: 'pending' } as MonthlyQualificationBreakdown;
   });
-  const startedMonths = breakdowns.filter((month) => month.start <= asOf);
-  const status: RewardQualificationStatus = startedMonths.some((month) => month.status === 'failed')
-    ? 'failed'
-    : startedMonths.length > 0 && startedMonths.every((month) => month.status === 'met')
-      ? 'met'
-      : 'pending';
-  const activeMonth = breakdowns.find((month) => month.start <= asOf && month.end >= asOf)
-    ?? breakdowns.find((month) => month.status === 'pending')
-    ?? breakdowns[breakdowns.length - 1];
-  const progress = minimumSpend > 0
-    ? Math.min(100, (activeMonth.spend / minimumSpend) * 100)
-    : 100;
+  const qualification = evaluateRewardPeriodQualification({
+    scope: getRewardPeriodMinimumScope(card.rewardPeriod),
+    months: monthSpend,
+    asOf,
+    today,
+  });
 
-  return { status, breakdowns, progress };
+  return {
+    status: qualification.status,
+    breakdowns: qualification.months,
+    progress: qualification.progress,
+  };
 }
 
 export class SimpleRewardsCalculator {

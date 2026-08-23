@@ -170,6 +170,9 @@ export function normaliseCard(
         monthCount,
         anchorDate,
         monthlyMinimumSpend,
+        minimumScope: rawRewardPeriod.minimumScope === 'whole_period'
+          ? 'whole_period'
+          : 'each_month',
       };
     } else {
       Reflect.deleteProperty(mutableCard, 'rewardPeriod');

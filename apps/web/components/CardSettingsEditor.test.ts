@@ -41,5 +41,13 @@ describe('CardSettingsEditor reward-period fields', () => {
       rewardPeriodAnchorDate: '2026-01-01',
       rewardPeriodMonthlyMinimum: 800,
     }).rewardPeriod).toBe(false);
+
+    expect(computeCardFieldDiff(configured, {
+      rewardPeriodEnabled: true,
+      rewardPeriodMonthCount: 3,
+      rewardPeriodAnchorDate: '2026-01-01',
+      rewardPeriodMonthlyMinimum: 800,
+      rewardPeriodMinimumScope: 'whole_period',
+    }).rewardPeriod).toBe(true);
   });
 });

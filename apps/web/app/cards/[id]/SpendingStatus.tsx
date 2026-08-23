@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { SimpleRewardsCalculator } from '@/lib/rewards-engine';
 import { resolveCardSpendingTier } from '@ynab-counter/app-core/rewards-engine';
+import { isWholePeriodMinimum } from '@ynab-counter/app-core/rewards-engine/utils/reward-period-qualification';
 import { YnabClient } from '@/lib/ynab-client';
 import { useSelectedBudget, useSettings } from '@/hooks/useLocalStorage';
 import { CurrencyAmount } from '@/components/CurrencyAmount';
@@ -200,6 +201,7 @@ export default function SpendingStatus({
   const milesValuation = settings?.milesValuation ?? 0.01;
   const hasMaximum = typeof maximumSpend === 'number' && maximumSpend > 0;
   const hasMonthlyMinimum = Boolean(card.rewardPeriod && card.rewardPeriod.monthlyMinimumSpend > 0);
+  const usesPeriodMinimum = isWholePeriodMinimum(card.rewardPeriod);
   const qualificationBlocked = Boolean(hasMonthlyMinimum && qualificationStatus !== 'met');
   const today = new Date();
   const asOf = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
@@ -348,7 +350,9 @@ export default function SpendingStatus({
           {hasMonthlyMinimum && (
             <div className="rounded-lg border bg-muted/10 p-4">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <h3 className="text-sm font-semibold">Monthly qualification</h3>
+                <h3 className="text-sm font-semibold">
+                  {usesPeriodMinimum ? 'Period qualification' : 'Monthly qualification'}
+                </h3>
                 <span className={cn(
                   'text-sm font-medium',
                   qualificationStatus === 'failed'
@@ -365,7 +369,13 @@ export default function SpendingStatus({
                 </span>
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
-                At least <CurrencyAmount value={monthlyMinimumSpend ?? 0} currency={currency} /> across the whole card in each anchored month. Future months do not block rewards; a started month must meet its target.
+                {usesPeriodMinimum
+                  ? <>
+                      At least <CurrencyAmount value={monthlyMinimumSpend ?? 0} currency={currency} /> across the whole card over the {card.rewardPeriod?.monthCount}-month period. The pot can fill in any month; the period only fails if it finishes short.
+                    </>
+                  : <>
+                      At least <CurrencyAmount value={monthlyMinimumSpend ?? 0} currency={currency} /> across the whole card in each anchored month. Future months do not block rewards; a started month must meet its target.
+                    </>}
               </p>
               <div className="mt-3 grid gap-2 sm:grid-cols-3">
                 {monthlyQualifications.map((month) => {
@@ -400,7 +410,7 @@ export default function SpendingStatus({
                         <span className="font-medium">
                           <CurrencyAmount value={month.spend} currency={currency} />
                         </span>
-                        {month.status === 'met' ? (
+                        {usesPeriodMinimum ? null : month.status === 'met' ? (
                           <span className="text-muted-foreground">
                             {statusLabel}
                           </span>

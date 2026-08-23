@@ -59,6 +59,7 @@ export const createCardEditState = (card: CreditCard): SingleCardEditState => ({
   rewardPeriodMonthCount: card.rewardPeriod?.monthCount ?? 3,
   rewardPeriodAnchorDate: card.rewardPeriod?.anchorDate ?? '',
   rewardPeriodMonthlyMinimum: card.rewardPeriod?.monthlyMinimumSpend ?? 0,
+  rewardPeriodMinimumScope: card.rewardPeriod?.minimumScope ?? 'each_month',
   promotionalPeriodEnabled: Boolean(card.promotionalPeriod),
   promotionalPeriodStart: card.promotionalPeriod?.startDate ?? '',
   promotionalPeriodEnd: card.promotionalPeriod?.endDate ?? '',
@@ -292,6 +293,7 @@ export function AllCardsTab({ initialCardId }: AllCardsTabProps) {
                 monthCount: changes.rewardPeriodMonthCount ?? 3,
                 anchorDate: changes.rewardPeriodAnchorDate,
                 monthlyMinimumSpend: changes.rewardPeriodMonthlyMinimum ?? 0,
+                minimumScope: changes.rewardPeriodMinimumScope ?? 'each_month',
               }
             : undefined,
           promotionalPeriod: changes.rewardPeriodEnabled

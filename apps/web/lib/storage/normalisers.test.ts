@@ -146,6 +146,19 @@ describe('normaliseCard', () => {
       monthCount: 3,
       anchorDate: '2026-01-15',
       monthlyMinimumSpend: 800,
+      minimumScope: 'each_month',
+    });
+    expect(normaliseCard({
+      ...rawCard,
+      rewardPeriod: {
+        ...rawCard.rewardPeriod,
+        minimumScope: 'whole_period',
+      },
+    } as MutableCard, {}).rewardPeriod).toEqual({
+      monthCount: 3,
+      anchorDate: '2026-01-15',
+      monthlyMinimumSpend: 800,
+      minimumScope: 'whole_period',
     });
     expect(normaliseCard({
       ...rawCard,

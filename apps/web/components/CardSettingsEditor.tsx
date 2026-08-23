@@ -22,7 +22,7 @@ import {
   Sparkles,
   Settings2
 } from 'lucide-react';
-import type { CardSpendingTier, CreditCard } from '@/lib/storage';
+import type { CardSpendingTier, CreditCard, RewardPeriodMinimumScope } from '@/lib/storage';
 import { toIsoDateString } from '@/lib/date';
 import {
   formatMinimumSpendText,
@@ -43,6 +43,7 @@ export interface CardEditState {
   rewardPeriodMonthCount?: number;
   rewardPeriodAnchorDate?: string;
   rewardPeriodMonthlyMinimum?: number;
+  rewardPeriodMinimumScope?: RewardPeriodMinimumScope;
   promotionalPeriodEnabled?: boolean;
   promotionalPeriodStart?: string;
   promotionalPeriodEnd?: string;
@@ -180,6 +181,9 @@ export function computeCardFieldDiff(
   const rewardPeriodMonthlyMinimum = state.rewardPeriodMonthlyMinimum
     ?? card.rewardPeriod?.monthlyMinimumSpend
     ?? 0;
+  const rewardPeriodMinimumScope = state.rewardPeriodMinimumScope
+    ?? card.rewardPeriod?.minimumScope
+    ?? 'each_month';
   const subcategoriesEnabled = state.subcategoriesEnabled ?? card.subcategoriesEnabled ?? false;
   const baselineSubcategories = cloneSubcategories(card.subcategories);
   const stateSubcategories = cloneSubcategories(state.subcategories ?? card.subcategories);
@@ -209,7 +213,8 @@ export function computeCardFieldDiff(
       rewardPeriodEnabled !== Boolean(card.rewardPeriod) ||
       rewardPeriodMonthCount !== (card.rewardPeriod?.monthCount ?? 3) ||
       rewardPeriodAnchorDate !== (card.rewardPeriod?.anchorDate ?? '') ||
-      rewardPeriodMonthlyMinimum !== (card.rewardPeriod?.monthlyMinimumSpend ?? 0),
+      rewardPeriodMonthlyMinimum !== (card.rewardPeriod?.monthlyMinimumSpend ?? 0) ||
+      rewardPeriodMinimumScope !== (card.rewardPeriod?.minimumScope ?? 'each_month'),
     promotionalPeriod:
       promotionalPeriodEnabled !== Boolean(card.promotionalPeriod) ||
       promotionalPeriodStart !== (card.promotionalPeriod?.startDate ?? '') ||
@@ -374,6 +379,9 @@ export function CardSettingsEditor({
   const rewardPeriodMonthlyMinimum = state.rewardPeriodMonthlyMinimum
     ?? card.rewardPeriod?.monthlyMinimumSpend
     ?? 0;
+  const rewardPeriodMinimumScope = state.rewardPeriodMinimumScope
+    ?? card.rewardPeriod?.minimumScope
+    ?? 'each_month';
   const promotionalPeriodEnabled = state.promotionalPeriodEnabled ?? Boolean(card.promotionalPeriod);
   const promotionalPeriodStart = state.promotionalPeriodStart ?? card.promotionalPeriod?.startDate ?? '';
   const promotionalPeriodEnd = state.promotionalPeriodEnd ?? card.promotionalPeriod?.endDate ?? '';
@@ -655,7 +663,9 @@ export function CardSettingsEditor({
           <SettingCapsule
             label="Minimum spend"
             description={rewardPeriodEnabled
-              ? 'Optional period-wide minimum in addition to the monthly target'
+              ? rewardPeriodMinimumScope === 'whole_period'
+                ? 'Optional extra floor on top of the period pot'
+                : 'Optional period-wide minimum in addition to the monthly target'
               : 'Set the spend required before rewards unlock'}
             value={formatMinimumSpendText(minimumSpend)}
             icon={<Target className="h-4 w-4 text-muted-foreground" />}
@@ -847,8 +857,16 @@ export function CardSettingsEditor({
 
           <SettingCapsule
             label="Reward period"
-            description="Pool selected caps and qualify month by month"
-            value={rewardPeriodEnabled ? `${rewardPeriodMonthCount} months` : 'Monthly'}
+            description={rewardPeriodEnabled && rewardPeriodMinimumScope === 'whole_period'
+              ? 'Pool selected caps and one card-wide minimum over the period'
+              : 'Pool selected caps and qualify month by month'}
+            value={rewardPeriodEnabled
+              ? rewardPeriodMonthlyMinimum > 0
+                ? rewardPeriodMinimumScope === 'whole_period'
+                  ? `${rewardPeriodMonthCount} months · $${rewardPeriodMonthlyMinimum.toLocaleString()} over period`
+                  : `${rewardPeriodMonthCount} months · $${rewardPeriodMonthlyMinimum.toLocaleString()}/month`
+                : `${rewardPeriodMonthCount} months`
+              : 'Monthly'}
             icon={<CalendarClock className="h-4 w-4 text-muted-foreground" />}
             isDirty={fieldDirty.rewardPeriod}
           >
@@ -903,11 +921,34 @@ export function CardSettingsEditor({
                     </p>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">Card-wide minimum each month</Label>
+                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">Minimum applies</Label>
+                    <Select
+                      value={rewardPeriodMinimumScope}
+                      onValueChange={(value: RewardPeriodMinimumScope) => {
+                        onFieldChange('rewardPeriodMinimumScope', value);
+                      }}
+                    >
+                      <SelectTrigger aria-label="Reward period minimum applies">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="each_month">Each month</SelectItem>
+                        <SelectItem value="whole_period">Over the whole period</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                      {rewardPeriodMinimumScope === 'whole_period'
+                        ? 'Card-wide minimum for the period'
+                        : 'Card-wide minimum each month'}
+                    </Label>
                     <div className="relative">
                       <DollarSign className="absolute left-3 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
                       <Input
-                        aria-label="Monthly card-wide minimum spend"
+                        aria-label={rewardPeriodMinimumScope === 'whole_period'
+                          ? 'Card-wide minimum spend for the reward period'
+                          : 'Monthly card-wide minimum spend'}
                         type="number"
                         min="0"
                         step="50"
@@ -920,7 +961,9 @@ export function CardSettingsEditor({
                       />
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Purchases across the whole card count, net of refunds. A current month stays pending until it reaches this amount; a completed shortfall fails the period.
+                      {rewardPeriodMinimumScope === 'whole_period'
+                        ? 'Purchases across the whole card count, net of refunds. One pot for the full period, like a promotional window. The period stays pending until this amount is reached; a completed shortfall fails it.'
+                        : 'Purchases across the whole card count, net of refunds. A current month stays pending until it reaches this amount; a completed shortfall fails the period.'}
                     </p>
                   </div>
                   <p className="rounded-md bg-muted/50 p-2 text-xs text-muted-foreground">

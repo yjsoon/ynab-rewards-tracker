@@ -109,14 +109,24 @@ export interface CardSpendingTier {
 }
 
 /**
+ * How the card-wide reward-period minimum is judged.
+ * `each_month` is the historical default: every anchored month must hit the
+ * target on its own. `whole_period` uses one pot over the full window, the
+ * same way a promotional period applies `minimumSpend`.
+ */
+export type RewardPeriodMinimumScope = "each_month" | "whole_period";
+
+/**
  * A repeating reward period made up of anchored month-long windows. The
- * monthly minimum is card-wide; configured subcategory maximums are pooled
- * across the complete reward period.
+ * card-wide minimum either applies to each month or to the whole period;
+ * configured subcategory maximums are pooled across the complete window.
  */
 export interface CardRewardPeriod {
   monthCount: number;
   anchorDate: string;
   monthlyMinimumSpend: number;
+  /** Omitted on legacy records; readers treat that as `each_month`. */
+  minimumScope?: RewardPeriodMinimumScope;
 }
 
 export interface CreditCard {

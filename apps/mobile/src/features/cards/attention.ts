@@ -1,5 +1,9 @@
 import type { CardDashboardProjection } from '@ynab-counter/app-core/rewards-engine';
 import { parseYnabDate } from '@ynab-counter/app-core/rewards-engine/date-utils';
+import {
+  isWholePeriodMinimum,
+  sumQualificationSpend,
+} from '@ynab-counter/app-core/rewards-engine/utils/reward-period-qualification';
 
 const MS_PER_DAY = 86_400_000;
 
@@ -66,6 +70,16 @@ export function qualificationRow(
     return { tone: 'destructive', label: 'Period qualification failed' };
   }
 
+  const usesPeriodMinimum = isWholePeriodMinimum(projection.card.rewardPeriod);
+  const target = formatting.currencyRounded(monthlyMinimum);
+  if (usesPeriodMinimum) {
+    const spend = formatting.currencyRounded(sumQualificationSpend(months));
+    if (status === 'met') {
+      return { tone: 'positive', label: `Period: ${spend} of ${target} · met` };
+    }
+    return { tone: 'attention', label: `Period: ${spend} of ${target}` };
+  }
+
   const allMet = months.every((month) => month.status === 'met');
   if (status === 'met' && allMet) {
     const monthCount = projection.card.rewardPeriod.monthCount ?? months.length;
@@ -76,7 +90,6 @@ export function qualificationRow(
   }
 
   const spend = formatting.currencyRounded(active.spend);
-  const target = formatting.currencyRounded(monthlyMinimum);
   if (status === 'met') {
     return {
       tone: 'positive',

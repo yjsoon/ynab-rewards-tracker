@@ -1066,6 +1066,34 @@ describe('buildRewardsDashboard', () => {
     });
   });
 
+  it('projects a whole-period minimum against the pot, not the current month', () => {
+    const card = createCard({
+      rewardPeriod: {
+        monthCount: 3,
+        anchorDate: '2026-01-01',
+        monthlyMinimumSpend: 1000,
+        minimumScope: 'whole_period',
+      },
+    });
+    const result = buildRewardsDashboard(
+      [card],
+      [
+        createTransaction({ id: 'jan', date: '2026-01-10', amount: -400_000 }),
+        createTransaction({ id: 'feb', date: '2026-02-10', amount: -200_000 }),
+      ],
+      {},
+      referenceDate,
+    );
+
+    expect(result.cards[0]).toMatchObject({
+      status: 'building',
+      minimum: { target: 1000, remaining: 400, progress: 0.6, met: false },
+      progress: { minimumProgressSpend: 600 },
+      calculation: { qualificationStatus: 'pending' },
+      reward: { amount: 0, dollars: 0 },
+    });
+  });
+
   it('does not overlay a full-period persisted result onto a historical partial view', () => {
     const card = createCard({
       rewardPeriod: {
@@ -1231,6 +1259,58 @@ describe('buildRewardsDashboard', () => {
       expect(result.cards[0].calculation.qualificationStatus).toBe('failed');
       expect(result.cards[0].calculation.monthlyQualifications?.[0].status).toBe('failed');
       expect(result.cards[0].status).toBe('building');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not fail a persisted whole-period pot when an early month closes short', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 1, 1, 12));
+    try {
+      const card = createCard({
+        rewardPeriod: {
+          monthCount: 3,
+          anchorDate: '2026-01-01',
+          monthlyMinimumSpend: 1000,
+          minimumScope: 'whole_period',
+        },
+      });
+      const persisted: RewardCalculation = {
+        cardId: card.id,
+        ruleId: `card-${card.id}`,
+        period: '2026-01-01 → 2026-03-31',
+        totalSpend: 700,
+        countedSpend: 700,
+        eligibleSpend: 0,
+        rewardEarned: 0,
+        rewardType: 'cashback',
+        monthlyMinimumSpend: 1000,
+        qualificationStatus: 'pending',
+        monthlyQualifications: [
+          { start: '2026-01-01', end: '2026-01-31', spend: 700, minimumSpend: 1000, status: 'pending' },
+          { start: '2026-02-01', end: '2026-02-28', spend: 0, minimumSpend: 1000, status: 'pending' },
+          { start: '2026-03-01', end: '2026-03-31', spend: 0, minimumSpend: 1000, status: 'pending' },
+        ],
+        rewardPeriodCalculationVersion: REWARD_PERIOD_CALCULATION_VERSION,
+        minimumMet: false,
+        maximumExceeded: false,
+        shouldStopUsing: false,
+      };
+      const result = buildRewardsDashboard(
+        [card],
+        [createTransaction({ date: '2026-01-10', amount: -700_000 })],
+        {},
+        new Date(2026, 1, 1, 12),
+        [persisted],
+      );
+
+      expect(result.cards[0].calculation.qualificationStatus).toBe('pending');
+      expect(result.cards[0].minimum).toMatchObject({
+        target: 1000,
+        remaining: 300,
+        met: false,
+      });
     } finally {
       vi.useRealTimers();
     }
