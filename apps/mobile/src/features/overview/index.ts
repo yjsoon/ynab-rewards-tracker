@@ -1,5 +1,6 @@
 export { CardGroupHeader } from './card-group';
 export { CardTile, type CardTileProps } from './card-tile';
+export { formatLastUpdated } from './format-last-updated';
 export {
   setDashboardPeriodValue,
   useDashboardPeriod,

@@ -1,8 +1,5 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
-  ActionSheetIOS,
-  Alert,
-  Platform,
   Pressable,
   StyleSheet,
   View,
@@ -15,10 +12,13 @@ import { SymbolView } from 'expo-symbols';
 import { Caption1, Footnote, Headline, Title3 } from '@/components/ios';
 import type { CardFormatting } from '@/features/cards/presentation';
 import {
+  attentionCopy,
   daysLeftInPeriod,
   isPromotionalPeriodActive,
   qualificationRow,
+  statusPresentation,
 } from '@/features/cards/presentation';
+import { presentActionSheet } from './present-action-sheet';
 import { semanticColors, withAlpha } from '@/theme';
 import { interaction, nativeMetrics, radii, spacing } from '@/theme/tokens';
 import type { TextColor } from '@/components/ios/Typography';
@@ -26,7 +26,7 @@ import {
   resolveCardSpendingTier,
   type CardDashboardProjection,
 } from '@ynab-counter/app-core/rewards-engine';
-import type { CreditCard } from '@ynab-counter/app-core/storage';
+import type { CreditCard, MonthlyQualificationBreakdown } from '@ynab-counter/app-core/storage';
 import { CardSubcategoryBreakdown } from './subcategory-breakdown';
 import { ZonesProgressBar } from './zones-progress-bar';
 
@@ -54,55 +54,28 @@ function cardUsesBlocks(card: CreditCard): boolean {
   );
 }
 
-export interface CardTileProps {
-  projection: CardDashboardProjection;
-  formatting: CardFormatting;
-  referenceDate?: Date;
-  allowHideCard: boolean;
-  isSubcategoryExpanded: boolean;
-  onToggleSubcategories: () => void;
-  onHideCard: (cardId: string, hiddenUntil: string) => void;
-  onOpen: () => void;
-  onEdit: () => void;
-  style?: StyleProp<ViewStyle>;
+function activeMonthlyQualification(
+  months: readonly MonthlyQualificationBreakdown[],
+  asOf: string,
+): MonthlyQualificationBreakdown | undefined {
+  return months.find((month) => month.start <= asOf && month.end >= asOf)
+    ?? months.find((month) => month.status === 'pending');
 }
 
-function presentCardActions(params: {
-  cardName: string;
-  allowHide: boolean;
+function presentCardMenu(params: {
+  allowHideCard: boolean;
   onEdit: () => void;
   onHide: () => void;
-  onDetails: () => void;
 }): void {
-  const actions = [
-    { label: 'Edit settings', run: params.onEdit },
-    ...(params.allowHide
-      ? [{ label: 'Hide from dashboard', run: params.onHide }]
-      : []),
-    { label: 'View card details', run: params.onDetails },
-  ];
-  if (Platform.OS === 'ios') {
-    ActionSheetIOS.showActionSheetWithOptions(
-      {
-        options: [...actions.map((action) => action.label), 'Cancel'],
-        cancelButtonIndex: actions.length,
-      },
-      (index) => {
-        if (typeof index === 'number' && index < actions.length) {
-          actions[index]?.run();
-        }
-      },
-    );
-    return;
-  }
-  Alert.alert(
-    params.cardName,
-    undefined,
-    [
-      ...actions.map((action) => ({ text: action.label, onPress: action.run })),
-      { text: 'Cancel', style: 'cancel' },
+  presentActionSheet({
+    title: 'Card actions',
+    actions: [
+      { label: 'Edit settings', run: params.onEdit },
+      ...(params.allowHideCard
+        ? [{ label: 'Hide from dashboard', run: params.onHide }]
+        : []),
     ],
-  );
+  });
 }
 
 function whisperColor(tone: TextColor): ColorValue {
@@ -118,6 +91,19 @@ function whisperColor(tone: TextColor): ColorValue {
   return semanticColors.label;
 }
 
+export interface CardTileProps {
+  projection: CardDashboardProjection;
+  formatting: CardFormatting;
+  referenceDate?: Date;
+  allowHideCard: boolean;
+  isSubcategoryExpanded: boolean;
+  onToggleSubcategories: () => void;
+  onHideCard: (cardId: string, hiddenUntil: string) => void;
+  onEdit: () => void;
+  onOpen: () => void;
+  style?: StyleProp<ViewStyle>;
+}
+
 export function CardTile({
   projection,
   formatting,
@@ -126,11 +112,12 @@ export function CardTile({
   isSubcategoryExpanded,
   onToggleSubcategories,
   onHideCard,
-  onOpen,
   onEdit,
+  onOpen,
   style,
 }: CardTileProps) {
   const { card } = projection;
+  const [showRewardPeriodSpend, setShowRewardPeriodSpend] = useState(false);
   const promoActive = isPromotionalPeriodActive(card, referenceDate);
   const hasBlockRounding = cardUsesBlocks(card);
   const displayedSpend = hasBlockRounding ? projection.spend.counted : projection.spend.total;
@@ -157,6 +144,11 @@ export function CardTile({
     maximumTarget > 0 &&
     displayedSpend / maximumTarget >= NEAR_CAP_RATIO;
 
+  const qualificationFailed = projection.calculation.qualificationStatus === 'failed';
+  const qualificationPending = projection.calculation.qualificationStatus === 'pending';
+  const monthlyQualifications = projection.calculation.monthlyQualifications ?? [];
+  const calculationAsOf = projection.calculationPeriod.asOf ?? projection.calculationPeriod.end;
+  const qualificationMonth = activeMonthlyQualification(monthlyQualifications, calculationAsOf);
   const remainingToMaximum = hasMaximum ? Math.max(0, maximumTarget - displayedSpend) : 0;
   const exceededAmount = hasMaximum ? Math.max(0, displayedSpend - maximumTarget) : 0;
   const remainingToMinimum = hasMinimum ? projection.minimum.remaining ?? 0 : 0;
@@ -166,83 +158,89 @@ export function CardTile({
       : 0;
   const progressPercent = Math.round(clampedProgress * 100);
 
+  const heroVariant: HeroVariant = nextSpendingLevel
+    ? 'tier-left'
+    : hasMinimum && !minimumMet
+      ? 'min-left'
+      : hasMaximum && exceeded
+        ? 'cap-over'
+        : hasMaximum
+          ? 'cap-left'
+          : 'spent';
+  const canToggleSpendView = Boolean(
+    heroVariant === 'spent' && card.rewardPeriod && qualificationMonth,
+  );
+  const showingCurrentMonthSpend = canToggleSpendView && !showRewardPeriodSpend;
+  const heroSpend = showingCurrentMonthSpend && qualificationMonth
+    ? qualificationMonth.spend
+    : displayedSpend;
+
   const hero: HeroModel = useMemo(() => {
-    const variant: HeroVariant = nextSpendingLevel
-      ? 'tier-left'
-      : hasMinimum && !minimumMet
-        ? 'min-left'
-        : hasMaximum && exceeded
-          ? 'cap-over'
-          : hasMaximum
-            ? 'cap-left'
-            : 'spent';
-    const capUrgent = variant === 'cap-left' && nearCap;
+    const capUrgent = heroVariant === 'cap-left' && nearCap;
     const tone: TextColor =
-      variant === 'cap-over'
+      heroVariant === 'cap-over'
         ? 'destructive'
-        : variant === 'tier-left'
+        : heroVariant === 'tier-left'
           ? hasUnlockedSpendingTier ? 'positive' : 'attention'
-        : variant === 'min-left' || capUrgent
+        : heroVariant === 'min-left' || capUrgent
           ? 'attention'
-          : variant === 'cap-left' || (hasMinimum && minimumMet)
+          : heroVariant === 'cap-left' || (hasMinimum && minimumMet)
             ? 'positive'
             : 'primary';
     const amount =
-      variant === 'tier-left'
+      heroVariant === 'tier-left'
         ? remainingToSpendingTier
-        : variant === 'cap-left'
+        : heroVariant === 'cap-left'
         ? remainingToMaximum
-        : variant === 'cap-over'
+        : heroVariant === 'cap-over'
           ? exceededAmount
-          : variant === 'min-left'
+          : heroVariant === 'min-left'
             ? remainingToMinimum
-            : displayedSpend;
+            : heroSpend;
     const suffix =
-      variant === 'tier-left' || variant === 'min-left' ? 'to go'
-        : variant === 'cap-left' ? 'left'
-          : variant === 'cap-over' ? 'over'
+      heroVariant === 'tier-left' || heroVariant === 'min-left' ? 'to go'
+        : heroVariant === 'cap-left' ? 'left'
+          : heroVariant === 'cap-over' ? 'over'
             : 'spent';
     const label =
-      variant === 'tier-left' && nextSpendingLevel
+      heroVariant === 'tier-left' && nextSpendingLevel
         ? `${formatting.currencyRounded(remainingToSpendingTier)} to go to the ${formatting.currencyRounded(nextSpendingLevel.spendThreshold)} tier`
-        : variant === 'cap-left'
+        : heroVariant === 'cap-left'
         ? `${formatting.currencyRounded(remainingToMaximum)} left before the cap`
-        : variant === 'cap-over'
+        : heroVariant === 'cap-over'
           ? `${formatting.currencyRounded(exceededAmount)} over the cap`
-          : variant === 'min-left'
+          : heroVariant === 'min-left'
             ? `${formatting.currencyRounded(remainingToMinimum)} more to meet the minimum`
-            : `Spent ${formatting.currencyRounded(displayedSpend)} this period`;
+            : `Spent ${formatting.currencyRounded(heroSpend)} ${showingCurrentMonthSpend ? 'this month' : 'this period'}`;
     return {
-      variant,
+      variant: heroVariant,
       amount,
       tone,
       suffix,
       label,
-      weight: variant === 'spent' || variant === 'cap-over' ? 'semibold' : 'medium',
+      weight: heroVariant === 'spent' || heroVariant === 'cap-over' ? 'semibold' : 'medium',
     };
   }, [
-    displayedSpend,
-    exceeded,
     exceededAmount,
     formatting,
-    hasMaximum,
     hasMinimum,
     hasUnlockedSpendingTier,
+    heroSpend,
+    heroVariant,
     minimumMet,
     nearCap,
     nextSpendingLevel,
     remainingToMaximum,
     remainingToMinimum,
     remainingToSpendingTier,
+    showingCurrentMonthSpend,
   ]);
 
   const earnedNumber = projection.reward.amount;
   const earnedDisplay = Math.round(earnedNumber).toLocaleString();
-  const rewardChipTone: TextColor = exceeded
+  const rewardChipTone: TextColor = exceeded || qualificationFailed
     ? 'destructive'
-    : intermediateCapReached
-      ? 'attention'
-    : hasMinimum && !minimumMet
+    : intermediateCapReached || qualificationPending || (hasMinimum && !minimumMet)
       ? 'attention'
       : card.type === 'cashback'
         ? 'positive'
@@ -261,7 +259,7 @@ export function CardTile({
       ? `${formatting.currencyRounded(maximumTarget)} cap`
       : hero.variant === 'min-left'
         ? `${formatting.currencyRounded(minimumTarget)} min`
-        : 'This period';
+        : showingCurrentMonthSpend ? 'This month' : 'This period';
 
   const qualification = qualificationRow(projection, formatting);
   const daysRemaining = daysLeftInPeriod(
@@ -270,11 +268,9 @@ export function CardTile({
   );
   const daysTone: TextColor = daysRemaining <= 1
     ? 'destructive'
-    : daysRemaining <= 3
+    : daysRemaining <= 7
       ? 'attention'
-      : daysRemaining <= 7
-        ? 'attention'
-        : 'tertiary';
+      : 'tertiary';
   const daysLabel = `${daysRemaining}d`;
   const heroWhisper = whisperColor(hero.tone);
 
@@ -302,94 +298,154 @@ export function CardTile({
     : hero.variant === 'spent'
       ? undefined
       : `Spent ${formatting.currencyRounded(displayedSpend)}`;
-  const minimumMeta = !hasMinimum
-    ? undefined
-    : hero.variant === 'min-left'
-      ? `${progressPercent}% of min`
-      : minimumMet
-        ? `Met ${formatting.currencyRounded(minimumTarget)} min`
-        : `${progressPercent}% of ${formatting.currencyRounded(minimumTarget)} min`;
+  const minimumMeta = hasMinimum && hero.variant !== 'min-left'
+    ? minimumMet
+      ? `Met ${formatting.currencyRounded(minimumTarget)} min`
+      : `${progressPercent}% of ${formatting.currencyRounded(minimumTarget)} min`
+    : undefined;
   const noLimitsMeta = !hasMinimum && !hasMaximum && !nextSpendingLevel;
 
-  const borderTone = nextSpendingLevel
-    ? {
-        borderColor: hasUnlockedSpendingTier ? semanticColors.positive : semanticColors.attention,
-        borderWidth: 1.5,
-      }
-    : exceeded
+  const borderTone = qualificationFailed || exceeded
     ? { borderColor: semanticColors.capped, borderWidth: 1.5 }
-    : nearCap
-      ? { borderColor: semanticColors.attention, borderWidth: 1.5 }
-      : { borderColor: semanticColors.separator, borderWidth: StyleSheet.hairlineWidth };
+    : nextSpendingLevel
+      ? {
+          borderColor: hasUnlockedSpendingTier ? semanticColors.positive : semanticColors.attention,
+          borderWidth: 1.5,
+        }
+      : nearCap
+        ? { borderColor: semanticColors.attention, borderWidth: 1.5 }
+        : { borderColor: semanticColors.separator, borderWidth: StyleSheet.hairlineWidth };
+
+  const kebab = (
+    <Pressable
+      onPress={() => presentCardMenu({
+        allowHideCard,
+        onEdit,
+        onHide: () => onHideCard(card.id, projection.resetsOn),
+      })}
+      accessibilityRole="button"
+      accessibilityLabel={`${card.name} actions`}
+      hitSlop={8}
+      style={({ pressed }) => [styles.kebab, pressed && styles.pressed]}
+    >
+      <SymbolView
+        name="ellipsis"
+        size={16}
+        tintColor={semanticColors.tertiaryLabel}
+        accessibilityElementsHidden
+      />
+    </Pressable>
+  );
+
+  if (projection.status === 'unconfigured') {
+    const setup = statusPresentation('unconfigured');
+    const setupCopy = attentionCopy(projection, formatting);
+    return (
+      <View
+        style={[
+          styles.tile,
+          { borderColor: semanticColors.attention, borderWidth: 1.5 },
+          style,
+        ]}
+      >
+        {kebab}
+        <Pressable
+          onPress={onOpen}
+          accessible
+          accessibilityRole="button"
+          accessibilityLabel={`${card.name}, ${setup.label}. ${setupCopy}`}
+          accessibilityHint="Opens card details"
+          style={({ pressed }) => [styles.body, pressed && styles.pressed]}
+        >
+          <View style={styles.header}>
+            <Headline numberOfLines={1} style={styles.cardName}>{card.name}</Headline>
+          </View>
+          <Footnote color={setup.tone === 'attention' ? 'attention' : 'secondary'}>
+            {setup.label}
+          </Footnote>
+          <Footnote color="secondary">{setupCopy}</Footnote>
+        </Pressable>
+      </View>
+    );
+  }
+
+  const tileAccessibilityLabel = [
+    card.name,
+    `${earnedDisplay} ${card.type === 'cashback' ? 'cashback' : 'miles'} earned`,
+    hero.label,
+    qualification?.label,
+    `${daysRemaining} ${daysRemaining === 1 ? 'day' : 'days'} remaining`,
+    intermediateCapReached
+      ? 'current level capped; next tier can unlock more rewards'
+      : undefined,
+    blockCopy,
+  ].filter((part): part is string => Boolean(part)).join(', ');
 
   return (
     <View style={[styles.tile, borderTone, style]}>
-      <Pressable
-        onPress={() => presentCardActions({
-          cardName: card.name,
-          allowHide: allowHideCard,
-          onEdit,
-          onHide: () => onHideCard(card.id, projection.resetsOn),
-          onDetails: onOpen,
-        })}
-        accessibilityRole="button"
-        accessibilityLabel={`Card actions for ${card.name}`}
-        style={({ pressed }) => [styles.overflowButton, pressed && styles.pressed]}
-      >
-        <SymbolView
-          name="ellipsis"
-          size={16}
-          tintColor={semanticColors.secondaryLabel}
-        />
-      </Pressable>
-      <View style={styles.headerBar}>
-        <Pressable
-          onPress={onOpen}
-          accessibilityRole="button"
-          accessibilityLabel={`${card.name}, ${earnedDisplay} ${card.type === 'cashback' ? 'cashback' : 'miles'} earned`}
-          accessibilityHint="Opens card details"
-          style={({ pressed }) => [styles.headerNameHit, pressed && styles.pressed]}
-        >
-          <Headline numberOfLines={1} style={styles.cardName}>{card.name}</Headline>
-        </Pressable>
-        <View style={styles.headerTrailing}>
-          {promoActive ? (
-            <View style={styles.promoPill} accessibilityElementsHidden>
-              <SymbolView
-                name="sparkles"
-                size={11}
-                tintColor={semanticColors.systemPurple}
-              />
-              <Caption1 color="action" style={styles.promoText}>Promo</Caption1>
-            </View>
-          ) : null}
-          <View style={styles.rewardChip} accessibilityElementsHidden>
-            <SymbolView
-              name={card.type === 'cashback' ? 'dollarsign.circle.fill' : 'airplane'}
-              size={14}
-              tintColor={rewardChipColor}
-              style={styles.rewardIcon}
-            />
-            <Footnote style={[styles.rewardChipText, { color: rewardChipColor }]}>
-              {earnedDisplay}
-            </Footnote>
-          </View>
-        </View>
-      </View>
+      {kebab}
       <Pressable
         onPress={onOpen}
-        accessible
-        accessibilityRole="button"
-        accessibilityLabel={`${hero.label}${intermediateCapReached ? ', current level capped; next tier can unlock more rewards' : ''}${blockCopy ? `, ${blockCopy}` : ''}`}
-        accessibilityHint="Opens card details"
-        style={({ pressed }) => [styles.pressable, pressed && styles.pressed]}
+        accessible={false}
+        style={({ pressed }) => [styles.body, pressed && styles.pressed]}
       >
+        <View style={styles.header}>
+          <Pressable
+            onPress={onOpen}
+            accessible
+            accessibilityRole="button"
+            accessibilityLabel={tileAccessibilityLabel}
+            accessibilityHint="Opens card details"
+            style={styles.titleHit}
+          >
+            <Headline numberOfLines={1} style={styles.cardName}>{card.name}</Headline>
+          </Pressable>
+          <View style={styles.headerTrailing} accessibilityElementsHidden>
+            {promoActive ? (
+              <View style={styles.promoPill}>
+                <SymbolView
+                  name="sparkles"
+                  size={11}
+                  tintColor={semanticColors.systemPurple}
+                />
+                <Caption1 color="action" style={styles.promoText}>Promo</Caption1>
+              </View>
+            ) : null}
+            <View style={styles.rewardChip}>
+              <SymbolView
+                name={card.type === 'cashback' ? 'dollarsign.circle.fill' : 'airplane'}
+                size={14}
+                tintColor={rewardChipColor}
+                style={styles.rewardIcon}
+              />
+              <Footnote style={[styles.rewardChipText, { color: rewardChipColor }]}>
+                {earnedDisplay}
+              </Footnote>
+            </View>
+          </View>
+        </View>
 
-        <View style={styles.heroRow} accessibilityElementsHidden>
-          <Caption1 color="secondary" style={styles.heroLabel}>
-            {heroLabel}
-          </Caption1>
-          <View style={styles.heroValueRow}>
+        <View style={styles.heroRow}>
+          {canToggleSpendView ? (
+            <Pressable
+              onPress={() => setShowRewardPeriodSpend((current) => !current)}
+              accessibilityRole="button"
+              accessibilityLabel={showingCurrentMonthSpend
+                ? 'Showing this month spend. Show full reward period spend'
+                : 'Showing full reward period spend. Show this month spend'}
+              hitSlop={8}
+              style={styles.heroLabelHit}
+            >
+              <Caption1 color="secondary" style={[styles.heroLabel, styles.heroLabelToggle]}>
+                {heroLabel}
+              </Caption1>
+            </Pressable>
+          ) : (
+            <Caption1 color="secondary" style={styles.heroLabel} accessible={false}>
+              {heroLabel}
+            </Caption1>
+          )}
+          <View style={styles.heroValueRow} accessibilityElementsHidden>
             {hero.variant === 'min-left' || hero.variant === 'tier-left' ? (
               <SymbolView
                 name="arrow.up.right"
@@ -473,17 +529,13 @@ export function CardTile({
         </View>
 
         {qualification ? (
-          <Caption1
-            color={qualification.tone}
-            style={styles.tabular}
-            accessibilityElementsHidden
-          >
+          <Caption1 color={qualification.tone} style={styles.qualification} accessible={false}>
             {qualification.label}
           </Caption1>
         ) : null}
 
         {blockCopy ? (
-          <Caption1 color="tertiary" style={styles.tabular} accessibilityElementsHidden>
+          <Caption1 color="tertiary" style={styles.tabular} accessible={false}>
             {blockCopy}
           </Caption1>
         ) : null}
@@ -518,45 +570,34 @@ export function CardTile({
 
 const styles = StyleSheet.create({
   tile: {
+    position: 'relative',
     borderRadius: radii.xlarge,
     backgroundColor: semanticColors.secondarySystemGroupedBackground,
     overflow: 'hidden',
   },
-  overflowButton: {
+  kebab: {
     position: 'absolute',
     top: 0,
     right: 0,
     zIndex: 2,
-    width: nativeMetrics.minimumTouchTarget,
-    height: nativeMetrics.minimumTouchTarget,
+    minWidth: nativeMetrics.minimumTouchTarget,
+    minHeight: nativeMetrics.minimumTouchTarget,
     alignItems: 'center',
     justifyContent: 'center',
-    borderBottomLeftRadius: radii.medium,
     borderLeftWidth: StyleSheet.hairlineWidth,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderColor: semanticColors.separator,
+    borderBottomLeftRadius: radii.medium,
     backgroundColor: semanticColors.secondarySystemGroupedBackground,
   },
-  headerBar: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingTop: spacing.lg,
-    paddingLeft: spacing.lg,
-    paddingRight: nativeMetrics.minimumTouchTarget + spacing.sm,
+  body: {
+    padding: spacing.lg,
+    gap: spacing.md,
   },
-  headerNameHit: {
+  titleHit: {
     flex: 1,
     minWidth: 120,
-    minHeight: nativeMetrics.minimumTouchTarget,
     justifyContent: 'center',
-  },
-  pressable: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.lg,
-    gap: spacing.md,
   },
   footerSection: {
     paddingHorizontal: spacing.lg,
@@ -566,9 +607,15 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: interaction.subtlePressedOpacity,
   },
+  header: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingRight: nativeMetrics.hairlineInset - spacing.lg,
+  },
   cardName: {
-    flex: 1,
-    minWidth: 120,
+    flexShrink: 1,
   },
   headerTrailing: {
     flexDirection: 'row',
@@ -613,6 +660,17 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
     fontWeight: '600',
   },
+  heroLabelHit: {
+    minHeight: nativeMetrics.minimumTouchTarget,
+    justifyContent: 'center',
+    marginVertical: -spacing.sm,
+  },
+  heroLabelToggle: {
+    textDecorationLine: 'underline',
+  },
+  qualification: {
+    fontWeight: '600',
+  },
   heroValueRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
@@ -655,13 +713,13 @@ const styles = StyleSheet.create({
   hideButton: {
     alignSelf: 'stretch',
     minHeight: nativeMetrics.minimumTouchTarget,
-    marginHorizontal: spacing.lg,
-    marginBottom: spacing.lg,
-    borderRadius: radii.medium,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: semanticColors.separator,
     alignItems: 'center',
     justifyContent: 'center',
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: semanticColors.separator,
+    borderRadius: radii.small,
   },
   hideButtonText: {
     fontWeight: '600',

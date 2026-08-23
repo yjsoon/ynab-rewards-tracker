@@ -4,6 +4,7 @@ import {
   RefreshControl,
   ScrollView,
   StyleSheet,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -13,10 +14,8 @@ import { useStorage } from '@/contexts/StorageContext';
 import { EmptyState } from '@/components/native';
 import { Footnote } from '@/components/ios';
 import { createCardFormatting } from '@/features/cards/presentation';
-import {
-  orderCardProjections,
-  useRewardsDashboard,
-} from '@/features/cards/dashboard';
+import { orderTypedCardProjections } from '@/features/cards/card-ordering';
+import { useRewardsDashboard } from '@/features/cards/dashboard';
 import {
   CardGroupHeader,
   CardTile,
@@ -27,6 +26,7 @@ import {
 import { semanticColors } from '@/theme';
 import { interaction, nativeMetrics, radii, spacing } from '@/theme/tokens';
 import type { CardDashboardProjection } from '@ynab-counter/app-core/rewards-engine';
+import type { HiddenCard } from '@ynab-counter/app-core/storage';
 
 function isExpansionMap(
   value: unknown,
@@ -47,6 +47,16 @@ function compactCardName(name: string): string {
     .map((segment) => segment.trim())
     .filter(Boolean);
   return segments.at(-1) ?? name;
+}
+
+function dashboardColumnCount(width: number): number {
+  if (width >= 1024) {
+    return 3;
+  }
+  if (width >= 640) {
+    return 2;
+  }
+  return 1;
 }
 
 function CardGroupSection({
@@ -79,29 +89,25 @@ function CardGroupSection({
         collapsed={collapsed}
         onToggle={onToggle}
       />
-      {!collapsed ? <View style={styles.tileStack}>{children}</View> : null}
+      {!collapsed ? children : null}
     </View>
   );
 }
 
 export default function OverviewScreen() {
   const router = useRouter();
+  const { width: windowWidth } = useWindowDimensions();
   const { state, actions } = useStorage();
   const period = useDashboardPeriod();
   const referenceDate = period.isToday ? undefined : period.referenceDate;
   const model = useRewardsDashboard(referenceDate);
   const formatting = useMemo(() => createCardFormatting(state.settings), [state.settings]);
+  const columns = dashboardColumnCount(windowWidth);
+  const contentWidth = windowWidth - nativeMetrics.screenGutter * 2;
+  const tileWidth = columns === 1
+    ? contentWidth
+    : (contentWidth - spacing.md * (columns - 1)) / columns;
   const groupByType = state.settings.groupCardsByType ?? true;
-
-  const orderedCards = useMemo(
-    () => orderCardProjections(
-      model.dashboard.cards,
-      state.settings.cardOrdering?.all,
-      state.settings.cardOrdering?.cashback,
-      state.settings.cardOrdering?.miles,
-    ),
-    [model.dashboard.cards, state.settings.cardOrdering],
-  );
 
   const activeHiddenEntries = useMemo(() => {
     if (!period.isToday) {
@@ -112,24 +118,32 @@ export default function OverviewScreen() {
     );
   }, [period.isToday, period.referenceDate, state.hiddenCards]);
 
-  const activeHiddenIds = useMemo(
-    () => new Set(activeHiddenEntries.map((entry) => entry.cardId)),
-    [activeHiddenEntries],
+  const dashboardCards = useMemo(
+    () => groupByType
+      ? orderTypedCardProjections(
+          model.visibleCards,
+          state.settings.cardOrdering?.cashback,
+          state.settings.cardOrdering?.miles,
+        )
+      : model.visibleCards,
+    [groupByType, model.visibleCards, state.settings.cardOrdering],
   );
 
-  const featuredCards = useMemo(
-    () => orderedCards.filter(
-      ({ card }) => card.featured !== false && !activeHiddenIds.has(card.id),
-    ),
-    [activeHiddenIds, orderedCards],
+  const configuredCards = useMemo(
+    () => dashboardCards.filter((projection) => projection.status !== 'unconfigured'),
+    [dashboardCards],
   );
   const cashbackCards = useMemo(
-    () => featuredCards.filter(({ card }) => card.type === 'cashback'),
-    [featuredCards],
+    () => dashboardCards.filter(({ card }) => card.type === 'cashback'),
+    [dashboardCards],
   );
   const milesCards = useMemo(
-    () => featuredCards.filter(({ card }) => card.type === 'miles'),
-    [featuredCards],
+    () => dashboardCards.filter(({ card }) => card.type === 'miles'),
+    [dashboardCards],
+  );
+  const earnedDollars = useMemo(
+    () => configuredCards.reduce((sum, projection) => sum + projection.reward.dollars, 0),
+    [configuredCards],
   );
 
   const groupCollapsed = state.settings.collapsedCardGroups ?? {};
@@ -154,7 +168,7 @@ export default function OverviewScreen() {
   const syncActionLabel = model.canSync
     ? `${model.syncLabel} — Retry`
     : `${model.syncLabel} — Review settings`;
-  const hasDashboardContent = featuredCards.length > 0;
+  const hasDashboardContent = dashboardCards.length > 0;
 
   const openCard = (id: string) => {
     router.push({ pathname: '/card/[id]', params: { id } });
@@ -177,9 +191,10 @@ export default function OverviewScreen() {
     const currentValue = isExpansionMap(subcategoryExpansion)
       ? subcategoryExpansion[cardId] ?? false
       : Boolean(subcategoryExpansion);
+    const nextValue = !currentValue;
     const nextSetting: Record<string, boolean> = isExpansionMap(subcategoryExpansion)
-      ? { ...subcategoryExpansion, [cardId]: !currentValue }
-      : { [cardId]: !currentValue };
+      ? { ...subcategoryExpansion, [cardId]: nextValue }
+      : { [cardId]: nextValue };
     void actions.setSettings({ summaryViewSubcategoriesExpanded: nextSetting });
   };
 
@@ -189,9 +204,14 @@ export default function OverviewScreen() {
       : Boolean(subcategoryExpansion);
 
   const hideCard = async (cardId: string, hiddenUntil: string) => {
+    const hiddenEntry: HiddenCard = {
+      cardId,
+      hiddenUntil,
+      reason: 'maximum_spend_reached',
+    };
     const next = [
       ...state.hiddenCards.filter((entry) => entry.cardId !== cardId),
-      { cardId, hiddenUntil, reason: 'maximum_spend_reached' as const },
+      hiddenEntry,
     ];
     await actions.setHiddenCards(next);
   };
@@ -219,9 +239,16 @@ export default function OverviewScreen() {
       isSubcategoryExpanded={isSubcategoryExpanded(projection.card.id)}
       onToggleSubcategories={() => toggleSubcategories(projection.card.id)}
       onHideCard={(cardId, hiddenUntil) => void hideCard(cardId, hiddenUntil)}
-      onOpen={() => openCard(projection.card.id)}
       onEdit={() => editCard(projection.card.id)}
+      onOpen={() => openCard(projection.card.id)}
+      style={columns > 1 ? { width: tileWidth } : styles.tileFull}
     />
+  );
+
+  const tileGrid = (projections: CardDashboardProjection[]) => (
+    <View style={[styles.tileGrid, columns > 1 && styles.tileGridMulti]}>
+      {projections.map(renderTile)}
+    </View>
   );
 
   return (
@@ -320,13 +347,16 @@ export default function OverviewScreen() {
         )
       ) : (
         <>
-          <StatusSummary
-            projections={featuredCards}
-            formatting={formatting}
-            hiddenCards={period.isToday ? hiddenChips : undefined}
-            onUnhideCard={period.isToday ? (cardId) => void unhideCard(cardId) : undefined}
-            onUnhideAll={period.isToday ? () => void unhideAll() : undefined}
-          />
+          {configuredCards.length > 0 || hiddenChips.length > 0 ? (
+            <StatusSummary
+              projections={configuredCards}
+              earnedDollars={earnedDollars}
+              formatting={formatting}
+              hiddenCards={period.isToday ? hiddenChips : undefined}
+              onUnhideCard={period.isToday ? (cardId) => void unhideCard(cardId) : undefined}
+              onUnhideAll={period.isToday ? () => void unhideAll() : undefined}
+            />
+          ) : null}
 
           {groupByType ? (
             <>
@@ -338,7 +368,7 @@ export default function OverviewScreen() {
                 count={cashbackCards.length}
                 onToggle={() => toggleGroup('cashback')}
               >
-                {cashbackCards.map(renderTile)}
+                {tileGrid(cashbackCards)}
               </CardGroupSection>
               <CardGroupSection
                 title="Miles Cards"
@@ -348,12 +378,12 @@ export default function OverviewScreen() {
                 count={milesCards.length}
                 onToggle={() => toggleGroup('miles')}
               >
-                {milesCards.map(renderTile)}
+                {tileGrid(milesCards)}
               </CardGroupSection>
             </>
           ) : (
-            <View style={styles.tileStack}>
-              {featuredCards.map(renderTile)}
+            <View style={styles.section}>
+              {tileGrid(dashboardCards)}
             </View>
           )}
         </>
@@ -400,8 +430,15 @@ const styles = StyleSheet.create({
   section: {
     gap: spacing.sm,
   },
-  tileStack: {
+  tileGrid: {
     gap: spacing.md,
+  },
+  tileGridMulti: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  tileFull: {
+    alignSelf: 'stretch',
   },
   pressed: {
     opacity: interaction.pressedOpacity,

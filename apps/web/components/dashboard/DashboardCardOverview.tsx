@@ -23,7 +23,6 @@ import type {
 import type { YnabFlagColor } from "@/lib/ynab-constants";
 import type { Transaction } from "@/types/transaction";
 import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -261,9 +260,7 @@ export function DashboardCardOverview({
       );
     }
 
-    // Ungrouped mode: show all cards in a single grid
     if (!groupByType) {
-      // Combine already-ordered cashback and miles cards
       const allOrderedCards = allCards;
 
       return (
@@ -293,7 +290,6 @@ export function DashboardCardOverview({
       );
     }
 
-    // Grouped mode: show Cashback and Miles sections
     return (
       <>
         {cashbackCards.length > 0 && (
@@ -491,12 +487,9 @@ function CardGroup({
               <span>{title}</span>
             </button>
           </h2>
-          <Badge
-            variant="secondary"
-            className="h-5 min-w-5 justify-center px-1.5 text-[11px] tabular-nums"
-          >
+          <span className="text-[11px] tabular-nums text-muted-foreground">
             {cards.length}
-          </Badge>
+          </span>
         </div>
       )}
 

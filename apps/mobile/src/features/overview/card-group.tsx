@@ -32,27 +32,29 @@ export function CardGroupHeader({
       accessibilityHint={collapsed ? 'Expands this group' : 'Collapses this group'}
       style={({ pressed }) => [styles.header, pressed && styles.pressed]}
     >
-      <SymbolView
-        name="chevron.down"
-        size={11}
-        tintColor={semanticColors.tertiaryLabel}
-        style={collapsed && styles.chevronCollapsed}
-        accessibilityElementsHidden
-      />
-      <SymbolView
-        name={icon}
-        size={13}
-        tintColor={iconColor}
-        style={styles.icon}
-        accessibilityElementsHidden
-      />
-      <Caption1 color="secondary" style={styles.title} accessible={false}>
-        {title}
-      </Caption1>
-      <View style={styles.badge}>
-        <Footnote color="secondary" style={styles.count} accessible={false}>
-          {count}
+      <View style={styles.identity}>
+        <SymbolView
+          name={collapsed ? 'chevron.right' : 'chevron.down'}
+          size={13}
+          tintColor={semanticColors.tertiaryLabel}
+          style={styles.icon}
+          accessibilityElementsHidden
+        />
+        <SymbolView
+          name={icon}
+          size={13}
+          tintColor={iconColor}
+          style={styles.icon}
+          accessibilityElementsHidden
+        />
+        <Footnote color="secondary" style={styles.title} accessible={false}>
+          {title}
         </Footnote>
+      </View>
+      <View style={styles.badge} accessibilityElementsHidden>
+        <Caption1 color="secondary" style={styles.count}>
+          {count}
+        </Caption1>
       </View>
     </Pressable>
   );
@@ -66,18 +68,24 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingVertical: spacing.xs,
   },
+  identity: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    minWidth: 0,
+    flexShrink: 1,
+  },
   icon: {
     flexShrink: 0,
   },
   title: {
-    flexShrink: 1,
-    fontWeight: '600',
-    letterSpacing: 0.6,
     textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    fontWeight: '600',
   },
   badge: {
     minWidth: 20,
-    height: 20,
+    minHeight: 20,
     paddingHorizontal: spacing.sm,
     borderRadius: radii.pill,
     backgroundColor: semanticColors.tertiarySystemFill,
@@ -87,11 +95,6 @@ const styles = StyleSheet.create({
   count: {
     fontVariant: ['tabular-nums'],
     fontWeight: '600',
-    fontSize: 11,
-    lineHeight: 13,
-  },
-  chevronCollapsed: {
-    transform: [{ rotate: '-90deg' }],
   },
   pressed: {
     opacity: interaction.pressedOpacity,

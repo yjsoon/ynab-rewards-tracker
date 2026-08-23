@@ -235,7 +235,7 @@ interface CardSettingsEditorProps {
 }
 
 const capsuleBaseClasses =
-  'group inline-flex min-h-[44px] w-full items-center justify-between gap-4 rounded-full border px-4 py-2 text-left text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 sm:w-auto';
+  'group inline-flex min-h-[44px] w-full items-center justify-between gap-4 rounded-xl border px-4 py-2 text-left text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 sm:w-auto';
 
 function SettingCapsule({
   label,
@@ -272,7 +272,7 @@ function SettingCapsule({
             </div>
           </div>
           <div className="hidden h-8 border-l border-border/60 sm:block" aria-hidden="true" />
-          <span className="rounded-full bg-muted/30 px-3 py-1 text-xs font-medium text-muted-foreground">
+          <span className="max-w-[140px] truncate text-xs font-medium text-muted-foreground">
             {value}
           </span>
         </div>
@@ -302,7 +302,7 @@ function SettingCapsule({
               </div>
             </div>
             <div className="hidden h-8 border-l border-border/60 sm:block" aria-hidden="true" />
-            <span className="max-w-[140px] truncate rounded-full bg-muted/40 px-3 py-1 text-xs font-medium text-muted-foreground sm:text-sm">
+            <span className="max-w-[140px] truncate text-xs font-medium text-muted-foreground sm:text-sm">
               {value}
             </span>
           </div>
@@ -473,11 +473,7 @@ export function CardSettingsEditor({
               {earningRateLabel}
             </span>
           </div>
-          <div
-            className={`flex items-center gap-2 rounded-full border px-3 py-1 ${
-              fieldDirty.featured ? 'border-amber-300 bg-amber-50/60 dark:border-amber-700 dark:bg-amber-900/20' : ''
-            }`}
-          >
+          <div className="flex items-center gap-2">
             <Switch
               id={`featured-${card.id}`}
               checked={isFeatured}
@@ -488,7 +484,6 @@ export function CardSettingsEditor({
         </div>
       </div>
 
-      {/* Card Identity - shown conditionally */}
       {showNameAndIssuer && (
         <div className="mt-4">
           <SettingCapsule
@@ -537,7 +532,6 @@ export function CardSettingsEditor({
         </div>
       )}
 
-      {/* Rewards Configuration */}
       <div className="mt-6 space-y-3">
         <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Rewards Configuration</h4>
         <div className="flex flex-wrap gap-3">
@@ -655,7 +649,6 @@ export function CardSettingsEditor({
         </div>
       </div>
 
-      {/* Spend Limits */}
       <div className="mt-6 space-y-3">
         <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Spend Limits</h4>
         <div className="flex flex-wrap gap-3">
@@ -798,7 +791,6 @@ export function CardSettingsEditor({
         </div>
       </div>
 
-      {/* Billing & Periods */}
       <div className="mt-6 space-y-3">
         <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Billing & Periods</h4>
         <div className="flex flex-wrap gap-3">
@@ -842,7 +834,6 @@ export function CardSettingsEditor({
                     value={billingCycleDay}
                     onChange={(e) => {
                       const parsed = parseInt(e.target.value, 10);
-                      // Use 1 as default only if parsing fails (NaN), not for 0
                       onFieldChange('billingCycleDay', Number.isNaN(parsed) ? 1 : Math.max(1, Math.min(31, parsed)));
                     }}
                     min="1"
@@ -969,7 +960,6 @@ export function CardSettingsEditor({
                   onCheckedChange={(checked) => {
                     onFieldChange('promotionalPeriodEnabled', checked);
                     if (checked) {
-                      // Auto-populate start date to today if not already set
                       if (!promotionalPeriodStart) {
                         const today = new Date();
                         const isoDate = toIsoDateString(today);
@@ -1026,7 +1016,6 @@ export function CardSettingsEditor({
         </div>
       </div>
 
-      {/* Subcategory Rewards */}
       <div className={`mt-6 space-y-3 ${
         subcategoriesDirty
           ? 'rounded-xl p-4 border-amber-300/80 bg-amber-50/40 dark:border-amber-700/60 dark:bg-amber-900/15'
