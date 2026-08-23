@@ -2,9 +2,24 @@ import type {
   CardRewardPeriod,
   MonthlyQualificationBreakdown,
   MonthlyQualificationStatus,
+  RewardPeriodKind,
   RewardPeriodMinimumScope,
   RewardQualificationStatus,
 } from '../../storage/types';
+
+export function getRewardPeriodKind(
+  rewardPeriod?: Pick<CardRewardPeriod, 'endDate'> | null,
+): RewardPeriodKind {
+  return typeof rewardPeriod?.endDate === 'string' && rewardPeriod.endDate.length > 0
+    ? 'one_off'
+    : 'repeating';
+}
+
+export function isOneOffRewardPeriod(
+  rewardPeriod?: Pick<CardRewardPeriod, 'endDate'> | null,
+): boolean {
+  return getRewardPeriodKind(rewardPeriod) === 'one_off';
+}
 
 export function getRewardPeriodMinimumScope(
   rewardPeriod?: Pick<CardRewardPeriod, 'minimumScope'> | null,

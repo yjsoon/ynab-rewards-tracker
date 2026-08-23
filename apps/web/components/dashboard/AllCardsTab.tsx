@@ -32,7 +32,8 @@ import {
 } from 'lucide-react';
 import { EmptyCardsIcon } from '@/components/icons/BrandIcons';
 import { storage, type CardSubcategory, type CreditCard } from '@/lib/storage';
-import { type CardEditState as SingleCardEditState } from '@/components/CardSettingsEditor';
+import { buildRewardPeriodFromEditState, type CardEditState as SingleCardEditState } from '@/components/CardSettingsEditor';
+import { getRewardPeriodKind } from '@ynab-counter/app-core/rewards-engine/utils/reward-period-qualification';
 import { CardSettingsCompact } from '@/components/CardSettingsCompact';
 import { CardSettingsDialog } from '@/components/CardSettingsDialog';
 import { ThemeGroupingManager } from '@/components/ThemeGroupingManager';
@@ -59,7 +60,10 @@ export const createCardEditState = (card: CreditCard): SingleCardEditState => ({
   rewardPeriodMonthCount: card.rewardPeriod?.monthCount ?? 3,
   rewardPeriodAnchorDate: card.rewardPeriod?.anchorDate ?? '',
   rewardPeriodMonthlyMinimum: card.rewardPeriod?.monthlyMinimumSpend ?? 0,
-  rewardPeriodMinimumScope: card.rewardPeriod?.minimumScope ?? 'each_month',
+  rewardPeriodMinimumScope: card.rewardPeriod?.minimumScope
+    ?? (getRewardPeriodKind(card.rewardPeriod) === 'one_off' ? 'whole_period' : 'each_month'),
+  rewardPeriodKind: getRewardPeriodKind(card.rewardPeriod),
+  rewardPeriodEndDate: card.rewardPeriod?.endDate ?? '',
   promotionalPeriodEnabled: Boolean(card.promotionalPeriod),
   promotionalPeriodStart: card.promotionalPeriod?.startDate ?? '',
   promotionalPeriodEnd: card.promotionalPeriod?.endDate ?? '',
@@ -232,7 +236,17 @@ export function AllCardsTab({ initialCardId }: AllCardsTabProps) {
         changes.rewardPeriodEnabled &&
         !isValidDateValue(changes.rewardPeriodAnchorDate)
       ) {
-        setBatchError(`${card.name} requires a valid start date for its multi-month reward period.`);
+        setBatchError(`${card.name} requires a valid start date for its reward period.`);
+        return;
+      }
+      if (
+        changes.rewardPeriodEnabled &&
+        (changes.rewardPeriodKind ?? 'repeating') === 'one_off' &&
+        (!isValidDateValue(changes.rewardPeriodEndDate)
+          || (changes.rewardPeriodAnchorDate
+            && changes.rewardPeriodEndDate <= changes.rewardPeriodAnchorDate))
+      ) {
+        setBatchError(`${card.name} requires an end date after the start date for its one-off reward period.`);
         return;
       }
       const thresholds = [
@@ -253,7 +267,7 @@ export function AllCardsTab({ initialCardId }: AllCardsTabProps) {
     if (
       promotionsToRemove.length > 0 &&
       !window.confirm(
-        `Saving will remove the promotional period from ${promotionsToRemove.join(', ')} because a multi-month reward period overrides it. Continue?`,
+        `Saving will remove the promotional period from ${promotionsToRemove.join(', ')} because a reward period overrides it. Continue?`,
       )
     ) {
       return;
@@ -288,14 +302,7 @@ export function AllCardsTab({ initialCardId }: AllCardsTabProps) {
           billingCycle: changes.billingCycleType === 'billing'
             ? { type: 'billing', dayOfMonth: changes.billingCycleDay }
             : { type: 'calendar' },
-          rewardPeriod: changes.rewardPeriodEnabled && changes.rewardPeriodAnchorDate
-            ? {
-                monthCount: changes.rewardPeriodMonthCount ?? 3,
-                anchorDate: changes.rewardPeriodAnchorDate,
-                monthlyMinimumSpend: changes.rewardPeriodMonthlyMinimum ?? 0,
-                minimumScope: changes.rewardPeriodMinimumScope ?? 'each_month',
-              }
-            : undefined,
+          rewardPeriod: buildRewardPeriodFromEditState(changes),
           promotionalPeriod: changes.rewardPeriodEnabled
             ? undefined
             : changes.promotionalPeriodEnabled && changes.promotionalPeriodEnd

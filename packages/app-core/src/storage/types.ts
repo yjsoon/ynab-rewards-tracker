@@ -116,10 +116,14 @@ export interface CardSpendingTier {
  */
 export type RewardPeriodMinimumScope = "each_month" | "whole_period";
 
+/** Repeating cycles from the anchor, or a single dated window. */
+export type RewardPeriodKind = "repeating" | "one_off";
+
 /**
- * A repeating reward period made up of anchored month-long windows. The
- * card-wide minimum either applies to each month or to the whole period;
- * configured subcategory maximums are pooled across the complete window.
+ * A reward period made up of anchored month-long windows. Omit `endDate`
+ * to repeat; set it for a one-off window. The card-wide minimum either
+ * applies to each month or to the whole period; subcategory maximums are
+ * pooled across the complete window.
  */
 export interface CardRewardPeriod {
   monthCount: number;
@@ -127,6 +131,8 @@ export interface CardRewardPeriod {
   monthlyMinimumSpend: number;
   /** Omitted on legacy records; readers treat that as `each_month`. */
   minimumScope?: RewardPeriodMinimumScope;
+  /** Inclusive end date. When set, the window does not repeat. */
+  endDate?: string | null;
 }
 
 export interface CreditCard {

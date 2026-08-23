@@ -31,6 +31,7 @@ import { applyBlock, getBlockSize, getRewardRate } from './utils/reward-math';
 import {
   evaluateRewardPeriodQualification,
   getRewardPeriodMinimumScope,
+  isOneOffRewardPeriod,
 } from './utils/reward-period-qualification';
 import { resolveCardSpendingTier } from './utils/spending-tiers';
 
@@ -177,7 +178,13 @@ function calculateMonthlyQualification(
   const today = dateValue(new Date());
   const qualificationDateValue = period.asOf
     ?? (period.end < today ? period.end : today);
-  const qualificationDate = parseDateValue(qualificationDateValue);
+  const oneOffEnd = isOneOffRewardPeriod(card.rewardPeriod)
+    ? card.rewardPeriod?.endDate
+    : undefined;
+  const boundedQualificationDate = oneOffEnd && qualificationDateValue > oneOffEnd
+    ? oneOffEnd
+    : qualificationDateValue;
+  const qualificationDate = parseDateValue(boundedQualificationDate);
   if (
     !card.rewardPeriod ||
     card.rewardPeriod.monthlyMinimumSpend <= 0 ||

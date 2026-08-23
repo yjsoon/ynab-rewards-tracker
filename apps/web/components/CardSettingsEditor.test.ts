@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { CreditCard } from '@/lib/storage';
 
-import { computeCardFieldDiff } from './CardSettingsEditor';
+import { buildRewardPeriodFromEditState, computeCardFieldDiff } from './CardSettingsEditor';
 
 const card: CreditCard = {
   id: 'card-1',
@@ -49,5 +49,22 @@ describe('CardSettingsEditor reward-period fields', () => {
       rewardPeriodMonthlyMinimum: 800,
       rewardPeriodMinimumScope: 'whole_period',
     }).rewardPeriod).toBe(true);
+  });
+
+  it('persists a one-off window with a period pot', () => {
+    expect(buildRewardPeriodFromEditState({
+      rewardPeriodEnabled: true,
+      rewardPeriodKind: 'one_off',
+      rewardPeriodAnchorDate: '2026-01-01',
+      rewardPeriodEndDate: '2026-03-31',
+      rewardPeriodMonthlyMinimum: 1000,
+      rewardPeriodMinimumScope: 'whole_period',
+    })).toEqual({
+      monthCount: 3,
+      anchorDate: '2026-01-01',
+      endDate: '2026-03-31',
+      monthlyMinimumSpend: 1000,
+      minimumScope: 'whole_period',
+    });
   });
 });

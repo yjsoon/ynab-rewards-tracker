@@ -366,6 +366,42 @@ describe('SimpleRewardsCalculator.calculateCardRewards', () => {
     expect(calculation.rewardEarned).toBe(0);
   });
 
+  it('treats a one-off window as a single pot and returns to billing after it ends', () => {
+    const card: CreditCard = {
+      ...createMilesCardWithSubcategories(),
+      rewardPeriod: {
+        monthCount: 3,
+        anchorDate: '2026-01-01',
+        endDate: '2026-03-31',
+        monthlyMinimumSpend: 1000,
+        minimumScope: 'whole_period',
+      },
+    };
+    const pending = SimpleRewardsCalculator.calculateCardRewards(card, [
+      { ...createTransaction('jan', -400_000), date: '2026-01-10' },
+      { ...createTransaction('feb', -200_000), date: '2026-02-10' },
+    ], {
+      start: '2026-01-01',
+      end: '2026-03-31',
+      label: '2026-01-01 to 2026-03-31',
+      asOf: '2026-02-15',
+    });
+    expect(pending.qualificationStatus).toBe('pending');
+    expect(pending.rewardEarned).toBe(0);
+
+    const closed = SimpleRewardsCalculator.calculateCardRewards(card, [
+      { ...createTransaction('jan', -400_000), date: '2026-01-10' },
+      { ...createTransaction('feb', -200_000), date: '2026-02-10' },
+      { ...createTransaction('mar', -100_000), date: '2026-03-10' },
+    ], {
+      start: '2026-01-01',
+      end: '2026-03-31',
+      label: '2026-01-01 to 2026-03-31',
+      asOf: '2026-04-01',
+    });
+    expect(closed.qualificationStatus).toBe('failed');
+  });
+
   it('does not apply monthly qualification before the configured anchor', () => {
     const card: CreditCard = {
       ...createMilesCardWithSubcategories(),

@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import type { MonthlyQualificationBreakdown } from '../../storage/types';
 import {
   evaluateRewardPeriodQualification,
+  getRewardPeriodKind,
   getRewardPeriodMinimumScope,
+  isOneOffRewardPeriod,
   isWholePeriodMinimum,
 } from './reward-period-qualification';
 
@@ -18,6 +20,14 @@ describe('getRewardPeriodMinimumScope', () => {
     expect(getRewardPeriodMinimumScope(undefined)).toBe('each_month');
     expect(getRewardPeriodMinimumScope({})).toBe('each_month');
     expect(isWholePeriodMinimum({ minimumScope: 'whole_period' })).toBe(true);
+  });
+});
+
+describe('getRewardPeriodKind', () => {
+  it('treats a dated end as a one-off window', () => {
+    expect(getRewardPeriodKind(undefined)).toBe('repeating');
+    expect(isOneOffRewardPeriod({ endDate: '2026-03-31' })).toBe(true);
+    expect(isOneOffRewardPeriod({ endDate: null })).toBe(false);
   });
 });
 

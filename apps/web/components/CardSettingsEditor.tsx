@@ -22,7 +22,9 @@ import {
   Sparkles,
   Settings2
 } from 'lucide-react';
-import type { CardSpendingTier, CreditCard, RewardPeriodMinimumScope } from '@/lib/storage';
+import type { CardSpendingTier, CreditCard, RewardPeriodKind, RewardPeriodMinimumScope } from '@/lib/storage';
+import { getRewardPeriodKind } from '@ynab-counter/app-core/rewards-engine/utils/reward-period-qualification';
+import { countRewardPeriodMonths } from '@ynab-counter/app-core/rewards-engine/utils/periods';
 import { toIsoDateString } from '@/lib/date';
 import {
   formatMinimumSpendText,
@@ -44,6 +46,8 @@ export interface CardEditState {
   rewardPeriodAnchorDate?: string;
   rewardPeriodMonthlyMinimum?: number;
   rewardPeriodMinimumScope?: RewardPeriodMinimumScope;
+  rewardPeriodKind?: RewardPeriodKind;
+  rewardPeriodEndDate?: string;
   promotionalPeriodEnabled?: boolean;
   promotionalPeriodStart?: string;
   promotionalPeriodEnd?: string;
@@ -116,6 +120,48 @@ function generateSubcategoryId(): string {
   return `subcat-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function defaultOneOffEndDate(startIso: string): string {
+  const [year, month, day] = startIso.split('-').map(Number);
+  const end = new Date(year, month - 1 + 3, day);
+  end.setDate(end.getDate() - 1);
+  return toIsoDateString(end);
+}
+
+export function buildRewardPeriodFromEditState(state: {
+  rewardPeriodEnabled?: boolean;
+  rewardPeriodKind?: RewardPeriodKind;
+  rewardPeriodMonthCount?: number;
+  rewardPeriodAnchorDate?: string;
+  rewardPeriodEndDate?: string;
+  rewardPeriodMonthlyMinimum?: number;
+  rewardPeriodMinimumScope?: RewardPeriodMinimumScope;
+}): CreditCard['rewardPeriod'] {
+  if (!state.rewardPeriodEnabled || !state.rewardPeriodAnchorDate) {
+    return undefined;
+  }
+  const kind = state.rewardPeriodKind ?? 'repeating';
+  const monthlyMinimumSpend = state.rewardPeriodMonthlyMinimum ?? 0;
+  const minimumScope = state.rewardPeriodMinimumScope ?? 'each_month';
+  if (kind === 'one_off') {
+    if (!state.rewardPeriodEndDate || state.rewardPeriodEndDate <= state.rewardPeriodAnchorDate) {
+      return undefined;
+    }
+    return {
+      monthCount: countRewardPeriodMonths(state.rewardPeriodAnchorDate, state.rewardPeriodEndDate),
+      anchorDate: state.rewardPeriodAnchorDate,
+      endDate: state.rewardPeriodEndDate,
+      monthlyMinimumSpend,
+      minimumScope,
+    };
+  }
+  return {
+    monthCount: state.rewardPeriodMonthCount ?? 3,
+    anchorDate: state.rewardPeriodAnchorDate,
+    monthlyMinimumSpend,
+    minimumScope,
+  };
+}
+
 function buildDefaultSubcategory(
   flagColor: YnabFlagColor,
   rewardValue: number,
@@ -181,9 +227,11 @@ export function computeCardFieldDiff(
   const rewardPeriodMonthlyMinimum = state.rewardPeriodMonthlyMinimum
     ?? card.rewardPeriod?.monthlyMinimumSpend
     ?? 0;
+  const rewardPeriodKind = state.rewardPeriodKind ?? getRewardPeriodKind(card.rewardPeriod);
+  const rewardPeriodEndDate = state.rewardPeriodEndDate ?? card.rewardPeriod?.endDate ?? '';
   const rewardPeriodMinimumScope = state.rewardPeriodMinimumScope
     ?? card.rewardPeriod?.minimumScope
-    ?? 'each_month';
+    ?? (rewardPeriodKind === 'one_off' ? 'whole_period' : 'each_month');
   const subcategoriesEnabled = state.subcategoriesEnabled ?? card.subcategoriesEnabled ?? false;
   const baselineSubcategories = cloneSubcategories(card.subcategories);
   const stateSubcategories = cloneSubcategories(state.subcategories ?? card.subcategories);
@@ -214,7 +262,9 @@ export function computeCardFieldDiff(
       rewardPeriodMonthCount !== (card.rewardPeriod?.monthCount ?? 3) ||
       rewardPeriodAnchorDate !== (card.rewardPeriod?.anchorDate ?? '') ||
       rewardPeriodMonthlyMinimum !== (card.rewardPeriod?.monthlyMinimumSpend ?? 0) ||
-      rewardPeriodMinimumScope !== (card.rewardPeriod?.minimumScope ?? 'each_month'),
+      rewardPeriodMinimumScope !== (card.rewardPeriod?.minimumScope ?? 'each_month') ||
+      rewardPeriodKind !== getRewardPeriodKind(card.rewardPeriod) ||
+      rewardPeriodEndDate !== (card.rewardPeriod?.endDate ?? ''),
     promotionalPeriod:
       promotionalPeriodEnabled !== Boolean(card.promotionalPeriod) ||
       promotionalPeriodStart !== (card.promotionalPeriod?.startDate ?? '') ||
@@ -381,7 +431,9 @@ export function CardSettingsEditor({
     ?? 0;
   const rewardPeriodMinimumScope = state.rewardPeriodMinimumScope
     ?? card.rewardPeriod?.minimumScope
-    ?? 'each_month';
+    ?? (getRewardPeriodKind(card.rewardPeriod) === 'one_off' ? 'whole_period' : 'each_month');
+  const rewardPeriodKind = state.rewardPeriodKind ?? getRewardPeriodKind(card.rewardPeriod);
+  const rewardPeriodEndDate = state.rewardPeriodEndDate ?? card.rewardPeriod?.endDate ?? '';
   const promotionalPeriodEnabled = state.promotionalPeriodEnabled ?? Boolean(card.promotionalPeriod);
   const promotionalPeriodStart = state.promotionalPeriodStart ?? card.promotionalPeriod?.startDate ?? '';
   const promotionalPeriodEnd = state.promotionalPeriodEnd ?? card.promotionalPeriod?.endDate ?? '';
@@ -861,11 +913,15 @@ export function CardSettingsEditor({
               ? 'Pool selected caps and one card-wide minimum over the period'
               : 'Pool selected caps and qualify month by month'}
             value={rewardPeriodEnabled
-              ? rewardPeriodMonthlyMinimum > 0
-                ? rewardPeriodMinimumScope === 'whole_period'
-                  ? `${rewardPeriodMonthCount} months · $${rewardPeriodMonthlyMinimum.toLocaleString()} over period`
-                  : `${rewardPeriodMonthCount} months · $${rewardPeriodMonthlyMinimum.toLocaleString()}/month`
-                : `${rewardPeriodMonthCount} months`
+              ? rewardPeriodKind === 'one_off' && rewardPeriodAnchorDate && rewardPeriodEndDate
+                ? rewardPeriodMonthlyMinimum > 0
+                  ? `${rewardPeriodAnchorDate} to ${rewardPeriodEndDate} · $${rewardPeriodMonthlyMinimum.toLocaleString()}${rewardPeriodMinimumScope === 'whole_period' ? ' over period' : '/month'}`
+                  : `${rewardPeriodAnchorDate} to ${rewardPeriodEndDate}`
+                : rewardPeriodMonthlyMinimum > 0
+                  ? rewardPeriodMinimumScope === 'whole_period'
+                    ? `${rewardPeriodMonthCount} months · $${rewardPeriodMonthlyMinimum.toLocaleString()} over period`
+                    : `${rewardPeriodMonthCount} months · $${rewardPeriodMonthlyMinimum.toLocaleString()}/month`
+                  : `${rewardPeriodMonthCount} months`
               : 'Monthly'}
             icon={<CalendarClock className="h-4 w-4 text-muted-foreground" />}
             isDirty={fieldDirty.rewardPeriod}
@@ -881,7 +937,23 @@ export function CardSettingsEditor({
                   checked={rewardPeriodEnabled}
                   onCheckedChange={(checked) => {
                     onFieldChange('rewardPeriodEnabled', checked);
-                    if (checked && !rewardPeriodAnchorDate) {
+                    if (!checked) {
+                      return;
+                    }
+                    if (promotionalPeriodEnabled && promotionalPeriodEnd) {
+                      const start = promotionalPeriodStart
+                        || toIsoDateString(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+                      onFieldChange('rewardPeriodKind', 'one_off');
+                      onFieldChange('rewardPeriodAnchorDate', start);
+                      onFieldChange('rewardPeriodEndDate', promotionalPeriodEnd);
+                      onFieldChange('rewardPeriodMinimumScope', 'whole_period');
+                      if (minimumSpend && minimumSpend > 0 && rewardPeriodMonthlyMinimum <= 0) {
+                        onFieldChange('rewardPeriodMonthlyMinimum', minimumSpend);
+                      }
+                      onFieldChange('promotionalPeriodEnabled', false);
+                      return;
+                    }
+                    if (!rewardPeriodAnchorDate) {
                       const today = new Date();
                       onFieldChange(
                         'rewardPeriodAnchorDate',
@@ -895,31 +967,95 @@ export function CardSettingsEditor({
               {rewardPeriodEnabled && (
                 <>
                   <div className="space-y-1.5">
-                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">Months per period</Label>
-                    <Input
-                      aria-label="Months per reward period"
-                      type="number"
-                      min="2"
-                      max="24"
-                      value={rewardPeriodMonthCount}
-                      onChange={(event) => onFieldChange(
-                        'rewardPeriodMonthCount',
-                        Math.max(2, Math.min(24, Number(event.target.value) || 3)),
-                      )}
-                    />
+                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">Period type</Label>
+                    <Select
+                      value={rewardPeriodKind}
+                      onValueChange={(value: RewardPeriodKind) => {
+                        onFieldChange('rewardPeriodKind', value);
+                        if (value === 'one_off') {
+                          const start = rewardPeriodAnchorDate
+                            || toIsoDateString(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+                          if (!rewardPeriodAnchorDate) {
+                            onFieldChange('rewardPeriodAnchorDate', start);
+                          }
+                          if (!rewardPeriodEndDate) {
+                            onFieldChange('rewardPeriodEndDate', defaultOneOffEndDate(start));
+                          }
+                          if (!state.rewardPeriodMinimumScope && !card.rewardPeriod?.minimumScope) {
+                            onFieldChange('rewardPeriodMinimumScope', 'whole_period');
+                          }
+                        }
+                      }}
+                    >
+                      <SelectTrigger aria-label="Reward period type">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="repeating">Repeating</SelectItem>
+                        <SelectItem value="one_off">One-off</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">First period starts</Label>
-                    <Input
-                      aria-label="Reward period anchor date"
-                      type="date"
-                      value={rewardPeriodAnchorDate}
-                      onChange={(event) => onFieldChange('rewardPeriodAnchorDate', event.target.value)}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Periods repeat from this boundary. “Last two months” means the two completed anchored months before the current one.
-                    </p>
-                  </div>
+                  {rewardPeriodKind === 'repeating' ? (
+                    <>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs uppercase tracking-wide text-muted-foreground">Months per period</Label>
+                        <Input
+                          aria-label="Months per reward period"
+                          type="number"
+                          min="2"
+                          max="24"
+                          value={rewardPeriodMonthCount}
+                          onChange={(event) => onFieldChange(
+                            'rewardPeriodMonthCount',
+                            Math.max(2, Math.min(24, Number(event.target.value) || 3)),
+                          )}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs uppercase tracking-wide text-muted-foreground">First period starts</Label>
+                        <Input
+                          aria-label="Reward period anchor date"
+                          type="date"
+                          value={rewardPeriodAnchorDate}
+                          onChange={(event) => onFieldChange('rewardPeriodAnchorDate', event.target.value)}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Periods repeat from this boundary. “Last two months” means the two completed anchored months before the current one.
+                        </p>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs uppercase tracking-wide text-muted-foreground">Starts</Label>
+                        <Input
+                          aria-label="One-off reward period start date"
+                          type="date"
+                          value={rewardPeriodAnchorDate}
+                          onChange={(event) => {
+                            const nextStart = event.target.value;
+                            onFieldChange('rewardPeriodAnchorDate', nextStart);
+                            if (nextStart && (!rewardPeriodEndDate || rewardPeriodEndDate <= nextStart)) {
+                              onFieldChange('rewardPeriodEndDate', defaultOneOffEndDate(nextStart));
+                            }
+                          }}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs uppercase tracking-wide text-muted-foreground">Ends</Label>
+                        <Input
+                          aria-label="One-off reward period end date"
+                          type="date"
+                          value={rewardPeriodEndDate}
+                          onChange={(event) => onFieldChange('rewardPeriodEndDate', event.target.value)}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Same idea as a promotional window: one dated stretch, then the card returns to its billing cycle.
+                        </p>
+                      </div>
+                    </>
+                  )}
                   <div className="space-y-1.5">
                     <Label className="text-xs uppercase tracking-wide text-muted-foreground">Minimum applies</Label>
                     <Select
@@ -971,7 +1107,7 @@ export function CardSettingsEditor({
                   </p>
                   {promotionalPeriodEnabled && (
                     <p className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
-                      The reward period overrides the promotional period while enabled. Saving will remove the promotion; switch this off before saving to keep it.
+                      Saving this reward period will replace the promotional period. Use a one-off window if you only need a dated stretch.
                     </p>
                   )}
                 </>
@@ -982,8 +1118,8 @@ export function CardSettingsEditor({
           <SettingCapsule
             label="Promotional period"
             description={rewardPeriodEnabled
-              ? 'Overridden while the multi-month reward period is enabled'
-              : 'Override normal billing cycle with a fixed period'}
+              ? 'Overridden while the reward period is enabled'
+              : 'Dated override without a spend pot or pooled caps'}
             value={
               promotionalPeriodEnabled && promotionalPeriodEnd
                 ? promotionalPeriodStart
