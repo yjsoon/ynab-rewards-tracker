@@ -219,7 +219,7 @@ export function CardSummaryCompactContent({
           {heroVariant === "spent" && canToggleSpendView ? (
             <button
               type="button"
-              className="rounded-sm underline decoration-dotted underline-offset-4 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              className="normal-case rounded-sm underline decoration-dotted underline-offset-4 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               aria-label={showingCurrentMonthSpend
                 ? "Showing this month spend. Show full reward period spend"
                 : "Showing full reward period spend. Show this month spend"}
@@ -233,7 +233,9 @@ export function CardSummaryCompactContent({
             >
               {showingCurrentMonthSpend ? "This month" : "This period"}
             </button>
-          ) : heroVariant === "spent" ? "This period" : null}
+          ) : heroVariant === "spent" ? (
+            <span className="normal-case">This period</span>
+          ) : null}
         </span>
         <span
           className={cn("flex shrink-0 items-baseline gap-1", heroTone)}

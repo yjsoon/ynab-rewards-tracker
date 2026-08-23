@@ -436,12 +436,12 @@ export function CardTile({
               hitSlop={8}
               style={styles.heroLabelHit}
             >
-              <Caption1 color="secondary" style={[styles.heroLabel, styles.heroLabelToggle]}>
+              <Caption1 color="secondary" style={[styles.heroLabel, hero.variant === 'spent' && styles.heroLabelPeriod, styles.heroLabelToggle]}>
                 {heroLabel}
               </Caption1>
             </Pressable>
           ) : (
-            <Caption1 color="secondary" style={styles.heroLabel} accessible={false}>
+            <Caption1 color="secondary" style={[styles.heroLabel, hero.variant === 'spent' && styles.heroLabelPeriod]} accessible={false}>
               {heroLabel}
             </Caption1>
           )}
@@ -659,6 +659,10 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.6,
     fontWeight: '600',
+  },
+  heroLabelPeriod: {
+    textTransform: 'none',
+    letterSpacing: 0,
   },
   heroLabelHit: {
     minHeight: nativeMetrics.minimumTouchTarget,
