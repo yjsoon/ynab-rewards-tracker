@@ -316,6 +316,7 @@ export function AllCardsTab({ initialCardId }: AllCardsTabProps) {
       try {
         await autoBackup();
       } catch {
+        // Silent failure for backup - main save succeeded
       }
     } catch (error) {
       console.error('Failed to save changes:', error);
