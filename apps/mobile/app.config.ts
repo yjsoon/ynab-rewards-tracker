@@ -9,7 +9,9 @@ const createExpoConfig = ({ config }: ConfigContext): ExpoConfig => ({
   orientation: 'default',
   userInterfaceStyle: 'automatic',
   icon: './assets/icon.png',
-  platforms: ['ios', 'android'],
+  platforms: process.env.DASHBOARD_VISUAL === '1'
+    ? ['ios', 'android', 'web']
+    : ['ios', 'android'],
   plugins: [
     'expo-router',
     'expo-secure-store',

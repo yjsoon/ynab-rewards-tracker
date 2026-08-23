@@ -108,6 +108,9 @@ export const semanticColors = {
   destructive: platformColor('systemRed', '#D70015'),
   destructiveTint: dynamicColor('#FDE9E8', '#3B1718', '#FADDDC', '#4A1B1C'),
   capped: platformColor('systemRed', '#D70015'),
+  whisperPositive: dynamicColor('#022C22', '#D1FAE5', '#022C22', '#D1FAE5'),
+  whisperAttention: dynamicColor('#431407', '#FFEDD5', '#431407', '#FFEDD5'),
+  whisperDestructive: dynamicColor('#450A0A', '#FEE2E2', '#450A0A', '#FEE2E2'),
   neutralTint: platformColor('secondarySystemFill', '#78788028'),
   progressTrack: brandColors.progressTrack,
 

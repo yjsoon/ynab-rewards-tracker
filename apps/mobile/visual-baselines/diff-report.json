@@ -1,0 +1,11 @@
+[
+  {
+    "leftPath": "/workspace/apps/mobile/visual-baselines/web-featured-full.png",
+    "rightPath": "/workspace/apps/mobile/visual-baselines/ios-overview-full.png",
+    "outPath": "/workspace/apps/mobile/visual-baselines/diff-web-vs-ios.png",
+    "width": 390,
+    "height": 1322,
+    "mismatched": 64147,
+    "ratio": 0.1244
+  }
+]

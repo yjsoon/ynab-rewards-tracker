@@ -3,6 +3,7 @@ import {
   Pressable,
   StyleSheet,
   View,
+  type ColorValue,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
@@ -12,7 +13,9 @@ import { Caption1, Footnote, Headline, Title3 } from '@/components/ios';
 import type { CardFormatting } from '@/features/cards/presentation';
 import {
   attentionCopy,
+  daysLeftInPeriod,
   isPromotionalPeriodActive,
+  qualificationRow,
   statusPresentation,
 } from '@/features/cards/presentation';
 import { presentActionSheet } from './present-action-sheet';
@@ -75,6 +78,19 @@ function presentCardMenu(params: {
   });
 }
 
+function whisperColor(tone: TextColor): ColorValue {
+  if (tone === 'destructive') {
+    return semanticColors.whisperDestructive;
+  }
+  if (tone === 'attention') {
+    return semanticColors.whisperAttention;
+  }
+  if (tone === 'positive') {
+    return semanticColors.whisperPositive;
+  }
+  return semanticColors.label;
+}
+
 export interface CardTileProps {
   projection: CardDashboardProjection;
   formatting: CardFormatting;
@@ -133,15 +149,6 @@ export function CardTile({
   const monthlyQualifications = projection.calculation.monthlyQualifications ?? [];
   const calculationAsOf = projection.calculationPeriod.asOf ?? projection.calculationPeriod.end;
   const qualificationMonth = activeMonthlyQualification(monthlyQualifications, calculationAsOf);
-  const monthlyMinimumSpend = projection.calculation.monthlyMinimumSpend
-    ?? card.rewardPeriod?.monthlyMinimumSpend
-    ?? 0;
-  const hasMonthlyMinimum = monthlyMinimumSpend > 0;
-  const allMonthlyMinimumsMet = Boolean(
-    card.rewardPeriod &&
-    monthlyQualifications.length === card.rewardPeriod.monthCount &&
-    monthlyQualifications.every((month) => month.status === 'met'),
-  );
   const remainingToMaximum = hasMaximum ? Math.max(0, maximumTarget - displayedSpend) : 0;
   const exceededAmount = hasMaximum ? Math.max(0, displayedSpend - maximumTarget) : 0;
   const remainingToMinimum = hasMinimum ? projection.minimum.remaining ?? 0 : 0;
@@ -254,13 +261,18 @@ export function CardTile({
         ? `${formatting.currencyRounded(minimumTarget)} min`
         : showingCurrentMonthSpend ? 'This month' : 'This period';
 
-  const daysRemaining = projection.daysRemaining;
+  const qualification = qualificationRow(projection, formatting);
+  const daysRemaining = daysLeftInPeriod(
+    projection.period.end,
+    referenceDate ?? new Date(),
+  );
   const daysTone: TextColor = daysRemaining <= 1
     ? 'destructive'
     : daysRemaining <= 7
       ? 'attention'
       : 'tertiary';
   const daysLabel = `${daysRemaining}d`;
+  const heroWhisper = whisperColor(hero.tone);
 
   const blockCount = projection.blockInfo?.blocksEarned ?? null;
   const blockSize = projection.blockInfo?.sizes[0] ?? null;
@@ -303,21 +315,6 @@ export function CardTile({
       : nearCap
         ? { borderColor: semanticColors.attention, borderWidth: 1.5 }
         : { borderColor: semanticColors.separator, borderWidth: StyleSheet.hairlineWidth };
-
-  const qualificationCopy = !card.rewardPeriod || !hasMonthlyMinimum || !qualificationMonth
-    ? undefined
-    : projection.calculation.qualificationStatus === 'failed'
-      ? 'Period qualification failed'
-      : projection.calculation.qualificationStatus === 'met'
-        ? allMonthlyMinimumsMet
-          ? `All ${card.rewardPeriod.monthCount} monthly minimums met`
-          : `This month: ${formatting.currencyRounded(qualificationMonth.spend)} of ${formatting.currencyRounded(monthlyMinimumSpend)} · met`
-        : `This month: ${formatting.currencyRounded(qualificationMonth.spend)} of ${formatting.currencyRounded(monthlyMinimumSpend)}`;
-  const qualificationTone: TextColor = projection.calculation.qualificationStatus === 'failed'
-    ? 'destructive'
-    : projection.calculation.qualificationStatus === 'met'
-      ? 'positive'
-      : 'attention';
 
   const kebab = (
     <Pressable
@@ -376,7 +373,7 @@ export function CardTile({
     card.name,
     `${earnedDisplay} ${card.type === 'cashback' ? 'cashback' : 'miles'} earned`,
     hero.label,
-    qualificationCopy,
+    qualification?.label,
     `${daysRemaining} ${daysRemaining === 1 ? 'day' : 'days'} remaining`,
     intermediateCapReached
       ? 'current level capped; next tier can unlock more rewards'
@@ -421,7 +418,7 @@ export function CardTile({
                 tintColor={rewardChipColor}
                 style={styles.rewardIcon}
               />
-              <Footnote color={rewardChipTone} style={styles.rewardChipText}>
+              <Footnote style={[styles.rewardChipText, { color: rewardChipColor }]}>
                 {earnedDisplay}
               </Footnote>
             </View>
@@ -475,13 +472,20 @@ export function CardTile({
             ) : null}
             <Title3
               color={hero.tone}
-              style={[styles.heroNumber, hero.weight === 'medium' && styles.heroNumberMedium]}
+              style={[
+                styles.heroNumber,
+                hero.weight === 'medium' && styles.heroNumberMedium,
+                { color: heroWhisper },
+              ]}
             >
               {heroNumberText}
             </Title3>
             <Caption1
               color={hero.variant === 'spent' ? 'secondary' : hero.tone}
-              style={styles.heroSuffix}
+              style={[
+                styles.heroSuffix,
+                hero.variant !== 'spent' && { color: heroWhisper },
+              ]}
             >
               {hero.suffix}
             </Caption1>
@@ -524,9 +528,9 @@ export function CardTile({
           </Footnote>
         </View>
 
-        {qualificationCopy ? (
-          <Caption1 color={qualificationTone} style={styles.qualification} accessible={false}>
-            {qualificationCopy}
+        {qualification ? (
+          <Caption1 color={qualification.tone} style={styles.qualification} accessible={false}>
+            {qualification.label}
           </Caption1>
         ) : null}
 

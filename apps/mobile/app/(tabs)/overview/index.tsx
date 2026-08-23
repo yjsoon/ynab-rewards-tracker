@@ -1,6 +1,5 @@
 import React, { useMemo } from 'react';
 import {
-  ActivityIndicator,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -12,7 +11,7 @@ import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 
 import { useStorage } from '@/contexts/StorageContext';
-import { EmptyState, SyncBadge } from '@/components/native';
+import { EmptyState } from '@/components/native';
 import { Footnote } from '@/components/ios';
 import { createCardFormatting } from '@/features/cards/presentation';
 import { orderTypedCardProjections } from '@/features/cards/card-ordering';
@@ -20,12 +19,10 @@ import { useRewardsDashboard } from '@/features/cards/dashboard';
 import {
   CardGroupHeader,
   CardTile,
-  formatLastUpdated,
   StatusSummary,
   useDashboardPeriod,
   type HiddenCardEntry,
 } from '@/features/overview';
-import { presentActionSheet } from '@/features/overview/present-action-sheet';
 import { semanticColors } from '@/theme';
 import { interaction, nativeMetrics, radii, spacing } from '@/theme/tokens';
 import type { CardDashboardProjection } from '@ynab-counter/app-core/rewards-engine';
@@ -60,25 +57,6 @@ function dashboardColumnCount(width: number): number {
     return 2;
   }
   return 1;
-}
-
-function presentViewOptions(params: {
-  groupByType: boolean;
-  onToggleGroupByType: () => void;
-  onOpenCategories: () => void;
-}): void {
-  presentActionSheet({
-    title: 'View options',
-    actions: [
-      {
-        label: params.groupByType
-          ? "Don't group cards by type"
-          : 'Group cards by type',
-        run: params.onToggleGroupByType,
-      },
-      { label: 'Reward categories', run: params.onOpenCategories },
-    ],
-  });
 }
 
 function CardGroupSection({
@@ -184,15 +162,13 @@ export default function OverviewScreen() {
   );
 
   const connected = Boolean(state.pat && state.selectedBudget.id);
+  const needsSyncAttention = connected
+    && state.cards.length > 0
+    && (model.syncState === 'offline' || model.syncState === 'attention');
+  const syncActionLabel = model.canSync
+    ? `${model.syncLabel} — Retry`
+    : `${model.syncLabel} — Review settings`;
   const hasDashboardContent = dashboardCards.length > 0;
-  const lastUpdatedLabel = formatLastUpdated(model.lastUpdatedAt ?? null);
-  const refreshAccessibilityLabel = model.canSync
-    ? lastUpdatedLabel
-      ? `Refresh dashboard data, last updated ${lastUpdatedLabel}`
-      : 'Refresh dashboard data'
-    : lastUpdatedLabel
-      ? `Open YNAB connection settings, last updated ${lastUpdatedLabel}`
-      : 'Open YNAB connection settings';
 
   const openCard = (id: string) => {
     router.push({ pathname: '/card/[id]', params: { id } });
@@ -275,43 +251,6 @@ export default function OverviewScreen() {
     </View>
   );
 
-  const periodTrigger = (
-    <Pressable
-      onPress={() => router.push('/(tabs)/overview/period')}
-      accessibilityRole="button"
-      accessibilityLabel={`Dashboard period, ${period.isToday ? 'today' : period.asOfLabel}`}
-      accessibilityHint="Changes the dashboard period"
-      style={({ pressed }) => [styles.periodTrigger, pressed && styles.pressed]}
-    >
-      <SymbolView
-        name={period.isToday ? 'calendar' : 'clock.arrow.circlepath'}
-        size={16}
-        tintColor={semanticColors.action}
-        accessibilityElementsHidden
-      />
-      <Footnote color={period.isToday ? 'action' : 'primary'} style={styles.periodLabel} accessible={false}>
-        {period.triggerLabel}
-      </Footnote>
-      <SymbolView
-        name="chevron.down"
-        size={10}
-        tintColor={semanticColors.tertiaryLabel}
-        accessibilityElementsHidden
-      />
-    </Pressable>
-  );
-
-  const refreshDashboard = () => {
-    if (model.isRefreshing) {
-      return;
-    }
-    if (model.canSync) {
-      void model.refresh();
-      return;
-    }
-    router.push('/settings');
-  };
-
   return (
     <ScrollView
       style={styles.screen}
@@ -328,77 +267,44 @@ export default function OverviewScreen() {
         />
       )}
     >
-      <View style={styles.toolbar}>
-        {periodTrigger}
-        {connected ? (
-          <View style={styles.toolbarActions}>
-            <Pressable
-              onPress={refreshDashboard}
-              disabled={model.isRefreshing}
-              accessibilityRole="button"
-              accessibilityLabel={refreshAccessibilityLabel}
-              accessibilityHint={model.canSync
-                ? 'Refreshes rewards from YNAB'
-                : 'Opens YNAB connection settings'}
-              accessibilityState={{ disabled: model.isRefreshing, busy: model.isRefreshing }}
-              style={({ pressed }) => [
-                styles.iconButton,
-                model.isRefreshing && styles.iconDisabled,
-                pressed && !model.isRefreshing && styles.pressed,
-              ]}
-            >
-              {model.isRefreshing ? (
-                <ActivityIndicator size="small" color={semanticColors.action} />
-              ) : (
-                <SymbolView
-                  name="arrow.clockwise"
-                  size={16}
-                  tintColor={semanticColors.action}
-                  accessibilityElementsHidden
-                />
-              )}
-            </Pressable>
-            <Pressable
-              onPress={() => presentViewOptions({
-                groupByType,
-                onToggleGroupByType: () => {
-                  void actions.setSettings({ groupCardsByType: !groupByType });
-                },
-                onOpenCategories: () => router.push('/(tabs)/overview/categories'),
-              })}
-              accessibilityRole="button"
-              accessibilityLabel="View options"
-              accessibilityHint="Groups cards or opens reward categories"
-              style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
-            >
-              <SymbolView
-                name="slider.horizontal.3"
-                size={16}
-                tintColor={semanticColors.action}
-                accessibilityElementsHidden
-              />
-            </Pressable>
-          </View>
+      <View style={styles.topRow}>
+        <Pressable
+          onPress={() => router.push('/(tabs)/overview/period')}
+          accessibilityRole="button"
+          accessibilityLabel={`Dashboard period, ${period.isToday ? 'today' : period.asOfLabel}`}
+          accessibilityHint="Changes the dashboard period"
+          style={({ pressed }) => [styles.periodPill, pressed && styles.pressed]}
+        >
+          <SymbolView
+            name={period.isToday ? 'calendar' : 'clock.arrow.circlepath'}
+            size={13}
+            tintColor={semanticColors.action}
+            accessibilityElementsHidden
+          />
+          <Footnote color={period.isToday ? 'action' : 'primary'} style={styles.periodLabel} accessible={false}>
+            {period.triggerLabel}
+          </Footnote>
+          <SymbolView
+            name="chevron.down"
+            size={9}
+            tintColor={semanticColors.tertiaryLabel}
+            accessibilityElementsHidden
+          />
+        </Pressable>
+        {needsSyncAttention ? (
+          <Pressable
+            onPress={model.canSync ? model.refresh : () => router.push('/settings')}
+            accessibilityRole="button"
+            accessibilityLabel={syncActionLabel}
+            accessibilityHint={model.canSync
+              ? 'Retries syncing rewards from YNAB'
+              : 'Opens YNAB connection settings'}
+            style={({ pressed }) => [styles.syncAction, pressed && styles.pressed]}
+          >
+            <Footnote color="action">{syncActionLabel}</Footnote>
+          </Pressable>
         ) : null}
       </View>
-
-      {connected && (model.syncState === 'offline' || model.syncState === 'attention') ? (
-        <SyncBadge
-          state={model.syncState}
-          label={model.syncLabel}
-          onPress={model.canSync ? model.refresh : () => router.push('/settings')}
-          accessibilityHint={model.canSync
-            ? 'Retries the YNAB refresh'
-            : 'Opens YNAB connection settings'}
-        />
-      ) : null}
-
-      {connected && model.isRefreshing ? (
-        <View style={styles.refreshBanner}>
-          <ActivityIndicator size="small" color={semanticColors.systemBlue} />
-          <Footnote color="secondary">Refreshing YNAB data…</Footnote>
-        </View>
-      ) : null}
 
       {!connected ? (
         <EmptyState
@@ -431,7 +337,7 @@ export default function OverviewScreen() {
           />
         ) : (
           <EmptyState
-            title="No featured cards"
+            title="No cards to use right now"
             action={{
               label: 'View cards',
               onPress: () => router.push('/(tabs)/cards'),
@@ -464,7 +370,6 @@ export default function OverviewScreen() {
               >
                 {tileGrid(cashbackCards)}
               </CardGroupSection>
-
               <CardGroupSection
                 title="Miles Cards"
                 icon="chart.line.uptrend.xyaxis"
@@ -496,42 +401,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: nativeMetrics.screenGutter,
     paddingTop: spacing.md,
     paddingBottom: 120,
-    gap: spacing.xxl,
+    gap: spacing.xl,
   },
-  toolbar: {
+  topRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
-    justifyContent: 'space-between',
     gap: spacing.sm,
   },
-  toolbarActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    marginLeft: 'auto',
-  },
-  periodTrigger: {
+  periodPill: {
     minHeight: nativeMetrics.minimumTouchTarget,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    paddingHorizontal: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radii.pill,
+    backgroundColor: semanticColors.secondarySystemGroupedBackground,
   },
   periodLabel: {
     fontWeight: '600',
   },
-  iconButton: {
-    minWidth: nativeMetrics.minimumTouchTarget,
+  syncAction: {
     minHeight: nativeMetrics.minimumTouchTarget,
-    alignItems: 'center',
+    alignSelf: 'flex-start',
     justifyContent: 'center',
-  },
-  iconDisabled: {
-    opacity: interaction.disabledOpacity,
+    marginLeft: 'auto',
   },
   section: {
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   tileGrid: {
     gap: spacing.md,
@@ -542,17 +439,6 @@ const styles = StyleSheet.create({
   },
   tileFull: {
     alignSelf: 'stretch',
-  },
-  refreshBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.small,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: semanticColors.separator,
-    backgroundColor: semanticColors.secondarySystemGroupedBackground,
   },
   pressed: {
     opacity: interaction.pressedOpacity,

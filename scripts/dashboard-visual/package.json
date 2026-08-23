@@ -1,0 +1,10 @@
+{
+  "name": "dashboard-visual",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "pixelmatch": "^5.3.0",
+    "pngjs": "^7.0.0",
+    "puppeteer-core": "^24.15.0"
+  }
+}

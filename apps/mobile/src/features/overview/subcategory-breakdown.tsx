@@ -11,7 +11,7 @@ import { Caption1, Footnote, Headline } from '@/components/ios';
 import type { CardFormatting } from '@/features/cards/presentation';
 import { flagColor } from '@/features/cards/presentation';
 import { semanticColors } from '@/theme';
-import { interaction, radii, spacing } from '@/theme/tokens';
+import { interaction, nativeMetrics, radii, spacing } from '@/theme/tokens';
 import type { TextColor } from '@/components/ios/Typography';
 import type { RewardCategoryProjection } from '@ynab-counter/app-core/rewards-engine';
 
@@ -76,10 +76,6 @@ export interface CardSubcategoryBreakdownProps {
   onToggleExpanded: () => void;
 }
 
-/**
- * Per-card composition: a flag-coloured stacked bar plus expandable rows with
- * spend against each tier's cap. Mirrors the web summary compact breakdown.
- */
 export function CardSubcategoryBreakdown({
   categories,
   formatting,
@@ -110,7 +106,7 @@ export function CardSubcategoryBreakdown({
         style={({ pressed }) => [styles.header, pressed && styles.pressed]}
       >
         <Caption1 color="secondary" style={styles.eyebrow} accessible={false}>
-          Categories
+          Subcategories
         </Caption1>
         <SymbolView
           name="chevron.down"
@@ -180,7 +176,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   header: {
-    minHeight: 32,
+    minHeight: nativeMetrics.minimumTouchTarget,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',

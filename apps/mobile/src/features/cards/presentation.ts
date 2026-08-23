@@ -11,6 +11,13 @@ import type { CardStatusDescriptor } from '@/components/native';
 import { semanticColors } from '@/theme';
 import type { ColorValue } from 'react-native';
 
+export type { CardAttentionStatus, QualificationRowModel } from './attention';
+export {
+  cardAttentionStatus,
+  daysLeftInPeriod,
+  qualificationRow,
+} from './attention';
+
 export interface CardFormatting {
   currency: string;
   currencyCompact: (value: number) => string;
@@ -53,10 +60,6 @@ function formatLocalDay(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-/**
- * Whether a card's promotional window includes the reference day.
- * `startDate` may be null (open-ended start); only a parseable end date is required.
- */
 export function isPromotionalPeriodActive(
   card: Pick<CreditCard, 'promotionalPeriod'>,
   referenceDate: Date = new Date(),
