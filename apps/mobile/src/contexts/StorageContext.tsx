@@ -94,6 +94,7 @@ type StorageState = {
 type SyncOptions = {
   sinceDate?: string;
   skipTransactions?: boolean;
+  preserveConnectionOnInvalidToken?: boolean;
 };
 
 type VerifiedProviderMigration = {
@@ -658,7 +659,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         const message = error instanceof Error ? error.message : 'Failed to sync with YNAB';
         const failure = error instanceof Error ? error : new Error(message);
 
-        if (isConfirmedInvalidToken(error)) {
+        if (isConfirmedInvalidToken(error) && !options.preserveConnectionOnInvalidToken) {
           await clearInvalidConnection(message);
         } else {
           setState((prev) => ({
@@ -1080,11 +1081,20 @@ export function StorageProvider({ children }: { children: ReactNode }) {
           isSyncing: false,
           pending: undefined,
           hasPendingChanges: false,
+          calculations: [],
           cachedData: undefined,
           budgets: migration.budgets,
           accounts: migration.accounts.filter((account) => !account.closed),
           metadata: { accountsBudgetId: migration.expected.selectedBudgetId },
         }));
+        void performSync({ preserveConnectionOnInvalidToken: true }, {
+          pat: credential,
+          selectedBudgetId: migration.expected.selectedBudgetId,
+          trackedAccountIds: migration.expected.trackedAccountIds,
+        }, storageGeneration).catch(() => {
+          // Migration is already committed. This refresh is non-destructive;
+          // errors remain visible and cleared calculations prevent stale rewards.
+        });
       },
       clearPAT: async () => {
         invalidatePendingOperations();

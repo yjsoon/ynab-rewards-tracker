@@ -500,13 +500,32 @@ export class StorageService {
 
           const migrated = this.cloneStorage(currentStorage);
           migrated.ynab.provider = 'howmuch';
+          migrated.calculations = [];
           delete migrated.cachedData;
 
           // The credential is already durable. Treat this single payload write as
           // the cutover commit point so a later cancellation cannot roll it back
           // while leaving HowMuch persisted as the active provider.
           await AsyncStorageService.setString(STORAGE_KEY, JSON.stringify(migrated));
-          this.cache = migrated;
+
+          // Fold the migration into the latest cache object. Existing mutators
+          // may hold this object and have queued a save while the native write
+          // was pending; updating it in place prevents that save from restoring
+          // the pre-migration provider.
+          const latest = this.cache;
+          if (!latest) {
+            this.cache = migrated;
+            return;
+          }
+          const published = this.cloneStorage(latest);
+          published.ynab.provider = 'howmuch';
+          published.calculations = [];
+          delete published.cachedData;
+          Object.keys(latest).forEach((key) => {
+            Reflect.deleteProperty(latest, key);
+          });
+          Object.assign(latest, published);
+          this.cache = latest;
         });
       } catch (error) {
         if (previousApiKey === null) {

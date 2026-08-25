@@ -159,6 +159,40 @@ describe('budget provider credentials', () => {
     await expect(service.getBudgetProvider()).resolves.toBe('howmuch');
     await expect(service.getPAT()).resolves.toBe('howmuch-token:howmuch-api-key');
   });
+
+  it('prevents a queued cache save from restoring YNAB after the cutover', async () => {
+    const service = new StorageService();
+    await service.setPAT('ynab-pat');
+    await service.setSelectedBudget('budget-1', 'My budget');
+    let releaseMigrationWrite: (() => void) | undefined;
+    let markMigrationWriteStarted: (() => void) | undefined;
+    const migrationWriteStarted = new Promise<void>((resolve) => {
+      markMigrationWriteStarted = resolve;
+    });
+    const migrationWriteReleased = new Promise<void>((resolve) => {
+      releaseMigrationWrite = resolve;
+    });
+    mocks.setString.mockImplementationOnce(async (key: string, value: string) => {
+      markMigrationWriteStarted?.();
+      await migrationWriteReleased;
+      mocks.asyncValues.set(key, value);
+    });
+
+    const migration = service.migrateToHowMuch('howmuch-api-key', {
+      selectedBudgetId: 'budget-1',
+      trackedAccountIds: [],
+      linkedCardAccountIds: [],
+    });
+    await migrationWriteStarted;
+    const queuedCacheSave = service.setLastComputedAt('2026-08-25T00:00:00.000Z');
+    releaseMigrationWrite?.();
+    await Promise.all([migration, queuedCacheSave]);
+
+    const persisted = JSON.parse(mocks.asyncValues.get(STORAGE_KEY) ?? '{}');
+    expect(persisted.ynab.provider).toBe('howmuch');
+    expect(persisted.cachedData).toBeUndefined();
+    await expect(service.getPAT()).resolves.toBe('howmuch-token:howmuch-api-key');
+  });
 });
 
 describe('derived reward valuation', () => {

@@ -296,6 +296,7 @@ export class StorageService {
     }
     storage.ynab.provider = "howmuch";
     storage.ynab.howmuchToken = apiKey;
+    storage.calculations = [];
     delete storage.cachedData;
     this.setStorage(storage);
   }

@@ -273,8 +273,8 @@ export default function SettingsScreen() {
       navigation.setOptions({
         title: 'Budget connection',
         headerLargeTitle: false,
-        headerBackVisible: !isSetupMode,
-        gestureEnabled: !isSetupMode,
+        headerBackVisible: !isSetupMode && !isMigratingProvider,
+        gestureEnabled: !isSetupMode && !isMigratingProvider,
         headerRight: (isSetupMode || canDismiss)
           ? () => (
               <Button
@@ -284,7 +284,7 @@ export default function SettingsScreen() {
                 accessibilityLabel={doneButtonLabel}
                 accessibilityHint={isSetupMode ? "Complete setup" : "Close settings"}
                 style={styles.doneButton}
-                disabled={isSetupMode ? finishSetupDisabled : isApplyingChanges}
+                disabled={isMigratingProvider || (isSetupMode ? finishSetupDisabled : isApplyingChanges)}
               >
                 {isApplyingChanges || isConfirmingBudget ? (isSetupMode ? 'Finishing setup…' : 'Applying…') : doneButtonLabel}
               </Button>
@@ -297,8 +297,12 @@ export default function SettingsScreen() {
           headerRight: undefined,
         });
       };
-    }, [navigation, isSetupMode, canDismiss, handleNavBarDone, doneButtonLabel, finishSetupDisabled, isApplyingChanges, isConfirmingBudget])
+    }, [navigation, isSetupMode, isMigratingProvider, canDismiss, handleNavBarDone, doneButtonLabel, finishSetupDisabled, isApplyingChanges, isConfirmingBudget])
   );
+
+  useEffect(() => navigation.addListener('beforeRemove', (event) => {
+    if (isMigratingProvider) event.preventDefault();
+  }), [isMigratingProvider, navigation]);
 
   const statusMeta = connectionStatusCopy[state.connectionStatus];
 
@@ -661,7 +665,9 @@ export default function SettingsScreen() {
                         editable={!isMigratingProvider}
                       />
                       {migrationError ? (
-                        <Caption1 style={styles.errorText}>{migrationError}</Caption1>
+                        <View accessibilityRole="alert" accessibilityLiveRegion="assertive">
+                          <Caption1 style={styles.errorText}>{migrationError}</Caption1>
+                        </View>
                       ) : null}
                     </View>
                   </ListItem>
@@ -685,6 +691,10 @@ export default function SettingsScreen() {
                         size="medium"
                         onPress={handleMigrateToHowMuch}
                         disabled={isMigratingProvider || !migrationApiKey.trim()}
+                        accessibilityState={{
+                          disabled: isMigratingProvider || !migrationApiKey.trim(),
+                          busy: isMigratingProvider,
+                        }}
                       >
                         {isMigratingProvider ? 'Verifying…' : 'Verify and move'}
                       </Button>
