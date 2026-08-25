@@ -48,9 +48,6 @@ export function isYnabApiError(error: unknown): error is YnabApiError {
   return error instanceof YnabApiError;
 }
 
-/**
- * Read a user-facing message from a YNAB or HowMuch error body.
- */
 export function readYnabErrorMessage(body: unknown, fallback: string): string {
   if (typeof body === 'string') {
     const trimmed = body.trim();
