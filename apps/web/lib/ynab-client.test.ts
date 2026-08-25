@@ -159,6 +159,49 @@ describe("YnabClient cache bypass", () => {
     );
   });
 
+  it("surfaces HowMuch error.detail when a transaction update fails", async () => {
+    storage.setBudgetProvider("howmuch");
+    storage.setPAT("howmuch-api-key");
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      json: async () => ({
+        error: {
+          id: "400",
+          name: "bad_request",
+          detail: "Category not found",
+        },
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new YnabClient(storage.getPAT()!);
+
+    await expect(client.updateTransactionFlag("plan-1", "txn-1", "green")).rejects.toThrow(
+      "Category not found",
+    );
+  });
+
+  it("includes the HTTP status when the provider returns a non-JSON error body", async () => {
+    storage.setBudgetProvider("howmuch");
+    storage.setPAT("howmuch-api-key");
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 502,
+      json: async () => {
+        throw new Error("Unexpected token < in JSON");
+      },
+      text: async () => "",
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new YnabClient(storage.getPAT()!);
+
+    await expect(client.updateTransactionFlag("plan-1", "txn-1", "green")).rejects.toThrow(
+      "HTTP 502",
+    );
+  });
+
   it("skips the persisted account cache when bypassCache is set", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
