@@ -162,16 +162,17 @@ describe("YnabClient cache bypass", () => {
   it("surfaces HowMuch error.detail when a transaction update fails", async () => {
     storage.setBudgetProvider("howmuch");
     storage.setPAT("howmuch-api-key");
+    const errorBody = {
+      error: {
+        id: "400",
+        name: "bad_request",
+        detail: "Category not found",
+      },
+    };
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,
       status: 400,
-      json: async () => ({
-        error: {
-          id: "400",
-          name: "bad_request",
-          detail: "Category not found",
-        },
-      }),
+      text: async () => JSON.stringify(errorBody),
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -188,9 +189,6 @@ describe("YnabClient cache bypass", () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,
       status: 502,
-      json: async () => {
-        throw new Error("Unexpected token < in JSON");
-      },
       text: async () => "",
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -228,8 +226,7 @@ describe("YnabClient cache bypass", () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,
       status: 401,
-      json: async () => ({ message: "invalid token" }),
-      text: async () => "",
+      text: async () => JSON.stringify({ message: "invalid token" }),
     });
     vi.stubGlobal("fetch", fetchMock);
 
