@@ -18,7 +18,9 @@ import {
   createDashboardCacheKey,
   findDashboardCacheEntry,
   applyCardDeletion,
+  createProviderMigrationSnapshot,
   invalidateDerivedDataAfterSettingsImport,
+  providerMigrationSnapshotsMatch,
   validateHiddenUntilDate,
   normalizePeriod,
 } from '@ynab-counter/app-core/storage';
@@ -35,6 +37,7 @@ import type {
   DashboardTransactionsCacheEntry,
   DashboardTransactionsCachePayload,
   CachedTransaction,
+  ProviderMigrationSnapshot,
 } from '@ynab-counter/app-core/storage';
 import { resolveCloudSyncDirtyMarker } from '@ynab-counter/app-core/cloud-sync';
 import { revalueRewardCalculations } from '@ynab-counter/app-core/rewards-engine/utils/reward-calculation';
@@ -460,6 +463,60 @@ export class StorageService {
     delete storage.ynab.trackedAccountIds;
     delete storage.cachedData;
     await this.save(storage, expectedGeneration);
+  }
+
+  async migrateToHowMuch(
+    apiKey: string,
+    expected: ProviderMigrationSnapshot,
+    expectedGeneration = this.operationGeneration,
+  ): Promise<void> {
+    this.assertGeneration(expectedGeneration);
+    await this.load();
+    this.assertGeneration(expectedGeneration);
+
+    await this.enqueueCredentialOperation(async () => {
+      this.assertGeneration(expectedGeneration);
+      const previousApiKey = await SecureStore.getItemAsync(HOWMUCH_TOKEN_SECURE_STORE_KEY);
+      this.assertGeneration(expectedGeneration);
+      await SecureStore.setItemAsync(HOWMUCH_TOKEN_SECURE_STORE_KEY, apiKey);
+
+      try {
+        await this.enqueueWrite(async () => {
+          this.assertGeneration(expectedGeneration);
+          const currentStorage = this.cache;
+          if (!currentStorage) {
+            throw new StorageOperationCancelledError('Storage operation was cancelled.');
+          }
+          const current = createProviderMigrationSnapshot({
+            selectedBudgetId: currentStorage.ynab.selectedBudgetId ?? '',
+            trackedAccountIds: currentStorage.ynab.trackedAccountIds ?? [],
+            linkedCardAccountIds: currentStorage.cards
+              .map((card) => card.ynabAccountId)
+              .filter((accountId): accountId is string => Boolean(accountId)),
+          });
+          if (currentStorage.ynab.provider === 'howmuch' || !providerMigrationSnapshotsMatch(current, expected)) {
+            throw new Error('Rewards settings changed during verification. Review them and try again.');
+          }
+
+          const migrated = this.cloneStorage(currentStorage);
+          migrated.ynab.provider = 'howmuch';
+          delete migrated.cachedData;
+
+          // The credential is already durable. Treat this single payload write as
+          // the cutover commit point so a later cancellation cannot roll it back
+          // while leaving HowMuch persisted as the active provider.
+          await AsyncStorageService.setString(STORAGE_KEY, JSON.stringify(migrated));
+          this.cache = migrated;
+        });
+      } catch (error) {
+        if (previousApiKey === null) {
+          await SecureStore.deleteItemAsync(HOWMUCH_TOKEN_SECURE_STORE_KEY);
+        } else {
+          await SecureStore.setItemAsync(HOWMUCH_TOKEN_SECURE_STORE_KEY, previousApiKey);
+        }
+        throw error;
+      }
+    });
   }
 
   async setPAT(

@@ -18,7 +18,11 @@ import { useToast } from '@/contexts/ToastContext';
 import { Card, ListItem, Button, Footnote, SectionHeader, Separator, Headline, Caption1 } from '@/components/ios';
 import { semanticColors, semanticHex, withAlpha } from '@/theme/semanticColors';
 import { useStorage } from '@/contexts/StorageContext';
-import type { YnabAccountSummary, YnabBudgetSummary } from '@/lib/ynab-client';
+import { YnabClient, type YnabAccountSummary, type YnabBudgetSummary } from '@/lib/ynab-client';
+import {
+  createProviderMigrationSnapshot,
+  validateProviderMigration,
+} from '@ynab-counter/app-core/storage';
 
 const connectionStatusCopy: Record<
   'disconnected' | 'authenticating' | 'awaiting_budget' | 'connected' | 'error',
@@ -65,6 +69,10 @@ export default function SettingsScreen() {
   const [hasLocalAccountToggles, setHasLocalAccountToggles] = useState(false);
   const [activeBudgetSyncId, setActiveBudgetSyncId] = useState<string | undefined>();
   const [isSwitchingProvider, setIsSwitchingProvider] = useState(false);
+  const [showProviderMigration, setShowProviderMigration] = useState(false);
+  const [migrationApiKey, setMigrationApiKey] = useState('');
+  const [migrationError, setMigrationError] = useState<string | undefined>();
+  const [isMigratingProvider, setIsMigratingProvider] = useState(false);
 
   const isApplyingRef = useRef(false);
 
@@ -263,7 +271,7 @@ export default function SettingsScreen() {
   useFocusEffect(
     React.useCallback(() => {
       navigation.setOptions({
-        title: 'YNAB connection',
+        title: 'Budget connection',
         headerLargeTitle: false,
         headerBackVisible: !isSetupMode,
         gestureEnabled: !isSetupMode,
@@ -318,6 +326,11 @@ export default function SettingsScreen() {
     if (provider === state.provider) return;
     impact('light');
     setValidationError(undefined);
+    if (state.provider === 'ynab' && provider === 'howmuch' && state.pat && state.selectedBudget.id) {
+      setMigrationError(undefined);
+      setShowProviderMigration(true);
+      return;
+    }
     setSelectedBudgetId(undefined);
     setTrackedAccounts([]);
     setIsSwitchingProvider(true);
@@ -329,7 +342,78 @@ export default function SettingsScreen() {
     } finally {
       setIsSwitchingProvider(false);
     }
-  }, [actions, impact, notification, state.provider]);
+  }, [actions, impact, notification, state.pat, state.provider, state.selectedBudget.id]);
+
+  const handleMigrateToHowMuch = useCallback(async () => {
+    const apiKey = migrationApiKey.trim();
+    if (!apiKey) {
+      setMigrationError('Enter your HowMuch API key.');
+      return;
+    }
+    if (!state.selectedBudget.id) {
+      setMigrationError('Select a YNAB budget before migrating.');
+      return;
+    }
+    const sourceSnapshot = createProviderMigrationSnapshot({
+      selectedBudgetId: state.selectedBudget.id,
+      trackedAccountIds: state.trackedAccountIds,
+      linkedCardAccountIds: state.cards
+        .map((card) => card.ynabAccountId)
+        .filter((accountId): accountId is string => Boolean(accountId)),
+    });
+
+    impact('light');
+    setMigrationError(undefined);
+    setIsMigratingProvider(true);
+    try {
+      const client = new YnabClient(`howmuch-token:${apiKey}`);
+      const budgets = await client.getBudgets();
+      const matchingBudget = budgets.find((budget) => budget.id === state.selectedBudget.id);
+      if (!matchingBudget) {
+        setMigrationError('HowMuch does not contain your selected YNAB budget yet. Sync it to HowMuch, then try again.');
+        return;
+      }
+
+      const accounts = await client.getAccounts(matchingBudget.id, { includeClosed: true });
+      const validation = validateProviderMigration({
+        ...sourceSnapshot,
+        budgets,
+        accounts,
+      });
+      if (!validation.ok) {
+        const cardsByAccountId = new Map<string, string>();
+        state.cards.forEach((card) => {
+          if (card.ynabAccountId) cardsByAccountId.set(card.ynabAccountId, card.name);
+        });
+        const missingNames = validation.reason === 'accounts-not-found'
+          ? validation.missingAccountIds.map((id) => cardsByAccountId.get(id) ?? id)
+          : [];
+        setMigrationError(validation.reason === 'budget-not-found'
+          ? 'HowMuch does not contain your selected YNAB budget yet.'
+          : `HowMuch is missing ${missingNames.length === 1 ? 'this linked account' : 'these linked accounts'}: ${missingNames.join(', ')}.`);
+        return;
+      }
+
+      await actions.migrateToHowMuch(apiKey, {
+        expected: sourceSnapshot,
+        budgets,
+        accounts,
+      });
+      setMigrationApiKey('');
+      setShowProviderMigration(false);
+      setSelectedBudgetId(state.selectedBudget.id);
+      setTrackedAccounts(state.trackedAccountIds);
+      showToast({
+        variant: 'success',
+        message: `Moved to HowMuch. ${state.cards.length} reward card${state.cards.length === 1 ? '' : 's'} kept.`,
+      });
+    } catch (error) {
+      setMigrationError(`Could not verify HowMuch: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      notification('error');
+    } finally {
+      setIsMigratingProvider(false);
+    }
+  }, [actions, impact, migrationApiKey, notification, showToast, state.cards, state.selectedBudget.id, state.trackedAccountIds]);
 
   const handleDisconnect = useCallback(async () => {
     impact('medium');
@@ -445,11 +529,11 @@ export default function SettingsScreen() {
                       <TouchableOpacity
                         key={provider}
                         onPress={() => handleProviderChange(provider)}
-                        disabled={isSwitchingProvider}
+                        disabled={isSwitchingProvider || isMigratingProvider}
                         style={[
                           styles.providerOption,
                           state.provider === provider && styles.providerOptionSelected,
-                          isSwitchingProvider && styles.providerOptionDisabled,
+                          (isSwitchingProvider || isMigratingProvider) && styles.providerOptionDisabled,
                         ]}
                         accessibilityRole="radio"
                         accessibilityState={{ selected: state.provider === provider }}
@@ -550,6 +634,65 @@ export default function SettingsScreen() {
                 </ListItem>
               )}
             </Card>
+
+            {showProviderMigration ? (
+              <>
+                <SectionHeader>Move to HowMuch</SectionHeader>
+                <Card>
+                  <ListItem>
+                    <View style={styles.fieldGroup}>
+                      <Headline>Keep your existing reward cards</Headline>
+                      <Caption1 color="secondary">
+                        We’ll verify that HowMuch contains {state.selectedBudget.name || 'your selected budget'} and every linked account before changing anything.
+                      </Caption1>
+                    </View>
+                  </ListItem>
+                  <Separator inset={16} />
+                  <ListItem>
+                    <View style={styles.fieldGroup}>
+                      <Footnote color="secondary">HowMuch API key</Footnote>
+                      <TextInput
+                        placeholder="Enter your HowMuch API key"
+                        secureTextEntry
+                        value={migrationApiKey}
+                        onChangeText={setMigrationApiKey}
+                        style={styles.textInput}
+                        placeholderTextColor={semanticColors.tertiaryLabel}
+                        editable={!isMigratingProvider}
+                      />
+                      {migrationError ? (
+                        <Caption1 style={styles.errorText}>{migrationError}</Caption1>
+                      ) : null}
+                    </View>
+                  </ListItem>
+                  <Separator inset={16} />
+                  <ListItem>
+                    <View style={styles.migrationActions}>
+                      <Button
+                        variant="plain"
+                        size="medium"
+                        onPress={() => {
+                          setShowProviderMigration(false);
+                          setMigrationApiKey('');
+                          setMigrationError(undefined);
+                        }}
+                        disabled={isMigratingProvider}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        variant="filled"
+                        size="medium"
+                        onPress={handleMigrateToHowMuch}
+                        disabled={isMigratingProvider || !migrationApiKey.trim()}
+                      >
+                        {isMigratingProvider ? 'Verifying…' : 'Verify and move'}
+                      </Button>
+                    </View>
+                  </ListItem>
+                </Card>
+              </>
+            ) : null}
 
             {state.pat ? (
               <>
@@ -757,6 +900,13 @@ const styles = StyleSheet.create({
   },
   connectButton: {
     width: '100%',
+  },
+  migrationActions: {
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: 12,
   },
   accessoryRow: {
     flexDirection: 'row',

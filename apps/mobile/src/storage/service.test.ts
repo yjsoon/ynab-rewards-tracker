@@ -82,6 +82,83 @@ describe('budget provider credentials', () => {
     await expect(service.getPAT()).resolves.toBe('howmuch-token:secure-howmuch-key');
     expect(JSON.parse(await service.exportSettings()).ynab.howmuchToken).toBeUndefined();
   });
+
+  it('migrates credentials without clearing the selected budget or tracked accounts', async () => {
+    const service = new StorageService();
+    await service.setPAT('ynab-pat');
+    await service.setSelectedBudget('budget-1', 'My budget');
+    await service.setTrackedAccountIds(['account-1', 'account-2']);
+    await service.setCachedData({ transactions: [{ id: 'transaction-1' }] });
+
+    await service.migrateToHowMuch('howmuch-api-key', {
+      selectedBudgetId: 'budget-1',
+      trackedAccountIds: ['account-1', 'account-2'],
+      linkedCardAccountIds: [],
+    });
+
+    await expect(service.getBudgetProvider()).resolves.toBe('howmuch');
+    await expect(service.getPAT()).resolves.toBe('howmuch-token:howmuch-api-key');
+    await expect(service.getSelectedBudget()).resolves.toEqual({ id: 'budget-1', name: 'My budget' });
+    await expect(service.getTrackedAccountIds()).resolves.toEqual(['account-1', 'account-2']);
+    await expect(service.getCachedData()).resolves.toBeUndefined();
+    expect(mocks.secureValues.get(SECURE_PAT_KEY)).toBe('ynab-pat');
+  });
+
+  it('restores the previous HowMuch credential when the provider cutover cannot be persisted', async () => {
+    const service = new StorageService();
+    await service.setPAT('ynab-pat');
+    mocks.secureValues.set(SECURE_HOWMUCH_TOKEN_KEY, 'previous-howmuch-key');
+    mocks.setString.mockRejectedValueOnce(new Error('storage unavailable'));
+
+    await expect(service.migrateToHowMuch('new-howmuch-key', {
+      selectedBudgetId: '',
+      trackedAccountIds: [],
+      linkedCardAccountIds: [],
+    })).rejects.toThrow('storage unavailable');
+
+    await expect(service.getBudgetProvider()).resolves.toBe('ynab');
+    await expect(service.getPAT()).resolves.toBe('ynab-pat');
+    expect(mocks.secureValues.get(SECURE_HOWMUCH_TOKEN_KEY)).toBe('previous-howmuch-key');
+  });
+
+  it('rejects the cutover and restores credentials when mappings changed after verification', async () => {
+    const service = new StorageService();
+    await service.setPAT('ynab-pat');
+    await service.setSelectedBudget('budget-1', 'My budget');
+    await service.setTrackedAccountIds(['account-1']);
+    const verified = {
+      selectedBudgetId: 'budget-1',
+      trackedAccountIds: ['account-1'],
+      linkedCardAccountIds: [] as string[],
+    };
+    await service.setTrackedAccountIds(['account-1', 'account-2']);
+
+    await expect(service.migrateToHowMuch('howmuch-api-key', verified)).rejects.toThrow(
+      'Rewards settings changed during verification',
+    );
+    await expect(service.getBudgetProvider()).resolves.toBe('ynab');
+    await expect(service.getPAT()).resolves.toBe('ynab-pat');
+    expect(mocks.secureValues.has(SECURE_HOWMUCH_TOKEN_KEY)).toBe(false);
+  });
+
+  it('keeps the provider and credential consistent if the operation is invalidated at commit', async () => {
+    const service = new StorageService();
+    await service.setPAT('ynab-pat');
+    await service.setSelectedBudget('budget-1', 'My budget');
+    mocks.setString.mockImplementationOnce(async (key: string, value: string) => {
+      mocks.asyncValues.set(key, value);
+      service.invalidatePendingOperations();
+    });
+
+    await service.migrateToHowMuch('howmuch-api-key', {
+      selectedBudgetId: 'budget-1',
+      trackedAccountIds: [],
+      linkedCardAccountIds: [],
+    });
+
+    await expect(service.getBudgetProvider()).resolves.toBe('howmuch');
+    await expect(service.getPAT()).resolves.toBe('howmuch-token:howmuch-api-key');
+  });
 });
 
 describe('derived reward valuation', () => {

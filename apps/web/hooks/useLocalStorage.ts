@@ -6,6 +6,7 @@ import type {
   ThemeGroup,
   HiddenCard,
   StatementFormatterSettings,
+  ProviderMigrationSnapshot,
 } from '@/lib/storage';
 import { storage } from '@/lib/storage';
 import { useStorageContext } from '@/contexts/StorageContext';
@@ -111,6 +112,10 @@ export function useBudgetConnection() {
     storage.setBudgetProvider(provider);
     triggerRefresh();
   }, [triggerRefresh]);
+  const migrateToHowMuch = useCallback((apiKey: string, expected: ProviderMigrationSnapshot) => {
+    storage.migrateToHowMuch(apiKey, expected);
+    triggerRefresh();
+  }, [triggerRefresh]);
   const setSelectedBudget = useCallback((budgetId: string, budgetName: string) => {
     storage.setSelectedBudget(budgetId, budgetName);
     triggerRefresh();
@@ -128,6 +133,7 @@ export function useBudgetConnection() {
     ...value,
     setPAT,
     setBudgetProvider,
+    migrateToHowMuch,
     setSelectedBudget,
     setTrackedAccountIds,
     isAccountTracked,

@@ -71,6 +71,10 @@ import {
   Check,
 } from 'lucide-react';
 import { DashboardQuickStats } from '@/components/dashboard/DashboardQuickStats';
+import {
+  createProviderMigrationSnapshot,
+  validateProviderMigration,
+} from '@ynab-counter/app-core/storage';
 
 interface YnabBudget {
   id: string;
@@ -199,6 +203,7 @@ export default function SettingsPage() {
     setPAT,
     provider,
     setBudgetProvider,
+    migrateToHowMuch,
     selectedBudget,
     setSelectedBudget: persistSelectedBudget,
     trackedAccountIds,
@@ -254,6 +259,10 @@ export default function SettingsPage() {
   const [loadingBudgets, setLoadingBudgets] = useState(false);
   const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [showBudgetSelector, setShowBudgetSelector] = useState(false);
+  const [showProviderMigrationDialog, setShowProviderMigrationDialog] = useState(false);
+  const [migrationApiKey, setMigrationApiKey] = useState('');
+  const [migrationError, setMigrationError] = useState('');
+  const [migratingProvider, setMigratingProvider] = useState(false);
   const providerName = provider === 'howmuch' ? 'HowMuch' : 'YNAB';
 
   // Valuation settings
@@ -542,6 +551,66 @@ export default function SettingsPage() {
       setConnectionMessage(`Failed to replace token: ${getErrorMessage(error)}`);
     } finally {
       setLoadingBudgets(false);
+    }
+  }
+
+  async function handleMigrateToHowMuch() {
+    const apiKey = migrationApiKey.trim();
+    if (!apiKey) {
+      setMigrationError('Enter your HowMuch API key.');
+      return;
+    }
+    if (!selectedBudget.id) {
+      setMigrationError('Select a YNAB budget before migrating.');
+      return;
+    }
+    const sourceSnapshot = createProviderMigrationSnapshot({
+      selectedBudgetId: selectedBudget.id,
+      trackedAccountIds,
+      linkedCardAccountIds: cards
+        .map((card) => card.ynabAccountId)
+        .filter((accountId): accountId is string => Boolean(accountId)),
+    });
+
+    setMigratingProvider(true);
+    setMigrationError('');
+    try {
+      const client = new YnabClient(apiKey, 'howmuch');
+      const targetBudgets = await client.getBudgets({ bypassCache: true });
+      const matchingBudget = targetBudgets.find((budget) => budget.id === selectedBudget.id);
+      if (!matchingBudget) {
+        setMigrationError('HowMuch does not contain your selected YNAB budget yet. Sync it to HowMuch, then try again.');
+        return;
+      }
+
+      const targetAccounts = await client.getAccounts<YnabAccount>(matchingBudget.id, { bypassCache: true });
+      const validation = validateProviderMigration({
+        ...sourceSnapshot,
+        budgets: targetBudgets,
+        accounts: targetAccounts,
+      });
+
+      if (!validation.ok) {
+        const missingNames = validation.reason === 'accounts-not-found'
+          ? validation.missingAccountIds.map((id) => cardsByAccountId.get(id)?.name ?? id)
+          : [];
+        setMigrationError(validation.reason === 'budget-not-found'
+          ? 'HowMuch does not contain your selected YNAB budget yet.'
+          : `HowMuch is missing ${missingNames.length === 1 ? 'this linked account' : 'these linked accounts'}: ${missingNames.join(', ')}.`);
+        return;
+      }
+
+      migrateToHowMuch(apiKey, sourceSnapshot);
+      setBudgets(targetBudgets);
+      setAccounts(targetAccounts.filter((account) => !account.closed && account.on_budget));
+      setShowBudgetSelector(false);
+      setMigrationApiKey('');
+      setShowProviderMigrationDialog(false);
+      setConnectionMessage(`Moved to HowMuch. ${cards.length} reward card${cards.length === 1 ? '' : 's'} kept.`);
+    } catch (error) {
+      setMigrationError(`Could not verify HowMuch: ${getErrorMessage(error)}`);
+    } finally {
+      setMigratingProvider(false);
     }
   }
 
@@ -1175,6 +1244,11 @@ export default function SettingsPage() {
                 value={provider}
                 onValueChange={(value: 'ynab' | 'howmuch') => {
                   if (value === provider) return;
+                  if (provider === 'ynab' && value === 'howmuch' && pat && selectedBudget.id) {
+                    setMigrationError('');
+                    setShowProviderMigrationDialog(true);
+                    return;
+                  }
                   accountsRequestIdRef.current += 1;
                   budgetsRequestIdRef.current += 1;
                   hasRequestedBudgetsRef.current = false;
@@ -1819,6 +1893,68 @@ export default function SettingsPage() {
         onConfirm={confirmClearOrphanedCards}
         onCancel={() => setShowClearOrphanedDialog(false)}
       />
+
+      <Dialog
+        open={showProviderMigrationDialog}
+        onOpenChange={(open) => {
+          if (migratingProvider) return;
+          setShowProviderMigrationDialog(open);
+          if (!open) {
+            setMigrationApiKey('');
+            setMigrationError('');
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Move rewards tracking to HowMuch</DialogTitle>
+            <DialogDescription className="pt-2">
+              Rewards Tracker will first verify that HowMuch contains “{selectedBudget.name || 'your selected budget'}” and every account linked to your cards. Nothing changes if verification fails.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <label htmlFor="migration-howmuch-api-key" className="text-sm font-medium">
+              HowMuch API key
+            </label>
+            <input
+              id="migration-howmuch-api-key"
+              type="password"
+              autoComplete="off"
+              value={migrationApiKey}
+              onChange={(event) => setMigrationApiKey(event.target.value)}
+              placeholder="Paste your HowMuch API key"
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              disabled={migratingProvider}
+            />
+            <p className="text-sm text-muted-foreground">
+              Your cards, reward rules, and tracked-account choices will be kept. Transactions will be refreshed from HowMuch after the move.
+            </p>
+            {migrationError && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" aria-hidden="true" />
+                <AlertDescription>{migrationError}</AlertDescription>
+              </Alert>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowProviderMigrationDialog(false)}
+              disabled={migratingProvider}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleMigrateToHowMuch} disabled={migratingProvider || !migrationApiKey.trim()}>
+              {migratingProvider ? (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                  Verifying…
+                </>
+              ) : 'Verify and move'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Empty Sync Warning Dialog - Custom 3-button variant */}
       <Dialog open={showEmptySyncWarningDialog} onOpenChange={(open) => !open && setShowEmptySyncWarningDialog(false)}>

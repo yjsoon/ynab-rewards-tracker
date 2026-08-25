@@ -5,3 +5,4 @@ export * from './migrations';
 export * from './normalisers';
 export * from './helpers';
 export * from './dashboardCache';
+export * from './providerMigration';

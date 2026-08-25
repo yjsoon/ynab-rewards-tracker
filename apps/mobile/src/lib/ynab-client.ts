@@ -64,10 +64,12 @@ export class YnabClient {
     return this.coreClient.getBudgets();
   }
 
-  async getAccounts(budgetId: string): Promise<YnabAccountSummary[]> {
+  async getAccounts(
+    budgetId: string,
+    options: { includeClosed?: boolean } = {},
+  ): Promise<YnabAccountSummary[]> {
     const accounts = await this.coreClient.getAccounts(budgetId);
-    // Mobile filters out closed accounts by default
-    return accounts.filter((account) => !account.closed);
+    return options.includeClosed ? accounts : accounts.filter((account) => !account.closed);
   }
 
   async getTransactions(

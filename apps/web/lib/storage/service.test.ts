@@ -76,6 +76,84 @@ describe("StorageService clearAll", () => {
   });
 });
 
+describe("StorageService provider migration", () => {
+  beforeEach(() => {
+    Object.defineProperty(globalThis, "window", {
+      value: {
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      },
+      configurable: true,
+      writable: true,
+    });
+    Object.defineProperty(globalThis, "localStorage", {
+      value: createLocalStorageMock(),
+      configurable: true,
+      writable: true,
+    });
+  });
+
+  it("switches credentials while preserving the selected budget and tracked accounts", () => {
+    const service = new StorageService();
+    service.setPAT("ynab-pat");
+    service.setSelectedBudget("budget-1", "My budget");
+    service.setTrackedAccountIds(["account-1", "account-2"]);
+    service.setCachedData({ transactions: [{ id: "transaction-1" }] });
+
+    service.migrateToHowMuch("howmuch-api-key", {
+      selectedBudgetId: "budget-1",
+      trackedAccountIds: ["account-1", "account-2"],
+      linkedCardAccountIds: [],
+    });
+
+    expect(service.getBudgetProvider()).toBe("howmuch");
+    expect(service.getPAT()).toBe("howmuch-token:howmuch-api-key");
+    expect(service.getSelectedBudget()).toEqual({ id: "budget-1", name: "My budget" });
+    expect(service.getTrackedAccountIds()).toEqual(["account-1", "account-2"]);
+    expect(service.getCachedData()).toBeUndefined();
+    expect(readStoredYnab()).toMatchObject({ pat: "ynab-pat" });
+  });
+
+  it("leaves YNAB active when the cutover cannot be persisted", () => {
+    const service = new StorageService();
+    service.setPAT("ynab-pat");
+    service.setSelectedBudget("budget-1", "My budget");
+    const setItem = vi.spyOn(localStorage, "setItem").mockImplementation(() => {
+      throw new DOMException("Quota exceeded", "QuotaExceededError");
+    });
+
+    expect(() => service.migrateToHowMuch("howmuch-api-key", {
+      selectedBudgetId: "budget-1",
+      trackedAccountIds: [],
+      linkedCardAccountIds: [],
+    })).toThrow("Quota exceeded");
+    setItem.mockRestore();
+
+    expect(service.getBudgetProvider()).toBe("ynab");
+    expect(service.getPAT()).toBe("ynab-pat");
+    expect(service.getSelectedBudget()).toEqual({ id: "budget-1", name: "My budget" });
+  });
+
+  it("rejects the cutover if connection mappings changed after verification", () => {
+    const service = new StorageService();
+    service.setPAT("ynab-pat");
+    service.setSelectedBudget("budget-1", "My budget");
+    service.setTrackedAccountIds(["account-1"]);
+    const verified = {
+      selectedBudgetId: "budget-1",
+      trackedAccountIds: ["account-1"],
+      linkedCardAccountIds: [] as string[],
+    };
+    service.setTrackedAccountIds(["account-1", "account-2"]);
+
+    expect(() => service.migrateToHowMuch("howmuch-api-key", verified)).toThrow(
+      "Rewards settings changed during verification",
+    );
+    expect(service.getBudgetProvider()).toBe("ynab");
+    expect(service.getPAT()).toBe("ynab-pat");
+  });
+});
+
 describe("StorageService budget accounts cache", () => {
   beforeEach(() => {
     const localStorageMock = createLocalStorageMock();

@@ -38,6 +38,7 @@ import type {
   DashboardTransactionsCachePayload,
   DashboardTransactionsCacheEntry,
   Transaction,
+  ProviderMigrationSnapshot,
 } from '@ynab-counter/app-core/storage';
 import type {
   YnabAccountSummary,
@@ -95,12 +96,19 @@ type SyncOptions = {
   skipTransactions?: boolean;
 };
 
+type VerifiedProviderMigration = {
+  expected: ProviderMigrationSnapshot;
+  budgets: YnabBudgetSummary[];
+  accounts: YnabAccountSummary[];
+};
+
 type StorageActions = {
   refresh: (expectedGeneration?: number) => Promise<void>;
   invalidatePendingOperations: () => number;
   invalidateSyncRequests: () => void;
   setPAT: (pat: string) => Promise<boolean>;
   setBudgetProvider: (provider: BudgetProvider) => Promise<void>;
+  migrateToHowMuch: (apiKey: string, migration: VerifiedProviderMigration) => Promise<void>;
   clearPAT: () => Promise<void>;
   disconnect: () => Promise<void>;
   setSelectedBudget: (budgetId: string, budgetName: string) => Promise<void>;
@@ -243,6 +251,7 @@ const noopActions: StorageActions = {
   invalidateSyncRequests: () => {},
   setPAT: async () => true,
   setBudgetProvider: async () => {},
+  migrateToHowMuch: async () => {},
   clearPAT: async () => {},
   disconnect: async () => {},
   setSelectedBudget: async () => {},
@@ -896,6 +905,9 @@ export function StorageProvider({ children }: { children: ReactNode }) {
       setBudgetProvider: async (provider) => {
         setState((prev) => ({ ...withoutConnection(prev), provider }));
       },
+      migrateToHowMuch: async () => {
+        setState((prev) => ({ ...prev, provider: 'howmuch' }));
+      },
       clearPAT: async () => {
         setState(withoutConnection);
       },
@@ -1052,6 +1064,27 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         if (credential) {
           await initialiseConnection(credential, [], undefined, storageGeneration);
         }
+      },
+      migrateToHowMuch: async (apiKey, migration) => {
+        const credential = `howmuch-token:${apiKey}`;
+        const storageGeneration = invalidatePendingOperations();
+
+        await storage.migrateToHowMuch(apiKey, migration.expected, storageGeneration);
+        if (!storage.isGenerationCurrent(storageGeneration)) return;
+        setState((prev) => ({
+          ...prev,
+          provider: 'howmuch',
+          pat: credential,
+          connectionStatus: 'connected',
+          connectionError: undefined,
+          isSyncing: false,
+          pending: undefined,
+          hasPendingChanges: false,
+          cachedData: undefined,
+          budgets: migration.budgets,
+          accounts: migration.accounts.filter((account) => !account.closed),
+          metadata: { accountsBudgetId: migration.expected.selectedBudgetId },
+        }));
       },
       clearPAT: async () => {
         invalidatePendingOperations();

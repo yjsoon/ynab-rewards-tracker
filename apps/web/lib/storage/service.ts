@@ -22,7 +22,9 @@ import {
   createDashboardCacheKey,
   findDashboardCacheEntry,
   applyCardDeletion,
+  createProviderMigrationSnapshot,
   invalidateDerivedDataAfterSettingsImport,
+  providerMigrationSnapshotsMatch,
   validateHiddenUntilDate,
 } from "@ynab-counter/app-core/storage";
 import type {
@@ -42,6 +44,7 @@ import type {
   DashboardTransactionsCachePayload,
   CachedTransaction,
   StatementFormatterSettings,
+  ProviderMigrationSnapshot,
 } from "@ynab-counter/app-core/storage";
 import type {
   MutableCard,
@@ -275,6 +278,24 @@ export class StorageService {
     delete storage.ynab.selectedBudgetId;
     delete storage.ynab.selectedBudgetName;
     delete storage.ynab.trackedAccountIds;
+    delete storage.cachedData;
+    this.setStorage(storage);
+  }
+
+  migrateToHowMuch(apiKey: string, expected: ProviderMigrationSnapshot): void {
+    const storage = this.getStorage();
+    const current = createProviderMigrationSnapshot({
+      selectedBudgetId: storage.ynab.selectedBudgetId ?? "",
+      trackedAccountIds: storage.ynab.trackedAccountIds ?? [],
+      linkedCardAccountIds: storage.cards
+        .map((card) => card.ynabAccountId)
+        .filter((accountId): accountId is string => Boolean(accountId)),
+    });
+    if (storage.ynab.provider === "howmuch" || !providerMigrationSnapshotsMatch(current, expected)) {
+      throw new Error("Rewards settings changed during verification. Review them and try again.");
+    }
+    storage.ynab.provider = "howmuch";
+    storage.ynab.howmuchToken = apiKey;
     delete storage.cachedData;
     this.setStorage(storage);
   }
