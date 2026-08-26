@@ -195,7 +195,7 @@ export class YnabClient {
         }
 
         const raw = await response.text().catch(() => "");
-        throw new Error(readYnabErrorMessage(raw, raw || `HTTP ${response.status}`));
+        throw new Error(readYnabErrorMessage(raw, `HTTP ${response.status}`));
       }
 
       return response.json() as Promise<T>;

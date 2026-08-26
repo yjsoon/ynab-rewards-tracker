@@ -55,9 +55,9 @@ export function readYnabErrorMessage(body: unknown, fallback: string): string {
       return fallback;
     }
     try {
-      return readYnabErrorMessage(JSON.parse(trimmed) as unknown, trimmed);
+      return readYnabErrorMessage(JSON.parse(trimmed) as unknown, fallback);
     } catch {
-      return trimmed;
+      return fallback;
     }
   }
 

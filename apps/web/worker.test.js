@@ -42,4 +42,24 @@ describe("worker fetch routing", () => {
     expect(response.status).toBe(401);
     await expect(response.json()).resolves.toEqual({ error: "Missing authorization header" });
   });
+
+  it("still asks ASSETS for GET before falling through to OpenNext", async () => {
+    const assets = {
+      fetch: vi.fn().mockResolvedValue(new Response("not found", { status: 404 })),
+    };
+    const openNextWorker = {
+      fetch: vi.fn().mockResolvedValue(new Response("ok", { status: 200 })),
+    };
+    const fetch = createFetch({ openNextWorker });
+
+    const response = await fetch(
+      new Request("https://rewards.soon.sg/api/ynab/plans"),
+      { ASSETS: assets },
+      {},
+    );
+
+    expect(assets.fetch).toHaveBeenCalled();
+    expect(openNextWorker.fetch).toHaveBeenCalled();
+    expect(response.status).toBe(200);
+  });
 });
