@@ -25,9 +25,11 @@ describe('readYnabErrorMessage', () => {
     )).toBe('Plan not found');
   });
 
-  it('keeps non-JSON text', () => {
-    expect(readYnabErrorMessage('<html>Bad Gateway</html>', 'HTTP 502'))
-      .toBe('<html>Bad Gateway</html>');
+  it('does not return Cloudflare HTML as the message', () => {
+    expect(readYnabErrorMessage(
+      '<!DOCTYPE html><html><title>Worker threw exception</title></html>',
+      'HTTP 500',
+    )).toBe('HTTP 500');
   });
 
   it('falls back when the body is empty', () => {

@@ -183,6 +183,23 @@ describe("YnabClient cache bypass", () => {
     );
   });
 
+  it("does not dump Cloudflare HTML when a transaction update fails", async () => {
+    storage.setBudgetProvider("howmuch");
+    storage.setPAT("howmuch-api-key");
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      text: async () => "<!DOCTYPE html><html><title>Worker threw exception | rewards.soon.sg</title></html>",
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new YnabClient(storage.getPAT()!);
+
+    await expect(client.updateTransactionFlag("plan-1", "txn-1", "purple")).rejects.toThrow(
+      "HTTP 500",
+    );
+  });
+
   it("includes the HTTP status when the provider returns a non-JSON error body", async () => {
     storage.setBudgetProvider("howmuch");
     storage.setPAT("howmuch-api-key");
