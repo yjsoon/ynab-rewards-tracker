@@ -13,6 +13,7 @@ export {
   createYnabError,
   isYnabApiError,
   classifyHttpStatus,
+  readYnabErrorMessage,
 } from './errors';
 export type { YnabApiErrorCode } from './errors';
 

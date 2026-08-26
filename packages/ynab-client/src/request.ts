@@ -2,7 +2,7 @@
  * Core request helper for YNAB API with configurable timeout, retry, and backoff.
  */
 
-import { YnabApiError, createYnabError } from './errors';
+import { YnabApiError, createYnabError, readYnabErrorMessage } from './errors';
 import type { YnabApiErrorCode } from './errors';
 
 export const DEFAULT_BASE_URL = 'https://api.ynab.com/v1';
@@ -98,7 +98,7 @@ export async function requestJson<T>(options: RequestOptions): Promise<T> {
       // Handle other non-OK responses
       if (!response.ok) {
         const errorBody = await safeJsonParse(response);
-        const message = errorBody?.error?.detail ?? `HTTP ${response.status}`;
+        const message = readYnabErrorMessage(errorBody, `HTTP ${response.status}`);
         throw createYnabError('unknown_error', response.status, message);
       }
 

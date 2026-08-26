@@ -48,6 +48,43 @@ export function isYnabApiError(error: unknown): error is YnabApiError {
   return error instanceof YnabApiError;
 }
 
+export function readYnabErrorMessage(body: unknown, fallback: string): string {
+  if (typeof body === 'string') {
+    const trimmed = body.trim();
+    if (!trimmed) {
+      return fallback;
+    }
+    try {
+      return readYnabErrorMessage(JSON.parse(trimmed) as unknown, trimmed);
+    } catch {
+      return trimmed;
+    }
+  }
+
+  if (!isErrorRecord(body)) {
+    return fallback;
+  }
+
+  if (typeof body.message === 'string' && body.message.trim()) {
+    return body.message;
+  }
+
+  const nested = body.error;
+  if (typeof nested === 'string' && nested.trim()) {
+    return nested;
+  }
+
+  if (isErrorRecord(nested) && typeof nested.detail === 'string' && nested.detail.trim()) {
+    return nested.detail;
+  }
+
+  return fallback;
+}
+
+function isErrorRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
 /**
  * Classify an HTTP status code into a YnabApiErrorCode.
  */

@@ -32,13 +32,15 @@ export {
   YnabApiError,
   isYnabApiError,
   createYnabError,
+  readYnabErrorMessage,
 } from "@ynab-counter/ynab-client";
 export type { YnabApiErrorCode } from "@ynab-counter/ynab-client";
 
-import type {
-  YnabBudgetSummary,
-  YnabAccountSummary,
-  YnabPayee,
+import {
+  readYnabErrorMessage,
+  type YnabBudgetSummary,
+  type YnabAccountSummary,
+  type YnabPayee,
 } from "@ynab-counter/ynab-client";
 
 // Simple in-memory de-dupe and cache for GETs within a short window.
@@ -192,15 +194,8 @@ export class YnabClient {
           return doFetch(2);
         }
 
-        let message: string | null = null;
-        try {
-          const error = await response.json();
-          message = error?.message || error?.error || JSON.stringify(error);
-        } catch {
-          const text = await response.text().catch(() => "");
-          message = text || null;
-        }
-        throw new Error(message || "YNAB API error");
+        const raw = await response.text().catch(() => "");
+        throw new Error(readYnabErrorMessage(raw, raw || `HTTP ${response.status}`));
       }
 
       return response.json() as Promise<T>;
