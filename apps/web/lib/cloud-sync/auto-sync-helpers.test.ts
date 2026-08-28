@@ -138,6 +138,22 @@ describe('auto-sync helpers', () => {
     expect(action).toBe('in_sync');
   });
 
+  it('compares the same incomplete legacy payload identically', () => {
+    const legacy = {
+      ...basePayload,
+      cards: [{
+        id: 'card-1',
+        subcategories: [{ name: 'Dining', flagColor: 'red', rewardValue: 4, priority: 0, active: true }],
+      }],
+      themeGroups: [{ name: 'Dining', subcategories: [], cards: [] }],
+    };
+
+    expect(createComparableSnapshot(legacy)).toBe(createComparableSnapshot(legacy));
+    expect(createComparableSnapshot(legacy)).toBe(
+      createComparableSnapshot(JSON.parse(JSON.stringify(legacy))),
+    );
+  });
+
   it('keeps an intentional null distinct from an absent legacy field', () => {
     const localPayload = {
       ...basePayload,

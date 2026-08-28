@@ -78,20 +78,13 @@ export function useAutoBackup() {
           return;
         }
 
-        // Export current settings
-        const exportedSettings = storage.exportSettings();
-        const payload = JSON.parse(exportedSettings) as {
-          settings?: {
-            cloudSyncKeyId?: string;
-            cloudSyncLastSyncedAt?: string;
-            cloudSyncLocalChangedAt?: string;
-          };
-        };
+        const payload = JSON.parse(storage.exportSettings());
+        const deviceSettings = storage.getSettings();
 
         const keyId = await computeKeyId(normalised);
         const { ciphertext, iv } = await encryptJson(normalised, payload);
-        const expectedUpdatedAt = payload.settings?.cloudSyncKeyId === keyId
-          ? payload.settings.cloudSyncLastSyncedAt ?? null
+        const expectedUpdatedAt = deviceSettings.cloudSyncKeyId === keyId
+          ? deviceSettings.cloudSyncLastSyncedAt ?? null
           : null;
         const { updatedAt } = await uploadEncryptedSettings({
           keyId,
@@ -101,7 +94,7 @@ export function useAutoBackup() {
         });
 
         // Keep metadata aligned to avoid false local-vs-cloud drift checks.
-        completeCloudSyncSnapshot(payload.settings?.cloudSyncLocalChangedAt, {
+        completeCloudSyncSnapshot(deviceSettings.cloudSyncLocalChangedAt, {
           cloudSyncKeyId: keyId,
           cloudSyncLastSyncedAt: updatedAt,
         });

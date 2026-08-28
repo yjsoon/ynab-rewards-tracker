@@ -25,7 +25,7 @@ import {
 import { clearCloudSyncConflict } from '@/lib/cloud-sync/conflict-state';
 import { YnabClient } from '@/lib/ynab-client';
 import { toIsoDateString } from '@/lib/date';
-import type { CreditCard } from '@/lib/storage';
+import { storage, type CreditCard } from '@/lib/storage';
 import { validateYnabToken } from '@/lib/validation';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { Button } from '@/components/ui/button';
@@ -760,18 +760,13 @@ export default function SettingsPage() {
       throw new Error('Invalid sync code. Check the words and try again.');
     }
 
-    const payload = parseExportedSettings() as {
-      settings?: {
-        cloudSyncKeyId?: string;
-        cloudSyncLastSyncedAt?: string;
-        cloudSyncLocalChangedAt?: string;
-      };
-    };
+    const payload = parseExportedSettings();
+    const deviceSettings = storage.getSettings();
     const keyId = await computeKeyId(normalised);
     const { ciphertext, iv } = await encryptJson(normalised, payload);
     const expectedUpdatedAt = resolveUploadExpectedRevision({
-      localKeyId: payload.settings?.cloudSyncKeyId,
-      localLastSyncedAt: payload.settings?.cloudSyncLastSyncedAt,
+      localKeyId: deviceSettings.cloudSyncKeyId,
+      localLastSyncedAt: deviceSettings.cloudSyncLastSyncedAt,
       phraseKeyId: keyId,
       confirmedCloudUpdatedAt: options.confirmedCloudUpdatedAt,
     });
@@ -797,7 +792,7 @@ export default function SettingsPage() {
       settingsUpdate.cloudSyncMnemonic = normalised;
     }
 
-    completeCloudSyncSnapshot(payload.settings?.cloudSyncLocalChangedAt, settingsUpdate);
+    completeCloudSyncSnapshot(deviceSettings.cloudSyncLocalChangedAt, settingsUpdate);
     clearCloudSyncConflict();
     setCloudSyncPhrase(normalised);
     setGeneratedCloudPhrase(options.generated ? normalised : null);
@@ -1847,8 +1842,8 @@ export default function SettingsPage() {
             aria-label="Import settings file"
           />
           <p className="text-sm text-muted-foreground mt-3 space-y-1">
-            <span className="block">Export saves your cards and rules (but not your PAT). Import merges with existing data.</span>
-            <span className="block">API keys (YNAB PATs, formatter keys, etc.) are never included in exports.</span>
+            <span className="block">Export saves cards, rules, mappings and preferences as JSON. Import replaces that configuration.</span>
+            <span className="block">The YNAB token and other secrets stay on this browser. API keys are never included in the file.</span>
           </p>
         </CardContent>
       </Card>

@@ -9,6 +9,18 @@ import {
   type StorageData,
 } from '../storage';
 
+export const STORAGE_KEY_PORTABILITY = {
+  ynab: 'portable',
+  cards: 'portable',
+  rules: 'portable',
+  tagMappings: 'portable',
+  themeGroups: 'portable',
+  settings: 'portable',
+  hiddenCards: 'portable',
+  calculations: 'derived',
+  cachedData: 'device-local',
+} as const satisfies Record<keyof StorageData, 'portable' | 'derived' | 'device-local'>;
+
 /** Clear only the dirty marker belonging to the snapshot that just completed. */
 export function resolveCloudSyncDirtyMarker(
   snapshotMarker: string | undefined,
@@ -88,6 +100,7 @@ export function parseCloudSyncPayload(input: unknown): StorageData {
       ...defaults.ynab,
       ...(candidate.ynab ?? {}),
       pat: undefined,
+      howmuchToken: undefined,
     },
     cards: candidate.cards.map((card) => ({ ...card })),
     rules: candidate.rules.map((rule) => ({ ...rule })),

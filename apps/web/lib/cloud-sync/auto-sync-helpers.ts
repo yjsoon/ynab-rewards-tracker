@@ -102,7 +102,6 @@ export function createComparableSnapshot(payload: unknown): string {
 
   const root = cloned as Record<string, unknown>;
 
-  // Ignore volatile/transient fields when deciding whether data diverged.
   delete root.cachedData;
   delete root.calculations;
 
@@ -119,6 +118,7 @@ export function createComparableSnapshot(payload: unknown): string {
   if (root.ynab && typeof root.ynab === 'object') {
     const ynab = root.ynab as Record<string, unknown>;
     delete ynab.pat;
+    delete ynab.howmuchToken;
     delete ynab.lastSync;
   }
 

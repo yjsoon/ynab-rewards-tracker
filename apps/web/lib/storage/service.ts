@@ -1,6 +1,7 @@
 import type { YnabFlagColor } from "@ynab-counter/app-core/ynab";
 import {
   createCloudSyncPayload,
+  parseCloudSyncPayload,
   resolveCloudSyncDirtyMarker,
 } from "@ynab-counter/app-core/cloud-sync";
 
@@ -923,61 +924,39 @@ export class StorageService {
   }
 
   exportSettings(): string {
-    const storage = this.getStorage();
-    const formatterSettings = storage.settings?.statementFormatter
-      ? {
-          ...storage.settings.statementFormatter,
-          apiKeys: undefined,
-        }
-      : undefined;
-    const exportData = {
-      ...storage,
-      ynab: { ...storage.ynab, pat: undefined, howmuchToken: undefined },
-      settings: {
-        ...storage.settings,
-        cloudSyncMnemonic: undefined,
-        rememberCloudSyncCode: undefined,
-        autoSyncEnabled: undefined,
-        statementFormatter: formatterSettings,
-      },
-    };
-    return JSON.stringify(exportData, null, 2);
+    return JSON.stringify(createCloudSyncPayload(this.getStorage()), null, 2);
   }
 
   importSettings(jsonString: string): void {
     try {
-      const imported = JSON.parse(jsonString) as Partial<MutableStorageData>;
+      const imported = parseCloudSyncPayload(JSON.parse(jsonString));
       const storage = this.getStorage() as MutableStorageData;
 
-      // Fix #5: Preserve sensitive local-only data (more explicit checks with optional chaining)
       const localYnab = { ...storage.ynab };
-      const pat = localYnab.pat;
-      const cloudSyncMnemonic = storage.settings?.cloudSyncMnemonic;
-      const rememberCloudSyncCode = storage.settings?.rememberCloudSyncCode;
-      const autoSyncEnabled = storage.settings?.autoSyncEnabled;
+      const localSettings = { ...storage.settings };
       const formatterApiKeys = storage.settings?.statementFormatter?.apiKeys;
 
       Object.assign(storage, imported);
-      storage.ynab = this.mergeImportedYnabConnection(imported.ynab, localYnab, storage.cards);
+      storage.ynab = this.mergeImportedYnabConnection(imported.ynab, localYnab);
+      storage.settings = storage.settings && typeof storage.settings === "object"
+        ? { ...storage.settings }
+        : {};
 
-      // Restore PAT if it exists (non-empty string)
-      if (pat && typeof pat === "string") {
-        storage.ynab.pat = pat;
-      }
-
-      // Restore cloudSyncMnemonic if it exists and is a valid string
-      if (cloudSyncMnemonic && typeof cloudSyncMnemonic === "string") {
-        storage.settings.cloudSyncMnemonic = cloudSyncMnemonic;
-      }
-
-      // Restore rememberCloudSyncCode preference (boolean type check)
-      if (typeof rememberCloudSyncCode === "boolean") {
-        storage.settings.rememberCloudSyncCode = rememberCloudSyncCode;
-      }
-
-      // Preserve per-device auto-sync preference
-      if (typeof autoSyncEnabled === "boolean") {
-        storage.settings.autoSyncEnabled = autoSyncEnabled;
+      const localSettingKeys = [
+        "cloudSyncKeyId",
+        "cloudSyncLastSyncedAt",
+        "cloudSyncLocalChangedAt",
+        "cloudSyncMnemonic",
+        "rememberCloudSyncCode",
+        "autoSyncEnabled",
+      ] as const;
+      for (const key of localSettingKeys) {
+        const localValue = localSettings[key];
+        if (localValue === undefined) {
+          Reflect.deleteProperty(storage.settings, key);
+        } else {
+          Object.assign(storage.settings, { [key]: localValue });
+        }
       }
 
       if (formatterApiKeys) {
@@ -989,7 +968,7 @@ export class StorageService {
       pruneThemeGroups(storage);
       invalidateDerivedDataAfterSettingsImport(storage);
       this.setStorage(storage);
-    } catch (error) {
+    } catch {
       throw new Error("Invalid settings file");
     }
   }
@@ -997,50 +976,36 @@ export class StorageService {
   private mergeImportedYnabConnection(
     importedYnab: Partial<YnabConnection> | undefined,
     localYnab: YnabConnection,
-    cards: CreditCard[],
   ): YnabConnection {
     const imported =
       importedYnab && typeof importedYnab === "object" && !Array.isArray(importedYnab)
         ? importedYnab
         : {};
 
-    const next: YnabConnection = { ...localYnab, ...imported };
-    delete next.pat;
-    delete next.howmuchToken;
-    if (localYnab.pat) next.pat = localYnab.pat;
-    if (localYnab.howmuchToken) next.howmuchToken = localYnab.howmuchToken;
+    const next: YnabConnection = {};
+    if (localYnab.provider) {
+      next.provider = localYnab.provider;
+    }
+    if (localYnab.pat && typeof localYnab.pat === "string") {
+      next.pat = localYnab.pat;
+    }
+    if (localYnab.howmuchToken && typeof localYnab.howmuchToken === "string") {
+      next.howmuchToken = localYnab.howmuchToken;
+    }
+    if (typeof localYnab.lastSync === "string" && localYnab.lastSync) {
+      next.lastSync = localYnab.lastSync;
+    }
+
     const importedBudgetId = this.nonEmptyString(imported.selectedBudgetId);
     const importedBudgetName = this.nonEmptyString(imported.selectedBudgetName);
-    const localBudgetId = this.nonEmptyString(localYnab.selectedBudgetId);
-    const localBudgetName = this.nonEmptyString(localYnab.selectedBudgetName);
-
     if (importedBudgetId && importedBudgetName) {
       next.selectedBudgetId = importedBudgetId;
       next.selectedBudgetName = importedBudgetName;
-    } else if (localBudgetId && localBudgetName) {
-      next.selectedBudgetId = localBudgetId;
-      next.selectedBudgetName = localBudgetName;
-    } else {
-      delete next.selectedBudgetId;
-      delete next.selectedBudgetName;
     }
 
     const importedTrackedIds = this.normaliseAccountIds(imported.trackedAccountIds);
-    const cardAccountIds = this.normaliseAccountIds(
-      cards.map((card) => card.ynabAccountId),
-    );
-    const localTrackedIds = this.normaliseAccountIds(localYnab.trackedAccountIds);
-    const trackedAccountIds =
-      importedTrackedIds.length > 0
-        ? importedTrackedIds
-        : cardAccountIds.length > 0
-          ? cardAccountIds
-          : localTrackedIds;
-
-    if (trackedAccountIds.length > 0) {
-      next.trackedAccountIds = trackedAccountIds;
-    } else {
-      delete next.trackedAccountIds;
+    if (importedTrackedIds.length > 0) {
+      next.trackedAccountIds = importedTrackedIds;
     }
 
     return next;
