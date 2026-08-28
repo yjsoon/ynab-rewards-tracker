@@ -300,7 +300,7 @@ describe("StorageService importSettings", () => {
     };
   }
 
-  it("preserves the local PAT, budget, and tracked accounts when a cloud payload has no YNAB selection", () => {
+  it("keeps the local PAT when a portable snapshot has no YNAB selection", () => {
     const service = new StorageService();
 
     service.setPAT("local-pat");
@@ -311,10 +311,10 @@ describe("StorageService importSettings", () => {
 
     expect(service.getPAT()).toBe("local-pat");
     expect(service.getSelectedBudget()).toEqual({
-      id: "budget-local",
-      name: "Local Budget",
+      id: undefined,
+      name: undefined,
     });
-    expect(service.getTrackedAccountIds()).toEqual(["account-local"]);
+    expect(service.getTrackedAccountIds()).toEqual([]);
   });
 
   it("clears the device-local dashboard cache when the import omits it", () => {
@@ -356,9 +356,10 @@ describe("StorageService importSettings", () => {
     new StorageService().importSettings(JSON.stringify({ ...importedBase, ynab: {} }));
 
     expect(readStoredYnab().lastSync).toBe("2026-05-22T01:02:03.000Z");
+    expect(readStoredYnab().selectedBudgetId).toBeUndefined();
   });
 
-  it("ignores array-shaped imported YNAB settings", () => {
+  it("ignores array-shaped imported YNAB settings and still keeps the local PAT", () => {
     const service = new StorageService();
 
     service.setPAT("local-pat");
@@ -369,17 +370,18 @@ describe("StorageService importSettings", () => {
 
     expect(service.getPAT()).toBe("local-pat");
     expect(service.getSelectedBudget()).toEqual({
-      id: "budget-local",
-      name: "Local Budget",
+      id: undefined,
+      name: undefined,
     });
-    expect(service.getTrackedAccountIds()).toEqual(["account-local"]);
+    expect(service.getTrackedAccountIds()).toEqual([]);
   });
 
-  it("treats empty imported budget fields as absent and reconstructs tracked accounts from imported cards", () => {
+  it("treats an empty portable YNAB selection as a deletion instead of reconstructing from cards", () => {
     const service = new StorageService();
 
     service.setPAT("local-pat");
     service.setSelectedBudget("budget-local", "Local Budget");
+    service.setTrackedAccountIds(["account-local"]);
 
     service.importSettings(
       JSON.stringify({
@@ -395,10 +397,11 @@ describe("StorageService importSettings", () => {
 
     expect(service.getPAT()).toBe("local-pat");
     expect(service.getSelectedBudget()).toEqual({
-      id: "budget-local",
-      name: "Local Budget",
+      id: undefined,
+      name: undefined,
     });
-    expect(service.getTrackedAccountIds()).toEqual(["account-card"]);
+    expect(service.getTrackedAccountIds()).toEqual([]);
+    expect(service.getCards().map((card) => card.id)).toEqual(["card-account-card"]);
   });
 
   it("uses valid YNAB connection fields from the imported payload", () => {
@@ -495,6 +498,36 @@ describe("StorageService importSettings", () => {
     expect(service.getPAT()).toBe("local-pat");
     expect(service.getCachedData()).toBeUndefined();
     expect(service.getCalculations()).toEqual([]);
+  });
+
+  it("keeps Cloud Sync lineage and marks the imported payload dirty", () => {
+    const service = new StorageService();
+    service.updateSettings({
+      cloudSyncKeyId: "key-1",
+      cloudSyncLastSyncedAt: "2026-08-01T00:00:00.000Z",
+      cloudSyncMnemonic: "one two three",
+      rememberCloudSyncCode: true,
+      autoSyncEnabled: true,
+    });
+    service.saveCard(buildCard("account-local"));
+
+    service.importSettings(JSON.stringify({
+      ...importedBase,
+      ynab: {},
+      cards: [buildCard("account-imported")],
+      settings: { currency: "GBP" },
+    }));
+
+    expect(service.getSettings()).toMatchObject({
+      currency: "GBP",
+      cloudSyncKeyId: "key-1",
+      cloudSyncLastSyncedAt: "2026-08-01T00:00:00.000Z",
+      cloudSyncMnemonic: "one two three",
+      rememberCloudSyncCode: true,
+      autoSyncEnabled: true,
+    });
+    expect(service.getSettings().cloudSyncLocalChangedAt).toEqual(expect.any(String));
+    expect(service.getCards().map((card) => card.id)).toEqual(["card-account-imported"]);
   });
 
   it("replaces a missing portable field with parse defaults instead of keeping the local value", () => {

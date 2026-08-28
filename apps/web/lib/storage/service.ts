@@ -884,29 +884,30 @@ export class StorageService {
       const storage = this.getStorage() as MutableStorageData;
 
       const localYnab = { ...storage.ynab };
-      const pat = localYnab.pat;
-      const cloudSyncMnemonic = storage.settings?.cloudSyncMnemonic;
-      const rememberCloudSyncCode = storage.settings?.rememberCloudSyncCode;
-      const autoSyncEnabled = storage.settings?.autoSyncEnabled;
+      const localSettings = { ...storage.settings };
       const formatterApiKeys = storage.settings?.statementFormatter?.apiKeys;
 
       Object.assign(storage, imported);
-      storage.ynab = this.mergeImportedYnabConnection(imported.ynab, localYnab, storage.cards);
+      storage.ynab = this.mergeImportedYnabConnection(imported.ynab, localYnab);
+      storage.settings = storage.settings && typeof storage.settings === "object"
+        ? { ...storage.settings }
+        : {};
 
-      if (pat && typeof pat === "string") {
-        storage.ynab.pat = pat;
-      }
-
-      if (cloudSyncMnemonic && typeof cloudSyncMnemonic === "string") {
-        storage.settings.cloudSyncMnemonic = cloudSyncMnemonic;
-      }
-
-      if (typeof rememberCloudSyncCode === "boolean") {
-        storage.settings.rememberCloudSyncCode = rememberCloudSyncCode;
-      }
-
-      if (typeof autoSyncEnabled === "boolean") {
-        storage.settings.autoSyncEnabled = autoSyncEnabled;
+      const localSettingKeys = [
+        "cloudSyncKeyId",
+        "cloudSyncLastSyncedAt",
+        "cloudSyncLocalChangedAt",
+        "cloudSyncMnemonic",
+        "rememberCloudSyncCode",
+        "autoSyncEnabled",
+      ] as const;
+      for (const key of localSettingKeys) {
+        const localValue = localSettings[key];
+        if (localValue === undefined) {
+          Reflect.deleteProperty(storage.settings, key);
+        } else {
+          Object.assign(storage.settings, { [key]: localValue });
+        }
       }
 
       if (formatterApiKeys) {
@@ -926,46 +927,30 @@ export class StorageService {
   private mergeImportedYnabConnection(
     importedYnab: Partial<YnabConnection> | undefined,
     localYnab: YnabConnection,
-    cards: CreditCard[],
   ): YnabConnection {
     const imported =
       importedYnab && typeof importedYnab === "object" && !Array.isArray(importedYnab)
         ? importedYnab
         : {};
 
-    const next: YnabConnection = { ...localYnab, ...imported };
+    const next: YnabConnection = {};
+    if (localYnab.pat && typeof localYnab.pat === "string") {
+      next.pat = localYnab.pat;
+    }
+    if (typeof localYnab.lastSync === "string" && localYnab.lastSync) {
+      next.lastSync = localYnab.lastSync;
+    }
+
     const importedBudgetId = this.nonEmptyString(imported.selectedBudgetId);
     const importedBudgetName = this.nonEmptyString(imported.selectedBudgetName);
-    const localBudgetId = this.nonEmptyString(localYnab.selectedBudgetId);
-    const localBudgetName = this.nonEmptyString(localYnab.selectedBudgetName);
-
     if (importedBudgetId && importedBudgetName) {
       next.selectedBudgetId = importedBudgetId;
       next.selectedBudgetName = importedBudgetName;
-    } else if (localBudgetId && localBudgetName) {
-      next.selectedBudgetId = localBudgetId;
-      next.selectedBudgetName = localBudgetName;
-    } else {
-      delete next.selectedBudgetId;
-      delete next.selectedBudgetName;
     }
 
     const importedTrackedIds = this.normaliseAccountIds(imported.trackedAccountIds);
-    const cardAccountIds = this.normaliseAccountIds(
-      cards.map((card) => card.ynabAccountId),
-    );
-    const localTrackedIds = this.normaliseAccountIds(localYnab.trackedAccountIds);
-    const trackedAccountIds =
-      importedTrackedIds.length > 0
-        ? importedTrackedIds
-        : cardAccountIds.length > 0
-          ? cardAccountIds
-          : localTrackedIds;
-
-    if (trackedAccountIds.length > 0) {
-      next.trackedAccountIds = trackedAccountIds;
-    } else {
-      delete next.trackedAccountIds;
+    if (importedTrackedIds.length > 0) {
+      next.trackedAccountIds = importedTrackedIds;
     }
 
     return next;
