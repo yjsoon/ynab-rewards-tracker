@@ -89,12 +89,7 @@ export function useAutoSync() {
           console.error('Auto-sync: Failed to parse local export payload', error);
           return;
         }
-        const snapshotSettings = (
-          localPayload as { settings?: { cloudSyncLocalChangedAt?: unknown } }
-        ).settings;
-        const snapshotMarker = typeof snapshotSettings?.cloudSyncLocalChangedAt === 'string'
-          ? snapshotSettings.cloudSyncLocalChangedAt
-          : undefined;
+        const snapshotMarker = storage.getSettings().cloudSyncLocalChangedAt;
 
         const stored = await fetchEncryptedSettings(keyId);
 
@@ -146,13 +141,8 @@ export function useAutoSync() {
         }
 
         if (action === 'pull_cloud') {
-          const currentSnapshot = storage.exportSettings();
-          const currentPayload = JSON.parse(currentSnapshot) as {
-            settings?: { cloudSyncLocalChangedAt?: unknown };
-          };
-          const currentMarker = typeof currentPayload.settings?.cloudSyncLocalChangedAt === 'string'
-            ? currentPayload.settings.cloudSyncLocalChangedAt
-            : undefined;
+          const currentPayload = JSON.parse(storage.exportSettings());
+          const currentMarker = storage.getSettings().cloudSyncLocalChangedAt;
           if (!isLocalSnapshotCurrent({
             expectedPayload: localPayload,
             expectedDirtyMarker: snapshotMarker,

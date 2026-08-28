@@ -194,6 +194,69 @@ describe("StorageService dashboard transactions cache", () => {
   });
 });
 
+describe("StorageService exportSettings", () => {
+  beforeEach(() => {
+    Object.defineProperty(globalThis, "window", {
+      value: {
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      },
+      configurable: true,
+      writable: true,
+    });
+    Object.defineProperty(globalThis, "localStorage", {
+      value: createLocalStorageMock(),
+      configurable: true,
+      writable: true,
+    });
+  });
+
+  it("omits pat, cachedData, and non-empty calculations while including cards", () => {
+    const service = new StorageService();
+    service.setPAT("secret-pat");
+    service.saveCard({
+      id: "card-account-1",
+      name: "Rewards Card",
+      issuer: "Bank",
+      type: "cashback",
+      ynabAccountId: "account-1",
+      featured: true,
+      earningRate: 1,
+    });
+    service.setCachedData({ lastUpdated: "2026-08-01T00:00:00.000Z" });
+    service.saveCalculation({
+      cardId: "card-account-1",
+      ruleId: "rule-1",
+      period: "2026-07",
+      totalSpend: 10,
+      eligibleSpend: 10,
+      rewardEarned: 1,
+      rewardType: "cashback",
+      minimumMet: true,
+      maximumExceeded: false,
+      shouldStopUsing: false,
+    });
+
+    service.updateSettings({
+      cloudSyncKeyId: "key-1",
+      cloudSyncLastSyncedAt: "2026-08-01T00:00:00.000Z",
+    });
+
+    const exported = JSON.parse(service.exportSettings());
+
+    expect(exported.ynab?.pat).toBeUndefined();
+    expect("cachedData" in exported).toBe(false);
+    expect(exported.calculations).toEqual([]);
+    expect(exported.settings.cloudSyncKeyId).toBeUndefined();
+    expect(exported.settings.cloudSyncLastSyncedAt).toBeUndefined();
+    expect(exported.settings.cloudSyncLocalChangedAt).toBeUndefined();
+    expect(service.getSettings().cloudSyncLocalChangedAt).toEqual(expect.any(String));
+    expect(exported.cards).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "card-account-1" }),
+    ]));
+  });
+});
+
 describe("StorageService importSettings", () => {
   beforeEach(() => {
     const localStorageMock = createLocalStorageMock();
@@ -385,6 +448,65 @@ describe("StorageService importSettings", () => {
       name: "Cloud Budget",
     });
     expect(service.getTrackedAccountIds()).toEqual(["account-a", "account-b"]);
+  });
+
+  it("does not persist secrets or caches from an old fat dump and keeps the local PAT", () => {
+    const service = new StorageService();
+    service.setPAT("local-pat");
+    service.saveCalculation({
+      cardId: "card-local",
+      ruleId: "rule-local",
+      period: "2026-07",
+      totalSpend: 20,
+      eligibleSpend: 20,
+      rewardEarned: 2,
+      rewardType: "cashback",
+      minimumMet: true,
+      maximumExceeded: false,
+      shouldStopUsing: false,
+    });
+    service.setCachedData({ lastUpdated: "2026-08-01T00:00:00.000Z" });
+
+    service.importSettings(JSON.stringify({
+      ...importedBase,
+      ynab: { pat: "file-pat" },
+      calculations: [{
+        cardId: "card-file",
+        ruleId: "rule-file",
+        period: "2026-07",
+        totalSpend: 10,
+        eligibleSpend: 10,
+        rewardEarned: 1,
+        rewardType: "cashback",
+        minimumMet: true,
+        maximumExceeded: false,
+        shouldStopUsing: false,
+      }],
+      cachedData: {
+        lastUpdated: "2026-07-31T00:00:00.000Z",
+        transactions: [{ id: "txn-1" }],
+      },
+      settings: {
+        theme: "dark",
+        cloudSyncMnemonic: "file phrase",
+      },
+    }));
+
+    expect(service.getPAT()).toBe("local-pat");
+    expect(service.getCachedData()).toBeUndefined();
+    expect(service.getCalculations()).toEqual([]);
+  });
+
+  it("replaces a missing portable field with parse defaults instead of keeping the local value", () => {
+    const service = new StorageService();
+    service.hideCard("card-stale", "2027-12-31T00:00:00.000Z");
+    expect(service.getHiddenCards()).toEqual([
+      expect.objectContaining({ cardId: "card-stale" }),
+    ]);
+
+    service.importSettings(JSON.stringify({ ...importedBase, ynab: {} }));
+
+    expect(service.getHiddenCards()).toEqual([]);
   });
 
   it("removes stored budget fields when setSelectedBudget is called with an empty value", () => {

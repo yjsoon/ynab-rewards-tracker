@@ -1,3 +1,5 @@
+import { parseCloudSyncPayload } from '@ynab-counter/app-core/cloud-sync';
+
 export type AutoSyncAction =
   | 'skip'
   | 'seed_cloud'
@@ -91,7 +93,40 @@ function toStableObject(value: unknown): unknown {
   return value;
 }
 
+function isStorageShaped(payload: unknown): boolean {
+  if (!payload || typeof payload !== 'object') {
+    return false;
+  }
+
+  if (!('cards' in payload) || !Array.isArray(payload.cards)) {
+    return false;
+  }
+
+  if (!('rules' in payload) || !Array.isArray(payload.rules)) {
+    return false;
+  }
+
+  if (
+    !('settings' in payload)
+    || typeof payload.settings !== 'object'
+    || payload.settings === null
+    || Array.isArray(payload.settings)
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
 export function createComparableSnapshot(payload: unknown): string {
+  if (isStorageShaped(payload)) {
+    try {
+      return JSON.stringify(toStableObject(parseCloudSyncPayload(payload)));
+    } catch {
+      // Incomplete fixtures still need the delete-list compare.
+    }
+  }
+
   const cloned = payload && typeof payload === 'object'
     ? JSON.parse(JSON.stringify(payload)) as Record<string, unknown>
     : payload;
@@ -102,7 +137,6 @@ export function createComparableSnapshot(payload: unknown): string {
 
   const root = cloned as Record<string, unknown>;
 
-  // Ignore volatile/transient fields when deciding whether data diverged.
   delete root.cachedData;
   delete root.calculations;
 
