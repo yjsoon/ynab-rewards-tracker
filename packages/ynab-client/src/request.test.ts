@@ -129,6 +129,7 @@ describe('requestJson', () => {
       await expect(requestJson(defaultOptions)).rejects.toMatchObject({
         code: 'unknown_error',
         status: 500,
+        message: 'Server error',
       });
     });
 

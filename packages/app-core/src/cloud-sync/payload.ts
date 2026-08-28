@@ -100,6 +100,7 @@ export function parseCloudSyncPayload(input: unknown): StorageData {
       ...defaults.ynab,
       ...(candidate.ynab ?? {}),
       pat: undefined,
+      howmuchToken: undefined,
     },
     cards: candidate.cards.map((card) => ({ ...card })),
     rules: candidate.rules.map((rule) => ({ ...rule })),

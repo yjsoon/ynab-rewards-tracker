@@ -5,6 +5,11 @@ import { useId, useState } from 'react';
 import type { MouseEvent } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  hasSubcategoryMaximum,
+  subcategoryRowFillPercent,
+  uncappedSubcategoryScale,
+} from '@/lib/subcategory-row-fill';
 import { CurrencyAmount } from './CurrencyAmount';
 import { getFlagHex, getFlagBorderColor } from '@/lib/flag-colors';
 
@@ -63,6 +68,7 @@ export function SubcategoryBreakdownCompact({
 
   // Calculate percentages for stacked bar
   const totalSpend = breakdowns.reduce((sum, b) => sum + b.totalSpend, 0);
+  const uncappedScale = uncappedSubcategoryScale(breakdowns);
   const segments = sortedBreakdowns.map(b => {
     // Calculate cap progress percentage if there's a maximum spend limit
     const capProgress = b.maximumSpend && b.maximumSpend > 0
@@ -177,14 +183,14 @@ export function SubcategoryBreakdownCompact({
               const borderColor = getFlagBorderColor(entry.flagColor, 0.4);
               const flagColor = getFlagHex(entry.flagColor);
 
-              // Background fill width: with a cap, show cap progress. Without one, fall back to
-              // this row's share of total subcategory spend so the bar still conveys weight.
-              const hasCap = !!(entry.maximumSpend && entry.maximumSpend > 0);
-              const progress = hasCap
-                ? Math.min(100, (entry.totalSpend / (entry.maximumSpend as number)) * 100)
-                : totalSpend > 0
-                  ? (entry.totalSpend / totalSpend) * 100
-                  : 0;
+              // Capped rows show progress toward their maximum. Uncapped rows scale
+              // against the largest uncapped spend so the list uses the full row width.
+              const hasCap = hasSubcategoryMaximum(entry.maximumSpend);
+              const progress = subcategoryRowFillPercent({
+                totalSpend: entry.totalSpend,
+                maximumSpend: entry.maximumSpend,
+                uncappedScale,
+              });
 
               // Cap-pressure colour for the inline percentage text.
               let pctClass = 'text-muted-foreground';

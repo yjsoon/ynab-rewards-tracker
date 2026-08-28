@@ -118,6 +118,7 @@ export function createComparableSnapshot(payload: unknown): string {
   if (root.ynab && typeof root.ynab === 'object') {
     const ynab = root.ynab as Record<string, unknown>;
     delete ynab.pat;
+    delete ynab.howmuchToken;
     delete ynab.lastSync;
   }
 

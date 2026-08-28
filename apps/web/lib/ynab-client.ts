@@ -32,13 +32,15 @@ export {
   YnabApiError,
   isYnabApiError,
   createYnabError,
+  readYnabErrorMessage,
 } from "@ynab-counter/ynab-client";
 export type { YnabApiErrorCode } from "@ynab-counter/ynab-client";
 
-import type {
-  YnabBudgetSummary,
-  YnabAccountSummary,
-  YnabPayee,
+import {
+  readYnabErrorMessage,
+  type YnabBudgetSummary,
+  type YnabAccountSummary,
+  type YnabPayee,
 } from "@ynab-counter/ynab-client";
 
 // Simple in-memory de-dupe and cache for GETs within a short window.
@@ -50,6 +52,7 @@ const MAX_GET_CACHE_ENTRIES = 100;
 const ACCOUNTS_CACHE_TTL_MS = 5 * 60 * 1000;
 const FLAG_NAMES_CACHE_TTL_MS = 5 * 60 * 1000;
 const MAX_FLAG_NAMES_CACHE_ENTRIES = 50;
+const MAX_TRANSACTION_PAGES = 1000;
 let nextClientCacheScope = 0;
 const inflightFlagNames = new Map<
   string,
@@ -134,10 +137,17 @@ interface YnabRequestOptions extends RequestInit {
 
 export class YnabClient {
   private pat: string;
+  private proxyCredential: string;
+  private provider: "ynab" | "howmuch";
   private cacheScope: string;
 
-  constructor(pat: string) {
-    this.pat = pat;
+  constructor(pat: string, provider?: "ynab" | "howmuch") {
+    const hasHowMuchPrefix = pat.startsWith("howmuch-token:");
+    this.provider = provider ?? (hasHowMuchPrefix ? "howmuch" : "ynab");
+    this.pat = hasHowMuchPrefix ? pat.slice("howmuch-token:".length) : pat;
+    this.proxyCredential = this.provider === "howmuch"
+      ? `howmuch-token:${this.pat}`
+      : this.pat;
     this.cacheScope = `client-${++nextClientCacheScope}`;
   }
 
@@ -168,7 +178,7 @@ export class YnabClient {
       const response = await fetch(`/api/ynab/${path}`, {
         ...fetchOptions,
         headers: {
-          Authorization: `Bearer ${this.pat}`,
+          Authorization: `Bearer ${this.proxyCredential}`,
           "Content-Type": "application/json",
           ...fetchOptions.headers,
         },
@@ -184,15 +194,8 @@ export class YnabClient {
           return doFetch(2);
         }
 
-        let message: string | null = null;
-        try {
-          const error = await response.json();
-          message = error?.message || error?.error || JSON.stringify(error);
-        } catch {
-          const text = await response.text().catch(() => "");
-          message = text || null;
-        }
-        throw new Error(message || "YNAB API error");
+        const raw = await response.text().catch(() => "");
+        throw new Error(readYnabErrorMessage(raw, `HTTP ${response.status}`));
       }
 
       return response.json() as Promise<T>;
@@ -248,7 +251,7 @@ export class YnabClient {
       : storage.getBudgetAccountsCache<TAccount & BudgetAccountsCacheAccount>(
           budgetId,
           ACCOUNTS_CACHE_TTL_MS,
-          this.pat,
+          `${this.provider}:${this.pat}`,
         );
 
     if (cachedAccounts) {
@@ -263,7 +266,7 @@ export class YnabClient {
       budgetId,
       result.data.accounts as Array<TAccount & BudgetAccountsCacheAccount>,
       new Date().toISOString(),
-      this.pat,
+      `${this.provider}:${this.pat}`,
     );
     return result.data.accounts;
   }
@@ -380,14 +383,44 @@ export class YnabClient {
     if (options?.since_date) params.append("since_date", options.since_date);
     if (options?.type) params.append("type", options.type);
 
-    const query = params.toString() ? `?${params.toString()}` : "";
-    const result = await this.request<
-      YnabResponse<{ transactions: Transaction[] }>
-    >(`plans/${budgetId}/transactions${query}`, {
-      signal: options?.signal,
-      bypassCache: options?.bypassCache,
-    });
-    return result.data.transactions;
+    if (this.provider !== "howmuch") {
+      const query = params.toString() ? `?${params.toString()}` : "";
+      const result = await this.request<YnabResponse<{ transactions: Transaction[] }>>(
+        `plans/${budgetId}/transactions${query}`,
+        { signal: options?.signal, bypassCache: options?.bypassCache },
+      );
+      return result.data.transactions;
+    }
+
+    const transactions: Transaction[] = [];
+    let offset = 0;
+    let hasMore = true;
+    let pageCount = 0;
+    while (hasMore) {
+      if (++pageCount > MAX_TRANSACTION_PAGES) {
+        throw new Error("HowMuch transaction pagination exceeded the safety limit");
+      }
+      params.set("limit", "250");
+      params.set("offset", String(offset));
+      const result = await this.request<YnabResponse<{
+        transactions: Transaction[];
+        has_more?: boolean;
+        next_offset?: number | null;
+      }>>(`plans/${budgetId}/transactions?${params.toString()}`, {
+        signal: options?.signal,
+        bypassCache: options?.bypassCache,
+      });
+      transactions.push(...result.data.transactions);
+      const nextOffset = result.data.next_offset;
+      if (!result.data.has_more || nextOffset === null || nextOffset === undefined) {
+        hasMore = false;
+      } else if (!Number.isSafeInteger(nextOffset) || nextOffset <= offset) {
+        throw new Error("Invalid HowMuch transaction pagination cursor");
+      } else {
+        offset = nextOffset;
+      }
+    }
+    return transactions;
   }
 
   async getTransaction(
@@ -398,6 +431,21 @@ export class YnabClient {
     const result = await this.request<
       YnabResponse<{ transaction: Transaction }>
     >(`plans/${budgetId}/transactions/${transactionId}`, init);
+    return result.data.transaction;
+  }
+
+  async updateTransactionFlag(
+    budgetId: string,
+    transactionId: string,
+    flagColor: YnabFlagColor | null,
+  ) {
+    const result = await this.request<YnabResponse<{ transaction: Transaction }>>(
+      `plans/${budgetId}/transactions/${transactionId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ transaction: { flag_color: flagColor || null } }),
+      },
+    );
     return result.data.transaction;
   }
 

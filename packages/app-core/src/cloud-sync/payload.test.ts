@@ -25,6 +25,7 @@ describe('Cloud Sync payloads', () => {
   it('exclude credentials, recovery codes, API keys, transactions and calculations', () => {
     const data = createDefaultStorage();
     data.ynab.pat = 'secret-pat';
+    data.ynab.howmuchToken = 'secret-howmuch';
     data.ynab.selectedBudgetId = 'budget-1';
     data.settings = {
       currency: 'SGD',
@@ -43,6 +44,7 @@ describe('Cloud Sync payloads', () => {
 
     const payload = createCloudSyncPayload(data);
     expect(payload.ynab.pat).toBeUndefined();
+    expect(payload.ynab.howmuchToken).toBeUndefined();
     expect(payload.settings.cloudSyncMnemonic).toBeUndefined();
     expect(payload.settings.cloudSyncLocalChangedAt).toBeUndefined();
     expect(payload.settings.statementFormatter?.apiKeys).toBeUndefined();
@@ -53,7 +55,7 @@ describe('Cloud Sync payloads', () => {
 
   it('accepts a web-shaped snapshot but strips local-only fields on restore', () => {
     const parsed = parseCloudSyncPayload({
-      ynab: { pat: 'must-not-import', selectedBudgetId: 'budget-1', trackedAccountIds: ['a1'] },
+      ynab: { pat: 'must-not-import', howmuchToken: 'must-not-import', selectedBudgetId: 'budget-1', trackedAccountIds: ['a1'] },
       cards: [],
       rules: [],
       tagMappings: [],
@@ -70,6 +72,7 @@ describe('Cloud Sync payloads', () => {
     });
 
     expect(parsed.ynab.pat).toBeUndefined();
+    expect(parsed.ynab.howmuchToken).toBeUndefined();
     expect(parsed.ynab.selectedBudgetId).toBe('budget-1');
     expect(parsed.settings.currency).toBe('SGD');
     expect(parsed.settings.cloudSyncMnemonic).toBeUndefined();

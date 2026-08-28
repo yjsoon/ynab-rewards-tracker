@@ -2,9 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   CreditCard,
   AppSettings,
+  BudgetProvider,
   ThemeGroup,
   HiddenCard,
   StatementFormatterSettings,
+  ProviderMigrationSnapshot,
 } from '@/lib/storage';
 import { storage } from '@/lib/storage';
 import { useStorageContext } from '@/contexts/StorageContext';
@@ -15,6 +17,12 @@ const EMPTY_SELECTED_BUDGET: { id?: string; name?: string } = {};
 const EMPTY_THEME_GROUP_LIST: ThemeGroup[] = [];
 const EMPTY_HIDDEN_CARD_LIST: HiddenCard[] = [];
 const EMPTY_STATEMENT_FORMATTER_SETTINGS: StatementFormatterSettings = {};
+const EMPTY_BUDGET_CONNECTION = {
+  provider: 'ynab' as BudgetProvider,
+  pat: '',
+  selectedBudget: EMPTY_SELECTED_BUDGET,
+  trackedAccountIds: EMPTY_STRING_ARRAY,
+};
 const DEFAULT_SETTINGS: AppSettings = {
   theme: 'light',
   currency: '$',
@@ -72,6 +80,65 @@ export function useYnabPAT() {
   }, [triggerRefresh]);
 
   return { pat, setPAT, isLoading };
+}
+
+export function useBudgetProvider() {
+  const { value: provider, triggerRefresh, isLoading } = useStorageResource(
+    () => storage.getBudgetProvider(),
+    "ynab" as BudgetProvider,
+  );
+  const setBudgetProvider = useCallback((nextProvider: BudgetProvider) => {
+    storage.setBudgetProvider(nextProvider);
+    triggerRefresh();
+  }, [triggerRefresh]);
+
+  return { provider, setBudgetProvider, isLoading };
+}
+
+export function useBudgetConnection() {
+  const { value, triggerRefresh, isLoading } = useStorageResource(() => ({
+    provider: storage.getBudgetProvider(),
+    pat: storage.getPAT() || '',
+    selectedBudget: storage.getSelectedBudget(),
+    trackedAccountIds: storage.getTrackedAccountIds(),
+  }), EMPTY_BUDGET_CONNECTION);
+
+  const setPAT = useCallback((newPAT: string) => {
+    if (newPAT) storage.setPAT(newPAT);
+    else storage.clearPAT();
+    triggerRefresh();
+  }, [triggerRefresh]);
+  const setBudgetProvider = useCallback((provider: BudgetProvider) => {
+    storage.setBudgetProvider(provider);
+    triggerRefresh();
+  }, [triggerRefresh]);
+  const migrateToHowMuch = useCallback((apiKey: string, expected: ProviderMigrationSnapshot) => {
+    storage.migrateToHowMuch(apiKey, expected);
+    triggerRefresh();
+  }, [triggerRefresh]);
+  const setSelectedBudget = useCallback((budgetId: string, budgetName: string) => {
+    storage.setSelectedBudget(budgetId, budgetName);
+    triggerRefresh();
+  }, [triggerRefresh]);
+  const setTrackedAccountIds = useCallback((accountIds: string[]) => {
+    storage.setTrackedAccountIds(accountIds);
+    triggerRefresh();
+  }, [triggerRefresh]);
+  const isAccountTracked = useCallback(
+    (accountId: string) => value.trackedAccountIds.includes(accountId),
+    [value.trackedAccountIds],
+  );
+
+  return {
+    ...value,
+    setPAT,
+    setBudgetProvider,
+    migrateToHowMuch,
+    setSelectedBudget,
+    setTrackedAccountIds,
+    isAccountTracked,
+    isLoading,
+  };
 }
 
 export function useCreditCards() {

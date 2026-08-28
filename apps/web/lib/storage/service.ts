@@ -23,7 +23,9 @@ import {
   createDashboardCacheKey,
   findDashboardCacheEntry,
   applyCardDeletion,
+  createProviderMigrationSnapshot,
   invalidateDerivedDataAfterSettingsImport,
+  providerMigrationSnapshotsMatch,
   validateHiddenUntilDate,
 } from "@ynab-counter/app-core/storage";
 import type {
@@ -43,6 +45,7 @@ import type {
   DashboardTransactionsCachePayload,
   CachedTransaction,
   StatementFormatterSettings,
+  ProviderMigrationSnapshot,
 } from "@ynab-counter/app-core/storage";
 import type {
   MutableCard,
@@ -258,18 +261,64 @@ export class StorageService {
   }
 
   getPAT(): YnabConnection["pat"] {
-    return this.getStorage().ynab.pat;
+    const storage = this.getStorage();
+    return storage.ynab.provider === "howmuch"
+      ? storage.ynab.howmuchToken
+        ? `howmuch-token:${storage.ynab.howmuchToken}`
+        : undefined
+      : storage.ynab.pat;
+  }
+
+  getBudgetProvider(): NonNullable<YnabConnection["provider"]> {
+    return this.getStorage().ynab.provider === "howmuch" ? "howmuch" : "ynab";
+  }
+
+  setBudgetProvider(provider: NonNullable<YnabConnection["provider"]>): void {
+    const storage = this.getStorage();
+    storage.ynab.provider = provider;
+    delete storage.ynab.selectedBudgetId;
+    delete storage.ynab.selectedBudgetName;
+    delete storage.ynab.trackedAccountIds;
+    delete storage.cachedData;
+    this.setStorage(storage);
+  }
+
+  migrateToHowMuch(apiKey: string, expected: ProviderMigrationSnapshot): void {
+    const storage = this.getStorage();
+    const current = createProviderMigrationSnapshot({
+      selectedBudgetId: storage.ynab.selectedBudgetId ?? "",
+      trackedAccountIds: storage.ynab.trackedAccountIds ?? [],
+      linkedCardAccountIds: storage.cards
+        .map((card) => card.ynabAccountId)
+        .filter((accountId): accountId is string => Boolean(accountId)),
+    });
+    if (storage.ynab.provider === "howmuch" || !providerMigrationSnapshotsMatch(current, expected)) {
+      throw new Error("Rewards settings changed during verification. Review them and try again.");
+    }
+    storage.ynab.provider = "howmuch";
+    storage.ynab.howmuchToken = apiKey;
+    storage.calculations = [];
+    delete storage.cachedData;
+    this.setStorage(storage);
   }
 
   setPAT(pat: string): void {
     const storage = this.getStorage();
-    storage.ynab.pat = pat;
+    if (storage.ynab.provider === "howmuch") {
+      storage.ynab.howmuchToken = pat;
+    } else {
+      storage.ynab.pat = pat;
+    }
     this.setStorage(storage);
   }
 
   clearPAT(): void {
     const storage = this.getStorage();
-    delete storage.ynab.pat;
+    if (storage.ynab.provider === "howmuch") {
+      delete storage.ynab.howmuchToken;
+    } else {
+      delete storage.ynab.pat;
+    }
     this.setStorage(storage);
   }
 
@@ -934,8 +983,14 @@ export class StorageService {
         : {};
 
     const next: YnabConnection = {};
+    if (localYnab.provider) {
+      next.provider = localYnab.provider;
+    }
     if (localYnab.pat && typeof localYnab.pat === "string") {
       next.pat = localYnab.pat;
+    }
+    if (localYnab.howmuchToken && typeof localYnab.howmuchToken === "string") {
+      next.howmuchToken = localYnab.howmuchToken;
     }
     if (typeof localYnab.lastSync === "string" && localYnab.lastSync) {
       next.lastSync = localYnab.lastSync;

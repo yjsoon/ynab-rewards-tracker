@@ -1,6 +1,6 @@
 import React, { type ReactNode } from 'react';
 import { Pressable, Text, StyleSheet, View } from 'react-native';
-import type { StyleProp, ViewStyle, TextStyle } from 'react-native';
+import type { AccessibilityState, StyleProp, ViewStyle, TextStyle } from 'react-native';
 import { useHaptics } from '../../hooks/useHaptics';
 import { semanticColors } from '../../theme/semanticColors';
 import { interaction, nativeMetrics } from '../../theme/tokens';
@@ -18,6 +18,7 @@ interface ButtonProps {
   textStyle?: StyleProp<TextStyle>;
   accessibilityLabel?: string;
   accessibilityHint?: string;
+  accessibilityState?: AccessibilityState;
   testID?: string;
 }
 
@@ -35,6 +36,7 @@ export function Button({
   textStyle,
   accessibilityLabel,
   accessibilityHint,
+  accessibilityState,
   testID,
 }: ButtonProps) {
   const { impact } = useHaptics();
@@ -92,7 +94,7 @@ export function Button({
       accessibilityLabel={accessibilityLabel}
       accessibilityHint={accessibilityHint}
       accessibilityRole="button"
-      accessibilityState={{ disabled }}
+      accessibilityState={{ ...accessibilityState, disabled }}
       testID={testID}
       style={({ pressed }) => [
         styles.base,

@@ -3,21 +3,10 @@
 // behavior while still letting missing old chunks reach OpenNext's version router.
 import openNextWorker from "./.open-next/worker.js";
 import { handleCloudSyncRequest } from "./cloud-sync-authority.js";
+import { createWorkerFetch } from "./worker-fetch.js";
 
 export { CloudSyncBackup } from "./cloud-sync-authority.js";
 
 export default {
-  async fetch(request, env, ctx) {
-    const cloudSyncResponse = await handleCloudSyncRequest(request, env);
-    if (cloudSyncResponse) {
-      return cloudSyncResponse;
-    }
-
-    const assetResponse = await env.ASSETS.fetch(request);
-    if (assetResponse.status !== 404) {
-      return assetResponse;
-    }
-
-    return openNextWorker.fetch(request, env, ctx);
-  },
+  fetch: createWorkerFetch({ handleCloudSyncRequest, openNextWorker }),
 };

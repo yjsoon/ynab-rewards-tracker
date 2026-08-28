@@ -1,160 +1,59 @@
-import type { NextRequest} from 'next/server';
-import { NextResponse } from 'next/server';
+import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 
-const YNAB_API_BASE = 'https://api.ynab.com/v1';
+const YNAB_API_BASE = "https://api.ynab.com/v1";
+const HOWMUCH_API_BASE = "https://howmuch.soon.sg/v1";
 
-// Generic YNAB API proxy that handles any path
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { path: string[] } }
-) {
-  const authHeader = req.headers.get('authorization');
-  
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return NextResponse.json(
-      { error: 'Missing authorization header' },
-      { status: 401 }
-    );
+type RouteContext = { params: { path: string[] } };
+
+async function proxy(req: NextRequest, { params }: RouteContext) {
+  const authHeader = req.headers.get("authorization");
+  const credential = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : undefined;
+
+  if (!credential) {
+    return NextResponse.json({ error: "Missing authorization header" }, { status: 401 });
   }
 
-  const token = authHeader.substring(7);
-  const path = params.path.join('/');
-  const queryString = req.nextUrl.search;
-  
+  const provider = credential.startsWith("howmuch-token:") ? "howmuch" : "ynab";
+  const clientToken = provider === "howmuch"
+    ? credential.slice("howmuch-token:".length)
+    : credential;
+  if (!clientToken) {
+    return NextResponse.json({ error: "Missing access token" }, { status: 401 });
+  }
+
+  const baseUrl = provider === "howmuch" ? HOWMUCH_API_BASE : YNAB_API_BASE;
+  const url = `${baseUrl}/${params.path.join("/")}${req.nextUrl.search}`;
+
   try {
-    const url = `${YNAB_API_BASE}/${path}${queryString}`;
+    const method = req.method.toUpperCase();
+    const body = method === "GET" || method === "HEAD" ? undefined : await req.text();
     const response = await fetch(url, {
+      method,
       headers: {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/json',
+        Authorization: `Bearer ${clientToken}`,
+        Accept: "application/json",
+        ...(body ? { "Content-Type": req.headers.get("content-type") || "application/json" } : {}),
+      },
+      body,
+    });
+    const responseBody = await response.text();
+
+    return new NextResponse(responseBody, {
+      status: response.status,
+      headers: {
+        "Content-Type": response.headers.get("content-type") || "application/json",
+        ...(response.headers.get("retry-after")
+          ? { "Retry-After": response.headers.get("retry-after")! }
+          : {}),
       },
     });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      return NextResponse.json(
-        { 
-          error: 'YNAB API error', 
-          status: response.status,
-          message: errorText 
-        },
-        { status: response.status }
-      );
-    }
-
-    const data = await response.json();
-    return NextResponse.json(data);
   } catch (error) {
-    console.error('Proxy error:', error);
-    return NextResponse.json(
-      { error: 'Failed to proxy request' },
-      { status: 500 }
-    );
+    console.error(`${provider} proxy error:`, error);
+    return NextResponse.json({ error: "Failed to proxy request" }, { status: 502 });
   }
 }
 
-// Support POST for creating/updating
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { path: string[] } }
-) {
-  const authHeader = req.headers.get('authorization');
-
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return NextResponse.json(
-      { error: 'Missing authorization header' },
-      { status: 401 }
-    );
-  }
-
-  const token = authHeader.substring(7);
-  const path = params.path.join('/');
-  const body = await req.json();
-
-  try {
-    const url = `${YNAB_API_BASE}/${path}`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      return NextResponse.json(
-        {
-          error: 'YNAB API error',
-          status: response.status,
-          message: errorText
-        },
-        { status: response.status }
-      );
-    }
-
-    const data = await response.json();
-    return NextResponse.json(data);
-  } catch (error) {
-    console.error('Proxy error:', error);
-    return NextResponse.json(
-      { error: 'Failed to proxy request' },
-      { status: 500 }
-    );
-  }
-}
-
-// Support PATCH for updating
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: { path: string[] } }
-) {
-  const authHeader = req.headers.get('authorization');
-
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return NextResponse.json(
-      { error: 'Missing authorization header' },
-      { status: 401 }
-    );
-  }
-
-  const token = authHeader.substring(7);
-  const path = params.path.join('/');
-  const body = await req.json();
-
-  try {
-    const url = `${YNAB_API_BASE}/${path}`;
-    const response = await fetch(url, {
-      method: 'PATCH',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      return NextResponse.json(
-        {
-          error: 'YNAB API error',
-          status: response.status,
-          message: errorText
-        },
-        { status: response.status }
-      );
-    }
-
-    const data = await response.json();
-    return NextResponse.json(data);
-  } catch (error) {
-    console.error('Proxy error:', error);
-    return NextResponse.json(
-      { error: 'Failed to proxy request' },
-      { status: 500 }
-    );
-  }
-}
+export const GET = proxy;
+export const POST = proxy;
+export const PATCH = proxy;

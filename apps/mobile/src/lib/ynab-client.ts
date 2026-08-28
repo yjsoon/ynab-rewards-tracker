@@ -33,6 +33,8 @@ export { YnabApiError, isYnabApiError, createYnabError };
 // Mobile-specific configuration
 const DEFAULT_TIMEOUT_MS = 20_000;
 const MAX_RETRY_ATTEMPTS = 2;
+const HOWMUCH_TOKEN_PREFIX = 'howmuch-token:';
+const HOWMUCH_API_URL = 'https://howmuch.soon.sg/v1';
 
 type TransactionFilter = {
   sinceDate?: string;
@@ -47,10 +49,14 @@ export class YnabClient {
   private readonly coreClient: CoreYnabClient;
 
   constructor(pat: string) {
+    const usesHowMuch = pat.startsWith(HOWMUCH_TOKEN_PREFIX);
+    const accessToken = usesHowMuch ? pat.slice(HOWMUCH_TOKEN_PREFIX.length) : pat;
     this.coreClient = new CoreYnabClient({
-      accessToken: pat,
+      accessToken,
+      baseUrl: usesHowMuch ? HOWMUCH_API_URL : undefined,
       timeoutMs: DEFAULT_TIMEOUT_MS,
       maxRetries: MAX_RETRY_ATTEMPTS,
+      paginateTransactions: usesHowMuch,
     });
   }
 
@@ -58,10 +64,12 @@ export class YnabClient {
     return this.coreClient.getBudgets();
   }
 
-  async getAccounts(budgetId: string): Promise<YnabAccountSummary[]> {
+  async getAccounts(
+    budgetId: string,
+    options: { includeClosed?: boolean } = {},
+  ): Promise<YnabAccountSummary[]> {
     const accounts = await this.coreClient.getAccounts(budgetId);
-    // Mobile filters out closed accounts by default
-    return accounts.filter((account) => !account.closed);
+    return options.includeClosed ? accounts : accounts.filter((account) => !account.closed);
   }
 
   async getTransactions(

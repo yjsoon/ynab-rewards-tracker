@@ -43,6 +43,57 @@ describe('YnabClient', () => {
     );
   });
 
+  it('follows bounded transaction pages when pagination is enabled', async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ data: { transactions: [{ id: 'one' }], has_more: true, next_offset: 250 } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ data: { transactions: [{ id: 'two' }], has_more: false, next_offset: null } }),
+      });
+    const client = new YnabClient({
+      accessToken: 'test-token',
+      fetchImpl,
+      paginateTransactions: true,
+    });
+
+    const transactions = await client.getTransactions('plan-1', { sinceDate: '2026-01-01' });
+
+    expect(transactions.map((transaction) => transaction.id)).toEqual(['one', 'two']);
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      1,
+      'https://api.ynab.com/v1/plans/plan-1/transactions?since_date=2026-01-01&limit=250&offset=0',
+      expect.any(Object),
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      'https://api.ynab.com/v1/plans/plan-1/transactions?since_date=2026-01-01&limit=250&offset=250',
+      expect.any(Object),
+    );
+  });
+
+  it('rejects a non-progressing transaction pagination cursor', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: { transactions: [], has_more: true, next_offset: 0 } }),
+    });
+    const client = new YnabClient({
+      accessToken: 'test-token',
+      fetchImpl,
+      paginateTransactions: true,
+    });
+
+    await expect(client.getTransactions('plan-1')).rejects.toThrow(
+      'Invalid HowMuch transaction pagination cursor',
+    );
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
   it('accepts legacy budget response keys for compatibility', async () => {
     const fetchImpl = vi.fn().mockResolvedValue({
       ok: true,

@@ -27,6 +27,7 @@ import {
 } from '@ynab-counter/app-core/storage';
 import type {
   AppSettings,
+  BudgetProvider,
   CreditCard,
   RewardRule,
   TagMapping,
@@ -37,6 +38,7 @@ import type {
   DashboardTransactionsCachePayload,
   DashboardTransactionsCacheEntry,
   Transaction,
+  ProviderMigrationSnapshot,
 } from '@ynab-counter/app-core/storage';
 import type {
   YnabAccountSummary,
@@ -67,6 +69,7 @@ type Metadata = {
 };
 
 type StorageState = {
+  provider: BudgetProvider;
   pat?: string;
   connectionStatus: ConnectionStatus;
   isSyncing: boolean;
@@ -91,6 +94,13 @@ type StorageState = {
 type SyncOptions = {
   sinceDate?: string;
   skipTransactions?: boolean;
+  preserveConnectionOnInvalidToken?: boolean;
+};
+
+type VerifiedProviderMigration = {
+  expected: ProviderMigrationSnapshot;
+  budgets: YnabBudgetSummary[];
+  accounts: YnabAccountSummary[];
 };
 
 type StorageActions = {
@@ -98,6 +108,8 @@ type StorageActions = {
   invalidatePendingOperations: () => number;
   invalidateSyncRequests: () => void;
   setPAT: (pat: string) => Promise<boolean>;
+  setBudgetProvider: (provider: BudgetProvider) => Promise<void>;
+  migrateToHowMuch: (apiKey: string, migration: VerifiedProviderMigration) => Promise<void>;
   clearPAT: () => Promise<void>;
   disconnect: () => Promise<void>;
   setSelectedBudget: (budgetId: string, budgetName: string) => Promise<void>;
@@ -152,6 +164,7 @@ function localChangeSettings(): Pick<AppSettings, 'cloudSyncLocalChangedAt'> {
 }
 
 const defaultState: StorageState = {
+  provider: 'ynab',
   connectionStatus: 'disconnected',
   isSyncing: false,
   selectedBudget: {},
@@ -238,6 +251,8 @@ const noopActions: StorageActions = {
   invalidatePendingOperations: () => 0,
   invalidateSyncRequests: () => {},
   setPAT: async () => true,
+  setBudgetProvider: async () => {},
+  migrateToHowMuch: async () => {},
   clearPAT: async () => {},
   disconnect: async () => {},
   setSelectedBudget: async () => {},
@@ -267,6 +282,7 @@ const StorageContext = createContext<StorageContextValue>({
 async function hydrate(): Promise<StorageState> {
   const [
     pat,
+    provider,
     selectedBudget,
     trackedAccountIds,
     cards,
@@ -279,6 +295,7 @@ async function hydrate(): Promise<StorageState> {
     cachedData,
   ] = await Promise.all([
     storage.getPAT(),
+    storage.getBudgetProvider(),
     storage.getSelectedBudget(),
     storage.getTrackedAccountIds(),
     storage.getCards(),
@@ -301,6 +318,7 @@ async function hydrate(): Promise<StorageState> {
   }
 
   return {
+    provider,
     pat: pat ?? undefined,
     connectionStatus,
     isSyncing: false,
@@ -641,7 +659,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         const message = error instanceof Error ? error.message : 'Failed to sync with YNAB';
         const failure = error instanceof Error ? error : new Error(message);
 
-        if (isConfirmedInvalidToken(error)) {
+        if (isConfirmedInvalidToken(error) && !options.preserveConnectionOnInvalidToken) {
           await clearInvalidConnection(message);
         } else {
           setState((prev) => ({
@@ -885,6 +903,12 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         }));
         return true;
       },
+      setBudgetProvider: async (provider) => {
+        setState((prev) => ({ ...withoutConnection(prev), provider }));
+      },
+      migrateToHowMuch: async () => {
+        setState((prev) => ({ ...prev, provider: 'howmuch' }));
+      },
       clearPAT: async () => {
         setState(withoutConnection);
       },
@@ -1006,10 +1030,12 @@ export function StorageProvider({ children }: { children: ReactNode }) {
         try {
           await storage.setPAT(trimmed, storageGeneration);
           if (!storage.isGenerationCurrent(storageGeneration)) return false;
+          const credential = await storage.getPAT();
+          if (!credential || !storage.isGenerationCurrent(storageGeneration)) return false;
           const storedSelection = await storage.getSelectedBudget();
           if (!storage.isGenerationCurrent(storageGeneration)) return false;
           await initialiseConnection(
-            trimmed,
+            credential,
             state.trackedAccountIds,
             storedSelection.id,
             storageGeneration,
@@ -1024,6 +1050,51 @@ export function StorageProvider({ children }: { children: ReactNode }) {
           }
           throw error;
         }
+      },
+      setBudgetProvider: async (provider) => {
+        const storageGeneration = invalidatePendingOperations();
+        await storage.setBudgetProvider(provider, storageGeneration);
+        if (!storage.isGenerationCurrent(storageGeneration)) return;
+        const credential = await storage.getPAT();
+        if (!storage.isGenerationCurrent(storageGeneration)) return;
+        setState((prev) => ({
+          ...withoutConnection(prev),
+          provider,
+          pat: credential,
+        }));
+        if (credential) {
+          await initialiseConnection(credential, [], undefined, storageGeneration);
+        }
+      },
+      migrateToHowMuch: async (apiKey, migration) => {
+        const credential = `howmuch-token:${apiKey}`;
+        const storageGeneration = invalidatePendingOperations();
+
+        await storage.migrateToHowMuch(apiKey, migration.expected, storageGeneration);
+        if (!storage.isGenerationCurrent(storageGeneration)) return;
+        setState((prev) => ({
+          ...prev,
+          provider: 'howmuch',
+          pat: credential,
+          connectionStatus: 'connected',
+          connectionError: undefined,
+          isSyncing: false,
+          pending: undefined,
+          hasPendingChanges: false,
+          calculations: [],
+          cachedData: undefined,
+          budgets: migration.budgets,
+          accounts: migration.accounts.filter((account) => !account.closed),
+          metadata: { accountsBudgetId: migration.expected.selectedBudgetId },
+        }));
+        void performSync({ preserveConnectionOnInvalidToken: true }, {
+          pat: credential,
+          selectedBudgetId: migration.expected.selectedBudgetId,
+          trackedAccountIds: migration.expected.trackedAccountIds,
+        }, storageGeneration).catch(() => {
+          // Migration is already committed. This refresh is non-destructive;
+          // errors remain visible and cleared calculations prevent stale rewards.
+        });
       },
       clearPAT: async () => {
         invalidatePendingOperations();

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { useYnabPAT, useCreditCards, useSettings, useSelectedBudget, useTrackedAccountIds } from '@/hooks/useLocalStorage';
+import { useBudgetConnection, useCreditCards, useSettings } from '@/hooks/useLocalStorage';
 import { useAutoBackup } from '@/hooks/useAutoBackup';
 import {
   createMnemonic,
@@ -71,6 +71,10 @@ import {
   Check,
 } from 'lucide-react';
 import { DashboardQuickStats } from '@/components/dashboard/DashboardQuickStats';
+import {
+  createProviderMigrationSnapshot,
+  validateProviderMigration,
+} from '@ynab-counter/app-core/storage';
 
 interface YnabBudget {
   id: string;
@@ -194,7 +198,19 @@ function TrackedAccountCard({ account, isTracked, linkedCard, onToggle }: Tracke
 }
 
 export default function SettingsPage() {
-  const { pat, setPAT, isLoading: patLoading } = useYnabPAT();
+  const {
+    pat,
+    setPAT,
+    provider,
+    setBudgetProvider,
+    migrateToHowMuch,
+    selectedBudget,
+    setSelectedBudget: persistSelectedBudget,
+    trackedAccountIds,
+    setTrackedAccountIds: persistTrackedAccountIds,
+    isAccountTracked,
+    isLoading: connectionLoading,
+  } = useBudgetConnection();
   const { cards, saveCard, deleteCard, isLoading: cardsLoading } = useCreditCards();
   const {
     settings,
@@ -213,6 +229,8 @@ export default function SettingsPage() {
   const [showClearTokenDialog, setShowClearTokenDialog] = useState(false);
   const hasRequestedBudgetsRef = useRef(false);
   const skipConnectionFetchForPatRef = useRef<string | null>(null);
+  const accountsRequestIdRef = useRef(0);
+  const budgetsRequestIdRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [cloudSyncPhrase, setCloudSyncPhrase] = useState('');
@@ -237,12 +255,15 @@ export default function SettingsPage() {
 
   // Budget and account selection state
   const [budgets, setBudgets] = useState<YnabBudget[]>([]);
-  const { selectedBudget, setSelectedBudget: persistSelectedBudget } = useSelectedBudget();
   const [accounts, setAccounts] = useState<YnabAccount[]>([]);
-  const { trackedAccountIds, setTrackedAccountIds: persistTrackedAccountIds, isAccountTracked } = useTrackedAccountIds();
   const [loadingBudgets, setLoadingBudgets] = useState(false);
   const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [showBudgetSelector, setShowBudgetSelector] = useState(false);
+  const [showProviderMigrationDialog, setShowProviderMigrationDialog] = useState(false);
+  const [migrationApiKey, setMigrationApiKey] = useState('');
+  const [migrationError, setMigrationError] = useState('');
+  const [migratingProvider, setMigratingProvider] = useState(false);
+  const providerName = provider === 'howmuch' ? 'HowMuch' : 'YNAB';
 
   // Valuation settings
   const [milesValuation, setMilesValuation] = useState<number>(
@@ -379,20 +400,23 @@ export default function SettingsPage() {
   const fetchAccounts = useCallback(async (budgetId: string, tokenOverride?: string) => {
     const token = tokenOverride ?? pat;
     if (!token) return;
+    const requestId = ++accountsRequestIdRef.current;
 
     setLoadingAccounts(true);
     try {
-      const client = new YnabClient(token);
+      const client = new YnabClient(token, tokenOverride ? provider : undefined);
       const fetchedAccounts = await client.getAccounts<YnabAccount>(budgetId);
+      if (requestId !== accountsRequestIdRef.current) return;
       const openAccounts = fetchedAccounts.filter((acc) => !acc.closed && acc.on_budget);
       setAccounts(openAccounts);
       syncCardsWithAccounts(openAccounts);
     } catch (error) {
+      if (requestId !== accountsRequestIdRef.current) return;
       setConnectionMessage(`Failed to fetch accounts: ${getErrorMessage(error)}`);
     } finally {
-      setLoadingAccounts(false);
+      if (requestId === accountsRequestIdRef.current) setLoadingAccounts(false);
     }
-  }, [pat, syncCardsWithAccounts]);
+  }, [pat, provider, syncCardsWithAccounts]);
 
   const handleBudgetSelect = useCallback((budgetId: string, budgetName: string, tokenOverride?: string) => {
     persistSelectedBudget(budgetId, budgetName);
@@ -403,11 +427,13 @@ export default function SettingsPage() {
   const fetchBudgets = useCallback(async (tokenOverride?: string) => {
     const token = tokenOverride ?? pat;
     if (!token) return;
+    const requestId = ++budgetsRequestIdRef.current;
 
     setLoadingBudgets(true);
     try {
-      const client = new YnabClient(token);
+      const client = new YnabClient(token, tokenOverride ? provider : undefined);
       const fetchedBudgets = await client.getBudgets();
+      if (requestId !== budgetsRequestIdRef.current) return;
       setBudgets(fetchedBudgets);
       setConnectionMessage(''); // Clear "Fetching budgets..." message on success
 
@@ -415,11 +441,12 @@ export default function SettingsPage() {
         handleBudgetSelect(fetchedBudgets[0].id, fetchedBudgets[0].name, token);
       }
     } catch (error) {
+      if (requestId !== budgetsRequestIdRef.current) return;
       setConnectionMessage(`Failed to fetch budgets: ${getErrorMessage(error)}`);
     } finally {
-      setLoadingBudgets(false);
+      if (requestId === budgetsRequestIdRef.current) setLoadingBudgets(false);
     }
-  }, [pat, handleBudgetSelect]);
+  }, [pat, provider, handleBudgetSelect]);
 
   useEffect(() => {
     if (!valuationMessage) return;
@@ -474,9 +501,9 @@ export default function SettingsPage() {
     e.preventDefault();
 
     const nextToken = tokenInput.trim();
-    const validation = validateYnabToken(nextToken);
-    if (!validation.valid) {
-      setConnectionMessage(`❌ ${validation.error}`);
+    const validation = provider === 'ynab' ? validateYnabToken(nextToken) : null;
+    if (!nextToken || (validation && !validation.valid)) {
+      setConnectionMessage(`❌ ${validation?.error || 'Access key is required'}`);
       return;
     }
 
@@ -497,7 +524,7 @@ export default function SettingsPage() {
     setConnectionMessage('Checking access to your selected budget...');
 
     try {
-      const client = new YnabClient(nextToken);
+      const client = new YnabClient(nextToken, provider);
       const fetchedBudgets = await client.getBudgets();
       setBudgets(fetchedBudgets);
       hasRequestedBudgetsRef.current = true;
@@ -524,6 +551,66 @@ export default function SettingsPage() {
       setConnectionMessage(`Failed to replace token: ${getErrorMessage(error)}`);
     } finally {
       setLoadingBudgets(false);
+    }
+  }
+
+  async function handleMigrateToHowMuch() {
+    const apiKey = migrationApiKey.trim();
+    if (!apiKey) {
+      setMigrationError('Enter your HowMuch API key.');
+      return;
+    }
+    if (!selectedBudget.id) {
+      setMigrationError('Select a YNAB budget before migrating.');
+      return;
+    }
+    const sourceSnapshot = createProviderMigrationSnapshot({
+      selectedBudgetId: selectedBudget.id,
+      trackedAccountIds,
+      linkedCardAccountIds: cards
+        .map((card) => card.ynabAccountId)
+        .filter((accountId): accountId is string => Boolean(accountId)),
+    });
+
+    setMigratingProvider(true);
+    setMigrationError('');
+    try {
+      const client = new YnabClient(apiKey, 'howmuch');
+      const targetBudgets = await client.getBudgets({ bypassCache: true });
+      const matchingBudget = targetBudgets.find((budget) => budget.id === selectedBudget.id);
+      if (!matchingBudget) {
+        setMigrationError('HowMuch does not contain your selected YNAB budget yet. Sync it to HowMuch, then try again.');
+        return;
+      }
+
+      const targetAccounts = await client.getAccounts<YnabAccount>(matchingBudget.id, { bypassCache: true });
+      const validation = validateProviderMigration({
+        ...sourceSnapshot,
+        budgets: targetBudgets,
+        accounts: targetAccounts,
+      });
+
+      if (!validation.ok) {
+        const missingNames = validation.reason === 'accounts-not-found'
+          ? validation.missingAccountIds.map((id) => cardsByAccountId.get(id)?.name ?? id)
+          : [];
+        setMigrationError(validation.reason === 'budget-not-found'
+          ? 'HowMuch does not contain your selected YNAB budget yet.'
+          : `HowMuch is missing ${missingNames.length === 1 ? 'this linked account' : 'these linked accounts'}: ${missingNames.join(', ')}.`);
+        return;
+      }
+
+      migrateToHowMuch(apiKey, sourceSnapshot);
+      setBudgets(targetBudgets);
+      setAccounts(targetAccounts.filter((account) => !account.closed && account.on_budget));
+      setShowBudgetSelector(false);
+      setMigrationApiKey('');
+      setShowProviderMigrationDialog(false);
+      setConnectionMessage(`Moved to HowMuch. ${cards.length} reward card${cards.length === 1 ? '' : 's'} kept.`);
+    } catch (error) {
+      setMigrationError(`Could not verify HowMuch: ${getErrorMessage(error)}`);
+    } finally {
+      setMigratingProvider(false);
     }
   }
 
@@ -1064,7 +1151,7 @@ export default function SettingsPage() {
     }
   }
 
-  if (patLoading || cardsLoading) {
+  if (connectionLoading || cardsLoading) {
     return <div className="p-5">Loading settings...</div>;
   }
 
@@ -1122,12 +1209,12 @@ export default function SettingsPage() {
         </Alert>
       )}
 
-      {/* YNAB Connection and Cloud Sync */}
+      {/* Budget provider connection and Cloud Sync */}
       <Card id="settings-budget">
         <CardHeader>
-          <CardTitle>YNAB Connection & Backup</CardTitle>
+          <CardTitle>Budget Connection & Backup</CardTitle>
           <CardDescription>
-            Connect YNAB first. Cloud Sync is optional if you want a backup or use Rewards Tracker on another device.
+            Connect your budget provider first. Cloud Sync is optional if you want a backup or use Rewards Tracker on another device.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -1137,14 +1224,52 @@ export default function SettingsPage() {
                 1
               </div>
               <div>
-                <h2 id="ynab-connection-heading" className="text-base font-semibold">Connect YNAB</h2>
+                <h2 id="ynab-connection-heading" className="text-base font-semibold">Connect {providerName}</h2>
                 <p className="text-sm text-muted-foreground">
-                  Add your Personal Access Token, then choose the budget and accounts that feed rewards tracking.
+                  {provider === 'ynab'
+                    ? 'Add your Personal Access Token, then choose the budget and accounts that feed rewards tracking.'
+                    : 'Add your HowMuch API key, then choose the budget and accounts that feed rewards tracking.'}
                 </p>
               </div>
             </div>
 
-            {!pat ? (
+            <div className="space-y-2 sm:pl-10">
+              <label className="text-sm font-medium" htmlFor="budget-provider">Budget provider</label>
+              <Select
+                value={provider}
+                onValueChange={(value: 'ynab' | 'howmuch') => {
+                  if (value === provider) return;
+                  if (provider === 'ynab' && value === 'howmuch' && pat && selectedBudget.id) {
+                    setMigrationError('');
+                    setShowProviderMigrationDialog(true);
+                    return;
+                  }
+                  accountsRequestIdRef.current += 1;
+                  budgetsRequestIdRef.current += 1;
+                  hasRequestedBudgetsRef.current = false;
+                  skipConnectionFetchForPatRef.current = null;
+                  setBudgetProvider(value);
+                  setBudgets([]);
+                  setAccounts([]);
+                  setLoadingBudgets(false);
+                  setLoadingAccounts(false);
+                  setShowBudgetSelector(true);
+                  setConnectionMessage(value === 'howmuch'
+                    ? 'HowMuch selected. Add your API key to connect.'
+                    : 'YNAB selected. Add your Personal Access Token to connect.');
+                }}
+              >
+                <SelectTrigger id="budget-provider" className="w-full sm:w-64">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ynab">YNAB</SelectItem>
+                  <SelectItem value="howmuch">HowMuch</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {provider === 'ynab' && !pat ? (
               <form onSubmit={handleSaveToken} className="space-y-4 sm:pl-10">
                 <label
                   htmlFor="pat-input"
@@ -1176,7 +1301,7 @@ export default function SettingsPage() {
                   <Button type="submit">Save Token</Button>
                 </div>
               </form>
-            ) : (
+            ) : provider === 'ynab' ? (
               <div className="space-y-4 sm:pl-10">
                 <div className="flex items-center gap-2 text-green-600">
                   <CheckCircle2 className="h-5 w-5" aria-hidden="true" />
@@ -1288,6 +1413,63 @@ export default function SettingsPage() {
                     Clear Token
                   </Button>
                 </div>
+              </div>
+            ) : !pat ? (
+              <form onSubmit={handleSaveToken} className="space-y-3 sm:pl-10">
+                <label htmlFor="howmuch-access-key" className="block text-sm font-medium">
+                  HowMuch API key
+                </label>
+                <p className="text-sm text-muted-foreground">
+                  This account-specific key stays on this device and is never included in exports or Cloud Sync.
+                </p>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <input
+                    id="howmuch-access-key"
+                    type="password"
+                    autoComplete="off"
+                    value={tokenInput}
+                    onChange={(event) => setTokenInput(event.target.value)}
+                    placeholder="Paste your HowMuch API key"
+                    className="flex-1 px-3 py-2 border rounded-md text-base md:text-sm"
+                  />
+                  <Button type="submit">Connect</Button>
+                </div>
+              </form>
+            ) : (
+              <div className="space-y-4 sm:pl-10">
+                <div className="flex items-center gap-2 text-green-600">
+                  <CheckCircle2 className="h-5 w-5" aria-hidden="true" />
+                  <span className="font-medium">API key configured</span>
+                </div>
+                {selectedBudget.id && !showBudgetSelector ? (
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-medium">Selected budget</p>
+                      <p className="text-lg">{selectedBudget.name}</p>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={() => { fetchBudgets(); setShowBudgetSelector(true); }}>
+                      Change Budget
+                    </Button>
+                  </div>
+                ) : loadingBudgets ? (
+                  <p className="text-sm">Loading budgets...</p>
+                ) : budgets.length > 0 ? (
+                  <Select
+                    value={selectedBudget.id || ''}
+                    onValueChange={(value) => {
+                      const budget = budgets.find((entry) => entry.id === value);
+                      if (budget) handleBudgetSelect(budget.id, budget.name);
+                    }}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Choose a budget..." /></SelectTrigger>
+                    <SelectContent>
+                      {budgets.map((budget) => <SelectItem key={budget.id} value={budget.id}>{budget.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Button variant="outline" onClick={() => fetchBudgets()}>Load Budgets</Button>
+                )}
+                <Button variant="outline" onClick={() => setShowClearTokenDialog(true)}>Clear API Key</Button>
               </div>
             )}
           </section>
@@ -1679,9 +1861,9 @@ export default function SettingsPage() {
 
       <ConfirmDialog
         isOpen={showClearTokenDialog}
-        title="Clear YNAB Token?"
-        message="This will remove your Personal Access Token and clear your budget and account selections. You'll need to reconnect to YNAB. Your card configurations and rules will not be affected."
-        confirmText="Clear Token"
+        title={`Clear ${provider === 'ynab' ? 'YNAB access token' : 'HowMuch API key'}?`}
+        message={`This will remove your ${provider === 'ynab' ? 'Personal Access Token' : 'HowMuch API key'} and clear your budget and account selections. You'll need to reconnect to ${providerName}. Your card configurations and rules will not be affected.`}
+        confirmText={provider === 'ynab' ? 'Clear Token' : 'Clear API Key'}
         cancelText="Cancel"
         onConfirm={handleClearToken}
         onCancel={() => setShowClearTokenDialog(false)}
@@ -1706,6 +1888,68 @@ export default function SettingsPage() {
         onConfirm={confirmClearOrphanedCards}
         onCancel={() => setShowClearOrphanedDialog(false)}
       />
+
+      <Dialog
+        open={showProviderMigrationDialog}
+        onOpenChange={(open) => {
+          if (migratingProvider) return;
+          setShowProviderMigrationDialog(open);
+          if (!open) {
+            setMigrationApiKey('');
+            setMigrationError('');
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Move rewards tracking to HowMuch</DialogTitle>
+            <DialogDescription className="pt-2">
+              Rewards Tracker will first verify that HowMuch contains “{selectedBudget.name || 'your selected budget'}” and every account linked to your cards. Nothing changes if verification fails.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <label htmlFor="migration-howmuch-api-key" className="text-sm font-medium">
+              HowMuch API key
+            </label>
+            <input
+              id="migration-howmuch-api-key"
+              type="password"
+              autoComplete="off"
+              value={migrationApiKey}
+              onChange={(event) => setMigrationApiKey(event.target.value)}
+              placeholder="Paste your HowMuch API key"
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              disabled={migratingProvider}
+            />
+            <p className="text-sm text-muted-foreground">
+              Your cards, reward rules, and tracked-account choices will be kept. Transactions will be refreshed from HowMuch after the move.
+            </p>
+            {migrationError && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" aria-hidden="true" />
+                <AlertDescription>{migrationError}</AlertDescription>
+              </Alert>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowProviderMigrationDialog(false)}
+              disabled={migratingProvider}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleMigrateToHowMuch} disabled={migratingProvider || !migrationApiKey.trim()}>
+              {migratingProvider ? (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                  Verifying…
+                </>
+              ) : 'Verify and move'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Empty Sync Warning Dialog - Custom 3-button variant */}
       <Dialog open={showEmptySyncWarningDialog} onOpenChange={(open) => !open && setShowEmptySyncWarningDialog(false)}>
