@@ -5,6 +5,10 @@ import { formatDateValue } from '@/lib/dashboard-period';
 import type { YnabFlagColor } from '@/lib/ynab-constants';
 import { SimpleRewardsCalculator } from '@/lib/rewards-engine';
 import { resolveCardSpendingTier } from '@ynab-counter/app-core/rewards-engine';
+import {
+  isWholePeriodMinimum,
+  sumQualificationSpend,
+} from '@ynab-counter/app-core/rewards-engine/utils/reward-period-qualification';
 import { YnabClient } from '@/lib/ynab-client';
 import { storage } from '@/lib/storage';
 import {
@@ -87,6 +91,8 @@ export function CardSpendingSummaryContent({
   )
     ?? monthlyQualifications.find((month) => month.status === 'pending');
   const hasMonthlyMinimum = (monthlyMinimumSpend ?? 0) > 0;
+  const usesPeriodMinimum = isWholePeriodMinimum(card.rewardPeriod);
+  const periodQualificationSpend = sumQualificationSpend(monthlyQualifications);
   const allMonthlyMinimumsMet = Boolean(
     card.rewardPeriod &&
     monthlyQualifications.length === card.rewardPeriod.monthCount &&
@@ -185,18 +191,30 @@ export function CardSpendingSummaryContent({
               : 'border-amber-200 bg-amber-50/50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300',
         )}>
           {qualificationStatus === 'failed'
-            ? 'A completed month missed its card-wide minimum'
+            ? usesPeriodMinimum
+              ? 'The period missed its card-wide minimum'
+              : 'A completed month missed its card-wide minimum'
             : qualificationStatus === 'met'
-              ? allMonthlyMinimumsMet
-                ? `All ${card.rewardPeriod.monthCount} monthly minimums met`
-                : <>
-                    Current anchored month: <CurrencyAmount value={activeQualificationMonth.spend} currency={currency} /> of{' '}
+              ? usesPeriodMinimum
+                ? <>
+                    Period: <CurrencyAmount value={periodQualificationSpend} currency={currency} /> of{' '}
                     <CurrencyAmount value={monthlyMinimumSpend ?? 0} currency={currency} /> · met
                   </>
-              : <>
-                  Current anchored month: <CurrencyAmount value={activeQualificationMonth.spend} currency={currency} /> of{' '}
-                  <CurrencyAmount value={monthlyMinimumSpend ?? 0} currency={currency} />
-                </>}
+                : allMonthlyMinimumsMet
+                  ? `All ${card.rewardPeriod.monthCount} monthly minimums met`
+                  : <>
+                      Current anchored month: <CurrencyAmount value={activeQualificationMonth.spend} currency={currency} /> of{' '}
+                      <CurrencyAmount value={monthlyMinimumSpend ?? 0} currency={currency} /> · met
+                    </>
+              : usesPeriodMinimum
+                ? <>
+                    Period: <CurrencyAmount value={periodQualificationSpend} currency={currency} /> of{' '}
+                    <CurrencyAmount value={monthlyMinimumSpend ?? 0} currency={currency} />
+                  </>
+                : <>
+                    Current anchored month: <CurrencyAmount value={activeQualificationMonth.spend} currency={currency} /> of{' '}
+                    <CurrencyAmount value={monthlyMinimumSpend ?? 0} currency={currency} />
+                  </>}
         </div>
       )}
 

@@ -1,6 +1,7 @@
 import type { CreditCard } from '../../storage/types';
 
 import { formatLocalDate, getEffectiveBillingDay } from '../date-utils';
+import { isOneOffRewardPeriod } from './reward-period-qualification';
 
 export interface CardPeriod {
   startDate: Date;
@@ -81,7 +82,31 @@ export function isRewardPeriodActive(
     targetDate.getMonth(),
     targetDate.getDate(),
   );
-  return reference >= anchor;
+  if (reference < anchor) {
+    return false;
+  }
+  if (!isOneOffRewardPeriod(card.rewardPeriod) || !card.rewardPeriod.endDate) {
+    return true;
+  }
+  const end = parseLocalDate(card.rewardPeriod.endDate);
+  return Boolean(end && reference <= end);
+}
+
+export function countRewardPeriodMonths(anchorDate: string, endDate: string): number {
+  const anchor = parseLocalDate(anchorDate);
+  const end = parseLocalDate(endDate);
+  if (!anchor || !end || end < anchor) {
+    return 1;
+  }
+  let count = 0;
+  while (count < 24) {
+    const start = addAnchoredMonths(anchor, count);
+    if (start > end) {
+      break;
+    }
+    count += 1;
+  }
+  return Math.max(1, count);
 }
 
 export function calculateCardPeriod(card: CreditCard, targetDate: Date = new Date()): CardPeriod {
@@ -92,6 +117,16 @@ export function calculateCardPeriod(card: CreditCard, targetDate: Date = new Dat
   if (card.rewardPeriod && isRewardPeriodActive(card, reference)) {
     const anchor = parseLocalDate(card.rewardPeriod.anchorDate);
     if (anchor) {
+      if (isOneOffRewardPeriod(card.rewardPeriod) && card.rewardPeriod.endDate) {
+        const oneOffEnd = parseLocalDate(card.rewardPeriod.endDate);
+        if (oneOffEnd) {
+          return {
+            startDate: anchor,
+            endDate: oneOffEnd,
+            label: `${formatLocalDate(anchor)} to ${card.rewardPeriod.endDate}`,
+          };
+        }
+      }
       const monthCount = card.rewardPeriod.monthCount;
       let periodOffset = Math.floor(monthDistance(anchor, reference) / monthCount);
       let startDate = addAnchoredMonths(anchor, periodOffset * monthCount);
@@ -211,6 +246,29 @@ export function getRewardPeriodMonths(card: CreditCard, period: CardPeriod): Car
   const anchor = parseLocalDate(card.rewardPeriod.anchorDate);
   if (!anchor) {
     return [period];
+  }
+
+  if (isOneOffRewardPeriod(card.rewardPeriod) && card.rewardPeriod.endDate) {
+    const windowEnd = parseLocalDate(card.rewardPeriod.endDate);
+    if (!windowEnd) {
+      return [period];
+    }
+    const months: CardPeriod[] = [];
+    for (let index = 0; index < 24; index += 1) {
+      const startDate = addAnchoredMonths(anchor, index);
+      if (startDate > windowEnd) {
+        break;
+      }
+      const nextStart = addAnchoredMonths(anchor, index + 1);
+      const rawEnd = new Date(nextStart.getTime() - 1);
+      const endDate = rawEnd > windowEnd ? windowEnd : rawEnd;
+      months.push({
+        startDate,
+        endDate,
+        label: `${formatLocalDate(startDate)} to ${formatLocalDate(endDate)}`,
+      });
+    }
+    return months.length > 0 ? months : [period];
   }
 
   const firstOffset = monthDistance(anchor, period.startDate);

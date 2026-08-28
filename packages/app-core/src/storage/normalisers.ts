@@ -36,6 +36,34 @@ function createRandomId(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function parseIsoDateParts(value: unknown): Date | null {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return null;
+  }
+  const [year, month, day] = value.split('-').map(Number);
+  const parsed = new Date(year, month - 1, day);
+  if (
+    parsed.getFullYear() !== year
+    || parsed.getMonth() !== month - 1
+    || parsed.getDate() !== day
+  ) {
+    return null;
+  }
+  return parsed;
+}
+
+function countInclusiveMonthSpan(start: Date, end: Date): number {
+  let count = 0;
+  while (count < 24) {
+    const monthStart = new Date(start.getFullYear(), start.getMonth() + count, start.getDate());
+    if (monthStart > end) {
+      break;
+    }
+    count += 1;
+  }
+  return Math.max(1, count);
+}
+
 export function createSubcategoryId(): string {
   return createRandomId('subcat');
 }
@@ -144,32 +172,39 @@ export function normaliseCard(
 
   const rawRewardPeriod = mutableCard.rewardPeriod;
   if (rawRewardPeriod && typeof rawRewardPeriod === 'object') {
-    const monthCount = Number(rawRewardPeriod.monthCount);
     const monthlyMinimumSpend = Number(rawRewardPeriod.monthlyMinimumSpend);
     const anchorDate = rawRewardPeriod.anchorDate;
-    const anchorParts = typeof anchorDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(anchorDate)
-      ? anchorDate.split('-').map(Number)
-      : [];
-    const parsedAnchor = anchorParts.length === 3
-      ? new Date(anchorParts[0], anchorParts[1] - 1, anchorParts[2])
-      : null;
-    const validAnchor = Boolean(parsedAnchor
-      && parsedAnchor.getFullYear() === anchorParts[0]
-      && parsedAnchor.getMonth() === anchorParts[1] - 1
-      && parsedAnchor.getDate() === anchorParts[2]);
+    const parsedAnchor = parseIsoDateParts(anchorDate);
+    const parsedEnd = parseIsoDateParts(rawRewardPeriod.endDate);
+    const isOneOff = Boolean(parsedEnd && parsedAnchor && parsedEnd.getTime() > parsedAnchor.getTime());
+    const rawMonthCount = Number(rawRewardPeriod.monthCount);
+    const monthCount = Number.isInteger(rawMonthCount)
+      && rawMonthCount >= (isOneOff ? 1 : 2)
+      && rawMonthCount <= 24
+      ? rawMonthCount
+      : isOneOff && parsedAnchor && parsedEnd
+        ? countInclusiveMonthSpan(parsedAnchor, parsedEnd)
+        : NaN;
 
     if (
       Number.isInteger(monthCount)
-      && monthCount >= 2
+      && monthCount >= (isOneOff ? 1 : 2)
       && monthCount <= 24
       && Number.isFinite(monthlyMinimumSpend)
       && monthlyMinimumSpend >= 0
-      && validAnchor
+      && parsedAnchor
+      && (!rawRewardPeriod.endDate || isOneOff)
     ) {
       mutableCard.rewardPeriod = {
         monthCount,
         anchorDate,
         monthlyMinimumSpend,
+        minimumScope: rawRewardPeriod.minimumScope === 'whole_period'
+          ? 'whole_period'
+          : 'each_month',
+        ...(isOneOff && typeof rawRewardPeriod.endDate === 'string'
+          ? { endDate: rawRewardPeriod.endDate }
+          : {}),
       };
     } else {
       Reflect.deleteProperty(mutableCard, 'rewardPeriod');

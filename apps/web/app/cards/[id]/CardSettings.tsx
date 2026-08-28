@@ -10,7 +10,8 @@ import { useCreditCards, useSettings } from '@/hooks/useLocalStorage';
 import { useAutoBackup } from '@/hooks/useAutoBackup';
 import { storage, type CardSubcategory, type CreditCard } from '@/lib/storage';
 import { validateIssuer, sanitizeInput } from '@/lib/validation';
-import { CardSettingsEditor, computeCardFieldDiff, type CardEditState } from '@/components/CardSettingsEditor';
+import { CardSettingsEditor, computeCardFieldDiff, buildRewardPeriodFromEditState, type CardEditState } from '@/components/CardSettingsEditor';
+import { getRewardPeriodKind } from '@ynab-counter/app-core/rewards-engine/utils/reward-period-qualification';
 import { UNFLAGGED_FLAG, YNAB_FLAG_COLORS, type YnabFlagColor } from '@/lib/ynab-constants';
 
 // Map flag colors to actual colors for visual representation
@@ -45,6 +46,10 @@ const createFormState = (nextCard: CreditCard): CardEditState => ({
   rewardPeriodMonthCount: nextCard.rewardPeriod?.monthCount ?? 3,
   rewardPeriodAnchorDate: nextCard.rewardPeriod?.anchorDate ?? '',
   rewardPeriodMonthlyMinimum: nextCard.rewardPeriod?.monthlyMinimumSpend ?? 0,
+  rewardPeriodMinimumScope: nextCard.rewardPeriod?.minimumScope
+    ?? (getRewardPeriodKind(nextCard.rewardPeriod) === 'one_off' ? 'whole_period' : 'each_month'),
+  rewardPeriodKind: getRewardPeriodKind(nextCard.rewardPeriod),
+  rewardPeriodEndDate: nextCard.rewardPeriod?.endDate ?? '',
   promotionalPeriodEnabled: Boolean(nextCard.promotionalPeriod),
   promotionalPeriodStart: nextCard.promotionalPeriod?.startDate || '',
   promotionalPeriodEnd: nextCard.promotionalPeriod?.endDate || '',
@@ -158,7 +163,18 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
     }
 
     if (formData.rewardPeriodEnabled && !formData.rewardPeriodAnchorDate) {
-      setError('Multi-month reward periods require a start date');
+      setError('Reward periods require a start date');
+      setSaving(false);
+      return;
+    }
+    const rewardPeriodStart = formData.rewardPeriodAnchorDate;
+    if (
+      formData.rewardPeriodEnabled &&
+      (formData.rewardPeriodKind ?? 'repeating') === 'one_off' &&
+      rewardPeriodStart &&
+      (!formData.rewardPeriodEndDate || formData.rewardPeriodEndDate <= rewardPeriodStart)
+    ) {
+      setError('One-off reward periods require an end date after the start date');
       setSaving(false);
       return;
     }
@@ -177,7 +193,7 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
       card.promotionalPeriod &&
       formData.rewardPeriodEnabled &&
       !window.confirm(
-        'Saving this multi-month reward period will remove the existing promotional period. Continue?',
+        'Saving this reward period will remove the existing promotional period. Continue?',
       )
     ) {
       setSaving(false);
@@ -202,13 +218,7 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
         billingCycle: formData.billingCycleType === 'billing'
           ? { type: 'billing', dayOfMonth: formData.billingCycleDay || 1 }
           : { type: 'calendar' },
-        rewardPeriod: formData.rewardPeriodEnabled && formData.rewardPeriodAnchorDate
-          ? {
-              monthCount: formData.rewardPeriodMonthCount ?? 3,
-              anchorDate: formData.rewardPeriodAnchorDate,
-              monthlyMinimumSpend: formData.rewardPeriodMonthlyMinimum ?? 0,
-            }
-          : undefined,
+        rewardPeriod: buildRewardPeriodFromEditState(formData),
         promotionalPeriod: !formData.rewardPeriodEnabled && formData.promotionalPeriodEnabled && formData.promotionalPeriodEnd
           ? {
               startDate: formData.promotionalPeriodStart || null,
@@ -306,15 +316,19 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
               <p className="text-sm font-medium text-muted-foreground">Reward Period</p>
               <p className="mt-1 font-medium">
                 {card.rewardPeriod
-                  ? `${card.rewardPeriod.monthCount} months from ${new Date(`${card.rewardPeriod.anchorDate}T12:00:00`).toLocaleDateString()}`
+                  ? card.rewardPeriod.endDate
+                    ? `${new Date(`${card.rewardPeriod.anchorDate}T12:00:00`).toLocaleDateString()} to ${new Date(`${card.rewardPeriod.endDate}T12:00:00`).toLocaleDateString()}`
+                    : `${card.rewardPeriod.monthCount} months from ${new Date(`${card.rewardPeriod.anchorDate}T12:00:00`).toLocaleDateString()}`
                   : 'Follows billing cycle'}
               </p>
               {card.rewardPeriod && (
                 <>
                   <p className="text-xs text-muted-foreground">
                     {card.rewardPeriod.monthlyMinimumSpend > 0
-                      ? `${formatDollars(card.rewardPeriod.monthlyMinimumSpend, { currency: settings.currency })} card-wide minimum each month`
-                      : 'No monthly minimum'}
+                      ? card.rewardPeriod.minimumScope === 'whole_period'
+                        ? `${formatDollars(card.rewardPeriod.monthlyMinimumSpend, { currency: settings.currency })} card-wide minimum over the period`
+                        : `${formatDollars(card.rewardPeriod.monthlyMinimumSpend, { currency: settings.currency })} card-wide minimum each month`
+                      : 'No card-wide minimum'}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     This overrides the billing cycle and any promotional period.
@@ -352,7 +366,7 @@ export default function CardSettings({ card, onUpdate, initialEditing = false }:
                   : `${formatDollars(card.minimumSpend, { currency: settings.currency })} required`}
               </p>
               {card.rewardPeriod && card.minimumSpend !== null && card.minimumSpend !== undefined && card.minimumSpend > 0 && (
-                <p className="text-xs text-muted-foreground">Additional to the monthly minimum</p>
+                <p className="text-xs text-muted-foreground">Additional to the reward-period minimum</p>
               )}
             </div>
             <div>

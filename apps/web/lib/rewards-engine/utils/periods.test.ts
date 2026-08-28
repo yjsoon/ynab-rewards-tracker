@@ -137,6 +137,29 @@ describe('calculateCardPeriod', () => {
       label: '2026-02-01 to 2026-04-30',
     });
   });
+
+  it('keeps a one-off reward period as a single dated window', () => {
+    const card: CreditCard = {
+      ...baseCard,
+      rewardPeriod: {
+        monthCount: 3,
+        anchorDate: '2026-01-01',
+        endDate: '2026-03-31',
+        monthlyMinimumSpend: 1000,
+        minimumScope: 'whole_period',
+      },
+    };
+
+    expect(toSimplePeriod(calculateCardPeriod(card, new Date(2026, 1, 15)))).toEqual({
+      start: '2026-01-01',
+      end: '2026-03-31',
+      label: '2026-01-01 to 2026-03-31',
+    });
+    expect(toSimplePeriod(calculateCardPeriod(card, new Date(2026, 3, 1))).start).toBe('2026-04-01');
+    expect(getRewardPeriodMonths(card, calculateCardPeriod(card, new Date(2026, 1, 15))).map((month) => (
+      toSimplePeriod(month).start
+    ))).toEqual(['2026-01-01', '2026-02-01', '2026-03-01']);
+  });
 });
 
 describe('toSimplePeriod', () => {

@@ -19,6 +19,12 @@ import {
   resolveCardSpendingTier,
 } from './utils/spending-tiers';
 import { REWARD_PERIOD_CALCULATION_VERSION } from './utils/reward-calculation';
+import {
+  evaluateRewardPeriodQualification,
+  getRewardPeriodMinimumScope,
+  isWholePeriodMinimum,
+  sumQualificationSpend,
+} from './utils/reward-period-qualification';
 
 const MILLIUNITS_PER_UNIT = 1000;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -431,29 +437,17 @@ function applyPersistedCalculation(
   }
 
   const today = formatLocalDate(new Date());
-  const persistedMonthlyQualifications = persisted.monthlyQualifications?.map((month) => ({
-    ...month,
-    status: month.spend >= month.minimumSpend
-      ? 'met' as const
-      : month.end < asOf || (month.end === asOf && asOf < today)
-        ? 'failed' as const
-        : 'pending' as const,
-  }));
-  const persistedStartedMonths = persistedMonthlyQualifications?.filter(
-    (month) => month.start <= asOf,
-  );
-  const persistedQualificationStatus = persistedStartedMonths?.some(
-    (month) => month.status === 'failed',
-  )
-    ? 'failed' as const
-    : persistedStartedMonths?.length && persistedStartedMonths.every((month) => month.status === 'met')
-      ? 'met' as const
-      : persistedMonthlyQualifications?.length
-        ? 'pending' as const
-        : calculation.qualificationStatus;
-  const persistedActiveMonth = persistedMonthlyQualifications?.find(
-    (month) => month.start <= asOf && month.end >= asOf,
-  );
+  const persistedQualification = persisted.monthlyQualifications?.length
+    ? evaluateRewardPeriodQualification({
+        scope: getRewardPeriodMinimumScope(card.rewardPeriod),
+        months: persisted.monthlyQualifications,
+        asOf,
+        today,
+      })
+    : undefined;
+  const persistedMonthlyQualifications = persistedQualification?.months;
+  const persistedQualificationStatus = persistedQualification?.status
+    ?? calculation.qualificationStatus;
 
   const persistedSubcategories = new Map(
     persisted.subcategoryBreakdowns?.map((entry) => [entry.subcategoryId, entry] as const) ?? [],
@@ -492,9 +486,8 @@ function applyPersistedCalculation(
     minimumSpendMet: card.rewardPeriod && card.rewardPeriod.monthlyMinimumSpend > 0
       ? persistedQualificationStatus === 'met' && persisted.minimumMet
       : persisted.minimumMet,
-    minimumSpendProgress: persistedActiveMonth
-      ? Math.min(100, (persistedActiveMonth.spend / persistedActiveMonth.minimumSpend) * 100)
-      : persisted.minimumProgress,
+    minimumSpendProgress: persistedQualification?.progress
+      ?? persisted.minimumProgress,
     // Keep persisted spend when it fills a truncated live cache, but derive
     // statuses again for this view date so pending months cannot freeze.
     monthlyMinimumSpend: persisted.monthlyMinimumSpend ?? calculation.monthlyMinimumSpend,
@@ -652,15 +645,23 @@ export function buildRewardsDashboard(
     const activeMonthlyQualification = calculation.monthlyQualifications?.find(
       (month) => month.start <= asOf && month.end >= asOf,
     );
-    const configuredMinimum = activeMonthlyQualification?.minimumSpend
-      ?? calculation.minimumSpend;
+    const usesPeriodMinimum = isWholePeriodMinimum(card.rewardPeriod);
+    const periodQualificationSpend = calculation.monthlyQualifications?.length
+      ? sumQualificationSpend(calculation.monthlyQualifications)
+      : calculation.totalSpend;
+    const configuredMinimum = usesPeriodMinimum
+      ? calculation.monthlyMinimumSpend ?? card.rewardPeriod?.monthlyMinimumSpend
+      : activeMonthlyQualification?.minimumSpend
+        ?? calculation.minimumSpend;
     const configuredMaximum = calculation.maximumSpend;
     const hasMinimum = hasPositiveThreshold(configuredMinimum);
     const hasMaximum = hasPositiveThreshold(configuredMaximum);
     const minimumTarget = hasMinimum ? configuredMinimum : null;
     const maximumTarget = hasMaximum ? configuredMaximum : null;
-    const minimumProgressSpend = activeMonthlyQualification?.spend
-      ?? calculation.totalSpend;
+    const minimumProgressSpend = usesPeriodMinimum
+      ? periodQualificationSpend
+      : activeMonthlyQualification?.spend
+        ?? calculation.totalSpend;
     const minimumProgress = minimumTarget
       ? Math.min(1, minimumProgressSpend / minimumTarget)
       : null;
@@ -675,9 +676,11 @@ export function buildRewardsDashboard(
       calculation.totalSpend,
     ).hasNextSpendingTier;
     const minimumMet = minimumTarget !== null
-      ? activeMonthlyQualification
-        ? activeMonthlyQualification.status === 'met'
-        : calculation.minimumSpendMet
+      ? usesPeriodMinimum
+        ? calculation.qualificationStatus === 'met'
+        : activeMonthlyQualification
+          ? activeMonthlyQualification.status === 'met'
+          : calculation.minimumSpendMet
       : null;
     const eligibleSpendBeforeBlocks = calculation.eligibleSpendBeforeBlocks
       ?? calculation.eligibleSpend;

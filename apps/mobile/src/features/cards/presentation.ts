@@ -3,6 +3,7 @@ import type {
   CardPortfolioStatus,
 } from '@ynab-counter/app-core/rewards-engine';
 import type { AppSettings, CreditCard } from '@ynab-counter/app-core/storage';
+import { isWholePeriodMinimum } from '@ynab-counter/app-core/rewards-engine/utils/reward-period-qualification';
 import {
   formatCurrency as formatCurrencyCore,
   normalizeCurrencyCode,
@@ -194,7 +195,9 @@ export function attentionCopy(
       return 'Add an earning rate to start tracking rewards.';
     case 'building':
       if (projection.calculation.qualificationStatus === 'failed') {
-        return 'Monthly qualification failed for this reward period.';
+        return isWholePeriodMinimum(projection.card.rewardPeriod)
+          ? 'The period missed its card-wide minimum.'
+          : 'Monthly qualification failed for this reward period.';
       }
       return `${formatting.currencyCompact(projection.minimum.remaining ?? 0)} more to unlock rewards.`;
     case 'near_cap':

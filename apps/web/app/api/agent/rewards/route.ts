@@ -21,6 +21,11 @@ import { getAlertRecommendations, getCardRecommendations } from '@ynab-counter/a
 import { buildCardEntries } from '@ynab-counter/app-core/rewards-engine/utils/category-insights';
 import { resolveLatestPeriod } from '@ynab-counter/app-core/rewards-engine/utils/recommendation-helpers';
 import {
+  getRewardPeriodMinimumScope,
+  isWholePeriodMinimum,
+  sumQualificationSpend,
+} from '@ynab-counter/app-core/rewards-engine/utils/reward-period-qualification';
+import {
   createSubcategoryContext,
   normaliseFlagColor,
   resolveSubcategory,
@@ -116,6 +121,7 @@ type CardStatusAvailable = {
     qualification: {
       status: RewardQualificationStatus | null;
       monthlyMinimum: number | null;
+      minimumScope: 'each_month' | 'whole_period' | null;
       activeMonth: MonthlyQualificationBreakdown | null;
     };
     maximum: {
@@ -551,12 +557,21 @@ function buildCardStatus(
   const activeMonth = summary.monthlyQualifications.find(
     (month) => month.start <= todayValue && month.end >= todayValue,
   ) ?? null;
+  const usesPeriodMinimum = isWholePeriodMinimum(card.rewardPeriod);
+  const periodQualificationSpend = summary.monthlyQualifications.length
+    ? sumQualificationSpend(summary.monthlyQualifications)
+    : totalSpend;
 
-  const minimumTarget = activeMonth?.minimumSpend
-    ?? (summary.minimumSpend === undefined
-      ? getPositiveNumber(card.minimumSpend)
-      : getPositiveNumber(summary.minimumSpend));
-  const minimumProgressSpend = activeMonth?.spend ?? totalSpend;
+  const minimumTarget = usesPeriodMinimum
+    ? summary.monthlyMinimumSpend
+      ?? getPositiveNumber(card.rewardPeriod?.monthlyMinimumSpend)
+    : activeMonth?.minimumSpend
+      ?? (summary.minimumSpend === undefined
+        ? getPositiveNumber(card.minimumSpend)
+        : getPositiveNumber(summary.minimumSpend));
+  const minimumProgressSpend = usesPeriodMinimum
+    ? periodQualificationSpend
+    : activeMonth?.spend ?? totalSpend;
   const minimumRemaining = minimumTarget
     ? Math.max(0, minimumTarget - minimumProgressSpend)
     : null;
@@ -565,9 +580,11 @@ function buildCardStatus(
     : null;
   const minimumMet = minimumTarget === null
     ? null
-    : activeMonth
-      ? activeMonth.status === 'met'
-      : totalSpend >= minimumTarget;
+    : usesPeriodMinimum
+      ? summary.qualificationStatus === 'met'
+      : activeMonth
+        ? activeMonth.status === 'met'
+        : totalSpend >= minimumTarget;
 
   const maximumCap = summary.maximumSpend === undefined
     ? getPositiveNumber(card.maximumSpend)
@@ -597,6 +614,9 @@ function buildCardStatus(
       qualification: {
         status: summary.qualificationStatus,
         monthlyMinimum: summary.monthlyMinimumSpend,
+        minimumScope: card.rewardPeriod
+          ? getRewardPeriodMinimumScope(card.rewardPeriod)
+          : null,
         activeMonth,
       },
       maximum: {
