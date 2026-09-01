@@ -4,6 +4,7 @@ import type { CreditCard, RewardCalculation, Transaction } from '../storage/type
 import {
   buildRewardsDashboard,
   projectTransactions,
+  resolveActiveMinimumProgress,
 } from './dashboard-projection';
 import { formatLocalDate } from './date-utils';
 import { SimpleRewardsCalculator } from './simple-calculator';
@@ -1066,6 +1067,41 @@ describe('buildRewardsDashboard', () => {
     });
   });
 
+  it('does not credit earlier months toward this month remaining', () => {
+    const card = createCard({
+      minimumSpend: 500,
+      rewardPeriod: {
+        monthCount: 3,
+        anchorDate: '2026-07-01',
+        monthlyMinimumSpend: 500,
+      },
+    });
+    const result = buildRewardsDashboard(
+      [card],
+      [
+        createTransaction({ id: 'july', date: '2026-07-10', amount: -551_000 }),
+        createTransaction({ id: 'august', date: '2026-08-15', amount: -500_000 }),
+      ],
+      {},
+      new Date(2026, 8, 1, 12),
+    );
+
+    expect(result.cards[0]).toMatchObject({
+      status: 'building',
+      spend: { total: 1_051 },
+      minimum: { target: 500, remaining: 500, progress: 0, met: false },
+      progress: { minimumProgressSpend: 0 },
+      calculation: {
+        qualificationStatus: 'pending',
+        monthlyQualifications: [
+          { spend: 551, status: 'met' },
+          { spend: 500, status: 'met' },
+          { spend: 0, status: 'pending' },
+        ],
+      },
+    });
+  });
+
   it('does not overlay a full-period persisted result onto a historical partial view', () => {
     const card = createCard({
       rewardPeriod: {
@@ -1234,6 +1270,29 @@ describe('buildRewardsDashboard', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('resolveActiveMinimumProgress', () => {
+  it('uses this month spend even when the period total already exceeds the monthly minimum', () => {
+    const progress = resolveActiveMinimumProgress({
+      totalSpend: 1_051,
+      minimumSpend: 500,
+      minimumSpendMet: false,
+      monthlyQualifications: [
+        { start: '2026-07-01', end: '2026-07-31', spend: 551, minimumSpend: 500, status: 'met' },
+        { start: '2026-08-01', end: '2026-08-31', spend: 500, minimumSpend: 500, status: 'met' },
+        { start: '2026-09-01', end: '2026-09-30', spend: 0, minimumSpend: 500, status: 'pending' },
+      ],
+    }, '2026-09-01');
+
+    expect(progress).toEqual({
+      target: 500,
+      spend: 0,
+      remaining: 500,
+      progress: 0,
+      met: false,
+    });
   });
 });
 

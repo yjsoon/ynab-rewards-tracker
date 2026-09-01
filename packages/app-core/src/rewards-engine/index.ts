@@ -11,6 +11,7 @@ export {
   projectRewardCategories,
   projectRewardsPortfolio,
   projectTransactions,
+  resolveActiveMinimumProgress,
 } from './dashboard-projection';
 export type { Transaction, TransactionWithRewards } from '../storage/types';
 export { TransactionMatcher } from './matcher';
@@ -33,6 +34,7 @@ export type {
 } from './simple-calculator';
 export type {
   AccountNameLookup,
+  ActiveMinimumProgress,
   CardBlockProjection,
   CardDashboardProjection,
   CardPortfolioStatus,

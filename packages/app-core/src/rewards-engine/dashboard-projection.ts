@@ -58,6 +58,15 @@ export interface ThresholdProjection {
   met: boolean | null;
 }
 
+/**
+ * Minimum progress for dashboard tiles. When a multi-month reward period is
+ * active, remaining and percent use the anchored month containing `asOf`,
+ * not the whole-period spend against a single monthly target.
+ */
+export interface ActiveMinimumProgress extends ThresholdProjection {
+  spend: number;
+}
+
 export interface MaximumThresholdProjection extends ThresholdProjection {
   over: number | null;
   reached: boolean;
@@ -326,6 +335,35 @@ function createStatusCounts(): CardStatusCounts {
 
 function hasPositiveThreshold(value: number | null | undefined): value is number {
   return typeof value === 'number' && value > 0;
+}
+
+export function resolveActiveMinimumProgress(
+  calculation: Pick<
+    SimplifiedCalculation,
+    'totalSpend' | 'minimumSpend' | 'minimumSpendMet' | 'monthlyQualifications'
+  >,
+  asOf: string,
+): ActiveMinimumProgress {
+  const activeMonthlyQualification = calculation.monthlyQualifications?.find(
+    (month) => month.start <= asOf && month.end >= asOf,
+  );
+  const configuredMinimum = activeMonthlyQualification?.minimumSpend
+    ?? calculation.minimumSpend;
+  const target = hasPositiveThreshold(configuredMinimum) ? configuredMinimum : null;
+  const spend = activeMonthlyQualification?.spend ?? calculation.totalSpend;
+  const progress = target === null ? null : Math.min(1, spend / target);
+
+  return {
+    target,
+    spend,
+    remaining: target === null ? null : Math.max(0, target - spend),
+    progress,
+    met: target === null
+      ? null
+      : activeMonthlyQualification
+        ? activeMonthlyQualification.status === 'met'
+        : calculation.minimumSpendMet,
+  };
 }
 
 function hasEarningConfiguration(card: CreditCard): boolean {
@@ -649,21 +687,14 @@ export function buildRewardsDashboard(
     const maximumProgressSpend = usesBlocks
       ? calculation.countedSpend
       : calculation.totalSpend;
-    const activeMonthlyQualification = calculation.monthlyQualifications?.find(
-      (month) => month.start <= asOf && month.end >= asOf,
-    );
-    const configuredMinimum = activeMonthlyQualification?.minimumSpend
-      ?? calculation.minimumSpend;
+    const activeMinimum = resolveActiveMinimumProgress(calculation, asOf);
     const configuredMaximum = calculation.maximumSpend;
-    const hasMinimum = hasPositiveThreshold(configuredMinimum);
+    const hasMinimum = activeMinimum.target !== null;
     const hasMaximum = hasPositiveThreshold(configuredMaximum);
-    const minimumTarget = hasMinimum ? configuredMinimum : null;
+    const minimumTarget = activeMinimum.target;
     const maximumTarget = hasMaximum ? configuredMaximum : null;
-    const minimumProgressSpend = activeMonthlyQualification?.spend
-      ?? calculation.totalSpend;
-    const minimumProgress = minimumTarget
-      ? Math.min(1, minimumProgressSpend / minimumTarget)
-      : null;
+    const minimumProgressSpend = activeMinimum.spend;
+    const minimumProgress = activeMinimum.progress;
     const maximumProgress = maximumTarget
       ? calculation.maximumSpendExceeded
         ? 1
@@ -674,11 +705,7 @@ export function buildRewardsDashboard(
       card,
       calculation.totalSpend,
     ).hasNextSpendingTier;
-    const minimumMet = minimumTarget !== null
-      ? activeMonthlyQualification
-        ? activeMonthlyQualification.status === 'met'
-        : calculation.minimumSpendMet
-      : null;
+    const minimumMet = activeMinimum.met;
     const eligibleSpendBeforeBlocks = calculation.eligibleSpendBeforeBlocks
       ?? calculation.eligibleSpend;
     const status = getStatus({
@@ -713,9 +740,7 @@ export function buildRewardsDashboard(
       },
       minimum: {
         target: minimumTarget,
-        remaining: minimumTarget === null
-          ? null
-          : Math.max(0, minimumTarget - minimumProgressSpend),
+        remaining: activeMinimum.remaining,
         progress: minimumProgress,
         met: minimumMet,
       },

@@ -3,8 +3,7 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { formatDateValue } from '@/lib/dashboard-period';
 import type { YnabFlagColor } from '@/lib/ynab-constants';
-import { SimpleRewardsCalculator } from '@/lib/rewards-engine';
-import { resolveCardSpendingTier } from '@ynab-counter/app-core/rewards-engine';
+import { resolveActiveMinimumProgress, resolveCardSpendingTier, SimpleRewardsCalculator } from '@/lib/rewards-engine';
 import { YnabClient } from '@/lib/ynab-client';
 import { storage } from '@/lib/storage';
 import {
@@ -93,6 +92,7 @@ export function CardSpendingSummaryContent({
     monthlyQualifications.every((month) => month.status === 'met'),
   );
   const hasMaximum = typeof maximumSpend === 'number' && maximumSpend > 0;
+  const activeMinimum = resolveActiveMinimumProgress(calculation, calculationAsOf);
   const hasBlockRounding = Boolean(
     (typeof card.earningBlockSize === 'number' && card.earningBlockSize > 0) ||
       (card.subcategoriesEnabled &&
@@ -229,12 +229,12 @@ export function CardSpendingSummaryContent({
               ) : null}
             </div>
           ) : null}
-          {!nextSpendingLevel && (isMinimumSpendConfigured(minimumSpend) || hasMaximum) ? (
+          {!nextSpendingLevel && (activeMinimum.target !== null || hasMaximum) ? (
             <SpendingProgressBar
               totalSpend={totalSpend}
-              minimumSpend={minimumSpend}
+              minimumSpend={activeMinimum.target}
               maximumSpend={maximumSpend}
-              minimumProgressSpend={totalSpend}
+              minimumProgressSpend={activeMinimum.spend}
               maximumProgressSpend={displayedSpend}
               currency={currency}
               showLabels={true}

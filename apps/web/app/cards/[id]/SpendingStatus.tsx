@@ -14,8 +14,7 @@ import {
   CheckCircle2,
   Layers
 } from 'lucide-react';
-import { SimpleRewardsCalculator } from '@/lib/rewards-engine';
-import { resolveCardSpendingTier } from '@ynab-counter/app-core/rewards-engine';
+import { resolveActiveMinimumProgress, resolveCardSpendingTier, SimpleRewardsCalculator } from '@/lib/rewards-engine';
 import { YnabClient } from '@/lib/ynab-client';
 import { useSelectedBudget, useSettings } from '@/hooks/useLocalStorage';
 import { CurrencyAmount } from '@/components/CurrencyAmount';
@@ -206,6 +205,7 @@ export default function SpendingStatus({
   const currentQualification = monthlyQualifications.find(
     (month) => asOf >= month.start && asOf <= month.end
   );
+  const activeMinimum = resolveActiveMinimumProgress(spendingAnalysis, asOf);
   const hasBlockRounding = Boolean(
     (typeof card.earningBlockSize === 'number' && card.earningBlockSize > 0) ||
       (card.subcategoriesEnabled &&
@@ -422,16 +422,16 @@ export default function SpendingStatus({
             </div>
           )}
 
-          {(minimumSpend !== null && minimumSpend !== undefined) || hasMaximum ? (
+          {(activeMinimum.target !== null || hasMaximum) ? (
             <div className="space-y-4">
               {!nextSpendingLevel ? (
                 <div className="bg-muted/5 rounded-lg p-4">
                   <h3 className="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wide">Spending Progress</h3>
                   <SpendingProgressBar
                     totalSpend={totalSpend}
-                    minimumSpend={minimumSpend}
+                    minimumSpend={activeMinimum.target}
                     maximumSpend={maximumSpend}
-                    minimumProgressSpend={totalSpend}
+                    minimumProgressSpend={activeMinimum.spend}
                     maximumProgressSpend={displayedSpend}
                     currency={currency}
                     showLabels={true}
@@ -454,14 +454,14 @@ export default function SpendingStatus({
                     <strong>Current spend level capped.</strong> Further spend will not earn at this level, but reaching the next tier recalculates this period at its new rates.
                   </AlertDescription>
                 </Alert>
-              ) : minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0 && totalSpend < minimumSpend ? (
+              ) : activeMinimum.met === false && (activeMinimum.remaining ?? 0) > 0 ? (
                 <Alert className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30">
                   <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                   <AlertDescription className="text-amber-700 dark:text-amber-300">
-                    <strong>Minimum spend requirement not met.</strong> You need to spend <CurrencyAmount value={Math.max(0, (minimumSpend || 0) - totalSpend)} currency={currency} /> more to start earning rewards this period.
+                    <strong>Minimum spend requirement not met.</strong> You need to spend <CurrencyAmount value={activeMinimum.remaining ?? 0} currency={currency} /> more to start earning rewards {hasMonthlyMinimum ? 'this month' : 'this period'}.
                   </AlertDescription>
                 </Alert>
-              ) : minimumSpend !== null && minimumSpend !== undefined && minimumSpend > 0 && minimumSpendMet ? (
+              ) : activeMinimum.target !== null && minimumSpendMet ? (
                 <Alert className="border-emerald-200/60 bg-emerald-50/60 dark:border-emerald-900/40 dark:bg-emerald-950/20">
                   <CheckCircle2 className="h-4 w-4 text-emerald-500/80 dark:text-emerald-300/80" />
                   <AlertDescription className="text-emerald-700/80 dark:text-emerald-200/90">
