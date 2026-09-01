@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { formatDateValue } from '@/lib/dashboard-period';
 import type { YnabFlagColor } from '@/lib/ynab-constants';
-import { resolveActiveMinimumProgress, resolveCardSpendingTier, SimpleRewardsCalculator } from '@/lib/rewards-engine';
+import { resolveActiveMinimumProgress, resolveCardSpendingTier, SimpleRewardsCalculator, summariseMonthlyQualificationProgress } from '@/lib/rewards-engine';
 import { YnabClient } from '@/lib/ynab-client';
 import { storage } from '@/lib/storage';
 import {
@@ -86,11 +86,12 @@ export function CardSpendingSummaryContent({
   )
     ?? monthlyQualifications.find((month) => month.status === 'pending');
   const hasMonthlyMinimum = (monthlyMinimumSpend ?? 0) > 0;
-  const allMonthlyMinimumsMet = Boolean(
-    card.rewardPeriod &&
-    monthlyQualifications.length === card.rewardPeriod.monthCount &&
-    monthlyQualifications.every((month) => month.status === 'met'),
-  );
+  const qualificationProgress = card.rewardPeriod
+    ? summariseMonthlyQualificationProgress(
+      monthlyQualifications,
+      card.rewardPeriod.monthCount,
+    )
+    : null;
   const hasMaximum = typeof maximumSpend === 'number' && maximumSpend > 0;
   const activeMinimum = resolveActiveMinimumProgress(calculation, calculationAsOf);
   const hasBlockRounding = Boolean(
@@ -184,19 +185,13 @@ export function CardSpendingSummaryContent({
               ? 'border-emerald-200 bg-emerald-50/50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300'
               : 'border-amber-200 bg-amber-50/50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300',
         )}>
-          {qualificationStatus === 'failed'
-            ? 'A completed month missed its card-wide minimum'
-            : qualificationStatus === 'met'
-              ? allMonthlyMinimumsMet
-                ? `All ${card.rewardPeriod.monthCount} monthly minimums met`
-                : <>
-                    Current anchored month: <CurrencyAmount value={activeQualificationMonth.spend} currency={currency} /> of{' '}
-                    <CurrencyAmount value={monthlyMinimumSpend ?? 0} currency={currency} /> · met
-                  </>
-              : <>
-                  Current anchored month: <CurrencyAmount value={activeQualificationMonth.spend} currency={currency} /> of{' '}
-                  <CurrencyAmount value={monthlyMinimumSpend ?? 0} currency={currency} />
-                </>}
+          {qualificationProgress?.allMet
+            ? `All ${card.rewardPeriod.monthCount} monthly minimums met`
+            : <>
+                Current anchored month: <CurrencyAmount value={activeQualificationMonth.spend} currency={currency} /> of{' '}
+                <CurrencyAmount value={monthlyMinimumSpend ?? 0} currency={currency} />
+                {qualificationProgress?.tally ? ` · ${qualificationProgress.tally}` : null}
+              </>}
         </div>
       )}
 

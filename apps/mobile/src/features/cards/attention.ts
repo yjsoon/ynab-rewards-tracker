@@ -1,4 +1,7 @@
-import type { CardDashboardProjection } from '@ynab-counter/app-core/rewards-engine';
+import {
+  summariseMonthlyQualificationProgress,
+  type CardDashboardProjection,
+} from '@ynab-counter/app-core/rewards-engine';
 import { parseYnabDate } from '@ynab-counter/app-core/rewards-engine/date-utils';
 
 const MS_PER_DAY = 86_400_000;
@@ -62,29 +65,28 @@ export function qualificationRow(
   }
 
   const status = projection.calculation.qualificationStatus;
-  if (status === 'failed') {
-    return { tone: 'destructive', label: 'Period qualification failed' };
-  }
+  const progress = summariseMonthlyQualificationProgress(
+    months,
+    projection.card.rewardPeriod.monthCount ?? months.length,
+  );
 
-  const allMet = months.every((month) => month.status === 'met');
-  if (status === 'met' && allMet) {
-    const monthCount = projection.card.rewardPeriod.monthCount ?? months.length;
+  if (progress.allMet) {
     return {
       tone: 'positive',
-      label: `All ${monthCount} monthly minimums met`,
+      label: `All ${progress.monthCount} monthly minimums met`,
     };
   }
 
   const spend = formatting.currencyRounded(active.spend);
   const target = formatting.currencyRounded(monthlyMinimum);
-  if (status === 'met') {
-    return {
-      tone: 'positive',
-      label: `This month: ${spend} of ${target} · met`,
-    };
+  const thisMonth = `This month: ${spend} of ${target}`;
+  const label = progress.tally ? `${thisMonth} · ${progress.tally}` : thisMonth;
+
+  if (status === 'failed') {
+    return { tone: 'destructive', label };
   }
-  return {
-    tone: 'attention',
-    label: `This month: ${spend} of ${target}`,
-  };
+  if (status === 'met') {
+    return { tone: 'positive', label };
+  }
+  return { tone: 'attention', label };
 }

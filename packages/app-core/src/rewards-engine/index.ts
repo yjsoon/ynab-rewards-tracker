@@ -22,6 +22,9 @@ export {
   getCardSpendingLevels,
   resolveCardSpendingTier,
 } from './utils/spending-tiers';
+export {
+  summariseMonthlyQualificationProgress,
+} from './utils/qualification-progress';
 
 export type { CalculationPeriod } from './calculator';
 export type {
@@ -61,3 +64,6 @@ export type {
   CardSpendingLevel,
   ResolvedCardSpendingTier,
 } from './utils/spending-tiers';
+export type {
+  MonthlyQualificationProgress,
+} from './utils/qualification-progress';
