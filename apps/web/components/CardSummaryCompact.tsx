@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowUpRight, Gauge, OctagonAlert } from "lucide-react";
 import type { YnabFlagColor } from "@/lib/ynab-constants";
 import { formatDateValue } from "@/lib/dashboard-period";
-import { resolveCardSpendingTier, SimpleRewardsCalculator } from "@/lib/rewards-engine";
+import { resolveActiveMinimumProgress, resolveCardSpendingTier, SimpleRewardsCalculator } from "@/lib/rewards-engine";
 import { YnabClient } from "@/lib/ynab-client";
 import {
   NEAR_CAP_RATIO,
@@ -13,7 +13,6 @@ import {
   getActiveMonthlyQualification,
 } from "@/lib/card-metrics";
 import { useSelectedBudget, useSettings } from "@/hooks/useLocalStorage";
-import { hasMinimumSpendRequirement } from "@/lib/minimum-spend-helpers";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
 import { SpendingProgressBar } from "@/components/SpendingProgressBar";
 import { SubcategoryBreakdownCompact } from "@/components/SubcategoryBreakdownCompact";
@@ -62,8 +61,6 @@ export function CardSummaryCompactContent({
     totalSpend,
     countedSpend,
     eligibleSpend,
-    minimumSpend,
-    minimumSpendMet,
     monthlyMinimumSpend,
     qualificationStatus,
     monthlyQualifications = [],
@@ -87,11 +84,12 @@ export function CardSummaryCompactContent({
   const [showRewardPeriodSpend, setShowRewardPeriodSpend] = useState(false);
   const hasBlockRounding = cardUsesBlockRounding(card);
   const displayedSpend = hasBlockRounding ? countedSpend : totalSpend;
-  const hasMinimum = hasMinimumSpendRequirement(minimumSpend);
-  const minimumTarget = typeof minimumSpend === "number" && minimumSpend > 0 ? minimumSpend : 0;
-  const clampedProgress = hasMinimum && minimumTarget > 0
-    ? Math.min(1, Math.max(0, totalSpend / minimumTarget))
-    : 0;
+  const activeMinimum = resolveActiveMinimumProgress(calculation, calculationAsOf);
+  const hasMinimum = activeMinimum.target !== null;
+  const minimumTarget = activeMinimum.target ?? 0;
+  const minimumSpendMet = activeMinimum.met === true;
+  const minimumProgressSpend = activeMinimum.spend;
+  const clampedProgress = activeMinimum.progress ?? 0;
   const progressPercent = Math.round(clampedProgress * 100);
   const resolvedSpendingTier = resolveCardSpendingTier(card, totalSpend);
   const activeSpendingLevel = resolvedSpendingTier.activeLevel;
@@ -106,7 +104,7 @@ export function CardSummaryCompactContent({
   const maximumTarget = hasMaximum ? maximumSpend : 0;
   const remainingToMaximum = hasMaximum ? Math.max(0, maximumTarget - displayedSpend) : 0;
   const exceededAmount = hasMaximum ? Math.max(0, displayedSpend - maximumTarget) : 0;
-  const remainingToMinimum = hasMinimum ? Math.max(0, minimumTarget - totalSpend) : 0;
+  const remainingToMinimum = activeMinimum.remaining ?? 0;
   const remainingToSpendingTier = nextSpendingLevel
     ? Math.max(0, nextSpendingLevel.spendThreshold - totalSpend)
     : 0;
@@ -288,9 +286,9 @@ export function CardSummaryCompactContent({
 
       <SpendingProgressBar
         totalSpend={nextSpendingLevel ? totalSpend : displayedSpend}
-        minimumSpend={nextSpendingLevel?.spendThreshold ?? minimumSpend}
+        minimumSpend={nextSpendingLevel?.spendThreshold ?? activeMinimum.target}
         maximumSpend={nextSpendingLevel ? null : maximumSpend}
-        minimumProgressSpend={totalSpend}
+        minimumProgressSpend={nextSpendingLevel ? totalSpend : minimumProgressSpend}
         maximumProgressSpend={nextSpendingLevel ? undefined : displayedSpend}
         currency={currency}
         showLabels={false}
