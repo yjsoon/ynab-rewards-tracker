@@ -24,7 +24,7 @@ describe("budget API proxy", () => {
 
     expect(response.status).toBe(200);
     expect(fetchMock).toHaveBeenCalledWith(
-      "https://howmuch.soon.sg/v1/plans",
+      "https://howmuch.tk.sg/v1/plans",
       expect.objectContaining({
         headers: expect.objectContaining({ Authorization: "Bearer account-api-key" }),
       }),

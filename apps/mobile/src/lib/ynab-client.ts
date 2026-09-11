@@ -34,7 +34,7 @@ export { YnabApiError, isYnabApiError, createYnabError };
 const DEFAULT_TIMEOUT_MS = 20_000;
 const MAX_RETRY_ATTEMPTS = 2;
 const HOWMUCH_TOKEN_PREFIX = 'howmuch-token:';
-const HOWMUCH_API_URL = 'https://howmuch.soon.sg/v1';
+const HOWMUCH_API_URL = 'https://howmuch.tk.sg/v1';
 
 type TransactionFilter = {
   sinceDate?: string;

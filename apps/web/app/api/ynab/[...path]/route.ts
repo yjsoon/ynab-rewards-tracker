@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 const YNAB_API_BASE = "https://api.ynab.com/v1";
-const HOWMUCH_API_BASE = "https://howmuch.soon.sg/v1";
+const HOWMUCH_API_BASE = "https://howmuch.tk.sg/v1";
 
 type RouteContext = { params: { path: string[] } };
 
