@@ -1,4 +1,5 @@
 import type { YnabFlagColor } from "@ynab-counter/app-core/ynab";
+import { exportAccountConfig, parseAccountConfig } from "@ynab-counter/app-core/storage/account-config";
 import {
   createCloudSyncPayload,
   parseCloudSyncPayload,
@@ -157,13 +158,13 @@ export class StorageService {
     return emptyStorage;
   }
 
-  private setStorage(data: StorageData): void {
+  private setStorage(data: StorageData, normalize = true): void {
     if (typeof window === "undefined") {
       return;
     }
 
     try {
-      const normalized = this.normalizeStorage(data as MutableStorageData);
+      const normalized = normalize ? this.normalizeStorage(data as MutableStorageData) : data;
       const previousRaw = localStorage.getItem(STORAGE_KEY);
       const previous = previousRaw
         ? this.normalizeStorage(JSON.parse(previousRaw) as MutableStorageData)
@@ -355,6 +356,33 @@ export class StorageService {
 
   getCards(): CreditCard[] {
     return this.getStorage().cards || [];
+  }
+
+  exportAccountConfig(accountId: string): string {
+    const card = this.getCards().find((entry) => entry.ynabAccountId === accountId);
+    if (!card) throw new Error("This account has no rewards configuration to export.");
+    return exportAccountConfig(card);
+  }
+
+  importAccountConfig(json: string, account: { id: string; name: string }): void {
+    const config = parseAccountConfig(json);
+    if (!account.id || !account.name.trim()) throw new Error("Select an existing destination account.");
+    const storage = this.getStorage();
+    const existing = storage.cards.find((card) => card.ynabAccountId === account.id);
+    const card = normaliseCard({
+      ...config,
+      // Explicit null prevents the legacy migration restoring an old rule's rate.
+      earningRate: config.earningRate ?? null,
+      id: existing?.id ?? `card-${account.id}`,
+      ynabAccountId: account.id,
+      name: existing?.name ?? account.name,
+      featured: existing?.featured ?? true,
+    } as MutableCard, config.flagNames);
+    this.setStorage({
+      ...storage,
+      cards: existing ? storage.cards.map((entry) => entry.id === existing.id ? card : entry) : [...storage.cards, card],
+      calculations: storage.calculations.filter((entry) => entry.cardId !== card.id),
+    }, false);
   }
 
   saveCard(card: CreditCard): void {

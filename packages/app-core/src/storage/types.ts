@@ -146,6 +146,8 @@ export interface CreditCard {
   subcategoriesEnabled?: boolean;
   subcategories?: CardSubcategory[];
   spendingTiers?: CardSpendingTier[];
+  /** Portable account-scoped labels; never overwrite the connected budget's global labels. */
+  flagNames?: Partial<Record<YnabFlagColor, string>>;
 }
 
 // Legacy alias retained for compatibility with existing imports

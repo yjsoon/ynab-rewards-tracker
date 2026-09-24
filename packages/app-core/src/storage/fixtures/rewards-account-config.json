@@ -1,0 +1,24 @@
+{
+  "format": "rewards-account-config",
+  "version": 1,
+  "card": {
+    "name": "Synthetic Miles Card",
+    "issuer": "Example Bank",
+    "type": "miles",
+    "billingCycle": { "type": "billing", "dayOfMonth": 17 },
+    "rewardPeriod": { "monthCount": 3, "anchorDate": "2026-01-17", "monthlyMinimumSpend": 500 },
+    "promotionalPeriod": { "startDate": null, "endDate": "2026-12-31", "description": "Synthetic promotion" },
+    "earningRate": 1.2,
+    "earningBlockSize": 5,
+    "minimumSpend": 100,
+    "maximumSpend": 2400,
+    "subcategoriesEnabled": true,
+    "subcategories": [
+      { "id": "synthetic-dining", "name": "Dining", "flagColor": "orange", "rewardValue": 4, "milesBlockSize": 5, "minimumSpend": null, "maximumSpend": 800, "priority": 0, "active": true, "excludeFromRewards": false, "createdAt": "2026-01-01T00:00:00.000Z", "updatedAt": "2026-01-02T00:00:00.000Z" },
+      { "id": "synthetic-base", "name": "Other purchases", "flagColor": "unflagged", "rewardValue": 1.2, "priority": 1, "active": true, "createdAt": "2026-01-01T00:00:00.000Z", "updatedAt": "2026-01-02T00:00:00.000Z" }
+    ],
+    "spendingTiers": [
+      { "id": "synthetic-tier", "spendThreshold": 1000, "earningRate": 1.5, "maximumSpend": 3000, "subcategories": [{ "subcategoryId": "synthetic-dining", "rewardValue": 6, "maximumSpend": 1200 }] }
+    ]
+  }
+}

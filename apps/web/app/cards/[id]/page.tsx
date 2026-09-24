@@ -16,6 +16,7 @@ import { cn } from '@/lib/utils';
 import TransactionsPreview from './TransactionsPreview';
 import SpendingStatus from './SpendingStatus';
 import CardSettings from './CardSettings';
+import { AccountConfigExport } from '@/components/AccountConfigExport';
 
 const TRANSACTION_LOOKBACK_DAYS = 90;
 
@@ -78,6 +79,10 @@ export default function CardDetailPage() {
           {card.type === 'cashback' ? 'Cashback Rewards' : 'Miles Rewards'} •
           {card.featured ? ' Featured on dashboard' : ' Hidden from dashboard'}
         </p>
+        <div className="mt-4 space-y-2">
+          <AccountConfigExport account={{ id: card.ynabAccountId, name: card.name }} />
+          <p className="text-sm text-muted-foreground">Exports saved settings. Save any changes before exporting.</p>
+        </div>
       </div>
 
       {pat && (

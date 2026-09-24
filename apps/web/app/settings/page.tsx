@@ -28,6 +28,7 @@ import { toIsoDateString } from '@/lib/date';
 import { storage, type CreditCard } from '@/lib/storage';
 import { validateYnabToken } from '@/lib/validation';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { AccountConfigExchange } from '@/components/AccountConfigExchange';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -1806,6 +1807,8 @@ export default function SettingsPage() {
           </form>
         </CardContent>
       </Card>
+
+      <AccountConfigExchange accounts={accounts} cards={cards} />
 
       {/* Data Management */}
       <Card>
