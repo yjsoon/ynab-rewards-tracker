@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
 import { STORAGE_KEY } from "@ynab-counter/app-core/storage";
+import { computeCurrentPeriod } from "@ynab-counter/app-core/rewards-engine/compute";
+import { RewardsCalculator } from "@ynab-counter/app-core/rewards-engine/calculator";
+import { formatLocalDate } from "@ynab-counter/app-core/rewards-engine/date-utils";
 
 import {
   CLOUD_SYNC_CONFLICT_EVENT,
@@ -287,6 +291,80 @@ describe("StorageService exportSettings", () => {
       configurable: true,
       writable: true,
     });
+  });
+
+  it("exchanges one account, preserves siblings/ledger/preferences and clears omitted configuration", () => {
+    const service = new StorageService();
+    const fixture = JSON.parse(readFileSync(new URL('../../../../packages/app-core/src/storage/fixtures/rewards-account-config.json', import.meta.url), 'utf8'));
+    fixture.card.flagNames = { blue: 'Portable blue label' };
+    service.saveCard({ ...fixture.card, earningRate: 99, issuer: 'Old issuer', id: 'destination', ynabAccountId: 'account-1', name: 'Local name', featured: false });
+    service.saveCard({ id: 'sibling', ynabAccountId: 'account-2', name: 'Sibling', issuer: 'Other bank', type: 'cashback', featured: true, earningRate: 7 });
+    service.setPAT('private-token');
+    service.setCachedData({ flagNames: { blue: 'Global label' }, transactions: [{ id: 'ledger-entry', amount: -123456 }] });
+    service.updateSettings({ currency: 'SGD', milesValuation: 0.023 });
+    service.saveRule({ id: 'legacy-rule', cardId: 'sibling', name: 'Legacy', rewardType: 'miles', rewardValue: 42, startDate: '2026-01-01', endDate: '2026-12-31', active: true, priority: 0 });
+    service.saveTagMapping({ id: 'mapping', cardId: 'sibling', ynabTag: 'blue', rewardCategory: 'Travel' });
+    for (const cardId of ['destination', 'sibling']) {
+      service.saveCalculation({ cardId, ruleId: 'rule', period: '2026-01', totalSpend: 123, eligibleSpend: 100, rewardEarned: 4, rewardType: 'miles', minimumMet: true, maximumExceeded: false, shouldStopUsing: false });
+    }
+    const before = JSON.parse(localStorage.getItem(STORAGE_KEY)!);
+
+    service.importAccountConfig(JSON.stringify(fixture), { id: 'account-1', name: 'Account name' });
+    const exported = JSON.parse(service.exportAccountConfig('account-1'));
+    expect(exported.card).toMatchObject({ ...fixture.card, name: 'Local name' });
+    expect(exported.card).not.toHaveProperty('id');
+    expect(exported.card).not.toHaveProperty('ynabAccountId');
+    expect(exported.card).not.toHaveProperty('featured');
+    expect(service.getCards()[0]).toMatchObject({ id: 'destination', name: 'Local name', ynabAccountId: 'account-1', featured: false });
+    const after = JSON.parse(localStorage.getItem(STORAGE_KEY)!);
+    expect(after.cards[1]).toEqual(before.cards[1]);
+    expect(after.cachedData).toEqual(before.cachedData);
+    expect(after.ynab).toEqual(before.ynab);
+    expect(after.settings).toEqual({ ...before.settings, cloudSyncLocalChangedAt: expect.any(String) });
+    expect(after.rules).toEqual(before.rules);
+    expect(after.tagMappings).toEqual(before.tagMappings);
+    expect(after.themeGroups).toEqual(before.themeGroups);
+    expect(after.calculations).toEqual(before.calculations.filter((entry: { cardId: string }) => entry.cardId === 'sibling'));
+
+    service.importAccountConfig(JSON.stringify({ format: fixture.format, version: 1, card: { name: 'Source', issuer: '', type: 'cashback' } }), { id: 'account-1', name: 'Account name' });
+    const cleared = new StorageService().getCards()[0];
+    expect(cleared).toMatchObject({ earningRate: null, maximumSpend: null, minimumSpend: null, earningBlockSize: null, subcategories: [], spendingTiers: [], featured: false, name: 'Local name' });
+    for (const key of ['rewardPeriod', 'promotionalPeriod', 'flagNames']) expect(cleared).not.toHaveProperty(key);
+
+    const snapshot = localStorage.getItem(STORAGE_KEY);
+    expect(() => service.importAccountConfig('{"format":"settings","version":1}', { id: 'account-1', name: 'A' })).toThrow();
+    expect(localStorage.getItem(STORAGE_KEY)).toBe(snapshot);
+    const missingUnflagged = structuredClone(fixture);
+    missingUnflagged.card.subcategories = [missingUnflagged.card.subcategories[0]];
+    expect(() => service.importAccountConfig(JSON.stringify(missingUnflagged), { id: 'account-1', name: 'A' })).toThrow('explicit unflagged category');
+    expect(localStorage.getItem(STORAGE_KEY)).toBe(snapshot);
+    expect(new StorageService().getCards()[0]).toEqual(cleared);
+    service.importAccountConfig(JSON.stringify(fixture), { id: 'new-account', name: 'Existing budget account' });
+    expect(service.getCards().at(-1)).toMatchObject({ name: 'Existing budget account', ynabAccountId: 'new-account', featured: true });
+  });
+
+  it("rejects active legacy-rule exchange atomically, but permits disabled rules without overriding imported rewards", async () => {
+    const service = new StorageService();
+    service.saveCard({ id: 'destination', ynabAccountId: 'account-1', name: 'Local', issuer: 'Bank', type: 'cashback', featured: true, earningRate: 2 });
+    const rule = { id: 'legacy', cardId: 'destination', name: 'Legacy', rewardType: 'cashback' as const, rewardValue: 5, startDate: '2000-01-01', endDate: '2100-12-31', active: true, priority: 0 };
+    service.saveRule(rule);
+    service.saveRule({ ...rule, id: 'sibling-rule', cardId: 'sibling' });
+    const card = service.getCards()[0];
+    const client = { getTransactions: async () => [{ id: 'purchase', account_id: 'account-1', date: formatLocalDate(RewardsCalculator.calculatePeriod(card).startDate), amount: -100000 }] };
+    const calculate = () => computeCurrentPeriod(client, 'budget', service.getCards(), service.getRules());
+    expect((await calculate())[0].rewardEarned).toBe(5);
+    const json = JSON.stringify({ format: 'rewards-account-config', version: 1, card: { name: 'Source', issuer: 'New bank', type: 'cashback', earningRate: 2 } });
+    const before = localStorage.getItem(STORAGE_KEY);
+    expect(() => service.exportAccountConfig('account-1')).toThrow('active legacy reward rules');
+    expect(() => service.importAccountConfig(json, { id: 'account-1', name: 'Account' })).toThrow('active legacy reward rules');
+    expect(localStorage.getItem(STORAGE_KEY)).toBe(before);
+    expect((await calculate())[0].rewardEarned).toBe(5);
+
+    service.saveRule({ ...rule, active: false });
+    service.importAccountConfig(json, { id: 'account-1', name: 'Account' });
+    expect((await calculate())[0].rewardEarned).toBe(2);
+    expect(JSON.parse(service.exportAccountConfig('account-1')).card.earningRate).toBe(2);
+    expect(service.getRules()).toEqual([{ ...rule, active: false }, { ...rule, id: 'sibling-rule', cardId: 'sibling' }]);
   });
 
   it("omits pat, cachedData, and non-empty calculations while including cards", () => {
