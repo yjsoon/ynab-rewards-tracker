@@ -358,9 +358,16 @@ export class StorageService {
     return this.getStorage().cards || [];
   }
 
+  private requirePortableRewards(card: CreditCard): void {
+    if (this.getCardRules(card.id).some((rule) => rule.active)) {
+      throw new Error("This account has active legacy reward rules that cannot be exchanged. Disable or remove them on the Rules page before importing or exporting account configuration.");
+    }
+  }
+
   exportAccountConfig(accountId: string): string {
     const card = this.getCards().find((entry) => entry.ynabAccountId === accountId);
     if (!card) throw new Error("This account has no rewards configuration to export.");
+    this.requirePortableRewards(card);
     return exportAccountConfig(card);
   }
 
@@ -369,6 +376,7 @@ export class StorageService {
     if (!account.id || !account.name.trim()) throw new Error("Select an existing destination account.");
     const storage = this.getStorage();
     const existing = storage.cards.find((card) => card.ynabAccountId === account.id);
+    if (existing) this.requirePortableRewards(existing);
     const card = normaliseCard({
       ...config,
       // Explicit null prevents the legacy migration restoring an old rule's rate.
