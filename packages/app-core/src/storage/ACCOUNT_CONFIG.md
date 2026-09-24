@@ -34,9 +34,9 @@ Top-level `id`, `ynabAccountId` and `featured` are never portable.
   normaliser would otherwise add a base-rate earning category, changing behaviour.
   Add an unflagged category with zero rewards or excluded from rewards in the source.
 - Accounts with active legacy reward rules cannot import or export this card-only
-  format: those rules can override the exchanged rate in calculations. Disable or
-  remove them on the Rules page first. Inactive rules and other accounts' rules
-  remain untouched.
+  format: those rules can override the exchanged rate in calculations. Exchange is
+  unavailable for these accounts; no legacy-rule migration UI is provided.
+  Inactive rules and other accounts' rules remain untouched.
 
 Import preserves the destination card ID, account link, name and featured status;
 a newly configured account uses its account name. Omitted optional fields clear old

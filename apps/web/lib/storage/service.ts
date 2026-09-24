@@ -360,7 +360,7 @@ export class StorageService {
 
   private requirePortableRewards(card: CreditCard): void {
     if (this.getCardRules(card.id).some((rule) => rule.active)) {
-      throw new Error("This account has active legacy reward rules that cannot be exchanged. Disable or remove them on the Rules page before importing or exporting account configuration.");
+      throw new Error("This account has active legacy reward rules that cannot be exchanged in the per-account format. Import and export are unavailable for this account; its configuration has not changed.");
     }
   }
 
