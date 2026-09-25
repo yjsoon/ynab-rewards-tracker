@@ -29,6 +29,7 @@ import { storage, type CreditCard } from '@/lib/storage';
 import { validateYnabToken } from '@/lib/validation';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { AccountConfigExchange } from '@/components/AccountConfigExchange';
+import { JsonExportDialog, downloadJson } from '@/components/JsonExportDialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -58,6 +59,7 @@ import {
   CreditCard as CreditCardIcon,
   Trash2,
   Download,
+  FileJson,
   Upload,
   AlertCircle,
   RefreshCw,
@@ -226,6 +228,7 @@ export default function SettingsPage() {
   const [tokenInput, setTokenInput] = useState('');
   const [testingConnection, setTestingConnection] = useState(false);
   const [connectionMessage, setConnectionMessage] = useState('');
+  const [viewedExportJson, setViewedExportJson] = useState<string | null>(null);
   const [showClearDialog, setShowClearDialog] = useState(false);
   const [showClearTokenDialog, setShowClearTokenDialog] = useState(false);
   const hasRequestedBudgetsRef = useRef(false);
@@ -653,15 +656,10 @@ export default function SettingsPage() {
     }
   }
 
+  const settingsExportFilename = `ynab-rewards-settings-${toIsoDateString(new Date())}.json`;
+
   function handleExport() {
-    const json = exportSettings();
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `ynab-rewards-settings-${toIsoDateString(new Date())}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadJson(exportSettings(), settingsExportFilename);
   }
 
   function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
@@ -1824,6 +1822,10 @@ export default function SettingsPage() {
               <Download className="mr-2 h-4 w-4" />
               Export Settings
             </Button>
+            <Button variant="outline" onClick={() => setViewedExportJson(exportSettings())}>
+              <FileJson className="mr-2 h-4 w-4" />
+              View JSON
+            </Button>
             <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
               <Upload className="mr-2 h-4 w-4" />
               Import Settings
@@ -1850,6 +1852,14 @@ export default function SettingsPage() {
           </p>
         </CardContent>
       </Card>
+
+      <JsonExportDialog
+        json={viewedExportJson}
+        filename={settingsExportFilename}
+        title="Settings Export"
+        description="The same JSON as the exported file. The YNAB token and other secrets are not included."
+        onOpenChange={(open) => { if (!open) setViewedExportJson(null); }}
+      />
 
       {/* Confirmation Dialogs */}
       <ConfirmDialog
