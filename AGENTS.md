@@ -1,6 +1,6 @@
 # Rewards Tracker for YNAB
 
-A client-side rewards tracker with a Next.js web app and an Expo mobile app. Both analyse YNAB transactions to track credit card rewards with user-defined rules, and share the rewards engine, storage types and utilities in `packages/app-core`. User data lives in browser or device storage; there is no application database and there must be no server-side dependency. `packages/db` is unused.
+A client-side rewards tracker with a Next.js web app and an Expo mobile app. Both analyse YNAB transactions to track credit card rewards with user-defined rules, and share the rewards engine, storage types and utilities in `packages/app-core`. User data lives in browser or device storage; there is no application database. The only server pieces are the stateless YNAB proxy, the Agent API and optional Cloud Sync below; do not add server-held user data or other server-side dependencies. `packages/db` is unused.
 
 ## Architecture contracts
 
@@ -34,7 +34,7 @@ A client-side rewards tracker with a Next.js web app and an Expo mobile app. Bot
 
 ## Deployment
 
-- The web app runs on Cloudflare Workers via OpenNext at https://rewards.soon.sg. Production normally deploys by pushing to `main` and monitoring the `Deploy to Cloudflare Workers` workflow.
+- The web app runs on Cloudflare Workers via OpenNext at https://rewards.soon.sg. Production normally deploys by pushing to `main` and monitoring the `Deploy to Cloudflare Workers` workflow, which runs only when the push changes `apps/web/**`, `packages/**` or `pnpm-lock.yaml` (or on manual dispatch).
 - Use the manual deploy (`pnpm --filter ./apps/web deploy:cloudflare`) only when a local deploy is specifically required. OpenNext skew protection also needs `CF_WORKER_NAME`, `CF_WORKERS_SCRIPTS_API_TOKEN` and `CF_ACCOUNT_ID` as configured in the deploy workflow; a successful `wrangler whoami` is not sufficient if the token cannot read Worker versions.
 - Inspect the current Expo/EAS configuration before changing mobile release workflows.
 
